@@ -606,7 +606,24 @@ mod tests {
     }
 
     #[test]
-    fn unreadable_path_is_unreadable_not_not_found() {
+    fn path_below_a_file_or_a_directory_is_an_error_not_an_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("file.txt");
+        std::fs::write(&file, "line_id,hold_remark,hold_type\n").unwrap();
+        // A path below a regular file is not "not found" on Unix; the real error decides.
+        // Windows reports a missing path component there, so only Unix pins the variant.
+        let err = read_workbook(&file.join("holds.xlsx")).unwrap_err();
+        assert!(!matches!(err, ImportError::EmptyFile { .. }), "{err:?}");
+        #[cfg(unix)]
+        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+        // A directory exists but cannot be read as a file.
+        let err = read_workbook(dir.path()).unwrap_err();
+        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_denied_file_is_unreadable_not_not_found() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("locked.csv");
@@ -617,12 +634,39 @@ mod tests {
         }
         let err = read_workbook(&path).unwrap_err();
         assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
-        // A path below a regular file is not "not found"; the real error decides.
-        let err = read_workbook(&path.join("inner.csv")).unwrap_err();
-        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
-        // A directory exists but cannot be read as a file.
-        let err = read_workbook(dir.path()).unwrap_err();
-        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn upper_case_extension_reads_like_lower_case() {
+        let cfg = SynthConfig::new(3, 40, 150);
+        let rows = generate(&cfg);
+        let dir = tempfile::tempdir().unwrap();
+        let lower = dir.path().join("holds.xlsx");
+        write_workbook(&rows, &cfg, &lower).unwrap();
+        let upper = dir.path().join("HOLDS.XLSX");
+        std::fs::copy(&lower, &upper).unwrap();
+
+        let a = read_workbook(&lower).unwrap();
+        let b = read_workbook(&upper).unwrap();
+        assert_eq!(b.sheet_name, a.sheet_name);
+        assert_eq!(b.table.headers, a.table.headers);
+        assert_eq!(b.table.headers, hx_synth::HEADERS);
+        assert_eq!(b.table.rows.len(), rows.len());
+    }
+
+    #[test]
+    fn unknown_extension_is_read_by_content_sniffing() {
+        let cfg = SynthConfig::new(3, 40, 150);
+        let rows = generate(&cfg);
+        let dir = tempfile::tempdir().unwrap();
+        let xlsx = dir.path().join("holds.xlsx");
+        write_workbook(&rows, &cfg, &xlsx).unwrap();
+        let dat = dir.path().join("holds.dat");
+        std::fs::copy(&xlsx, &dat).unwrap();
+
+        let wb = read_workbook(&dat).unwrap();
+        assert_eq!(wb.table.headers, hx_synth::HEADERS);
+        assert_eq!(wb.table.rows.len(), rows.len());
     }
 
     #[test]
