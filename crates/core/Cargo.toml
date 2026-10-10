@@ -1,0 +1,17 @@
+[package]
+name = "hx-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+calamine.workspace = true
+chrono.workspace = true
+csv.workspace = true
+fancy-regex.workspace = true
+regex.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
