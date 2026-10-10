@@ -12,6 +12,12 @@ pub enum ImportError {
     #[error("Missing required columns: {}. Map them to columns in your file.", .0.join(", "))]
     MissingColumns(Vec<String>),
 
-    #[error("The file has a header row but no data rows.")]
+    #[error("The file has a header row but no data rows. Export the report again or choose another file.")]
     Empty,
+
+    #[error("No hold could be read: {skipped_rows} rows were skipped, for example {example}. Check the column mapping and the date format.")]
+    NoHolds {
+        skipped_rows: usize,
+        example: String,
+    },
 }

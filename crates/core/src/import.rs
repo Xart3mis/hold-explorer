@@ -142,6 +142,16 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
         });
     }
 
+    if holds.is_empty() {
+        return Err(match skipped.first() {
+            None => ImportError::Empty,
+            Some(first) => ImportError::NoHolds {
+                skipped_rows: skipped.len(),
+                example: format!("row {}: {}", first.row_number, first.reason),
+            },
+        });
+    }
+
     Ok(Parsed {
         holds,
         skipped,
@@ -402,5 +412,37 @@ mod tests {
                 .unwrap()
                 .and_hms_opt(12, 0, 0)
         );
+    }
+
+    fn three_column_table(rows: Vec<Vec<Cell>>) -> RawTable {
+        RawTable {
+            headers: vec!["line_id".into(), "hold_remark".into(), "hold_type".into()],
+            rows,
+        }
+    }
+
+    #[test]
+    fn only_blank_rows_is_an_empty_file() {
+        let t = three_column_table(vec![vec![Cell::Empty; 3]; 4]);
+        let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
+        assert_eq!(err, ImportError::Empty);
+        assert!(err.to_string().contains("no data rows"));
+    }
+
+    #[test]
+    fn rows_that_are_all_skipped_report_the_count_and_an_example() {
+        let row = || vec![Cell::Empty, text("x"), text("MISC.")];
+        let t = three_column_table(vec![row(), row(), row(), row()]);
+        let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
+        assert_eq!(
+            err,
+            ImportError::NoHolds {
+                skipped_rows: 4,
+                example: "row 2: blank line_id".to_string()
+            }
+        );
+        let message = err.to_string();
+        assert!(message.contains("4 rows"), "{message}");
+        assert!(message.contains("row 2: blank line_id"), "{message}");
     }
 }
