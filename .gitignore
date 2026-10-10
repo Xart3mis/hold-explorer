@@ -7,6 +7,11 @@ dist/
 *.xlsx
 *.xls
 *.holdx
+*.csv
+*.xlsm
+*.xlsb
+*.ods
+Hold Explorer.html
 
 # Local tool state
 .omc/

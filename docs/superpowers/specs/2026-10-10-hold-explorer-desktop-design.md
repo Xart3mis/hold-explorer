@@ -133,11 +133,23 @@ The import review and the mapping step are page-level flows, not modal dialogs.
 - Remove the literal `_x000D_`.
 - A blank discipline becomes `Unspecified`.
 - Keep the cleaned original for display. Derive a case-folded key for grouping, so `FIV/AIV REPORT` and `fiv/aiv report` group together.
-- A row with a blank `line_id` or an unparseable required date is skipped, counted, and listed with its row number. The import continues.
+- A row with a blank `line_id` or an unparseable creation date is skipped, counted, and listed with its row number. The import continues.
+- Date cells are read as dates. Text is read as a date in these shapes: `yyyy-mm-dd` and `yyyy/mm/dd`; `dd-Mon-yyyy`; and the numeric shapes `a/b/yyyy`, `a-b-yyyy`, `a.b.yyyy`; each with an optional 24-hour or AM/PM time. A number in a date column is read as an Excel serial date.
+- The numeric shapes are ambiguous, so the day and month order is decided once per date column: a first component above 12 anywhere in the column means day-first, a second component above 12 means month-first. An undecided column takes the order of the other date column when that one is decided; otherwise day-first, as the HTML tool reads `d/m/yyyy`.
+- A source `id` is used only when it is an exact whole number. Sizes must be finite and above zero.
 
 ### 6.3 Snapshot date
 
-In order of trust: the `info` sheet's Report Date; the day and month in the filename combined with the year of the newest timestamp in the file; the file's modified time. The review shows the result and lets the user change it. The app never assumes the current year.
+In order of trust: the `info` sheet's Report Date; a date in the filename; the file's modified time. The app records which of the three it used, and the review shows the date with its source and lets the user change it. The app never assumes the current year.
+
+A filename date is used only when it is plausible:
+
+- A written year must lie between 2000 and 2100. The date must not be earlier than the newest timestamp in the file.
+- A date without a year takes the year of the newest timestamp in the file, or the following year when that would put it before that timestamp. It is accepted only within 92 days after the newest timestamp.
+- No filename date may be more than one day after the file's modified time.
+- A written-year date that fails these checks is not reinterpreted as a shorter date.
+
+Timestamps outside 2000 to 2100 are ignored when finding the newest timestamp.
 
 ### 6.4 Workspace matching
 
@@ -226,7 +238,9 @@ The app suggests near-duplicate remarks. The user accepts or rejects each sugges
 
 ### 8.5 Solve order
 
-A line is freed only when all of its blockers are solved. The solve order ranks blockers greedily: each step takes the blocker that frees the most lines given the steps before it, with ties broken by partial progress on lines still blocked by several blockers. The list is complete, not capped at 20 steps as in the HTML tool, and shows lines freed per step and a cumulative curve.
+A line is freed only when all of its blockers are solved. The solve order ranks blockers greedily: each step takes the blocker that frees the most lines given the steps before it. Ties are broken by the HTML tool's score (lines freed times 1000, plus the sum of `1 / remaining blockers` over the lines it only advances), and exact ties go to the blocker that appears first in the file. The list is complete, not capped at 20 steps as in the HTML tool, and shows lines freed per step and a cumulative curve.
+
+This differs from the HTML tool in one case, by decision: the HTML tool compares only its score, so a blocker on about 2,000 or more partly blocked lines can outrank a blocker that frees a line. Hold Explorer never ranks a blocker that frees nothing above one that frees a line.
 
 ### 8.6 Graph
 
@@ -334,7 +348,7 @@ The user stars lines, blockers, and saved views. The Follow-up screen shows each
 
 ### 11.3 Aging
 
-The age of an open hold is the snapshot date minus the creation date. The duration of a released hold is the release date minus the creation date. Age bands are set per workspace; the default is 0-13, 14-29, 30-59, 60-89, and 90+ days. One stale threshold, 90 days by default, feeds the attention list.
+The age of an open hold is the snapshot date minus the creation date. The duration of a released hold is the release date minus the creation date. Both are differences between calendar dates, in days: a hold created yesterday evening is one day old this morning. Age bands are set per workspace; the default is 0-13, 14-29, 30-59, 60-89, and 90+ days. One stale threshold, 90 days by default, feeds the attention list.
 
 ### 11.4 Performance
 
@@ -385,7 +399,7 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 
 ## 14. Error handling
 
-- An import failure names its cause and its fix: an unreadable or password-protected file, no recognizable sheet, missing required columns (listed, and the mapping step opens), or zero rows.
+- An import failure names its cause and its fix: an unreadable or password-protected file, no recognizable sheet, missing required columns (listed, and the mapping step opens), no data rows, or no row from which a hold could be read (the message gives the number of skipped rows and an example).
 - An import either completes or changes nothing.
 - An export to a file that is open elsewhere says to close the file or choose another name.
 - A second launch focuses the running window; two instances never write the same data.
@@ -411,7 +425,7 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 
 ## 17. Acceptance
 
-- The same input gives the same numbers as the HTML tool for open holds.
+- The same input gives the same numbers as the HTML tool for open holds, except for the solve-order case described in 8.5.
 - A 10,000-row import completes in under 2 s. A filter change responds in under 100 ms. A cold start takes under 2 s.
 - The Windows executable is under 25 MB and runs without admin rights or installation on Windows 11 and on an updated Windows 10.
 - Every feature except the update check works offline.
