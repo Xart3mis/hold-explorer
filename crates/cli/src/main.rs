@@ -55,7 +55,7 @@ enum Cmd {
 enum WsCmd {
     /// Create a workspace file in a folder and print its info.
     Create { dir: PathBuf, name: String },
-    /// List the workspaces in a folder.
+    /// List the workspaces in a folder, and the workspace files that could not be read.
     List { dir: PathBuf },
     /// Import a holds file into a workspace as a new snapshot.
     Import {

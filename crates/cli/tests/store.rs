@@ -90,9 +90,11 @@ fn create_import_list_snapshots_and_summary() {
     assert_eq!(snapshot["skipped"], 0);
 
     let listed = json(&cli().args(["ws", "list"]).arg(dir.path()).output().unwrap());
-    assert_eq!(listed.as_array().unwrap().len(), 1);
-    assert_eq!(listed[0]["id"], created["id"]);
-    assert_eq!(listed[0]["snapshot_count"], 1);
+    let workspaces = listed["workspaces"].as_array().unwrap();
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(workspaces[0]["id"], created["id"]);
+    assert_eq!(workspaces[0]["snapshot_count"], 1);
+    assert_eq!(listed["unreadable"], serde_json::json!([]));
 
     let snapshots = json(&cli().args(["ws", "snapshots"]).arg(&ws).output().unwrap());
     assert_eq!(snapshots.as_array().unwrap().len(), 1);
@@ -208,9 +210,31 @@ fn the_project_number_shows_in_the_list_after_import() {
     json(&import(&ws, &synth_file(dir.path()), &[]));
     let listed = json(&cli().args(["ws", "list"]).arg(dir.path()).output().unwrap());
     assert_eq!(
-        listed[0]["project_numbers"],
+        listed["workspaces"][0]["project_numbers"],
         serde_json::json!(["0000-TEST"])
     );
+}
+
+#[test]
+fn the_list_names_a_workspace_it_cannot_read_beside_the_ones_it_can() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, readable) = create(dir.path(), "Readable");
+    let (newer, _) = create(dir.path(), "Newer");
+    // Bytes 60 to 63 of a database file hold its schema version.
+    let mut bytes = std::fs::read(&newer).unwrap();
+    bytes[60..64].copy_from_slice(&99u32.to_be_bytes());
+    std::fs::write(&newer, &bytes).unwrap();
+
+    let listed = json(&cli().args(["ws", "list"]).arg(dir.path()).output().unwrap());
+    let workspaces = listed["workspaces"].as_array().unwrap();
+    assert_eq!(workspaces.len(), 1);
+    assert_eq!(workspaces[0]["id"], readable["id"]);
+    let unreadable = listed["unreadable"].as_array().unwrap();
+    assert_eq!(unreadable.len(), 1);
+    assert_eq!(unreadable[0]["path"], newer.to_str().unwrap());
+    assert_eq!(unreadable[0]["error"]["kind"], "NewerSchema");
+    assert_eq!(unreadable[0]["error"]["found"], 99);
+    assert_eq!(std::fs::read(&newer).unwrap(), bytes);
 }
 
 #[test]

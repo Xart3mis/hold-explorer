@@ -1,20 +1,62 @@
 //! Finding, matching, and deleting the workspace files in a folder.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 
 use crate::error::StoreError;
 use crate::schema::{peek_version, SCHEMA_VERSION};
 use crate::workspace::{io_error, Workspace, WorkspaceInfo, EXTENSION};
 
-/// Every workspace file in `dir`, sorted by name then id. Files that are not workspaces, or that
-/// a newer version wrote, are skipped and left untouched. A folder that does not exist has none.
-pub fn list_workspaces(dir: &Path) -> Result<Vec<WorkspaceInfo>, StoreError> {
+/// The workspaces of a folder, and the workspace files that could not be read.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceList {
+    /// Readable workspaces, sorted by name, then id.
+    pub workspaces: Vec<WorkspaceInfo>,
+    /// Workspace files that could not be opened, sorted by path, each with the reason.
+    pub unreadable: Vec<UnreadableWorkspace>,
+}
+
+/// A workspace file that could not be opened.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnreadableWorkspace {
+    /// The workspace file.
+    pub path: PathBuf,
+    /// Why it could not be opened.
+    pub error: StoreError,
+}
+
+/// What the workspace file at `path` says about itself. A file a newer version wrote is refused
+/// before anything else is read from it.
+fn read_info(path: &Path) -> Result<WorkspaceInfo, StoreError> {
+    let found = peek_version(path)?;
+    if found > SCHEMA_VERSION {
+        return Err(StoreError::NewerSchema {
+            path: path.display().to_string(),
+            found,
+            supported: SCHEMA_VERSION,
+        });
+    }
+    Workspace::open(path)?.info()
+}
+
+/// Every file in `dir` named `*.holdx-ws`: the workspaces that could be read, and the ones that
+/// could not, each with the reason. One unreadable file never hides the others.
+///
+/// A file that is not a workspace at all is left out of both lists and left untouched. A
+/// workspace a newer version wrote is listed as unreadable and never written to. A folder that
+/// does not exist has no workspaces; an error is returned only when the folder itself cannot be
+/// read.
+pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
+    let mut list = WorkspaceList {
+        workspaces: Vec::new(),
+        unreadable: Vec::new(),
+    };
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(list),
         Err(e) => return Err(io_error(dir, &e)),
     };
-    let mut found = Vec::new();
     for entry in entries {
         let path = entry.map_err(|e| io_error(dir, &e))?.path();
         let named_like_a_workspace = path
@@ -24,25 +66,24 @@ pub fn list_workspaces(dir: &Path) -> Result<Vec<WorkspaceInfo>, StoreError> {
         if !named_like_a_workspace || !path.is_file() {
             continue;
         }
-        match peek_version(&path) {
-            Ok(version) if version <= SCHEMA_VERSION => {}
-            Ok(_) | Err(StoreError::NotAWorkspace { .. }) => continue,
-            Err(e) => return Err(e),
-        }
-        match Workspace::open(&path).and_then(|workspace| workspace.info()) {
-            Ok(info) => found.push(info),
-            Err(StoreError::NotAWorkspace { .. } | StoreError::NewerSchema { .. }) => {}
-            Err(e) => return Err(e),
+        match read_info(&path) {
+            Ok(info) => list.workspaces.push(info),
+            Err(StoreError::NotAWorkspace { .. }) => {}
+            Err(error) => list.unreadable.push(UnreadableWorkspace { path, error }),
         }
     }
-    found.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
-    Ok(found)
+    list.workspaces
+        .sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+    list.unreadable.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(list)
 }
 
-/// Workspaces in `dir` whose project numbers include `project_no` (trimmed, compared exactly).
+/// Readable workspaces in `dir` whose project numbers include `project_no` (trimmed, compared
+/// exactly), sorted by name, then id.
 pub fn find_by_project(dir: &Path, project_no: &str) -> Result<Vec<WorkspaceInfo>, StoreError> {
     let project_no = project_no.trim();
     Ok(list_workspaces(dir)?
+        .workspaces
         .into_iter()
         .filter(|info| info.project_numbers.iter().any(|p| p == project_no))
         .collect())
@@ -61,6 +102,13 @@ mod tests {
 
     fn names(list: &[WorkspaceInfo]) -> Vec<&str> {
         list.iter().map(|i| i.name.as_str()).collect()
+    }
+
+    fn nothing() -> WorkspaceList {
+        WorkspaceList {
+            workspaces: vec![],
+            unreadable: vec![],
+        }
     }
 
     #[test]
@@ -88,13 +136,17 @@ mod tests {
             .execute_batch("CREATE TABLE foo (a INTEGER)")
             .unwrap();
         let before = std::fs::read(&foreign).unwrap();
-        let list = list_workspaces(dir.path()).unwrap();
+        let WorkspaceList {
+            workspaces: list,
+            unreadable,
+        } = list_workspaces(dir.path()).unwrap();
         assert_eq!(names(&list), vec!["Alpha", "Alpha", "Beta"]);
         let mut ids = [a1.id, a2.id];
         ids.sort();
         assert_eq!(list[0].id, ids[0]);
         assert_eq!(list[1].id, ids[1]);
         assert_eq!(list[2], b);
+        assert_eq!(unreadable, vec![]);
         assert_eq!(std::fs::read(&foreign).unwrap(), before);
         assert_eq!(std::fs::read(&notes).unwrap(), notes_before);
         let files = std::fs::read_dir(dir.path()).unwrap().count();
@@ -104,7 +156,10 @@ mod tests {
     #[test]
     fn a_missing_directory_lists_nothing() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(list_workspaces(&dir.path().join("nope")).unwrap(), vec![]);
+        assert_eq!(
+            list_workspaces(&dir.path().join("nope")).unwrap(),
+            nothing()
+        );
     }
 
     #[test]
@@ -142,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn a_workspace_from_a_newer_version_is_skipped_and_untouched() {
+    fn a_workspace_from_a_newer_version_is_listed_as_unreadable_and_untouched() {
         let dir = tempfile::tempdir().unwrap();
         Workspace::create(dir.path(), "Ok").unwrap();
         let newer = Workspace::create(dir.path(), "Newer")
@@ -155,13 +210,117 @@ mod tests {
             .unwrap();
         let before = std::fs::read(&newer.path).unwrap();
         let list = list_workspaces(dir.path()).unwrap();
-        assert_eq!(names(&list), vec!["Ok"]);
+        assert_eq!(names(&list.workspaces), vec!["Ok"]);
+        assert_eq!(
+            list.unreadable,
+            vec![UnreadableWorkspace {
+                path: newer.path.clone(),
+                error: StoreError::NewerSchema {
+                    path: newer.path.display().to_string(),
+                    found: 99,
+                    supported: 1,
+                },
+            }]
+        );
         assert_eq!(std::fs::read(&newer.path).unwrap(), before);
         let error = Workspace::open(&newer.path).err().unwrap();
         assert!(
             matches!(error, StoreError::NewerSchema { found: 99, .. }),
             "{error}"
         );
+    }
+
+    /// A workspace file whose `meta` table lacks the `name` entry.
+    fn without_a_name(dir: &Path, file_name: &str) -> PathBuf {
+        let elsewhere = tempfile::tempdir().unwrap();
+        let made = Workspace::create(elsewhere.path(), "Nameless")
+            .unwrap()
+            .info()
+            .unwrap();
+        let path = dir.join(file_name);
+        std::fs::copy(&made.path, &path).unwrap();
+        Connection::open(&path)
+            .unwrap()
+            .execute("DELETE FROM meta WHERE key = 'name'", [])
+            .unwrap();
+        path
+    }
+
+    #[test]
+    fn unreadable_workspaces_are_reported_beside_the_readable_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("ws");
+        let healthy = Workspace::create(&folder, "Healthy")
+            .unwrap()
+            .info()
+            .unwrap();
+        let nameless = without_a_name(&folder, "a-nameless.holdx-ws");
+        let newer = folder.join("b-newer.holdx-ws");
+        std::fs::copy(&healthy.path, &newer).unwrap();
+        Connection::open(&newer)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        let files = [&healthy.path, &nameless, &newer];
+        let before: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(f).unwrap()).collect();
+
+        let list = list_workspaces(&folder).unwrap();
+        assert_eq!(list.workspaces, vec![healthy.clone()]);
+        assert_eq!(list.unreadable.len(), 2, "{:?}", list.unreadable);
+        assert_eq!(list.unreadable[0].path, nameless);
+        assert!(
+            matches!(&list.unreadable[0].error, StoreError::Corrupt { detail } if detail.contains("name")),
+            "{}",
+            list.unreadable[0].error
+        );
+        assert_eq!(list.unreadable[1].path, newer);
+        assert_eq!(
+            list.unreadable[1].error,
+            StoreError::NewerSchema {
+                path: newer.display().to_string(),
+                found: 99,
+                supported: 1,
+            }
+        );
+        let after: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(f).unwrap()).collect();
+        assert_eq!(after, before);
+        assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 3);
+    }
+
+    #[test]
+    fn the_listing_serializes_with_both_lists() {
+        let list = WorkspaceList {
+            workspaces: vec![],
+            unreadable: vec![UnreadableWorkspace {
+                path: PathBuf::from("w.holdx-ws"),
+                error: StoreError::Corrupt {
+                    detail: "bad".into(),
+                },
+            }],
+        };
+        let json = serde_json::to_value(&list).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "workspaces": [],
+                "unreadable": [
+                    {"path": "w.holdx-ws", "error": {"kind": "Corrupt", "detail": "bad"}}
+                ],
+            })
+        );
+        let back: WorkspaceList = serde_json::from_value(json).unwrap();
+        assert_eq!(back, list);
+    }
+
+    #[test]
+    fn find_by_project_goes_on_past_an_unreadable_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("ws");
+        let mut a = Workspace::create(&folder, "A").unwrap();
+        a.add_project_number("P1").unwrap();
+        drop(a);
+        without_a_name(&folder, "nameless.holdx-ws");
+        assert_eq!(names(&find_by_project(&folder, "P1").unwrap()), vec!["A"]);
     }
 
     #[test]
@@ -179,7 +338,7 @@ mod tests {
             &crashed,
             "INSERT INTO project (project_no) VALUES (?1)",
         );
-        let list = list_workspaces(&folder).unwrap();
+        let list = list_workspaces(&folder).unwrap().workspaces;
         assert_eq!(names(&list), vec!["Crashed"]);
         assert_eq!(list[0].id, original.id);
         assert!(list[0].project_numbers.is_empty());
@@ -193,7 +352,8 @@ mod tests {
         let stray = dir.path().join("short.holdx-ws");
         std::fs::write(&stray, "tiny\n").unwrap();
         let list = list_workspaces(dir.path()).unwrap();
-        assert_eq!(names(&list), vec!["Ok"]);
+        assert_eq!(names(&list.workspaces), vec!["Ok"]);
+        assert_eq!(list.unreadable, vec![]);
         assert_eq!(std::fs::read(&stray).unwrap(), b"tiny\n");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     }
@@ -210,7 +370,7 @@ mod tests {
             )
             .unwrap();
         let before = std::fs::read(&path).unwrap();
-        assert_eq!(list_workspaces(dir.path()).unwrap(), vec![]);
+        assert_eq!(list_workspaces(dir.path()).unwrap(), nothing());
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
@@ -223,7 +383,9 @@ mod tests {
             .info()
             .unwrap();
         std::fs::copy(&info.path, dir.path().join(".holdx-ws")).unwrap();
-        assert_eq!(list_workspaces(dir.path()).unwrap().len(), 2);
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(list.workspaces.len(), 2);
+        assert_eq!(list.unreadable, vec![]);
     }
 
     #[test]
@@ -237,7 +399,8 @@ mod tests {
             .unwrap();
         let before = std::fs::read(&path).unwrap();
         let list = list_workspaces(dir.path()).unwrap();
-        assert_eq!(names(&list), vec!["Ok"]);
+        assert_eq!(names(&list.workspaces), vec!["Ok"]);
+        assert_eq!(list.unreadable, vec![]);
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     }
