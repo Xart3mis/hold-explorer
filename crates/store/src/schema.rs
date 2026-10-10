@@ -97,13 +97,23 @@ pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
 
 /// Reads the workspace id of the existing workspace file at `path` through a read-only
 /// connection, so nothing is written, migrated, or backed up. `None` when `meta` has no id. Every
-/// schema version has the `meta` table.
+/// schema version written by this app has the `meta` table; a file without one gives `None`.
 pub(crate) fn peek_id(path: &Path) -> Result<Option<String>, StoreError> {
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|e| database_error(path, e))?;
+    let has_meta: bool = conn
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|e| database_error(path, e))?;
+    if !has_meta {
+        return Ok(None);
+    }
     conn.query_row("SELECT value FROM meta WHERE key = 'id'", [], |r| r.get(0))
         .optional()
         .map_err(|e| database_error(path, e))

@@ -202,4 +202,20 @@ mod tests {
         std::fs::copy(&info.path, dir.path().join(".holdx-ws")).unwrap();
         assert_eq!(list_workspaces(dir.path()).unwrap().len(), 2);
     }
+
+    #[test]
+    fn a_workspace_marked_file_without_tables_is_skipped_without_being_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::create(dir.path(), "Ok").unwrap();
+        let path = dir.path().join("empty.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("PRAGMA application_id = 1213749075;")
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(names(&list), vec!["Ok"]);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
 }

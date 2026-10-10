@@ -474,6 +474,21 @@ mod tests {
     }
 
     #[test]
+    fn open_refuses_a_workspace_marked_file_without_tables_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("w.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("PRAGMA application_id = 1213749075;")
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let error = Workspace::open(&path).err().unwrap();
+        assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
+    }
+
+    #[test]
     fn open_refuses_a_short_text_file_and_leaves_it_unchanged() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("short.holdx-ws");
