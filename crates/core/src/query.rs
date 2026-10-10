@@ -107,6 +107,8 @@ pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: Dim, col_dim: Dim) -> Ma
     Matrix { rows, cols, cells }
 }
 
+/// One line of a view. Sizes, stress calc, and the mismatch flag come from the line's first
+/// hold in the selection, because they are line-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LineRow {
     pub line_id: String,
@@ -320,5 +322,24 @@ mod tests {
         let rows = lines(&sample(), &open(), LineSort::OldestFirst);
         let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
         assert_eq!(ids, vec!["L1", "L2", "L4"]);
+    }
+
+    #[test]
+    fn median_of_two_ages_is_the_lower_one() {
+        let mut ds = sample();
+        ds.rows.truncate(2);
+        ds.rows[0].age_days = Some(9);
+        ds.rows[1].age_days = Some(3);
+        assert_eq!(summary(&ds, &open()).median_age_days, Some(3));
+    }
+
+    #[test]
+    fn oldest_first_puts_lines_without_a_creation_date_last() {
+        let mut ds = sample();
+        // L2 has a single open hold; without a creation date it has no age.
+        ds.rows[2].age_days = None;
+        let rows = lines(&ds, &open(), LineSort::OldestFirst);
+        let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
+        assert_eq!(ids, vec!["L1", "L4", "L2"]);
     }
 }

@@ -238,6 +238,24 @@ mod tests {
     }
 
     #[test]
+    fn hold_without_a_creation_date_is_excluded_by_any_age_limit() {
+        let mut ds = sample();
+        ds.rows[0].age_days = None;
+        let count_with = |spec: &FilterSpec| ds.rows.iter().filter(|r| spec.matches(r)).count();
+        assert_eq!(count_with(&FilterSpec::default()), 4);
+        let min = FilterSpec {
+            min_age_days: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(count_with(&min), 3);
+        let max = FilterSpec {
+            max_age_days: Some(1000),
+            ..Default::default()
+        };
+        assert_eq!(count_with(&max), 3);
+    }
+
+    #[test]
     fn age_range() {
         assert_eq!(
             count(&FilterSpec {
