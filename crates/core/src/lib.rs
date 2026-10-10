@@ -4,8 +4,9 @@
 //!
 //! The pipeline, in order:
 //!
-//! 1. Open: [`load::open_file`] reads a `.xlsx`, `.xls`, or `.csv` file into an
-//!    [`load::Opened`] (the raw table, a content hash, and a proposed column mapping).
+//! 1. Open: [`load::open_file`] reads a `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`, or delimited
+//!    text (`.csv`, `.tsv`, `.txt`) file into an [`load::Opened`] (the raw table, a content hash,
+//!    and a proposed column mapping); [`load::open_sheet`] opens a named sheet instead.
 //! 2. Map: [`mapping::ColumnMap::auto`] proposes which column supplies which field; a caller
 //!    may edit the map before parsing.
 //! 3. Parse: [`load::parse_opened`] (or [`import::parse_table`] on a bare table) turns the rows
@@ -31,7 +32,7 @@ pub mod mapping;
 pub mod model;
 pub mod normalize;
 pub mod query;
-pub mod reader;
+mod reader;
 pub mod rules;
 pub mod snapshot_date;
 pub mod solve;

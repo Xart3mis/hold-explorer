@@ -1,4 +1,7 @@
-//! One call from a file path to parsed holds.
+//! From a file path to parsed holds, in two steps. [`open_file`] (or [`open_sheet`]) reads the
+//! file into an [`Opened`]: the raw table, a content hash, and a proposed column mapping, which
+//! a caller may show and edit. [`parse_opened`] turns an `Opened` and a mapping into a
+//! [`Loaded`]. [`load_file`] runs both with the automatic mapping.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -27,6 +30,9 @@ pub struct Opened {
     pub content_hash: String,
     /// Key/value pairs from the workbook's information sheet; empty when it has none.
     pub info: BTreeMap<String, String>,
+    /// Every sheet name of the workbook in workbook order, for a sheet picker; empty for
+    /// delimited text.
+    pub sheets: Vec<String>,
     /// The sheet the table was read from.
     pub sheet_name: String,
     /// The sheet's header row and data rows, before mapping.
@@ -75,8 +81,21 @@ pub struct Loaded {
     pub snapshot: Option<SnapshotDate>,
 }
 
-/// Reads the file. Succeeds even when required columns are not mapped.
+/// Reads the file, choosing the data sheet of a workbook itself (the sheet named `data`, else
+/// the first with the required columns, else the first with rows). Succeeds even when required
+/// columns are not mapped.
 pub fn open_file(path: &Path) -> Result<Opened, ImportError> {
+    open_choosing(path, None)
+}
+
+/// Reads the file with the workbook sheet called `sheet` as the data sheet, whatever its
+/// columns. An unknown name gives `NoDataSheet` listing the sheets; so does delimited text,
+/// with an empty list, because it has no sheets.
+pub fn open_sheet(path: &Path, sheet: &str) -> Result<Opened, ImportError> {
+    open_choosing(path, Some(sheet))
+}
+
+fn open_choosing(path: &Path, sheet: Option<&str>) -> Result<Opened, ImportError> {
     let (bytes, modified) = read_file_bytes(path)?;
     let content_hash =
         Sha256::digest(&bytes)
@@ -86,7 +105,7 @@ pub fn open_file(path: &Path) -> Result<Opened, ImportError> {
                 let _ = write!(hex, "{byte:02x}");
                 hex
             });
-    let workbook = parse_workbook_bytes(path, &bytes)?;
+    let workbook = parse_workbook_bytes(path, &bytes, sheet)?;
     let auto_map = ColumnMap::auto(&workbook.table.headers);
     Ok(Opened {
         file_name: path
@@ -97,6 +116,7 @@ pub fn open_file(path: &Path) -> Result<Opened, ImportError> {
         modified: modified.map(|t| DateTime::<Local>::from(t).naive_local()),
         content_hash,
         info: workbook.info,
+        sheets: workbook.sheets,
         sheet_name: workbook.sheet_name,
         table: workbook.table,
         auto_map,
@@ -371,5 +391,80 @@ mod tests {
             loaded.snapshot.map(|s| s.source),
             Some(SnapshotSource::InfoSheet)
         );
+    }
+
+    fn two_sheet_workbook(dir: &std::path::Path) -> std::path::PathBuf {
+        let path = dir.join("two.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let data = book.add_worksheet();
+        data.set_name("data").unwrap();
+        for (i, h) in ["line_id", "hold_remark", "hold_type"].iter().enumerate() {
+            data.write_string(0, i as u16, *h).unwrap();
+            data.write_string(1, i as u16, ["L-1", "x", "MISC."][i])
+                .unwrap();
+        }
+        let other = book.add_worksheet();
+        other.set_name("Other").unwrap();
+        for (i, h) in ["Line", "Why", "Kind"].iter().enumerate() {
+            other.write_string(0, i as u16, *h).unwrap();
+        }
+        other.write_string(1, 0, "L-9").unwrap();
+        book.save(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn open_file_lists_sheets_and_open_sheet_chooses_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = two_sheet_workbook(dir.path());
+        let opened = open_file(&path).unwrap();
+        assert_eq!(opened.sheets, vec!["data", "Other"]);
+        assert_eq!(opened.sheet_name, "data");
+
+        let other = open_sheet(&path, "Other").unwrap();
+        assert_eq!(other.sheet_name, "Other");
+        assert_eq!(other.table.headers, vec!["Line", "Why", "Kind"]);
+        assert_eq!(other.sheets, vec!["data", "Other"]);
+        assert!(!other.auto_map.missing_required().is_empty());
+    }
+
+    #[test]
+    fn open_sheet_with_an_unknown_name_lists_the_sheets() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = two_sheet_workbook(dir.path());
+        let err = open_sheet(&path, "Nope").unwrap_err();
+        assert_eq!(
+            err,
+            ImportError::NoDataSheet {
+                sheets: vec!["data".into(), "Other".into()]
+            }
+        );
+    }
+
+    #[test]
+    fn delimited_text_has_no_sheets() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.csv");
+        std::fs::write(&path, "line_id,hold_remark,hold_type\nL-1,x,MISC.\n").unwrap();
+        assert!(open_file(&path).unwrap().sheets.is_empty());
+        let err = open_sheet(&path, "csv").unwrap_err();
+        assert_eq!(err, ImportError::NoDataSheet { sheets: Vec::new() });
+    }
+
+    #[test]
+    fn tab_and_text_files_are_read_as_delimited_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let tsv = dir.path().join("a.tsv");
+        std::fs::write(&tsv, "line_id\thold_remark\thold_type\nL-1\tx\tMISC.\n").unwrap();
+        assert_eq!(load_file(&tsv).unwrap().parsed.holds.len(), 1);
+
+        let text = "line_id\thold_remark\thold_type\r\nL-1\tx\tMISC.\r\n";
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        let txt = dir.path().join("b.txt");
+        std::fs::write(&txt, &bytes).unwrap();
+        assert_eq!(load_file(&txt).unwrap().parsed.holds.len(), 1);
     }
 }

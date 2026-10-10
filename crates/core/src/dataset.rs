@@ -82,6 +82,17 @@ impl Dataset {
             .collect();
         Dataset { snapshot, rows }
     }
+
+    /// The distinct keys of `Hold::extra` over all rows, sorted: the custom dimensions the file
+    /// supplies.
+    pub fn custom_dims(&self) -> Vec<String> {
+        let keys: std::collections::BTreeSet<&String> = self
+            .rows
+            .iter()
+            .flat_map(|row| row.hold.extra.keys())
+            .collect();
+        keys.into_iter().cloned().collect()
+    }
 }
 
 #[cfg(test)]
@@ -173,5 +184,15 @@ mod tests {
         let ds = sample();
         assert!(ds.rows[4].size_mismatch());
         assert!(!ds.rows[0].size_mismatch());
+    }
+
+    #[test]
+    fn custom_dims_lists_distinct_extra_keys_sorted() {
+        let mut ds = sample();
+        ds.rows[0].hold.extra.insert("Zone".into(), "a".into());
+        ds.rows[1].hold.extra.insert("Area".into(), "b".into());
+        ds.rows[2].hold.extra.insert("Zone".into(), "c".into());
+        assert_eq!(ds.custom_dims(), vec!["Area", "Zone"]);
+        assert!(sample().custom_dims().is_empty());
     }
 }

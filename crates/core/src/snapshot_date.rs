@@ -34,6 +34,9 @@ pub enum SnapshotSource {
     FileName,
     /// The file's last-modified time.
     FileTime,
+    /// A date the user entered. Nothing in this crate produces it; a caller uses it when the
+    /// user types the snapshot date because the file gave none or a wrong one.
+    User,
 }
 
 /// The moment a report was taken and how that was found out.
@@ -528,6 +531,15 @@ mod tests {
         assert_eq!(
             from_name("holds_29-Feb.xlsx", "2027-12-20 09:00:00", None),
             named("2028-02-29")
+        );
+    }
+
+    #[test]
+    fn user_source_round_trips_through_json() {
+        let json = serde_json::to_string(&SnapshotSource::User).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SnapshotSource>(&json).unwrap(),
+            SnapshotSource::User
         );
     }
 }

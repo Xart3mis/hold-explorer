@@ -1,4 +1,5 @@
-//! Reads `.xlsx`, `.xls`, and `.csv` files into a raw table.
+//! Reads `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`, and delimited text (`.csv`, `.tsv`, `.txt`)
+//! files into a raw table.
 
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
@@ -12,22 +13,23 @@ use calamine::{
 };
 
 use crate::error::ImportError;
-use serde::{Deserialize, Serialize};
 
 use crate::mapping::ColumnMap;
 use crate::table::{Cell, RawTable};
 
 /// What a spreadsheet file holds: its information sheet and its data sheet.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkbookData {
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct WorkbookData {
     /// Key and value pairs of the `info` sheet. Empty when there is none.
-    pub info: BTreeMap<String, String>,
-    /// The sheet the table was read from; for a CSV file, `csv`.
-    pub sheet_name: String,
+    pub(crate) info: BTreeMap<String, String>,
+    /// Every sheet name of the workbook in workbook order; empty for delimited text.
+    pub(crate) sheets: Vec<String>,
+    /// The sheet the table was read from; for delimited text, `csv`.
+    pub(crate) sheet_name: String,
     /// The header row and data rows of that sheet.
-    pub table: RawTable,
+    pub(crate) table: RawTable,
     /// Cells holding an Excel error (#N/A, #REF!, ...) in the chosen sheet, read as blank.
-    pub error_cells: usize,
+    pub(crate) error_cells: usize,
 }
 
 fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
@@ -239,6 +241,7 @@ fn read_csv(path: &Path, bytes: &[u8]) -> Result<WorkbookData, ImportError> {
 
     Ok(WorkbookData {
         info: BTreeMap::new(),
+        sheets: Vec::new(),
         sheet_name: "csv".to_string(),
         table: RawTable {
             headers,
@@ -273,23 +276,33 @@ fn open_sheets<'a>(
     })
 }
 
-/// Reads a `.xlsx`, `.xls`, or `.csv` file from `path` into a [`WorkbookData`]. The format is
-/// chosen by the file extension. Fails with `NotFound`, `EmptyFile`, `Unreadable`, or
-/// `NoDataSheet`.
-pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
+/// Reads the file at `path` into a [`WorkbookData`], choosing the data sheet itself. Fails with
+/// `NotFound`, `EmptyFile`, `Unreadable`, or `NoDataSheet`.
+#[cfg(test)]
+pub(crate) fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
     let (bytes, _) = read_file_bytes(path)?;
-    parse_workbook_bytes(path, &bytes)
+    parse_workbook_bytes(path, &bytes, None)
 }
 
-/// Parses the bytes of a file; `path` only gives the extension and the error messages.
-pub(crate) fn parse_workbook_bytes(path: &Path, bytes: &[u8]) -> Result<WorkbookData, ImportError> {
+/// Parses the bytes of a file; `path` only gives the extension and the error messages. The
+/// format is chosen by the extension: `.csv`, `.tsv`, and `.txt` are delimited text, the rest
+/// are workbooks. `sheet` names the data sheet of a workbook; `None` lets the reader choose it.
+/// Delimited text has no sheets, so a `sheet` gives `NoDataSheet` with an empty list.
+pub(crate) fn parse_workbook_bytes(
+    path: &Path,
+    bytes: &[u8],
+    sheet: Option<&str>,
+) -> Result<WorkbookData, ImportError> {
     let extension = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
-    if extension == "csv" {
-        return read_csv(path, bytes);
+    if matches!(extension.as_str(), "csv" | "tsv" | "txt") {
+        return match sheet {
+            Some(_) => Err(ImportError::NoDataSheet { sheets: Vec::new() }),
+            None => read_csv(path, bytes),
+        };
     }
 
     let mut workbook = open_sheets(&extension, bytes).map_err(|e| unreadable(path, e))?;
@@ -309,6 +322,23 @@ pub(crate) fn parse_workbook_bytes(path: &Path, bytes: &[u8]) -> Result<Workbook
                 }
             }
         }
+    }
+
+    if let Some(wanted) = sheet {
+        let Some(name) = names.iter().find(|n| is_named(n, wanted)) else {
+            return Err(ImportError::NoDataSheet { sheets: names });
+        };
+        let range = workbook
+            .worksheet_range(name)
+            .map_err(|e| unreadable(path, format!("sheet \"{name}\": {e}")))?;
+        let (table, error_cells) = table_from_range(&range);
+        return Ok(WorkbookData {
+            info,
+            sheet_name: name.clone(),
+            sheets: names.clone(),
+            table,
+            error_cells,
+        });
     }
 
     let mut tables: Vec<(String, RawTable, usize)> = Vec::new();
@@ -342,6 +372,7 @@ pub(crate) fn parse_workbook_bytes(path: &Path, bytes: &[u8]) -> Result<Workbook
             let (sheet_name, table, error_cells) = tables.swap_remove(index);
             Ok(WorkbookData {
                 info,
+                sheets: names,
                 sheet_name,
                 table,
                 error_cells,

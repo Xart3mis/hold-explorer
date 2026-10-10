@@ -18,7 +18,7 @@ pub enum ImportError {
         path: String,
     },
 
-    #[error("Could not read {path}: {detail}. Open the file in Excel and save it as .xlsx without a password, then choose it again.")]
+    #[error("Could not read {path}: {detail}. Check that the file is an Excel workbook or a CSV file, that it is saved without a password, and that you have permission to read it, then choose it again.")]
     /// The file at `path` exists but could not be read; `detail` is the underlying reason.
     Unreadable {
         /// The file that could not be read.
@@ -77,6 +77,23 @@ mod tests {
         };
         assert!(message(1).contains("1 row was skipped"), "{}", message(1));
         assert!(message(4).contains("4 rows were skipped"), "{}", message(4));
+    }
+
+    #[test]
+    fn unreadable_advice_fits_every_cause() {
+        let message = ImportError::Unreadable {
+            path: "a.xlsx".into(),
+            detail: "Permission denied".into(),
+        }
+        .to_string();
+        for part in [
+            "Permission denied",
+            "Excel workbook or a CSV",
+            "password",
+            "permission",
+        ] {
+            assert!(message.contains(part), "{message}");
+        }
     }
 
     fn every_variant() -> Vec<(ImportError, &'static str)> {

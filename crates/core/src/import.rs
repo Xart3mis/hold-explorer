@@ -85,7 +85,8 @@ fn decided_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> Option<D
 
 /// The order of one date column; an undecided column is read day-first, because the original
 /// tool reads `d/m/yyyy`.
-pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOrder {
+#[cfg(test)]
+fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOrder {
     decided_date_order(cells).unwrap_or(DateOrder::DayFirst)
 }
 
