@@ -36,7 +36,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     };
     let started = Instant::now();
     let s = summary(&ds, &spec);
-    let groups = group_by(&ds, &spec, Dim::Discipline);
+    let groups = group_by(&ds, &spec, &Dim::Discipline);
     let rows = lines(&ds, &spec, LineSort::HoldsDesc);
     let views = started.elapsed();
     assert!(s.holds > 0 && !groups.is_empty() && !rows.is_empty());

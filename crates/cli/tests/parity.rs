@@ -38,7 +38,7 @@ fn legacy_input(rows: &[SynthRow]) -> Value {
     )
 }
 
-fn counts(ds: &Dataset, dim: Dim) -> Value {
+fn counts(ds: &Dataset, dim: &Dim) -> Value {
     let mut map = Map::new();
     for group in group_by(ds, &FilterSpec::default(), dim) {
         map.insert(group.key, json!([group.holds, group.lines]));
@@ -87,22 +87,22 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
 
     assert_eq!(
         legacy["by"]["d"],
-        counts(&ds, Dim::Discipline),
+        counts(&ds, &Dim::Discipline),
         "seed {seed}: by discipline"
     );
     assert_eq!(
         legacy["by"]["t"],
-        counts(&ds, Dim::HoldType),
+        counts(&ds, &Dim::HoldType),
         "seed {seed}: by hold type"
     );
     assert_eq!(
         legacy["by"]["r"],
-        counts(&ds, Dim::Role),
+        counts(&ds, &Dim::Role),
         "seed {seed}: by role"
     );
     assert_eq!(
         legacy["by"]["z"],
-        counts(&ds, Dim::BlockerType),
+        counts(&ds, &Dim::BlockerType),
         "seed {seed}: by blocker type"
     );
 

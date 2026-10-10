@@ -80,8 +80,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 "skipped": skipped,
                 "warnings": warnings,
                 "summary": summary(&ds, &open),
-                "by_discipline": group_by(&ds, &open, Dim::Discipline),
-                "by_hold_type": group_by(&ds, &open, Dim::HoldType),
+                "by_discipline": group_by(&ds, &open, &Dim::Discipline),
+                "by_hold_type": group_by(&ds, &open, &Dim::HoldType),
                 "top_lines": top_lines,
                 "solve": solve_plan(&ds, &open, Some(10)).steps,
             });

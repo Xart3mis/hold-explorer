@@ -51,7 +51,7 @@ pub struct Group {
     pub lines: usize,
 }
 
-pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: Dim) -> Vec<Group> {
+pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: &Dim) -> Vec<Group> {
     let mut groups: BTreeMap<String, (usize, BTreeSet<&str>)> = BTreeMap::new();
     for row in filtered(ds, spec) {
         let entry = groups.entry(dim.value(row)).or_default();
@@ -78,7 +78,7 @@ pub struct Matrix {
     pub cells: Vec<Vec<usize>>,
 }
 
-pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: Dim, col_dim: Dim) -> Matrix {
+pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> Matrix {
     let rows: Vec<String> = group_by(ds, spec, row_dim)
         .into_iter()
         .map(|g| g.key)
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn groups_sort_by_holds_then_key() {
-        let groups = group_by(&sample(), &open(), Dim::Discipline);
+        let groups = group_by(&sample(), &open(), &Dim::Discipline);
         assert_eq!(
             keys(&groups),
             vec![("Civil", 2, 2), ("Piping", 1, 1), ("Unspecified", 1, 1)]
@@ -268,13 +268,13 @@ mod tests {
             status: Status::All,
             ..Default::default()
         };
-        let groups = group_by(&sample(), &all, Dim::HoldType);
+        let groups = group_by(&sample(), &all, &Dim::HoldType);
         assert_eq!(keys(&groups), vec![("MISC.", 3, 3), ("P&ID", 2, 2)]);
     }
 
     #[test]
     fn groups_by_blocker_type() {
-        let groups = group_by(&sample(), &open(), Dim::BlockerType);
+        let groups = group_by(&sample(), &open(), &Dim::BlockerType);
         assert_eq!(
             keys(&groups),
             vec![("PR", 2, 2), ("P&ID", 1, 1), ("VENDOR", 1, 1)]
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn matrix_counts_holds_per_cell() {
-        let m = matrix(&sample(), &open(), Dim::Discipline, Dim::HoldType);
+        let m = matrix(&sample(), &open(), &Dim::Discipline, &Dim::HoldType);
         assert_eq!(m.rows, vec!["Civil", "Piping", "Unspecified"]);
         assert_eq!(m.cols, vec!["MISC.", "P&ID"]);
         assert_eq!(m.cells, vec![vec![2, 0], vec![0, 1], vec![1, 0]]);
