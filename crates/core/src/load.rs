@@ -12,7 +12,7 @@ use crate::error::ImportError;
 use crate::import::{parse_table, Parsed};
 use crate::mapping::ColumnMap;
 use crate::reader::{parse_workbook_bytes, read_file_bytes};
-use crate::snapshot_date::{snapshot_date, SnapshotDate};
+use crate::snapshot_date::{parse_report_date, snapshot_date, SnapshotDate};
 use crate::table::RawTable;
 use crate::warning::{ImportWarning, WarningKind};
 
@@ -111,11 +111,30 @@ pub fn parse_opened(opened: &Opened, map: &ColumnMap) -> Result<Loaded, ImportEr
         parsed.warnings.push(ImportWarning {
             kind: WarningKind::ErrorCells,
             row_number: None,
+            column: None,
+            value: None,
             detail: format!(
                 "{} cell(s) in the sheet \"{}\" hold an Excel error such as #N/A or #REF! and were read as blank. Fix those cells in the source file and import it again if they matter.",
                 opened.error_cells, opened.sheet_name
             ),
         });
+    }
+    if let Some(text) = opened
+        .info
+        .get("Report Date")
+        .filter(|t| !t.trim().is_empty())
+    {
+        if parse_report_date(text).is_none() {
+            parsed.warnings.push(ImportWarning {
+                kind: WarningKind::UnreadableReportDate,
+                row_number: None,
+                column: None,
+                value: Some(text.clone()),
+                detail: format!(
+                    "The Report Date \"{text}\" in the information sheet could not be read, so the snapshot date comes from the file name or the file time. Write it like 09/29/2026 01:16 PM in the source, or enter the snapshot date yourself."
+                ),
+            });
+        }
     }
     let snapshot = snapshot_date(
         &opened.info,
@@ -318,5 +337,39 @@ mod tests {
         assert_eq!(loaded.parsed.holds.len(), 1);
         assert_eq!(loaded.parsed.holds[0].line_id, "L-2");
         assert_eq!(loaded.parsed.holds[0].remark, "y");
+    }
+
+    #[test]
+    fn unreadable_report_date_warns_and_is_not_the_snapshot_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("report.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let info = book.add_worksheet();
+        info.set_name("info").unwrap();
+        info.write_string(0, 0, "Report Date").unwrap();
+        info.write_string(0, 1, "yesterday").unwrap();
+        let data = book.add_worksheet();
+        data.set_name("data").unwrap();
+        for (i, h) in ["line_id", "hold_remark", "hold_type"].iter().enumerate() {
+            data.write_string(0, i as u16, *h).unwrap();
+            data.write_string(1, i as u16, ["L-1", "x", "MISC."][i])
+                .unwrap();
+        }
+        book.save(&path).unwrap();
+
+        let loaded = load_file(&path).unwrap();
+        let found: Vec<_> = loaded
+            .parsed
+            .warnings
+            .iter()
+            .filter(|w| w.kind == WarningKind::UnreadableReportDate)
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].row_number, None);
+        assert_eq!(found[0].value.as_deref(), Some("yesterday"));
+        assert_ne!(
+            loaded.snapshot.map(|s| s.source),
+            Some(SnapshotSource::InfoSheet)
+        );
     }
 }
