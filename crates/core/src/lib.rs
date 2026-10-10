@@ -21,6 +21,9 @@
 //! 6. Query: [`query::summary`], [`query::group_by`], [`query::matrix`], [`query::lines`], and
 //!    [`query::holds`] aggregate the selected holds.
 //! 7. Solve: [`solve::solve_plan`] orders the blockers to solve to free the most lines.
+//!
+//! The history store keeps each distinct hold row once, addressed by
+//! [`fingerprint::state_hash`], the versioned content hash of a [`model::Hold`].
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -28,6 +31,7 @@
 pub mod dataset;
 pub mod error;
 pub mod filter;
+pub mod fingerprint;
 pub mod import;
 pub mod load;
 pub mod mapping;

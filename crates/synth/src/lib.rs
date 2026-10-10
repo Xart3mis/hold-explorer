@@ -259,6 +259,93 @@ pub fn generate(cfg: &SynthConfig) -> Vec<SynthRow> {
     rows
 }
 
+/// What `evolve` changed, for tests to assert against.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Evolution {
+    /// Open rows that are released in the new export.
+    pub released: usize,
+    /// Rows whose remark changed.
+    pub edited: usize,
+    /// Rows that are gone from the new export.
+    pub removed: usize,
+    /// Rows that are new in the new export.
+    pub added: usize,
+}
+
+/// The export `days` later: same project, later report date.
+///
+/// Each input row is checked once, in this order: an open row is released with probability 5%;
+/// otherwise any row is removed with probability 0.5%; otherwise an open row gets an edited
+/// remark with probability 1%. Then about 3% of the input count in new rows are added at the end.
+/// Deterministic in `(rows, cfg, seed, days)`; the clock is never read.
+pub fn evolve(
+    rows: &[SynthRow],
+    cfg: &SynthConfig,
+    seed: u64,
+    days: i64,
+) -> (Vec<SynthRow>, SynthConfig, Evolution) {
+    let mut rng = Rng::new(seed);
+    let old_date = cfg.report_date;
+    let mut next_cfg = cfg.clone();
+    next_cfg.report_date = old_date + Duration::days(days);
+    let span = (next_cfg.report_date - old_date).num_seconds().max(1) as usize;
+
+    let mut evolution = Evolution::default();
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let mut row = row.clone();
+        if !row.released && rng.chance(0.05) {
+            row.released = true;
+            row.release_date = Some(old_date + Duration::seconds(1 + rng.below(span) as i64));
+            evolution.released += 1;
+        } else if rng.chance(0.005) {
+            evolution.removed += 1;
+            continue;
+        } else if !row.released && rng.chance(0.01) {
+            row.remark.push_str(" - rev 2");
+            evolution.edited += 1;
+        }
+        out.push(row);
+    }
+
+    let names: Vec<String> = (1..=30).map(|n| format!("Engineer {n:02}")).collect();
+    let mut next_id = rows.iter().map(|r| r.id).max().map_or(70_000, |m| m + 1);
+    for _ in 0..rows.len() {
+        if !rng.chance(0.03) {
+            continue;
+        }
+        let template = rng.pick(rows);
+        let unit = template
+            .line_id
+            .split('-')
+            .nth(1)
+            .and_then(|u| u.parse().ok())
+            .unwrap_or(500);
+        out.push(SynthRow {
+            id: next_id,
+            line_id: template.line_id.clone(),
+            name: rng.pick(&names).clone(),
+            role: rng.pick(&ROLES).to_string(),
+            remark: make_remark(&mut rng, unit),
+            hold_type: rng.pick(&HOLD_TYPES).to_string(),
+            discipline: if rng.chance(0.12) {
+                None
+            } else {
+                Some(rng.pick(&DISCIPLINES).to_string())
+            },
+            created: old_date + Duration::seconds(rng.below(span) as i64),
+            released: false,
+            release_date: None,
+            model_size: template.model_size.clone(),
+            ldt_size: template.ldt_size,
+            stress_calc: template.stress_calc.clone(),
+        });
+        next_id += 1;
+        evolution.added += 1;
+    }
+    (out, next_cfg, evolution)
+}
+
 fn excel_datetime(dt: NaiveDateTime) -> Result<ExcelDateTime, XlsxError> {
     let seconds = dt.second() as f64 + dt.nanosecond() as f64 / 1e9;
     ExcelDateTime::from_ymd(dt.year() as u16, dt.month() as u8, dt.day() as u8)?.and_hms(
@@ -415,5 +502,118 @@ mod tests {
         let path = dir.path().join("holds_synth.xlsx");
         write_workbook(&rows, &cfg, &path).unwrap();
         assert!(std::fs::metadata(&path).unwrap().len() > 10_000);
+    }
+
+    fn clean(s: &str) -> String {
+        s.replace("_x000D_", "")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn base() -> (SynthConfig, Vec<SynthRow>) {
+        let cfg = SynthConfig::new(7, 300, 2000);
+        let rows = generate(&cfg);
+        (cfg, rows)
+    }
+
+    #[test]
+    fn evolve_is_deterministic_and_moves_the_date() {
+        let (cfg, rows) = base();
+        let a = evolve(&rows, &cfg, 7, 3);
+        assert_eq!(a, evolve(&rows, &cfg, 7, 3));
+        assert_ne!(a.0, evolve(&rows, &cfg, 8, 3).0);
+        assert_eq!(a.1.report_date, cfg.report_date + Duration::days(3));
+        assert_eq!(a.1.project_no, cfg.project_no);
+        let ids: HashSet<i64> = a.0.iter().map(|r| r.id).collect();
+        assert_eq!(ids.len(), a.0.len());
+    }
+
+    #[test]
+    fn evolve_counts_match_a_recount() {
+        let (cfg, rows) = base();
+        let (out, next, ev) = evolve(&rows, &cfg, 7, 3);
+        let before: HashMap<i64, &SynthRow> = rows.iter().map(|r| (r.id, r)).collect();
+        let after: HashMap<i64, &SynthRow> = out.iter().map(|r| (r.id, r)).collect();
+
+        let same = out.iter().filter(|r| rows.contains(r)).count();
+        assert!(same * 100 >= out.len() * 85, "{same} of {}", out.len());
+
+        let released = after
+            .iter()
+            .filter(|(id, r)| before.get(id).is_some_and(|b| !b.released) && r.released)
+            .count();
+        let edited = after
+            .iter()
+            .filter(|(id, r)| {
+                before
+                    .get(id)
+                    .is_some_and(|b| clean(&b.remark) != clean(&r.remark))
+            })
+            .count();
+        let removed = before.keys().filter(|id| !after.contains_key(id)).count();
+        let added = after.keys().filter(|id| !before.contains_key(id)).count();
+        assert_eq!(ev.released, released);
+        assert_eq!(ev.edited, edited);
+        assert_eq!(ev.removed, removed);
+        assert_eq!(ev.added, added);
+        for n in [ev.released, ev.edited, ev.removed, ev.added] {
+            assert!(n > 0, "{ev:?}");
+        }
+
+        let max_id = rows.iter().map(|r| r.id).max().unwrap();
+        for r in &out {
+            match before.get(&r.id) {
+                Some(b) if !b.released && r.released => {
+                    let d = r.release_date.unwrap();
+                    assert!(d > cfg.report_date && d <= next.report_date);
+                }
+                Some(b) if b.released => assert_eq!(*b, r),
+                Some(_) => {}
+                None => {
+                    assert!(r.id > max_id);
+                    assert!(r.created >= cfg.report_date && r.created <= next.report_date);
+                }
+            }
+        }
+        let attrs = |r: &SynthRow| (r.model_size.clone(), r.ldt_size, r.stress_calc.clone());
+        let lines: HashMap<&str, _> = rows
+            .iter()
+            .map(|r| (r.line_id.as_str(), attrs(r)))
+            .collect();
+        for r in &out {
+            assert_eq!(lines[r.line_id.as_str()], attrs(r));
+        }
+    }
+
+    #[test]
+    fn evolve_keeps_the_order_of_surviving_rows() {
+        let (cfg, rows) = base();
+        let (out, _, _) = evolve(&rows, &cfg, 7, 3);
+        let position: HashMap<i64, usize> =
+            rows.iter().enumerate().map(|(i, r)| (r.id, i)).collect();
+        let kept: Vec<usize> = out
+            .iter()
+            .filter_map(|r| position.get(&r.id))
+            .copied()
+            .collect();
+        assert!(kept.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn chained_evolutions_load_without_skips_or_warnings() {
+        let (mut cfg, mut rows) = base();
+        let dir = tempfile::tempdir().unwrap();
+        for step in 0..3u64 {
+            let (next_rows, next_cfg, _) = evolve(&rows, &cfg, 100 + step, 3);
+            rows = next_rows;
+            cfg = next_cfg;
+            let path = dir.path().join(format!("holds_{step}.xlsx"));
+            write_workbook(&rows, &cfg, &path).unwrap();
+            let loaded = hx_core::load::load_file(&path).unwrap();
+            assert!(loaded.parsed.skipped.is_empty(), "step {step}");
+            assert!(loaded.parsed.warnings.is_empty(), "step {step}");
+            assert_eq!(loaded.parsed.holds.len(), rows.len());
+        }
     }
 }

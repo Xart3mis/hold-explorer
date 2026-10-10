@@ -11,6 +11,7 @@ use hx_core::load::load_file;
 use hx_core::query::{group_by, holds, lines, summary, HoldQuery, LineQuery};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
+use hx_store::{ImportOptions, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 #[test]
@@ -81,4 +82,38 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     eprintln!(
         "perf: import {import:?}, filtered views {views:?}, hold page {paging:?}, full solve order {solve:?}"
     );
+}
+
+#[test]
+#[ignore = "run in a release build"]
+fn ten_thousand_rows_import_into_a_workspace_in_under_a_second_and_read_back_in_300_ms() {
+    let cfg = SynthConfig::new(4, 3600, 10_000);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    let loaded = load_file(&path).unwrap();
+    let taken = loaded.snapshot.unwrap();
+
+    let mut workspace = Workspace::create(dir.path(), "perf").unwrap();
+    let started = Instant::now();
+    let info = workspace
+        .import(&loaded, taken, &ImportOptions::default())
+        .unwrap();
+    let stored = started.elapsed();
+    assert_eq!(info.row_count, 10_000);
+    assert!(
+        stored < Duration::from_secs(1),
+        "import into a workspace took {stored:?}"
+    );
+
+    let started = Instant::now();
+    let ds = workspace.dataset(info.id, RuleSet::builtin()).unwrap();
+    let read = started.elapsed();
+    assert_eq!(ds.rows.len(), 10_000);
+    assert!(
+        read < Duration::from_millis(300),
+        "reading the dataset took {read:?}"
+    );
+
+    eprintln!("perf: workspace import {stored:?}, dataset read {read:?}");
 }

@@ -10,4 +10,5 @@ chrono.workspace = true
 rust_xlsxwriter.workspace = true
 
 [dev-dependencies]
+hx-core = { path = "../core" }
 tempfile.workspace = true
