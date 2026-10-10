@@ -7,6 +7,7 @@ dist/
 *.xlsx
 *.xls
 *.holdx
+*.holdx-ws
 *.csv
 *.xlsm
 *.xlsb

@@ -44,7 +44,7 @@ pub enum StoreError {
         snapshot_id: i64,
     },
 
-    #[error("Could not read or write {path}: {detail}. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.")]
+    #[error("Could not read or write {path}: {}. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.", .detail.trim_end_matches('.'))]
     /// A workspace file could not be read or written.
     Io {
         /// The file or folder involved.
@@ -53,14 +53,14 @@ pub enum StoreError {
         detail: String,
     },
 
-    #[error("The workspace database reported an error: {detail}. Close any other program that uses the workspace and try again; if it keeps happening, restore the workspace from a backup.")]
+    #[error("The workspace database reported an error: {}. Close any other program that uses the workspace and try again; if it keeps happening, restore the workspace from a backup.", .detail.trim_end_matches('.'))]
     /// The database reported an error.
     Database {
         /// The underlying reason.
         detail: String,
     },
 
-    #[error("Stored data could not be understood: {detail}. The workspace file may be damaged; restore it from a backup, or import the files again into a new workspace.")]
+    #[error("Stored data could not be understood: {}. The workspace file may be damaged; restore it from a backup, or import the files again into a new workspace.", .detail.trim_end_matches('.'))]
     /// Stored data could not be understood.
     Corrupt {
         /// What was wrong with the stored data.
@@ -137,8 +137,26 @@ mod tests {
     fn every_message_ends_with_advice() {
         for (error, advice) in every_variant() {
             let message = error.to_string();
-            assert!(message.contains(advice), "{message}");
             assert!(message.ends_with('.'), "{message}");
+            let last_sentence = message.rsplit(". ").next().unwrap();
+            assert!(last_sentence.contains(advice), "{message}");
+        }
+    }
+
+    #[test]
+    fn a_detail_that_ends_in_a_period_does_not_double_it() {
+        let io = StoreError::Io {
+            path: "a.db".into(),
+            detail: "Permission denied.".into(),
+        };
+        let database = StoreError::Database {
+            detail: "disk I/O error.".into(),
+        };
+        let corrupt = StoreError::Corrupt {
+            detail: "bad json.".into(),
+        };
+        for error in [io, database, corrupt] {
+            assert!(!error.to_string().contains(".."), "{error}");
         }
     }
 

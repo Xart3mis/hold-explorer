@@ -75,10 +75,30 @@ fn database_error(path: &Path, error: rusqlite::Error) -> StoreError {
     }
 }
 
+/// Reads the schema version of the existing workspace file at `path` without writing anything
+/// and without creating the file. A file that is not a workspace gives `NotAWorkspace`.
+pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| database_error(path, e))?;
+    let application_id: i64 = conn
+        .query_row("PRAGMA application_id", [], |r| r.get(0))
+        .map_err(|e| database_error(path, e))?;
+    if application_id != APPLICATION_ID {
+        return Err(StoreError::NotAWorkspace {
+            path: path.display().to_string(),
+        });
+    }
+    conn.query_row("PRAGMA user_version", [], |r| r.get(0))
+        .map_err(|e| database_error(path, e))
+}
+
 /// Opens the workspace file at `path`, creating it when it does not exist, and brings it up to
 /// the newest schema version. Nothing is written until the file is known to be a workspace (or
 /// new), so a foreign file stays exactly as it was.
-pub fn open_database(path: &Path) -> Result<Connection, StoreError> {
+pub(crate) fn open_database(path: &Path) -> Result<Connection, StoreError> {
     let mut conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -302,6 +322,17 @@ mod tests {
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(files_in(dir.path()), vec!["notes.txt".to_string()]);
+    }
+
+    #[test]
+    fn a_tiny_text_file_is_not_a_workspace_and_is_left_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tiny.txt");
+        std::fs::write(&path, "0123456789").unwrap();
+        let error = open_database(&path).unwrap_err();
+        assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), b"0123456789");
+        assert_eq!(files_in(dir.path()), vec!["tiny.txt".to_string()]);
     }
 
     #[test]
