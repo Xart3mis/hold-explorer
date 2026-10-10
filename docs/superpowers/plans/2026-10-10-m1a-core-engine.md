@@ -4086,3 +4086,35 @@ git commit -m "test: prove parity with the HTML tool and add performance budget 
 | 17 same numbers as the HTML tool; import under 2 s; filter under 100 ms | 12 |
 
 Left for later plans, by design: 6.1 steps 4 to 6 and 6.4 to 6.7 (import review, workspace matching, guards, bulk import, drag and drop) in M1b; 7 (storage) in M1b; 9, 10.1, 10.3 (interface, search, saved views) in M1c; 10.4 (export), 12 (update check), 16 (release pipeline) in M1d.
+
+## Post-review corrections (2026-10-10)
+
+The plan was executed, reviewed as a whole, and corrected. Where this plan's code blocks and the repository differ, the repository is right. The spec was updated to match (sections 6.2, 6.3, 8.5, 11.3, 14, 17). The corrections:
+
+| Area | Plan said | Now |
+|---|---|---|
+| Age (Task 8) | Whole 24-hour periods between timestamps. | Difference between calendar dates. |
+| Blocker rules (Task 5) | Unicode word boundaries; `_x000D_` removed in two casings; "Other" cut at 60 characters. | ASCII word boundaries and whitespace, as in JavaScript; `_x000D_` removed in any casing; cut at 60 UTF-16 units. A remark corpus test compares every keyword and each edge case against the original JavaScript. |
+| Text dates (Tasks 2, 3) | A fixed format list with mixed day and month order. | Wider shapes, Excel serials, and one day/month order per column (spec 6.2). `Cell::as_datetime` takes a `DateOrder`. |
+| Empty result (Task 3) | A file whose rows were all skipped loaded with zero holds. | `ImportError::NoHolds { skipped_rows, example }`. |
+| Snapshot date (Task 4) | First filename match, 180-day roll-over rule, returned `Option<NaiveDateTime>`. | Plausibility rules of spec 6.3; returns `Option<SnapshotDate { at, source }>`; cannot panic. |
+| Solve order (Task 10) | The HTML tool's single score. | Most lines freed first, then that score (spec 8.5). |
+| Ids and sizes (Task 3) | Any number, through `f64`. | Exact whole ids only; finite positive sizes. |
+| Filters (Task 8) | All fields required when deserializing. | Missing fields take defaults. |
+| Toolchain | `stable` in CI. | Pinned 1.97.0 in `rust-toolchain.toml` and CI; `rust-version = "1.88"`. |
+
+Test totals at the end: 119 in `hx-core`, 10 in `hx-synth`, 2 CLI, 5 parity, 1 performance.
+
+### Carried into M1b: API pass on `hx-core` before storage and TypeScript types
+
+- Row numbers of skipped rows are wrong when a sheet does not start at row 1 or a CSV has blank lines; the reader must supply real row numbers.
+- `ImportError` is not `Serialize` or `Clone`, and `MissingColumns` carries labels instead of `Field` values. `load_file` takes no mapping and discards the table when columns are missing. `Parsed`, `SkippedRow`, `Loaded`, and `LineSort` lack serde derives.
+- There is no warnings channel. Silent coercions need one: an unreadable release date, an unrecognized `released` value, error cells, and a date column whose day/month order was assumed.
+- `Unreadable` should be split by cause so each message gives the right fix; an empty CSV and a sheet that fails to parse need their own messages.
+- `FilterSpec.fields` is keyed by `Dim`, which cannot hold a custom-field dimension, and age bands cannot be combined with OR.
+- `Group` has no display label, so grouping by remark shows the upper-case key; grouping by discipline, hold type, role, and name is case-sensitive.
+- `Row.age_days` means age for open holds and duration for released ones; split it.
+- No public query returns hold rows, and the "Single hold" preset has no query option.
+- Serialized types use `usize` and `i64`; check how the TypeScript generator handles 64-bit integers.
+- CSV delimiter and encoding (semicolon-delimited, Windows-1252); header whitespace; two extra columns with the same header.
+- Public API documentation; `RuleSet::builtin()` compiles its patterns on every call.
