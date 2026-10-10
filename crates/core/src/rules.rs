@@ -25,7 +25,10 @@ const TIE_IN_PATTERN: &str = r"(?-u:\b)T[0-9]{3}-R[0-9]{3}(?-u:\b)";
 
 /// Tested in this order; the first hit wins.
 const KEYWORDS: [(&str, &str); 16] = [
-    (r"P\s?&\s?IDS?(?-u:\b)|(?-u:\b)PIDS?(?-u:\b)", "P&ID"),
+    (
+        r"P(?-u:\s)?&(?-u:\s)?IDS?(?-u:\b)|(?-u:\b)PIDS?(?-u:\b)",
+        "P&ID",
+    ),
     (r"SLEEPER", "SLEEPERS"),
     (r"MISC", "MISC."),
     (r"FIV|AIV", "FIV/AIV"),
@@ -143,6 +146,12 @@ mod tests {
 
     fn pair(kind: &str, item: &str) -> (String, String) {
         (kind.to_string(), item.to_string())
+    }
+
+    #[test]
+    fn next_line_char_is_not_whitespace_in_the_pid_pattern() {
+        assert_eq!(classify("P\u{85}&ID").0, "Other");
+        assert_eq!(classify("P & ID").1, "P&ID");
     }
 
     #[test]

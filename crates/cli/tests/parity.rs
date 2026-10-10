@@ -143,6 +143,7 @@ fn matches_the_html_tool_at_real_scale() {
 const CORPUS_FIXED: &[&str] = &[
     "P&ID",
     "P & IDs",
+    "P\u{85}&ID",
     "PID",
     "sleeper",
     "misc items",
