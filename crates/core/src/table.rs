@@ -36,7 +36,8 @@ pub enum DateOrder {
     MonthFirst,
 }
 
-const TIME: &str = r"(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*([AaPp][Mm])?)?";
+const TIME: &str =
+    r"(?:[ T]+([0-9]{1,2}):([0-9]{2})(?::([0-9]{2})(?:\.([0-9]+))?)?\s*([AaPp][Mm])?)?";
 
 struct DateShapes {
     year_first: Regex,
@@ -50,11 +51,11 @@ fn shapes() -> &'static DateShapes {
         let literal = "pattern is a valid literal";
         let build = |head: &str| Regex::new(&format!("^{head}{TIME}$")).expect(literal);
         DateShapes {
-            year_first: build(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})"),
+            year_first: build(r"([0-9]{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})"),
             month_name: build(
-                r"(?i)(\d{1,2})[- ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ](\d{4})",
+                r"(?i)([0-9]{1,2})[- ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ]([0-9]{4})",
             ),
-            ambiguous: build(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})"),
+            ambiguous: build(r"([0-9]{1,2})[-/.]([0-9]{1,2})[-/.]([0-9]{4})"),
         }
     })
 }
@@ -158,15 +159,19 @@ impl Cell {
         .filter(|n| n.is_finite())
     }
 
-    /// A whole-number id: text parsed as `i64`; a number only if it is finite, whole, and
-    /// within +-2^53, so it is exact as an `f64`.
+    /// A whole-number id. Text is parsed as `i64` first; failing that, as a number. A number
+    /// counts only if it is finite, whole, and within +-2^53, so it is exact as an `f64`.
     pub fn as_id(&self) -> Option<i64> {
         const LIMIT: f64 = 9_007_199_254_740_992.0;
+        let whole =
+            |n: f64| (n.is_finite() && n.fract() == 0.0 && n.abs() <= LIMIT).then_some(n as i64);
         match self {
-            Cell::Text(s) => s.trim().parse().ok(),
-            Cell::Number(n) if n.is_finite() && n.fract() == 0.0 && n.abs() <= LIMIT => {
-                Some(*n as i64)
-            }
+            Cell::Text(s) => s
+                .trim()
+                .parse()
+                .ok()
+                .or_else(|| s.trim().parse().ok().and_then(whole)),
+            Cell::Number(n) => whole(*n),
             _ => None,
         }
     }
@@ -415,6 +420,10 @@ mod tests {
         assert_eq!(text("1.9").as_id(), None);
         assert_eq!(text("9007199254740993").as_id(), Some(9007199254740993));
         assert_eq!(text(" 42 ").as_id(), Some(42));
+        assert_eq!(text("87763.0").as_id(), Some(87763));
+        assert_eq!(text(" 87763 ").as_id(), Some(87763));
+        assert_eq!(text("inf").as_id(), None);
+        assert_eq!(text("abc").as_id(), None);
         assert_eq!(Cell::Number(42.0).as_id(), Some(42));
         assert_eq!(Cell::Number(1.9).as_id(), None);
         assert_eq!(Cell::Number(f64::NAN).as_id(), None);
