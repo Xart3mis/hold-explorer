@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
-use hx_core::query::{group_by, lines, summary, LineSort};
+use hx_core::query::{group_by, lines, summary, LineQuery};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -37,7 +37,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     let started = Instant::now();
     let s = summary(&ds, &spec);
     let groups = group_by(&ds, &spec, &Dim::Discipline);
-    let rows = lines(&ds, &spec, LineSort::HoldsDesc);
+    let rows = lines(&ds, &spec, &LineQuery::default());
     let views = started.elapsed();
     assert!(s.holds > 0 && !groups.is_empty() && !rows.is_empty());
     assert!(

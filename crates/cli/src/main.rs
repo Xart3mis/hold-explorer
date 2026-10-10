@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
-use hx_core::query::{group_by, lines, summary, LineSort};
+use hx_core::query::{group_by, lines, summary, LineQuery};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -66,7 +66,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 
             let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot.at);
             let open = FilterSpec::default();
-            let top_lines: Vec<_> = lines(&ds, &open, LineSort::HoldsDesc)
+            let top_lines: Vec<_> = lines(&ds, &open, &LineQuery::default())
                 .into_iter()
                 .take(10)
                 .collect();

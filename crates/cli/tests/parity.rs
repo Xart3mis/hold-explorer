@@ -7,7 +7,7 @@ use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
 use hx_core::model::Hold;
-use hx_core::query::{group_by, lines, summary, LineSort};
+use hx_core::query::{group_by, lines, summary, LineQuery, LineSort};
 use hx_core::rules::RuleSet;
 use hx_core::snapshot_date::parse_report_date;
 use hx_core::solve::solve_plan;
@@ -106,10 +106,17 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
         "seed {seed}: by blocker type"
     );
 
-    let easiest: Vec<String> = lines(&ds, &open, LineSort::Easiest)
-        .into_iter()
-        .map(|l| l.line_id)
-        .collect();
+    let easiest: Vec<String> = lines(
+        &ds,
+        &open,
+        &LineQuery {
+            sort: LineSort::Easiest,
+            ..Default::default()
+        },
+    )
+    .into_iter()
+    .map(|l| l.line_id)
+    .collect();
     assert_eq!(
         legacy["easy"],
         json!(easiest),

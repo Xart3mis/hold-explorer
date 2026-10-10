@@ -130,7 +130,7 @@ impl FilterSpec {
 
         if !self.age_bands.is_empty()
             && !row
-                .age_days
+                .days()
                 .is_some_and(|age| self.age_bands.iter().any(|band| band.contains(age)))
         {
             return false;
@@ -298,6 +298,7 @@ mod tests {
     fn hold_without_a_creation_date_matches_no_age_band() {
         let mut ds = sample();
         ds.rows[0].age_days = None;
+        ds.rows[0].duration_days = None;
         let count_with = |spec: &FilterSpec| ds.rows.iter().filter(|r| spec.matches(r)).count();
         assert_eq!(count_with(&FilterSpec::default()), 4);
         assert_eq!(count_with(&bands(&[(Some(0), None)])), 3);

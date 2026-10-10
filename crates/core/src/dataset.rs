@@ -1,25 +1,34 @@
 //! Holds of one snapshot with their derived values.
 
 use chrono::NaiveDateTime;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::Hold;
 use crate::normalize::fold_key;
 use crate::rules::{Blocker, RuleSet};
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Row {
     pub hold: Hold,
     pub blocker: Blocker,
     /// Case-folded remark, for grouping.
     pub remark_key: String,
-    /// Calendar days. It has two meanings: for an open hold it is the age (snapshot date minus
-    /// creation date); for a released hold it is the duration (release date minus creation date).
-    /// A view that mixes open and released holds therefore mixes the two.
+    /// Open holds only: calendar days from creation to the snapshot.
     pub age_days: Option<i64>,
+    /// Released holds only: calendar days from creation to release.
+    pub duration_days: Option<i64>,
 }
 
 impl Row {
+    /// `age_days` for an open hold, `duration_days` for a released one.
+    pub fn days(&self) -> Option<i64> {
+        if self.hold.released {
+            self.duration_days
+        } else {
+            self.age_days
+        }
+    }
+
     /// Blocker identity: owning discipline plus item.
     pub fn blocker_key(&self) -> String {
         format!("{}|{}", self.hold.discipline, self.blocker.item)
@@ -47,7 +56,7 @@ impl Dataset {
                 } else {
                     Some(snapshot)
                 };
-                let age_days = match (hold.created, end) {
+                let elapsed = match (hold.created, end) {
                     (Some(created), Some(end)) => {
                         Some((end.date() - created.date()).num_days().max(0))
                     }
@@ -56,7 +65,8 @@ impl Dataset {
                 Row {
                     blocker: rules.classify(&hold.remark),
                     remark_key: fold_key(&hold.remark),
-                    age_days,
+                    age_days: if hold.released { None } else { elapsed },
+                    duration_days: if hold.released { elapsed } else { None },
                     hold,
                 }
             })
@@ -82,8 +92,26 @@ mod tests {
     #[test]
     fn age_runs_to_snapshot_for_open_and_to_release_for_released() {
         let ds = sample();
-        let ages: Vec<Option<i64>> = ds.rows.iter().map(|r| r.age_days).collect();
-        assert_eq!(ages, vec![Some(10), Some(40), Some(5), Some(30), Some(1)]);
+        let days: Vec<Option<i64>> = ds.rows.iter().map(|r| r.days()).collect();
+        assert_eq!(days, vec![Some(10), Some(40), Some(5), Some(30), Some(1)]);
+    }
+
+    #[test]
+    fn open_rows_have_an_age_and_no_duration() {
+        let ds = sample();
+        let open: Vec<&crate::dataset::Row> = ds.rows.iter().filter(|r| !r.hold.released).collect();
+        let ages: Vec<Option<i64>> = open.iter().map(|r| r.age_days).collect();
+        assert_eq!(ages, vec![Some(10), Some(40), Some(5), Some(1)]);
+        assert!(open.iter().all(|r| r.duration_days.is_none()));
+    }
+
+    #[test]
+    fn released_row_has_a_duration_and_no_age() {
+        let ds = sample();
+        let r = &ds.rows[3];
+        assert_eq!(r.age_days, None);
+        assert_eq!(r.duration_days, Some(30));
+        assert_eq!(r.days(), Some(30));
     }
 
     #[test]
@@ -95,7 +123,7 @@ mod tests {
             &crate::rules::RuleSet::builtin(),
             ds.snapshot,
         );
-        assert_eq!(rebuilt.rows[0].age_days, None);
+        assert_eq!(rebuilt.rows[0].days(), None);
     }
 
     fn age_of(mut hold: crate::model::Hold, snapshot: &str) -> Option<i64> {
@@ -105,7 +133,7 @@ mod tests {
             &crate::rules::RuleSet::builtin(),
             crate::testkit::at(snapshot),
         );
-        ds.rows[0].age_days
+        ds.rows[0].days()
     }
 
     #[test]
