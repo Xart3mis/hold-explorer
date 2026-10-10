@@ -10,8 +10,8 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::error::StoreError;
-use crate::schema::{open_database, peek_version};
+use crate::error::{database, StoreError};
+use crate::schema::{open_database, peek_id, peek_version};
 
 /// The extension of a workspace file.
 pub(crate) const EXTENSION: &str = "holdx-ws";
@@ -124,14 +124,18 @@ impl Workspace {
 
     fn initialise(path: &Path, id: &str, name: &str) -> Result<Workspace, StoreError> {
         let mut conn = open_database(path)?;
-        let tx = conn.transaction()?;
+        let tx = conn.transaction().map_err(database)?;
         {
-            let mut insert = tx.prepare("INSERT INTO meta (key, value) VALUES (?1, ?2)")?;
-            insert.execute(["id", id])?;
-            insert.execute(["name", name])?;
-            insert.execute(["created_at", &format_timestamp(Utc::now().naive_utc())])?;
+            let mut insert = tx
+                .prepare("INSERT INTO meta (key, value) VALUES (?1, ?2)")
+                .map_err(database)?;
+            insert.execute(["id", id]).map_err(database)?;
+            insert.execute(["name", name]).map_err(database)?;
+            insert
+                .execute(["created_at", &format_timestamp(Utc::now().naive_utc())])
+                .map_err(database)?;
         }
-        tx.commit()?;
+        tx.commit().map_err(database)?;
         Ok(Workspace {
             conn,
             path: path.to_path_buf(),
@@ -142,24 +146,23 @@ impl Workspace {
     /// missing file is an `Io` error; a file that is not a workspace is left as it was.
     pub fn open(path: &Path) -> Result<Workspace, StoreError> {
         peek_version(path)?;
-        let conn = open_database(path)?;
-        let workspace = Workspace {
-            conn,
-            path: path.to_path_buf(),
-        };
-        if workspace.meta("id")?.is_none() {
+        if peek_id(path)?.is_none() {
             return Err(StoreError::NotAWorkspace {
                 path: path.display().to_string(),
             });
         }
-        Ok(workspace)
+        let conn = open_database(path)?;
+        Ok(Workspace {
+            conn,
+            path: path.to_path_buf(),
+        })
     }
 
     fn meta(&self, key: &str) -> Result<Option<String>, StoreError> {
-        Ok(self
-            .conn
+        self.conn
             .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
-            .optional()?)
+            .optional()
+            .map_err(database)
     }
 
     fn required_meta(&self, key: &str) -> Result<String, StoreError> {
@@ -172,15 +175,19 @@ impl Workspace {
     pub fn info(&self) -> Result<WorkspaceInfo, StoreError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT project_no FROM project ORDER BY project_no")?;
+            .prepare("SELECT project_no FROM project ORDER BY project_no")
+            .map_err(database)?;
         let project_numbers = stmt
-            .query_map([], |r| r.get(0))?
-            .collect::<Result<Vec<String>, _>>()?;
-        let (count, latest): (i64, Option<String>) =
-            self.conn
-                .query_row("SELECT count(*), max(taken_at) FROM snapshot", [], |r| {
-                    Ok((r.get(0)?, r.get(1)?))
-                })?;
+            .query_map([], |r| r.get(0))
+            .map_err(database)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(database)?;
+        let (count, latest): (i64, Option<String>) = self
+            .conn
+            .query_row("SELECT count(*), max(taken_at) FROM snapshot", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .map_err(database)?;
         Ok(WorkspaceInfo {
             id: self.required_meta("id")?,
             name: self.required_meta("name")?,
@@ -194,10 +201,12 @@ impl Workspace {
 
     /// Renames the workspace. The name is trimmed; a blank name becomes `Untitled workspace`.
     pub fn rename(&mut self, name: &str) -> Result<(), StoreError> {
-        self.conn.execute(
-            "INSERT OR REPLACE INTO meta (key, value) VALUES ('name', ?1)",
-            [clean_name(name)],
-        )?;
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('name', ?1)",
+                [clean_name(name)],
+            )
+            .map_err(database)?;
         Ok(())
     }
 
@@ -206,20 +215,24 @@ impl Workspace {
     pub fn add_project_number(&mut self, project_no: &str) -> Result<(), StoreError> {
         let project_no = project_no.trim();
         if !project_no.is_empty() {
-            self.conn.execute(
-                "INSERT OR IGNORE INTO project (project_no) VALUES (?1)",
-                [project_no],
-            )?;
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO project (project_no) VALUES (?1)",
+                    [project_no],
+                )
+                .map_err(database)?;
         }
         Ok(())
     }
 
     /// Removes a project number (trimmed, compared exactly). A number not in the list is ignored.
     pub fn remove_project_number(&mut self, project_no: &str) -> Result<(), StoreError> {
-        self.conn.execute(
-            "DELETE FROM project WHERE project_no = ?1",
-            [project_no.trim()],
-        )?;
+        self.conn
+            .execute(
+                "DELETE FROM project WHERE project_no = ?1",
+                [project_no.trim()],
+            )
+            .map_err(database)?;
         Ok(())
     }
 
@@ -232,7 +245,8 @@ impl Workspace {
                 [MAPPING_KEY],
                 |r| r.get(0),
             )
-            .optional()?;
+            .optional()
+            .map_err(database)?;
         json.map(|json| {
             serde_json::from_str(&json).map_err(|e| StoreError::Corrupt {
                 detail: format!("the saved column mapping could not be read ({e})"),
@@ -246,10 +260,12 @@ impl Workspace {
         let json = serde_json::to_string(mapping).map_err(|e| StoreError::Corrupt {
             detail: format!("the column mapping could not be saved ({e})"),
         })?;
-        self.conn.execute(
-            "INSERT OR REPLACE INTO setting (key, value_json) VALUES (?1, ?2)",
-            [MAPPING_KEY, json.as_str()],
-        )?;
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO setting (key, value_json) VALUES (?1, ?2)",
+                [MAPPING_KEY, json.as_str()],
+            )
+            .map_err(database)?;
         Ok(())
     }
 }
@@ -258,6 +274,7 @@ impl Workspace {
 mod tests {
     use super::*;
     use hx_core::mapping::{Field, SavedColumn};
+    use rusqlite::Connection;
 
     fn mapping() -> SavedMapping {
         SavedMapping {
@@ -415,13 +432,56 @@ mod tests {
         assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
     }
 
+    fn files_in(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
     #[test]
-    fn open_refuses_a_file_without_a_workspace_id() {
+    fn open_refuses_a_file_without_a_workspace_id_and_changes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("w.holdx-ws");
         drop(crate::schema::open_database(&path).unwrap());
+        let before = std::fs::read(&path).unwrap();
         let error = Workspace::open(&path).err().unwrap();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
+    }
+
+    /// A file with the workspace application id and a `meta` table without an id, at a schema
+    /// version that still needs migrating. Opening it must not migrate it or back it up.
+    #[test]
+    fn open_refuses_an_old_file_without_a_workspace_id_before_migrating_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("w.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "PRAGMA application_id = 1213749075;
+                 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
+            )
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let error = Workspace::open(&path).err().unwrap();
+        assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
+    }
+
+    #[test]
+    fn open_refuses_a_short_text_file_and_leaves_it_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("short.holdx-ws");
+        std::fs::write(&path, "just a few words\n").unwrap();
+        let error = Workspace::open(&path).err().unwrap();
+        assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&path).unwrap(), b"just a few words\n");
+        assert_eq!(files_in(dir.path()), vec!["short.holdx-ws".to_string()]);
     }
 
     #[test]

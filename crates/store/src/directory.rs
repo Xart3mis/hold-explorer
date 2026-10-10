@@ -17,7 +17,11 @@ pub fn list_workspaces(dir: &Path) -> Result<Vec<WorkspaceInfo>, StoreError> {
     let mut found = Vec::new();
     for entry in entries {
         let path = entry.map_err(|e| io_error(dir, &e))?.path();
-        if path.extension().and_then(|e| e.to_str()) != Some(EXTENSION) || !path.is_file() {
+        let named_like_a_workspace = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(&format!(".{EXTENSION}")));
+        if !named_like_a_workspace || !path.is_file() {
             continue;
         }
         match peek_version(&path) {
@@ -73,7 +77,9 @@ mod tests {
             .unwrap()
             .info()
             .unwrap();
-        std::fs::write(dir.path().join("notes.holdx-ws"), "just text\n".repeat(50)).unwrap();
+        let notes = dir.path().join("notes.holdx-ws");
+        std::fs::write(&notes, "just text\n".repeat(50)).unwrap();
+        let notes_before = std::fs::read(&notes).unwrap();
         std::fs::write(dir.path().join("readme.txt"), "hello").unwrap();
         let foreign = dir.path().join("other.holdx-ws");
         Connection::open(&foreign)
@@ -89,6 +95,7 @@ mod tests {
         assert_eq!(list[1].id, ids[1]);
         assert_eq!(list[2], b);
         assert_eq!(std::fs::read(&foreign).unwrap(), before);
+        assert_eq!(std::fs::read(&notes).unwrap(), notes_before);
         let files = std::fs::read_dir(dir.path()).unwrap().count();
         assert_eq!(files, 6);
     }
@@ -154,5 +161,45 @@ mod tests {
             matches!(error, StoreError::NewerSchema { found: 99, .. }),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_short_stray_file_is_skipped_and_left_byte_for_byte() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::create(dir.path(), "Ok").unwrap();
+        let stray = dir.path().join("short.holdx-ws");
+        std::fs::write(&stray, "tiny\n").unwrap();
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(names(&list), vec!["Ok"]);
+        assert_eq!(std::fs::read(&stray).unwrap(), b"tiny\n");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn a_file_without_an_id_is_skipped_without_being_changed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("noid.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "PRAGMA application_id = 1213749075;
+                 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;",
+            )
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(list_workspaces(dir.path()).unwrap(), vec![]);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_file_whose_whole_name_is_the_extension_is_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let info = Workspace::create(dir.path(), "Hidden")
+            .unwrap()
+            .info()
+            .unwrap();
+        std::fs::copy(&info.path, dir.path().join(".holdx-ws")).unwrap();
+        assert_eq!(list_workspaces(dir.path()).unwrap().len(), 2);
     }
 }

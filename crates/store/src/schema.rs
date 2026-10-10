@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use rusqlite::{Connection, ErrorCode, OpenFlags};
+use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension};
 
-use crate::error::StoreError;
+use crate::error::{database, StoreError};
 
 /// The schema version this build reads and writes.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -71,7 +71,7 @@ fn database_error(path: &Path, error: rusqlite::Error) -> StoreError {
             path: path.display().to_string(),
             detail: error.to_string(),
         },
-        _ => StoreError::from(error),
+        _ => database(error),
     }
 }
 
@@ -92,6 +92,20 @@ pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
         });
     }
     conn.query_row("PRAGMA user_version", [], |r| r.get(0))
+        .map_err(|e| database_error(path, e))
+}
+
+/// Reads the workspace id of the existing workspace file at `path` through a read-only
+/// connection, so nothing is written, migrated, or backed up. `None` when `meta` has no id. Every
+/// schema version has the `meta` table.
+pub(crate) fn peek_id(path: &Path) -> Result<Option<String>, StoreError> {
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| database_error(path, e))?;
+    conn.query_row("SELECT value FROM meta WHERE key = 'id'", [], |r| r.get(0))
+        .optional()
         .map_err(|e| database_error(path, e))
 }
 
@@ -120,7 +134,8 @@ pub(crate) fn open_database(path: &Path) -> Result<Connection, StoreError> {
             return Err(not_a_workspace());
         }
     }
-    conn.execute_batch("PRAGMA foreign_keys = ON")?;
+    conn.execute_batch("PRAGMA foreign_keys = ON")
+        .map_err(|e| database_error(path, e))?;
     migrate(&mut conn, path, MIGRATIONS)?;
     Ok(conn)
 }
@@ -157,10 +172,11 @@ pub(crate) fn migrate(
         })?;
     }
     for migration in migrations.iter().filter(|m| m.to > found) {
-        let tx = conn.transaction()?;
-        tx.execute_batch(migration.sql)?;
-        tx.execute_batch(&format!("PRAGMA user_version = {}", migration.to))?;
-        tx.commit()?;
+        let tx = conn.transaction().map_err(database)?;
+        tx.execute_batch(migration.sql).map_err(database)?;
+        tx.execute_batch(&format!("PRAGMA user_version = {}", migration.to))
+            .map_err(database)?;
+        tx.commit().map_err(database)?;
     }
     Ok(())
 }

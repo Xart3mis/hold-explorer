@@ -68,11 +68,11 @@ pub enum StoreError {
     },
 }
 
-impl From<rusqlite::Error> for StoreError {
-    fn from(error: rusqlite::Error) -> Self {
-        StoreError::Database {
-            detail: error.to_string(),
-        }
+/// Reports a database error that has no path to name. Crate-private, so no `rusqlite` type
+/// appears in the public API.
+pub(crate) fn database(error: rusqlite::Error) -> StoreError {
+    StoreError::Database {
+        detail: error.to_string(),
     }
 }
 
