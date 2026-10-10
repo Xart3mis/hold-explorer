@@ -1,9 +1,15 @@
 //! Reads `.xlsx`, `.xls`, and `.csv` files into a raw table.
 
 use std::collections::BTreeMap;
+use std::io::{Cursor, Read};
 use std::path::Path;
+use std::time::SystemTime;
 
-use calamine::{open_workbook_auto, Data, DataType, Range, Reader};
+use calamine::Ods;
+use calamine::{
+    open_workbook_auto_from_rs, open_workbook_from_rs, Data, DataType, Error as CalamineError,
+    Range, Reader, Sheets, Xls, Xlsb, Xlsx,
+};
 
 use crate::error::ImportError;
 use serde::{Deserialize, Serialize};
@@ -28,9 +34,23 @@ fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
     }
 }
 
-fn not_found(path: &Path) -> ImportError {
-    ImportError::NotFound {
-        path: path.display().to_string(),
+/// The bytes of a file and its modified time. The file is opened and read once. A missing file
+/// is `NotFound`, an empty one is `EmptyFile`, and any other I/O error is `Unreadable`.
+pub(crate) fn read_file_bytes(path: &Path) -> Result<(Vec<u8>, Option<SystemTime>), ImportError> {
+    let read = || -> std::io::Result<(Vec<u8>, Option<SystemTime>)> {
+        let mut file = std::fs::File::open(path)?;
+        let modified = file.metadata().and_then(|m| m.modified()).ok();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes)?;
+        Ok((bytes, modified))
+    };
+    match read() {
+        Ok((bytes, _)) if bytes.is_empty() => Err(empty_file(path)),
+        Ok(read) => Ok(read),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(ImportError::NotFound {
+            path: path.display().to_string(),
+        }),
+        Err(e) => Err(unreadable(path, e)),
     }
 }
 
@@ -136,12 +156,31 @@ fn detect_delimiter(text: &str) -> u8 {
     best.0
 }
 
-fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
-    if !path.exists() {
-        return Err(not_found(path));
+/// The number of line breaks in `bytes`: `\r\n` counts once, a lone `\n` or `\r` once each.
+fn count_line_breaks(bytes: &[u8]) -> usize {
+    let mut count = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\r' => {
+                count += 1;
+                if bytes.get(i + 1) == Some(&b'\n') {
+                    i += 1;
+                }
+            }
+            b'\n' => count += 1,
+            _ => {}
+        }
+        i += 1;
     }
-    let bytes = std::fs::read(path).map_err(|e| unreadable(path, e))?;
-    let text = decode_csv(&bytes);
+    count
+}
+
+fn read_csv(path: &Path, bytes: &[u8]) -> Result<WorkbookData, ImportError> {
+    let text = decode_csv(bytes);
+    if text.trim().is_empty() {
+        return Err(empty_file(path));
+    }
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
@@ -150,9 +189,22 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
 
     let mut rows: Vec<Vec<Cell>> = Vec::new();
     let mut lines: Vec<usize> = Vec::new();
+    // Line breaks before `counted_to`, so each record only scans the text since the last one.
+    let (mut counted_to, mut breaks) = (0usize, 0usize);
     for (index, record) in reader.records().enumerate() {
         let record = record.map_err(|e| unreadable(path, e))?;
-        lines.push(record.position().map_or(index + 1, |p| p.line() as usize));
+        let line = match record.position() {
+            Some(p) => {
+                let offset = (p.byte() as usize).min(text.len());
+                if offset > counted_to {
+                    breaks += count_line_breaks(&text.as_bytes()[counted_to..offset]);
+                    counted_to = offset;
+                }
+                breaks + 1
+            }
+            None => index + 1,
+        };
+        lines.push(line);
         rows.push(
             record
                 .iter()
@@ -188,20 +240,47 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
     })
 }
 
+/// Opens a workbook from bytes, choosing the format by the file extension as
+/// `calamine::open_workbook_auto` does.
+fn open_sheets<'a>(
+    extension: &str,
+    bytes: &'a [u8],
+) -> Result<Sheets<Cursor<&'a [u8]>>, CalamineError> {
+    let cursor = Cursor::new(bytes);
+    Ok(match extension {
+        "xls" | "xla" => {
+            Sheets::Xls(open_workbook_from_rs::<Xls<_>, _>(cursor).map_err(CalamineError::Xls)?)
+        }
+        "xlsx" | "xlsm" | "xlam" => {
+            Sheets::Xlsx(open_workbook_from_rs::<Xlsx<_>, _>(cursor).map_err(CalamineError::Xlsx)?)
+        }
+        "xlsb" => {
+            Sheets::Xlsb(open_workbook_from_rs::<Xlsb<_>, _>(cursor).map_err(CalamineError::Xlsb)?)
+        }
+        "ods" => {
+            Sheets::Ods(open_workbook_from_rs::<Ods<_>, _>(cursor).map_err(CalamineError::Ods)?)
+        }
+        _ => open_workbook_auto_from_rs(cursor)?,
+    })
+}
+
 pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
+    let (bytes, _) = read_file_bytes(path)?;
+    parse_workbook_bytes(path, &bytes)
+}
+
+/// Parses the bytes of a file; `path` only gives the extension and the error messages.
+pub(crate) fn parse_workbook_bytes(path: &Path, bytes: &[u8]) -> Result<WorkbookData, ImportError> {
     let extension = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or_default()
         .to_ascii_lowercase();
     if extension == "csv" {
-        return read_csv(path);
+        return read_csv(path, bytes);
     }
 
-    if !path.exists() {
-        return Err(not_found(path));
-    }
-    let mut workbook = open_workbook_auto(path).map_err(|e| unreadable(path, e))?;
+    let mut workbook = open_sheets(&extension, bytes).map_err(|e| unreadable(path, e))?;
     let names: Vec<String> = workbook.sheet_names().to_vec();
 
     let mut info = BTreeMap::new();
@@ -506,6 +585,76 @@ mod tests {
         std::fs::write(&path, "").unwrap();
         let err = read_workbook(&path).unwrap_err();
         assert!(matches!(err, ImportError::EmptyFile { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn zero_byte_workbook_is_an_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.xlsx");
+        std::fs::write(&path, "").unwrap();
+        let err = read_workbook(&path).unwrap_err();
+        assert!(matches!(err, ImportError::EmptyFile { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn csv_of_only_blank_lines_is_an_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("blank.csv");
+        std::fs::write(&path, "\n\n  \n\n").unwrap();
+        let err = read_workbook(&path).unwrap_err();
+        assert!(matches!(err, ImportError::EmptyFile { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn unreadable_path_is_unreadable_not_not_found() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("locked.csv");
+        std::fs::write(&path, "line_id,hold_remark,hold_type\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&path).is_ok() {
+            return; // running with privileges that ignore file modes
+        }
+        let err = read_workbook(&path).unwrap_err();
+        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+        // A path below a regular file is not "not found"; the real error decides.
+        let err = read_workbook(&path.join("inner.csv")).unwrap_err();
+        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+        // A directory exists but cannot be read as a file.
+        let err = read_workbook(dir.path()).unwrap_err();
+        assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn csv_row_numbers_count_crlf_and_blank_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("crlf.csv");
+        std::fs::write(
+            &path,
+            "\r\n\r\nline_id,hold_remark,hold_type\r\nL-1,x,MISC.\r\n\r\nL-2,y,P&ID\r\n",
+        )
+        .unwrap();
+        let wb = read_workbook(&path).unwrap();
+        assert_eq!(
+            wb.table.headers,
+            vec!["line_id", "hold_remark", "hold_type"]
+        );
+        assert_eq!(wb.table.row_numbers, vec![4, 6]);
+    }
+
+    #[test]
+    fn utf_16le_csv_row_numbers_count_blank_lines() {
+        let text = "line_id,hold_remark,hold_type\r\nL-1,x,MISC.\r\n\r\nL-2,y,P&ID\r\n";
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("u16.csv");
+        std::fs::write(&path, &bytes).unwrap();
+        let wb = read_workbook(&path).unwrap();
+        assert_eq!(wb.table.rows.len(), 2);
+        assert_eq!(wb.table.row_numbers, vec![2, 4]);
     }
 
     #[test]
