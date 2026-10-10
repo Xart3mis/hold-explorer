@@ -27,9 +27,8 @@ fn size(cell: &Cell) -> Option<f64> {
 
 /// Day/month order of one date column, from its text cells of the shape `a/b/yyyy`
 /// (also `a-b-yyyy`, `a.b.yyyy`). A first part above 12 means day-first; otherwise a second
-/// part above 12 means month-first; otherwise day-first, because the original tool reads
-/// `d/m/yyyy`.
-pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOrder {
+/// part above 12 means month-first; otherwise the column is undecided (`None`).
+fn decided_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> Option<DateOrder> {
     let mut month_first = false;
     for cell in cells {
         let Cell::Text(text) = cell else { continue };
@@ -37,17 +36,19 @@ pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOr
             continue;
         };
         if first > 12 {
-            return DateOrder::DayFirst;
+            return Some(DateOrder::DayFirst);
         }
         if second > 12 {
             month_first = true;
         }
     }
-    if month_first {
-        DateOrder::MonthFirst
-    } else {
-        DateOrder::DayFirst
-    }
+    month_first.then_some(DateOrder::MonthFirst)
+}
+
+/// The order of one date column; an undecided column is read day-first, because the original
+/// tool reads `d/m/yyyy`.
+pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOrder {
+    decided_date_order(cells).unwrap_or(DateOrder::DayFirst)
 }
 
 pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportError> {
@@ -71,15 +72,18 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
 
     let order_of = |field: Field| {
         let column = map.fields.get(&field).copied();
-        infer_date_order(
+        decided_date_order(
             table
                 .rows
                 .iter()
                 .filter_map(|row| column.and_then(|index| row.get(index))),
         )
     };
-    let created_order = order_of(Field::Created);
-    let release_order = order_of(Field::ReleaseDate);
+    // A column that cannot decide its own order takes the other column's; with neither
+    // decided, both are day-first.
+    let (created, release) = (order_of(Field::Created), order_of(Field::ReleaseDate));
+    let created_order = created.or(release).unwrap_or(DateOrder::DayFirst);
+    let release_order = release.or(created).unwrap_or(DateOrder::DayFirst);
 
     let mut holds = Vec::with_capacity(table.rows.len());
     let mut skipped = Vec::new();
@@ -473,5 +477,75 @@ mod tests {
         assert_eq!(ids, vec![None, None, Some(9007199254740993)]);
         let sizes: Vec<_> = parsed.holds.iter().map(|h| h.model_size).collect();
         assert_eq!(sizes, vec![None, None, Some(6.0)]);
+    }
+
+    fn created_and_release_table(rows: &[(&str, &str)]) -> RawTable {
+        RawTable {
+            headers: vec![
+                "line_id".into(),
+                "hold_remark".into(),
+                "hold_type".into(),
+                "created".into(),
+                "release_date".into(),
+            ],
+            rows: rows
+                .iter()
+                .enumerate()
+                .map(|(i, (created, release))| {
+                    vec![
+                        text(&format!("L-{i}")),
+                        text("x"),
+                        text("MISC."),
+                        text(created),
+                        text(release),
+                    ]
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn undecided_release_column_follows_the_decided_creation_column() {
+        let t =
+            created_and_release_table(&[("9/2/2026 13:16", "9/3/2026"), ("9/25/2026 8:01", "")]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        let day = |m, d| {
+            NaiveDate::from_ymd_opt(2026, m, d)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+        };
+        assert_eq!(parsed.holds[0].release_date, day(9, 3));
+        assert_eq!(
+            parsed.holds[0].created,
+            NaiveDate::from_ymd_opt(2026, 9, 2)
+                .unwrap()
+                .and_hms_opt(13, 16, 0)
+        );
+    }
+
+    #[test]
+    fn undecided_creation_column_follows_the_decided_release_column() {
+        let t = created_and_release_table(&[("9/3/2026", "9/25/2026"), ("1/2/2026", "")]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        let day = |m, d| {
+            NaiveDate::from_ymd_opt(2026, m, d)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+        };
+        assert_eq!(parsed.holds[0].created, day(9, 3));
+        assert_eq!(parsed.holds[1].created, day(1, 2));
+    }
+
+    #[test]
+    fn two_undecided_date_columns_are_both_day_first() {
+        let t = created_and_release_table(&[("9/2/2026", "9/3/2026")]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        let day = |m, d| {
+            NaiveDate::from_ymd_opt(2026, m, d)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+        };
+        assert_eq!(parsed.holds[0].created, day(2, 9));
+        assert_eq!(parsed.holds[0].release_date, day(3, 9));
     }
 }
