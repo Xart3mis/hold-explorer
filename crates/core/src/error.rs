@@ -15,9 +15,27 @@ pub enum ImportError {
     #[error("The file has a header row but no data rows. Export the report again or choose another file.")]
     Empty,
 
-    #[error("No hold could be read: {skipped_rows} rows were skipped, for example {example}. Check the column mapping and the date format.")]
+    #[error("No hold could be read: {skipped_rows} {} skipped, for example {example}. Check the column mapping and the date format.", if *.skipped_rows == 1 { "row was" } else { "rows were" })]
     NoHolds {
         skipped_rows: usize,
         example: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_holds_message_agrees_with_the_row_count() {
+        let message = |skipped_rows| {
+            ImportError::NoHolds {
+                skipped_rows,
+                example: "row 2: blank line_id".to_string(),
+            }
+            .to_string()
+        };
+        assert!(message(1).contains("1 row was skipped"), "{}", message(1));
+        assert!(message(4).contains("4 rows were skipped"), "{}", message(4));
+    }
 }
