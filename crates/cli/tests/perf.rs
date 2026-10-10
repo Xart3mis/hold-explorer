@@ -24,7 +24,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     let loaded = load_file(&path).unwrap();
     let ds = Dataset::build(
         loaded.parsed.holds,
-        &RuleSet::builtin(),
+        RuleSet::builtin(),
         loaded.snapshot.unwrap().at,
     );
     let import = started.elapsed();

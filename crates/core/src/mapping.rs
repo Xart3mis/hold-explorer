@@ -4,25 +4,41 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+/// A hold property that a column of the file can supply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Field {
+    /// The export's own hold id.
     SourceId,
+    /// The line the hold is on. Required.
     LineId,
+    /// Name of the person on the hold.
     Name,
+    /// Role of that person.
     Role,
+    /// The hold remark the blocker is derived from. Required.
     Remark,
+    /// The kind of hold. Required.
     HoldType,
+    /// The discipline that owns the hold.
     Discipline,
+    /// When the hold was created.
     Created,
+    /// Whether the hold is released.
     Released,
+    /// Text recorded at release.
     ReleaseRemark,
+    /// When the hold was released.
     ReleaseDate,
+    /// Line size in the 3D model.
     ModelSize,
+    /// Line size in the line designation table (LDT).
     LdtSize,
+    /// Stress calculation reference.
     StressCalc,
 }
 
 impl Field {
+    /// Every field, in the order automatic mapping tries them.
     pub const ALL: [Field; 14] = [
         Field::SourceId,
         Field::LineId,
@@ -40,6 +56,7 @@ impl Field {
         Field::StressCalc,
     ];
 
+    /// The fields a file must supply for an import to succeed.
     pub const REQUIRED: [Field; 3] = [Field::LineId, Field::Remark, Field::HoldType];
 
     /// The column name PlantIM uses. Shown in messages about missing columns.
@@ -88,6 +105,7 @@ fn header_key(header: &str) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+/// Which column of a table supplies which field.
 pub struct ColumnMap {
     /// Field to zero-based column index.
     pub fields: BTreeMap<Field, usize>,
@@ -96,6 +114,9 @@ pub struct ColumnMap {
 }
 
 impl ColumnMap {
+    /// Proposes a mapping from header names (matched by `Field::aliases`, ignoring case, spaces,
+    /// and hyphens). The first column that matches a field takes it; columns that match nothing,
+    /// or a field already taken, are listed in `extras`. Blank headers are ignored.
     pub fn auto(headers: &[String]) -> ColumnMap {
         let mut map = ColumnMap::default();
         for (index, header) in headers.iter().enumerate() {
@@ -116,6 +137,7 @@ impl ColumnMap {
         map
     }
 
+    /// The required fields that have no column, in `Field::REQUIRED` order.
     pub fn missing_required(&self) -> Vec<Field> {
         Field::REQUIRED
             .into_iter()

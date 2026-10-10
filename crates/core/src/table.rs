@@ -7,17 +7,26 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// One cell of a sheet, typed as the file format stored it.
 pub enum Cell {
+    /// A blank cell.
     Empty,
+    /// Text.
     Text(String),
+    /// A number, including an Excel date serial.
     Number(f64),
+    /// A true/false value.
     Bool(bool),
+    /// A date with a time of day (midnight for a plain date).
     DateTime(NaiveDateTime),
 }
 
+/// A sheet as a header row and the rows beneath it.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct RawTable {
+    /// Header texts in column order, as written in the file.
     pub headers: Vec<String>,
+    /// The data rows; a row may be shorter than `headers`, in which case the missing cells are blank.
     pub rows: Vec<Vec<Cell>>,
     /// One-based row (sheet row or CSV line) of each entry of `rows`. May be empty for tables built by hand.
     pub row_numbers: Vec<usize>,
@@ -42,7 +51,9 @@ pub fn format_number(n: f64) -> String {
 /// How `a/b/yyyy` is read when both parts are 12 or less.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DateOrder {
+    /// `03/04/2026` is 3 April.
     DayFirst,
+    /// `03/04/2026` is 4 March.
     MonthFirst,
 }
 
@@ -150,6 +161,7 @@ fn from_excel_serial(serial: f64) -> Option<NaiveDateTime> {
 }
 
 impl Cell {
+    /// The cell as display text; numbers print without a needless `.0`, dates as `yyyy-mm-dd hh:mm:ss`.
     pub fn as_text(&self) -> String {
         match self {
             Cell::Empty => String::new(),
@@ -160,6 +172,7 @@ impl Cell {
         }
     }
 
+    /// The cell as a finite number; text is parsed after trimming, anything else gives `None`.
     pub fn as_number(&self) -> Option<f64> {
         match self {
             Cell::Number(n) => Some(*n),
@@ -197,6 +210,8 @@ impl Cell {
         }
     }
 
+    /// The cell as a flag: a number is true unless zero; text is `true`/`1`/`yes` or
+    /// `false`/`0`/`no` in any letter case; anything else gives `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Cell::Bool(b) => Some(*b),

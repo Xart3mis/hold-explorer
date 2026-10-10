@@ -28,14 +28,20 @@ const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
 /// Where the snapshot date came from, in order of trust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SnapshotSource {
+    /// The `Report Date` entry of the workbook's information sheet.
     InfoSheet,
+    /// A date written in the file name; midnight of that day.
     FileName,
+    /// The file's last-modified time.
     FileTime,
 }
 
+/// The moment a report was taken and how that was found out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotDate {
+    /// When the snapshot was taken.
     pub at: NaiveDateTime,
+    /// Where `at` came from.
     pub source: SnapshotSource,
 }
 
@@ -216,6 +222,9 @@ fn month_number(name: &str) -> Option<u32> {
     MONTHS.iter().position(|m| *m == name).map(|i| i as u32 + 1)
 }
 
+/// Works out the snapshot date, trying in order the `Report Date` of the information sheet,
+/// a date in the file name (using the newest hold date or the modified time to settle a
+/// missing year), and the file's modified time. `None` when none gives a date.
 pub fn snapshot_date(
     info: &BTreeMap<String, String>,
     file_name: &str,

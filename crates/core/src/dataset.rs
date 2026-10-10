@@ -7,9 +7,12 @@ use crate::model::Hold;
 use crate::normalize::fold_key;
 use crate::rules::{Blocker, RuleSet};
 
+/// A hold with the values derived from it for one snapshot.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Row {
+    /// The hold as imported.
     pub hold: Hold,
+    /// The blocker derived from the hold's remark.
     pub blocker: Blocker,
     /// Case-folded remark, for grouping.
     pub remark_key: String,
@@ -34,19 +37,25 @@ impl Row {
         format!("{}|{}", self.hold.discipline, self.blocker.item)
     }
 
+    /// True when the hold has both a model size and an LDT size and they differ.
     pub fn size_mismatch(&self) -> bool {
         matches!((self.hold.model_size, self.hold.ldt_size), (Some(a), Some(b)) if a != b)
     }
 }
 
+/// The rows of one snapshot, in file order.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dataset {
+    /// The moment open holds are aged against.
     pub snapshot: NaiveDateTime,
     /// In file order. Several queries depend on first-appearance order.
     pub rows: Vec<Row>,
 }
 
 impl Dataset {
+    /// Derives a [`Row`] for every hold, keeping their order. Age and duration count calendar
+    /// days (time of day ignored) and are never negative; they are `None` when the hold has no
+    /// creation date, or, for a released hold, no release date.
     pub fn build(holds: Vec<Hold>, rules: &RuleSet, snapshot: NaiveDateTime) -> Dataset {
         let rows = holds
             .into_iter()
@@ -120,7 +129,7 @@ mod tests {
         ds.rows[0].hold.created = None;
         let rebuilt = super::Dataset::build(
             ds.rows.iter().map(|r| r.hold.clone()).collect(),
-            &crate::rules::RuleSet::builtin(),
+            crate::rules::RuleSet::builtin(),
             ds.snapshot,
         );
         assert_eq!(rebuilt.rows[0].days(), None);
@@ -130,7 +139,7 @@ mod tests {
         hold.remark = "x".to_string();
         let ds = super::Dataset::build(
             vec![hold],
-            &crate::rules::RuleSet::builtin(),
+            crate::rules::RuleSet::builtin(),
             crate::testkit::at(snapshot),
         );
         ds.rows[0].days()

@@ -8,18 +8,25 @@ use crate::table::{ambiguous_parts, Cell, DateOrder, RawTable};
 use crate::warning::{ImportWarning, WarningKind};
 use serde::{Deserialize, Serialize};
 
+/// A data row that was left out of the import.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkippedRow {
     /// One-based row number in the sheet, counting the header as row 1.
     pub row_number: usize,
+    /// Why the row was skipped, for example `blank line_id`.
     pub reason: String,
 }
 
+/// The result of parsing a table into holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parsed {
+    /// The holds read, in row order. Never empty.
     pub holds: Vec<Hold>,
+    /// Rows left out, in row order. Entirely empty rows are not listed.
     pub skipped: Vec<SkippedRow>,
+    /// Things the import changed or assumed.
     pub warnings: Vec<ImportWarning>,
+    /// True when the file has no `id` or no `released` column (see `ColumnMap::is_limited`).
     pub limited: bool,
 }
 
@@ -54,6 +61,10 @@ pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOr
     decided_date_order(cells).unwrap_or(DateOrder::DayFirst)
 }
 
+/// Turns a raw table into holds using `map`. Rows with a blank `line_id` or an unreadable
+/// creation date are skipped and reported in [`Parsed::skipped`]; blank rows are dropped
+/// silently. Fails when a required column is not mapped, the table has no rows, or no row
+/// could be read.
 pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportError> {
     let missing = map.missing_required();
     if !missing.is_empty() {

@@ -19,15 +19,21 @@ use crate::warning::{ImportWarning, WarningKind};
 /// A file read but not yet parsed into holds: what the mapping screen shows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Opened {
+    /// The file's name without its directory.
     pub file_name: String,
+    /// The file's last-modified time in local time; `None` when the system does not give one.
     pub modified: Option<NaiveDateTime>,
     /// Lower-case hex SHA-256 of the file's bytes.
     pub content_hash: String,
+    /// Key/value pairs from the workbook's information sheet; empty when it has none.
     pub info: BTreeMap<String, String>,
+    /// The sheet the table was read from.
     pub sheet_name: String,
+    /// The sheet's header row and data rows, before mapping.
     pub table: RawTable,
     /// The mapping `ColumnMap::auto` proposes for `table.headers`.
     pub auto_map: ColumnMap,
+    /// How many cells held an Excel error such as `#N/A`; they were read as blank.
     pub error_cells: usize,
 }
 
@@ -47,13 +53,20 @@ impl Opened {
     }
 }
 
+/// A file read and parsed into holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Loaded {
+    /// The file's name without its directory.
     pub file_name: String,
+    /// Lower-case hex SHA-256 of the file's bytes.
     pub content_hash: String,
+    /// Key/value pairs from the workbook's information sheet; empty when it has none.
     pub info: BTreeMap<String, String>,
+    /// The sheet the holds were read from.
     pub sheet_name: String,
+    /// The column mapping that was used.
     pub map: ColumnMap,
+    /// The holds, skipped rows, and warnings.
     pub parsed: Parsed,
     /// `None` when neither the file nor its name nor its timestamps give a date.
     pub snapshot: Option<SnapshotDate>,

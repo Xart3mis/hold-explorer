@@ -54,7 +54,7 @@ pub fn sample() -> Dataset {
             released,
             mismatched,
         ],
-        &RuleSet::builtin(),
+        RuleSet::builtin(),
         snapshot(),
     )
 }

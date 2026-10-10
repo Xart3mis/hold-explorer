@@ -41,6 +41,7 @@ pub fn fold_key(input: &str) -> String {
     clean_text(input).to_uppercase()
 }
 
+/// Cleans `input` with [`clean_text`]; a blank result becomes [`UNSPECIFIED`].
 pub fn discipline_or_default(input: &str) -> String {
     let cleaned = clean_text(input);
     if cleaned.is_empty() {
@@ -50,6 +51,7 @@ pub fn discipline_or_default(input: &str) -> String {
     }
 }
 
+/// Cleans `input` with [`clean_text`]; a blank result becomes [`DASH`].
 pub fn or_dash(input: &str) -> String {
     let cleaned = clean_text(input);
     if cleaned.is_empty() {

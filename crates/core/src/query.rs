@@ -12,14 +12,20 @@ fn filtered<'a>(ds: &'a Dataset, spec: &'a FilterSpec) -> impl Iterator<Item = &
     ds.rows.iter().filter(move |row| spec.matches(row))
 }
 
+/// Headline numbers for a selection of holds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Summary {
+    /// Number of selected holds.
     pub holds: usize,
+    /// Number of distinct lines among the selected holds.
     pub lines: usize,
+    /// Number of lines that have exactly one selected hold.
     pub single_hold_lines: usize,
-    /// Lower median over open holds in the selection.
+    /// Lower median of the ages of the selected open holds, in days (the lower of the two middle
+    /// values when their count is even); `None` when no selected open hold has a creation date.
     pub median_age_days: Option<i64>,
-    /// Lower median over released holds in the selection.
+    /// Lower median of the durations of the selected released holds, in days; `None` when no
+    /// selected released hold has both a creation and a release date.
     pub median_duration_days: Option<i64>,
 }
 
@@ -32,6 +38,7 @@ fn lower_median(values: &mut [i64]) -> Option<i64> {
     }
 }
 
+/// Counts the holds and lines selected by `spec` and gives the median age and duration.
 pub fn summary(ds: &Dataset, spec: &FilterSpec) -> Summary {
     let mut per_line: HashMap<&str, usize> = HashMap::new();
     let mut ages: Vec<i64> = Vec::new();
@@ -56,12 +63,18 @@ pub fn summary(ds: &Dataset, spec: &FilterSpec) -> Summary {
     }
 }
 
+/// One value of a dimension and how many holds and lines have it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Group {
+    /// The dimension value, compared exactly (case-sensitive); empty when the hold has none.
     pub key: String,
-    /// What to show for this group.
+    /// What to show for this group: `(blank)` for an empty key, the original remark of the
+    /// group's first hold for a remark group, `<discipline> / <item>` for a blocker group,
+    /// and the key otherwise.
     pub label: String,
+    /// Number of selected holds with this value.
     pub holds: usize,
+    /// Number of distinct lines among those holds.
     pub lines: usize,
 }
 
@@ -76,6 +89,8 @@ fn label_for(dim: &Dim, key: &str, row: &Row) -> String {
     }
 }
 
+/// Groups the selected holds by `dim`. Groups are ordered by hold count, largest first, then by
+/// key in byte order. Grouping is case-sensitive.
 pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: &Dim) -> Vec<Group> {
     let mut groups: BTreeMap<String, (String, usize, BTreeSet<&str>)> = BTreeMap::new();
     for row in filtered(ds, spec) {
@@ -99,16 +114,22 @@ pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: &Dim) -> Vec<Group> {
     out
 }
 
+/// Hold counts for every pair of values of two dimensions.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Matrix {
+    /// Row dimension values, ordered as `group_by` orders groups.
     pub rows: Vec<String>,
+    /// Display label of each entry of `rows`.
     pub row_labels: Vec<String>,
+    /// Column dimension values, ordered as `group_by` orders groups.
     pub cols: Vec<String>,
+    /// Display label of each entry of `cols`.
     pub col_labels: Vec<String>,
     /// `cells[r][c]` is the number of holds with row value `rows[r]` and column value `cols[c]`.
     pub cells: Vec<Vec<usize>>,
 }
 
+/// Counts the selected holds for each pair of a `row_dim` value and a `col_dim` value.
 pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> Matrix {
     let row_groups = group_by(ds, spec, row_dim);
     let col_groups = group_by(ds, spec, col_dim);
@@ -146,21 +167,29 @@ pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> 
 /// hold in the selection, because they are line-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LineRow {
+    /// The line.
     pub line_id: String,
+    /// Number of selected holds on the line.
     pub holds: usize,
     /// In order of first appearance.
     pub disciplines: Vec<String>,
     /// In order of first appearance.
     pub hold_types: Vec<String>,
-    /// Number of distinct blockers.
+    /// Number of distinct blockers (by discipline and item) among the selected holds.
     pub blockers: usize,
+    /// Greatest age of the line's selected open holds, in days; `None` when none has an age.
     pub oldest_age_days: Option<i64>,
+    /// Model size of the line's first selected hold; `None` when it has none.
     pub model_size: Option<f64>,
+    /// LDT size of the line's first selected hold; `None` when it has none.
     pub ldt_size: Option<f64>,
+    /// Stress calculation of the line's first selected hold.
     pub stress_calc: String,
+    /// Whether the line's first selected hold has differing model and LDT sizes.
     pub size_mismatch: bool,
 }
 
+/// How `lines` orders its result; ties end in line id order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LineSort {
     /// Most holds first.
@@ -168,13 +197,15 @@ pub enum LineSort {
     HoldsDesc,
     /// Fewest disciplines, then fewest holds: the lines cheapest to free.
     Easiest,
-    /// Oldest open hold first.
+    /// Line with the oldest open hold first; lines with no open-hold age come last.
     OldestFirst,
 }
 
+/// Options for `lines`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LineQuery {
+    /// Order of the result.
     pub sort: LineSort,
     /// Keep only lines with exactly one hold in the selection.
     pub single_hold_only: bool,
@@ -191,6 +222,8 @@ fn push_unique(list: &mut Vec<String>, value: &str) {
     }
 }
 
+/// One row per line that has a selected hold, in the order `query.sort` gives. Disciplines and
+/// hold types are listed in order of first appearance in the dataset.
 pub fn lines(ds: &Dataset, spec: &FilterSpec, query: &LineQuery) -> Vec<LineRow> {
     let mut index: HashMap<&str, usize> = HashMap::new();
     let mut out: Vec<LineRow> = Vec::new();

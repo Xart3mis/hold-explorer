@@ -3,9 +3,11 @@
 use fancy_regex::Regex as LookaheadRegex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 
 use crate::normalize::clean_text;
 
+/// What a hold waits for, derived from its remark by [`RuleSet::classify`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Blocker {
     /// Blocker type: a tag code such as `PR`, `TIE-IN`, a keyword label, or `Other`.
@@ -46,6 +48,7 @@ const KEYWORDS: [(&str, &str); 16] = [
     (r"STRUCTURE|STEEL|STRU", "STRUCTURE"),
 ];
 
+/// The compiled patterns that turn a hold remark into a [`Blocker`].
 pub struct RuleSet {
     tag: LookaheadRegex,
     tie_in: Regex,
@@ -55,8 +58,13 @@ pub struct RuleSet {
 }
 
 impl RuleSet {
-    /// The rules of the HTML tool.
-    pub fn builtin() -> RuleSet {
+    /// The rules of the HTML tool, compiled once and shared.
+    pub fn builtin() -> &'static RuleSet {
+        static BUILTIN: OnceLock<RuleSet> = OnceLock::new();
+        BUILTIN.get_or_init(Self::compile)
+    }
+
+    fn compile() -> RuleSet {
         let literal = "pattern is a valid literal";
         RuleSet {
             tag: LookaheadRegex::new(TAG_PATTERN).expect(literal),
@@ -70,6 +78,11 @@ impl RuleSet {
         }
     }
 
+    /// Derives the blocker a remark waits for. Tests, in order: a tag such as
+    /// `577-PR-400` (kind is its letter code, with `STRU` reported as `STR`; `UNIT-` codes
+    /// are skipped), a tie-in such as `T123-R456`, the keyword list (first hit wins), and
+    /// otherwise `Other` with the remark upper-cased, stripped of a leading `HOLD ` and
+    /// `PENDING `/`ON `, and cut to 60 UTF-16 units; a blank remark gives the item `—`.
     pub fn classify(&self, remark: &str) -> Blocker {
         let upper = clean_text(remark).to_uppercase();
 
@@ -135,9 +148,23 @@ impl RuleSet {
     }
 }
 
+impl std::fmt::Debug for RuleSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RuleSet")
+            .field("keyword_rules", &self.keywords.len())
+            .finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn builtin_is_shared_and_debug_counts_keywords() {
+        assert!(std::ptr::eq(RuleSet::builtin(), RuleSet::builtin()));
+        assert!(format!("{:?}", RuleSet::builtin()).contains("16"));
+    }
 
     fn classify(remark: &str) -> (String, String) {
         let b = RuleSet::builtin().classify(remark);

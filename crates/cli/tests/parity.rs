@@ -71,7 +71,7 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
     let loaded = load_file(&workbook).unwrap();
     let ds = Dataset::build(
         loaded.parsed.holds,
-        &RuleSet::builtin(),
+        RuleSet::builtin(),
         loaded.snapshot.unwrap().at,
     );
     let open = FilterSpec::default();
@@ -347,7 +347,7 @@ fn solve_tie_break_matches_the_html_tool_when_partial_sums_differ_by_rounding() 
         })
         .collect();
     let snapshot = parse_report_date("2026-10-01 00:00:00").unwrap();
-    let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot);
+    let ds = Dataset::build(holds, RuleSet::builtin(), snapshot);
 
     let plan: Vec<Value> = solve_plan(&ds, &FilterSpec::default(), Some(20))
         .steps

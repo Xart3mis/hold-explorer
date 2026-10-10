@@ -17,11 +17,14 @@ use serde::{Deserialize, Serialize};
 use crate::mapping::ColumnMap;
 use crate::table::{Cell, RawTable};
 
+/// What a spreadsheet file holds: its information sheet and its data sheet.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkbookData {
     /// Key and value pairs of the `info` sheet. Empty when there is none.
     pub info: BTreeMap<String, String>,
+    /// The sheet the table was read from; for a CSV file, `csv`.
     pub sheet_name: String,
+    /// The header row and data rows of that sheet.
     pub table: RawTable,
     /// Cells holding an Excel error (#N/A, #REF!, ...) in the chosen sheet, read as blank.
     pub error_cells: usize,
@@ -264,6 +267,9 @@ fn open_sheets<'a>(
     })
 }
 
+/// Reads a `.xlsx`, `.xls`, or `.csv` file from `path` into a [`WorkbookData`]. The format is
+/// chosen by the file extension. Fails with `NotFound`, `EmptyFile`, `Unreadable`, or
+/// `NoDataSheet`.
 pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
     let (bytes, _) = read_file_bytes(path)?;
     parse_workbook_bytes(path, &bytes)

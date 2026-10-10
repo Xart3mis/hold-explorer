@@ -64,7 +64,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             let skipped = loaded.parsed.skipped.len();
             let warnings = loaded.parsed.warnings.len();
 
-            let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot.at);
+            let ds = Dataset::build(loaded.parsed.holds, RuleSet::builtin(), snapshot.at);
             let open = FilterSpec::default();
             let top_lines: Vec<_> = lines(&ds, &open, &LineQuery::default())
                 .into_iter()

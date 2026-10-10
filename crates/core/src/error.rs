@@ -1,3 +1,5 @@
+//! The error a failed import reports.
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -10,26 +12,52 @@ pub enum ImportError {
     #[error(
         "The file {path} was not found. It may have been moved or deleted; choose the file again."
     )]
-    NotFound { path: String },
+    /// The file does not exist at `path` (moved or deleted).
+    NotFound {
+        /// The path that was looked up.
+        path: String,
+    },
 
     #[error("Could not read {path}: {detail}. Open the file in Excel and save it as .xlsx without a password, then choose it again.")]
-    Unreadable { path: String, detail: String },
+    /// The file at `path` exists but could not be read; `detail` is the underlying reason.
+    Unreadable {
+        /// The file that could not be read.
+        path: String,
+        /// The underlying reason, as reported by the reader.
+        detail: String,
+    },
 
     #[error("The file {path} is empty. Export the report again and choose the new file.")]
-    EmptyFile { path: String },
+    /// The file at `path` has no content at all.
+    EmptyFile {
+        /// The empty file.
+        path: String,
+    },
 
     #[error("No sheet with hold data was found; the sheets in the file are: {}. Expected a sheet named \"data\" with the columns line_id, hold_remark, and hold_type.", .sheets.join(", "))]
-    NoDataSheet { sheets: Vec<String> },
+    /// The workbook has no sheet that holds hold data; `sheets` lists the sheet names found.
+    NoDataSheet {
+        /// Names of the sheets in the workbook.
+        sheets: Vec<String>,
+    },
 
     #[error("Missing required columns: {}. Map them to columns of the file.", .missing.iter().map(|f| f.label()).collect::<Vec<_>>().join(", "))]
-    MissingColumns { missing: Vec<Field> },
+    /// Required fields have no column mapped to them; `missing` lists those fields.
+    MissingColumns {
+        /// The required fields with no mapped column.
+        missing: Vec<Field>,
+    },
 
     #[error("The file has a header row but no data rows. Export the report again or choose another file.")]
+    /// The file has a header row but no data rows.
     Empty,
 
     #[error("No hold could be read: {skipped_rows} {} skipped, for example {example}. Check the column mapping and the date format.", if *.skipped_rows == 1 { "row was" } else { "rows were" })]
+    /// Every data row was skipped, so no hold was read.
     NoHolds {
+        /// How many rows were skipped.
         skipped_rows: usize,
+        /// A description of one skipped row and why it was skipped.
         example: String,
     },
 }

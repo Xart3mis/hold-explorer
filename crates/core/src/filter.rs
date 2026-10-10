@@ -9,21 +9,33 @@ use crate::table::format_number;
 /// A dimension holds can be grouped and filtered by.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Dim {
+    /// The hold's discipline (`Unspecified` when blank).
     Discipline,
+    /// The hold type (`—` when blank).
     HoldType,
+    /// The role (`—` when blank).
     Role,
+    /// The name (`—` when blank).
     Name,
+    /// The blocker's type, such as `PR` or `P&ID`.
     BlockerType,
+    /// The blocker's identity, `<discipline>|<item>`.
     Blocker,
+    /// The remark, cleaned and upper-cased, so remarks that differ only in case or spacing share a value.
     Remark,
+    /// The line the hold is on.
     LineId,
+    /// The model size as text; empty when the hold has none.
     ModelSize,
+    /// The stress calculation reference; empty when none.
     StressCalc,
-    /// An extra column, by the name it has in `Hold.extra`.
+    /// An extra column, by the name it has in `Hold.extra`; empty for a hold that has no value there.
     Custom(String),
 }
 
 impl Dim {
+    /// The value of this dimension for `row`, as text. Values are compared exactly, so
+    /// grouping and filtering by them are case-sensitive.
     pub fn value(&self, row: &Row) -> String {
         match self {
             Dim::Discipline => row.hold.discipline.clone(),
@@ -41,16 +53,22 @@ impl Dim {
     }
 }
 
+/// Which holds a filter keeps by release state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Status {
+    /// Holds not yet released (the default).
     #[default]
     Open,
+    /// Released holds only.
     Released,
+    /// Open and released holds.
     All,
 }
 
+/// Keeps rows by the value of one dimension.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldFilter {
+    /// The dimension tested.
     pub dim: Dim,
     /// Values combine with OR. An empty list does not filter.
     pub values: Vec<String>,
@@ -63,7 +81,9 @@ pub struct FieldFilter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgeBand {
+    /// Smallest age kept, in days; `None` for no lower bound.
     pub min_days: Option<i64>,
+    /// Largest age kept, in days; `None` for no upper bound.
     pub max_days: Option<i64>,
 }
 
@@ -77,7 +97,9 @@ impl AgeBand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DateRange {
+    /// First day kept; `None` for no lower bound.
     pub from: Option<NaiveDate>,
+    /// Last day kept; `None` for no upper bound.
     pub to: Option<NaiveDate>,
 }
 
@@ -94,22 +116,30 @@ impl DateRange {
     }
 }
 
+/// A complete filter: every part must hold for a row to be kept.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FilterSpec {
+    /// Release state kept; open holds by default.
     pub status: Status,
     /// Combined with AND. Values inside one entry combine with OR.
     pub fields: Vec<FieldFilter>,
     /// Case-insensitive substring of line, remark, name, hold type, discipline, or blocker item.
     pub text: String,
-    /// Combined with OR. Empty means no age filter.
+    /// Combined with OR. Empty means no age filter. A band tests the row's age in days, or its
+    /// duration for a released hold; a row with no such value fails any age filter.
     pub age_bands: Vec<AgeBand>,
+    /// Calendar days the creation date must fall in; a hold with no creation date fails a bounded range.
     pub created: DateRange,
+    /// Calendar days the release date must fall in; a hold with no release date fails a bounded range.
     pub released: DateRange,
+    /// `Some(true)` keeps only holds whose model and LDT sizes differ, `Some(false)` only the
+    /// others; `None` does not filter.
     pub size_mismatch: Option<bool>,
 }
 
 impl FilterSpec {
+    /// Whether `row` passes every part of the filter.
     pub fn matches(&self, row: &Row) -> bool {
         match self.status {
             Status::Open if row.hold.released => return false,
@@ -328,7 +358,7 @@ mod tests {
         let mut north = hold("L1", "Civil", "MISC.", "r", 3);
         north.extra.insert("Area".to_string(), "North".to_string());
         let other = hold("L2", "Civil", "MISC.", "r", 3);
-        let ds = Dataset::build(vec![north, other], &RuleSet::builtin(), snapshot());
+        let ds = Dataset::build(vec![north, other], RuleSet::builtin(), snapshot());
         let area = Dim::Custom("Area".to_string());
 
         let spec = field(area.clone(), &["North"], false);
