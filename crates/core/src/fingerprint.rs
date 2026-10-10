@@ -21,7 +21,7 @@ pub fn state_hash(hold: &Hold) -> [u8; 32] {
 /// The canonical encoding itself, for tests and debugging: the version, then every field of
 /// the hold in declaration order. Text is prefixed by its byte length, an optional value by a
 /// presence byte, a timestamp is whole seconds since the Unix epoch plus nanoseconds, a size is
-/// its `f64` bit pattern, and `extra` is its entry count followed by its entries in key order.
+/// its `f64` bit pattern (a zero of either sign is encoded as `0.0`), and `extra` is its entry count followed by its entries in key order.
 /// Numbers are little-endian.
 pub fn canonical_bytes(hold: &Hold) -> Vec<u8> {
     let mut out = Vec::with_capacity(256);

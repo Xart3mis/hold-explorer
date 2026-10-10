@@ -127,7 +127,9 @@ mod tests {
     #[test]
     fn time_round_trips_and_sorts_as_text() {
         let times = [
-            at(2000, 0),
+            NaiveDate::from_ymd_opt(2000, 1, 1)
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .unwrap(),
             at(2026, 0),
             at(2026, 123_456_789),
             NaiveDate::from_ymd_opt(2100, 12, 31)

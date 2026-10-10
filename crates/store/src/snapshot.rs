@@ -9,7 +9,7 @@ use hx_core::load::Loaded;
 use hx_core::model::Hold;
 use hx_core::rules::RuleSet;
 use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
-use rusqlite::{OptionalExtension, Row};
+use rusqlite::{OptionalExtension, Row, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 use crate::codec::{decode_ids, decode_time, encode_ids, encode_time};
@@ -119,7 +119,10 @@ impl Workspace {
         taken: SnapshotDate,
         options: &ImportOptions,
     ) -> Result<SnapshotInfo, StoreError> {
-        let tx = self.conn.transaction().map_err(database)?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database)?;
 
         let existing: Option<(i64, String, String)> = tx
             .query_row(
@@ -675,6 +678,60 @@ mod tests {
     }
 
     #[test]
+    fn every_date_source_round_trips_through_its_text() {
+        for source in [
+            SnapshotSource::InfoSheet,
+            SnapshotSource::FileName,
+            SnapshotSource::FileTime,
+            SnapshotSource::User,
+        ] {
+            assert_eq!(
+                source_from_text(&source_text(source).unwrap()).unwrap(),
+                source
+            );
+        }
+        assert!(matches!(
+            source_from_text("Telepathy"),
+            Err(StoreError::Corrupt { .. })
+        ));
+    }
+
+    #[test]
+    fn a_failure_after_the_writes_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = SynthConfig::new(5, 50, 600);
+        let rows = generate(&cfg);
+        let first = synth(dir.path(), "a.xlsx", &rows, &cfg);
+        let (rows2, cfg2, _) = evolve(&rows, &cfg, 11, 14);
+        let second = synth(dir.path(), "b.xlsx", &rows2, &cfg2);
+        let mut ws = workspace(dir.path());
+        let info = ws
+            .import(&first, taken_of(&first), &ImportOptions::default())
+            .unwrap();
+        let (snapshots, states) = (count(&ws, "snapshot"), count(&ws, "row_state"));
+        ws.conn
+            .execute_batch(
+                "CREATE TRIGGER refuse BEFORE INSERT ON snapshot \
+                 BEGIN SELECT RAISE(ABORT, 'refused'); END;",
+            )
+            .unwrap();
+        let result = ws.import(
+            &second,
+            taken_of(&second),
+            &ImportOptions {
+                replace: Some(info.id),
+            },
+        );
+        assert!(
+            matches!(result, Err(StoreError::Database { .. })),
+            "{result:?}"
+        );
+        assert_eq!(count(&ws, "snapshot"), snapshots);
+        assert_eq!(count(&ws, "row_state"), states);
+        assert_eq!(ws.holds(info.id).unwrap(), first.parsed.holds);
+    }
+
+    #[test]
     fn replace_of_an_unknown_id_stores_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let first = small(dir.path());
@@ -721,7 +778,10 @@ mod tests {
             crate::codec::decode_time(&detected_at.unwrap()).unwrap(),
             detected.at
         );
-        assert!(detected_source.is_some());
+        assert_eq!(
+            detected_source.unwrap(),
+            source_text(detected.source).unwrap()
+        );
     }
 
     #[test]
