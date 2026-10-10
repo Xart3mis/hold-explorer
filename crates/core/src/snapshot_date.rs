@@ -150,17 +150,23 @@ fn without_year(
 /// A date written in the filename, trying the patterns in order: `yyyy-mm-dd`, `dd-mm-yyyy`,
 /// `dd-Mon-yyyy`, `dd-Mon`, `dd-mm`. Within a pattern the first match that passes validation
 /// wins. The year-less patterns ignore any match that overlaps a match of a written-year
-/// pattern, whether or not that one passed validation, so a rejected `2026-10-11` is not
-/// re-read as `10-11`.
+/// pattern whose year is in range, whether or not that one passed validation, so a rejected
+/// `2026-10-11` is not re-read as `10-11`. A written-year match with a year out of range is
+/// no date and blocks nothing.
 fn date_from_name(
     file_name: &str,
     newest: Option<NaiveDateTime>,
     modified: Option<NaiveDateTime>,
 ) -> Option<NaiveDate> {
     let p = patterns();
-    let year_first = matches(&p.year_first, file_name);
-    let year_last = matches(&p.year_last, file_name);
-    let month_year = matches(&p.month_year, file_name);
+    let plausible = |re: &Regex, year_group: usize| {
+        let mut found = matches(re, file_name);
+        found.retain(|c| number(c, year_group).is_some_and(|y| YEARS.contains(&y)));
+        found
+    };
+    let year_first = plausible(&p.year_first, 1);
+    let year_last = plausible(&p.year_last, 3);
+    let month_year = plausible(&p.month_year, 3);
     let spans: Vec<(usize, usize)> = [&year_first, &year_last, &month_year]
         .into_iter()
         .flatten()
@@ -455,6 +461,18 @@ mod tests {
                 Some(modified)
             ),
             named("2026-10-08")
+        );
+    }
+
+    #[test]
+    fn a_time_or_counter_after_a_day_and_month_is_not_a_written_year() {
+        assert_eq!(
+            from_name("holds_08-10_1500.xlsx", "2026-10-05 09:00:00", None),
+            named("2026-10-08")
+        );
+        assert_eq!(
+            from_name("holds_07-Oct_1234.xlsx", "2026-10-05 09:00:00", None),
+            named("2026-10-07")
         );
     }
 
