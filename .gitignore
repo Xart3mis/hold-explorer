@@ -1,0 +1,15 @@
+# Build output
+target/
+node_modules/
+dist/
+
+# Real project data must never be committed. Tests generate synthetic workbooks at run time.
+*.xlsx
+*.xls
+*.holdx
+
+# Local tool state
+.omc/
+.serena/
+.superpowers/
+.tokensave/
