@@ -442,6 +442,30 @@ mod tests {
     }
 
     #[test]
+    fn open_sheet_prefers_an_exact_name_over_a_loose_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("names.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        for (name, header) in [("Data ", "first"), ("data", "second"), ("Other", "third")] {
+            let sheet = book.add_worksheet();
+            sheet.set_name(name).unwrap();
+            sheet.write_string(0, 0, header).unwrap();
+            sheet.write_string(1, 0, "x").unwrap();
+        }
+        book.save(&path).unwrap();
+        for (wanted, opened, header) in [
+            ("Data ", "Data ", "first"),
+            ("data", "data", "second"),
+            ("OTHER", "Other", "third"),
+        ] {
+            let got = open_sheet(&path, wanted).unwrap();
+            assert_eq!(got.sheet_name, opened, "{wanted:?}");
+            assert_eq!(got.table.headers, vec![header], "{wanted:?}");
+        }
+        assert!(open_sheet(&path, "nope").is_err());
+    }
+
+    #[test]
     fn delimited_text_has_no_sheets() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.csv");

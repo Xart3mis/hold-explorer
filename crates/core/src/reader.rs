@@ -325,7 +325,8 @@ pub(crate) fn parse_workbook_bytes(
     }
 
     if let Some(wanted) = sheet {
-        let Some(name) = names.iter().find(|n| is_named(n, wanted)) else {
+        let exact = names.iter().find(|n| n.as_str() == wanted);
+        let Some(name) = exact.or_else(|| names.iter().find(|n| is_named(n, wanted))) else {
             return Err(ImportError::NoDataSheet { sheets: names });
         };
         let range = workbook
