@@ -159,18 +159,29 @@ impl Cell {
         .filter(|n| n.is_finite())
     }
 
-    /// A whole-number id. Text is parsed as `i64` first; failing that, as a number. A number
+    /// A whole-number id. Text counts only as an optional sign and digits, optionally followed
+    /// by a decimal point and zeros, and is parsed exactly as `i64`. A number
     /// counts only if it is finite, whole, and within +-2^53, so it is exact as an `f64`.
     pub fn as_id(&self) -> Option<i64> {
         const LIMIT: f64 = 9_007_199_254_740_992.0;
         let whole =
             |n: f64| (n.is_finite() && n.fract() == 0.0 && n.abs() <= LIMIT).then_some(n as i64);
         match self {
-            Cell::Text(s) => s
-                .trim()
-                .parse()
-                .ok()
-                .or_else(|| s.trim().parse().ok().and_then(whole)),
+            Cell::Text(s) => {
+                let text = s.trim();
+                let whole_part = match text.split_once('.') {
+                    Some((int, zeros)) if !zeros.is_empty() && zeros.bytes().all(|b| b == b'0') => {
+                        int
+                    }
+                    Some(_) => return None,
+                    None => text,
+                };
+                let digits = whole_part.strip_prefix(['+', '-']).unwrap_or(whole_part);
+                if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                whole_part.parse().ok()
+            }
             Cell::Number(n) => whole(*n),
             _ => None,
         }
@@ -423,6 +434,13 @@ mod tests {
         assert_eq!(text("87763.0").as_id(), Some(87763));
         assert_eq!(text(" 87763 ").as_id(), Some(87763));
         assert_eq!(text("inf").as_id(), None);
+        assert_eq!(text("87763").as_id(), Some(87763));
+        assert_eq!(text("87763.000").as_id(), Some(87763));
+        assert_eq!(text("9007199254740993.0").as_id(), Some(9007199254740993));
+        assert_eq!(text("87763.00000000000000001").as_id(), None);
+        assert_eq!(text("1e3").as_id(), None);
+        assert_eq!(text(".").as_id(), None);
+        assert_eq!(text("").as_id(), None);
         assert_eq!(text("abc").as_id(), None);
         assert_eq!(Cell::Number(42.0).as_id(), Some(42));
         assert_eq!(Cell::Number(1.9).as_id(), None);
