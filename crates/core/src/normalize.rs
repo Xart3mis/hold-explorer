@@ -6,8 +6,17 @@ pub const UNSPECIFIED: &str = "Unspecified";
 /// Shown when a hold has no name, role, or hold type.
 pub const DASH: &str = "—";
 
+/// The characters JavaScript's `\s` matches. Rust's `char::is_whitespace` differs: it includes
+/// U+0085 and excludes U+FEFF.
+fn is_js_whitespace(c: char) -> bool {
+    matches!(c,
+        '\u{9}'..='\u{d}' | ' ' | '\u{a0}' | '\u{1680}' | '\u{2000}'..='\u{200a}'
+        | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}')
+}
+
 /// Removes the literal `_x000D_` (any letter case) that Excel leaves in exported text, collapses
-/// every run of whitespace (line breaks included) to one space, and trims.
+/// every run of whitespace (line breaks included, as JavaScript counts whitespace) to one
+/// space, and trims.
 pub fn clean_text(input: &str) -> String {
     // ASCII lower-casing keeps byte offsets, so matches in the copy locate the original.
     const ESCAPE: &str = "_x000d_";
@@ -20,7 +29,8 @@ pub fn clean_text(input: &str) -> String {
     }
     without_escape.push_str(&input[copied..]);
     without_escape
-        .split_whitespace()
+        .split(is_js_whitespace)
+        .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -57,6 +67,23 @@ mod tests {
     fn clean_text_collapses_whitespace_and_line_breaks() {
         assert_eq!(clean_text("  FIV/AIV   REPORT\n"), "FIV/AIV REPORT");
         assert_eq!(clean_text("a\r\n\tb"), "a b");
+    }
+
+    #[test]
+    fn clean_text_splits_on_the_javascript_whitespace_set() {
+        // U+FEFF is whitespace to JavaScript, so it splits and is trimmed.
+        assert_eq!(clean_text("P\u{feff}&ID"), "P &ID");
+        assert_eq!(clean_text("\u{feff}hold pending x"), "hold pending x");
+        // U+0085 is not, so it stays.
+        assert_eq!(clean_text("a\u{85}b"), "a\u{85}b");
+        for c in [
+            '\u{9}', '\u{b}', '\u{c}', '\u{a0}', '\u{1680}', '\u{2000}', '\u{200a}', '\u{2028}',
+            '\u{2029}', '\u{202f}', '\u{205f}', '\u{3000}',
+        ] {
+            assert_eq!(clean_text(&format!("a{c}b")), "a b", "U+{:04X}", c as u32);
+        }
+        // Zero-width space (U+200B) is not whitespace to JavaScript.
+        assert_eq!(clean_text("a\u{200b}b"), "a\u{200b}b");
     }
 
     #[test]

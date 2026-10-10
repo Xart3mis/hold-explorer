@@ -216,6 +216,10 @@ const CORPUS_FIXED: &[&str] = &[
     "ß support",
     "İ vendor",
     "hold  size\r\ndata",
+    "P\u{feff}&ID",
+    "\u{feff}hold pending x",
+    "a\u{85}b",
+    "\u{627}\u{646}\u{62a}\u{638}\u{627}\u{631}538-PR-100",
 ];
 
 #[test]
