@@ -1142,6 +1142,15 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_thousands_separator_size_warns_and_is_absent() {
+        let parsed = parse(&size_table(text("1,000")));
+        assert_eq!(parsed.holds[0].model_size, None);
+        let sizes = kinds(&parsed, WarningKind::UnreadableSize);
+        assert_eq!(sizes.len(), 1);
+        assert_eq!(sizes[0].value.as_deref(), Some("1,000"));
+    }
+
     fn id_table(id: Cell) -> RawTable {
         RawTable {
             headers: ["id", "line_id", "hold_remark", "hold_type"]

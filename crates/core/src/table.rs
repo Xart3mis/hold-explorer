@@ -176,14 +176,21 @@ impl Cell {
 
     /// The cell as a finite number; text is parsed after trimming, anything else gives `None`.
     /// Text with exactly one comma and no dot reads the comma as a decimal point (`1,5` is 1.5);
-    /// `1,234,567` and `1.234,5` are not numbers.
+    /// `1,234,567` and `1.234,5` are not numbers, and neither is a thousands separator: a comma
+    /// followed by exactly three digits after a part other than `0` (`1,000`, `12,500`), while
+    /// `0,125` is 0.125.
     pub fn as_number(&self) -> Option<f64> {
         match self {
             Cell::Number(n) => Some(*n),
             Cell::Text(s) => {
                 let text = s.trim();
                 text.parse().ok().or_else(|| {
-                    if text.matches(',').count() == 1 && !text.contains('.') {
+                    let (whole, fraction) = text.split_once(',')?;
+                    let single = !fraction.contains(',') && !text.contains('.');
+                    let thousands = fraction.len() == 3
+                        && fraction.bytes().all(|b| b.is_ascii_digit())
+                        && !matches!(whole, "0" | "-0");
+                    if single && !thousands {
                         text.replace(',', ".").parse().ok()
                     } else {
                         None
@@ -503,6 +510,17 @@ mod tests {
         assert_eq!(text("1.234,5").as_number(), None);
         assert_eq!(text("1.5").as_number(), Some(1.5));
         assert_eq!(text(",").as_number(), None);
+    }
+
+    #[test]
+    fn a_lone_thousands_separator_is_not_a_decimal_comma() {
+        assert_eq!(text("1,5").as_number(), Some(1.5));
+        assert_eq!(text("0,75").as_number(), Some(0.75));
+        assert_eq!(text("0,125").as_number(), Some(0.125));
+        assert_eq!(text("12,25").as_number(), Some(12.25));
+        assert_eq!(text("1,000").as_number(), None);
+        assert_eq!(text("1,234").as_number(), None);
+        assert_eq!(text("12,500").as_number(), None);
     }
 
     #[test]
