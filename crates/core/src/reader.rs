@@ -49,9 +49,14 @@ fn table_from_range(range: &Range<Data>) -> RawTable {
             .collect(),
         None => Vec::new(),
     };
+    // `start()` is the zero-based position of the used range's first cell; the header is
+    // its first row, so the first data row is one-based `start_row + 2`.
+    let first_data_row = range.start().map_or(2, |(row, _)| row as usize + 2);
+    let rows: Vec<Vec<Cell>> = rows.map(|row| row.iter().map(to_cell).collect()).collect();
     RawTable {
         headers,
-        rows: rows.map(|row| row.iter().map(to_cell).collect()).collect(),
+        row_numbers: (first_data_row..first_data_row + rows.len()).collect(),
+        rows,
     }
 }
 
@@ -67,8 +72,10 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
         .map_err(|e| unreadable(path, e))?;
 
     let mut rows: Vec<Vec<Cell>> = Vec::new();
-    for record in reader.records() {
+    let mut lines: Vec<usize> = Vec::new();
+    for (index, record) in reader.records().enumerate() {
         let record = record.map_err(|e| unreadable(path, e))?;
+        lines.push(record.position().map_or(index + 1, |p| p.line() as usize));
         rows.push(
             record
                 .iter()
@@ -85,6 +92,7 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
     if rows.is_empty() {
         return Err(ImportError::NoDataSheet);
     }
+    lines.remove(0);
     let headers = rows
         .remove(0)
         .iter()
@@ -99,7 +107,11 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
     Ok(WorkbookData {
         info: BTreeMap::new(),
         sheet_name: "csv".to_string(),
-        table: RawTable { headers, rows },
+        table: RawTable {
+            headers,
+            rows,
+            row_numbers: lines,
+        },
     })
 }
 
@@ -222,6 +234,51 @@ mod tests {
         );
         assert_eq!(wb.table.rows[1][1], Cell::Empty);
         assert!(wb.info.is_empty());
+    }
+
+    #[test]
+    fn workbook_row_numbers_follow_the_used_range() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("offset.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let sheet = book.add_worksheet();
+        sheet.set_name("data").unwrap();
+        for (i, h) in ["line_id", "hold_remark", "hold_type"].iter().enumerate() {
+            sheet.write_string(3, 2 + i as u16, *h).unwrap();
+        }
+        for (r, line) in [(4u32, "L-1"), (5, ""), (6, "L-3")] {
+            if !line.is_empty() {
+                sheet.write_string(r, 2, line).unwrap();
+            }
+            sheet.write_string(r, 3, "x").unwrap();
+            sheet.write_string(r, 4, "MISC.").unwrap();
+        }
+        book.save(&path).unwrap();
+
+        let wb = read_workbook(&path).unwrap();
+        assert_eq!(wb.table.row_numbers, vec![5, 6, 7]);
+        let parsed =
+            crate::import::parse_table(&wb.table, &ColumnMap::auto(&wb.table.headers)).unwrap();
+        assert_eq!(parsed.holds.len(), 2);
+        assert_eq!(parsed.skipped.len(), 1);
+        assert_eq!(parsed.skipped[0].row_number, 6);
+    }
+
+    #[test]
+    fn csv_row_numbers_are_file_lines() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("holds.csv");
+        std::fs::write(
+            &path,
+            "line_id,hold_remark,hold_type\n\nL-1,x,MISC.\n,y,MISC.\nL-2,z,P&ID\n",
+        )
+        .unwrap();
+        let wb = read_workbook(&path).unwrap();
+        let parsed =
+            crate::import::parse_table(&wb.table, &ColumnMap::auto(&wb.table.headers)).unwrap();
+        assert_eq!(parsed.holds.len(), 2);
+        assert_eq!(parsed.skipped.len(), 1);
+        assert_eq!(parsed.skipped[0].row_number, 4);
     }
 
     #[test]

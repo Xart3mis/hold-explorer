@@ -18,6 +18,15 @@ pub enum Cell {
 pub struct RawTable {
     pub headers: Vec<String>,
     pub rows: Vec<Vec<Cell>>,
+    /// One-based row (sheet row or CSV line) of each entry of `rows`. May be empty for tables built by hand.
+    pub row_numbers: Vec<usize>,
+}
+
+impl RawTable {
+    /// The recorded row number of `rows[index]`, or `index + 2` when none was recorded.
+    pub fn row_number(&self, index: usize) -> usize {
+        self.row_numbers.get(index).copied().unwrap_or(index + 2)
+    }
 }
 
 /// Prints whole numbers without a fractional part: `4`, not `4.0`.

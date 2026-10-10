@@ -406,6 +406,7 @@ dependencies = [
  "fancy-regex",
  "hx-synth",
  "regex",
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "tempfile",

@@ -92,7 +92,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
         if row.iter().all(|c| matches!(c, Cell::Empty)) {
             continue;
         }
-        let row_number = index + 2;
+        let row_number = table.row_number(index);
 
         let line_id = clean_text(&cell(row, Field::LineId).as_text());
         if line_id.is_empty() {
@@ -268,6 +268,7 @@ mod tests {
                     Cell::Empty,
                 ],
             ],
+            ..Default::default()
         }
     }
 
@@ -316,10 +317,26 @@ mod tests {
     }
 
     #[test]
+    fn hand_built_table_numbers_rows_from_two() {
+        let t = RawTable {
+            headers: vec!["line_id".into(), "hold_remark".into(), "hold_type".into()],
+            rows: vec![
+                vec![text("L-1"), text("x"), text("MISC.")],
+                vec![Cell::Empty, text("y"), text("MISC.")],
+            ],
+            ..Default::default()
+        };
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        assert_eq!(parsed.skipped.len(), 1);
+        assert_eq!(parsed.skipped[0].row_number, 3);
+    }
+
+    #[test]
     fn missing_required_columns_are_named() {
         let t = RawTable {
             headers: vec!["line_id".to_string(), "hold_type".to_string()],
             rows: vec![vec![text("L-1"), text("MISC.")]],
+            ..Default::default()
         };
         let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
         assert_eq!(
@@ -333,6 +350,7 @@ mod tests {
         let t = RawTable {
             headers: vec!["line_id".into(), "hold_remark".into(), "hold_type".into()],
             rows: vec![],
+            ..Default::default()
         };
         let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
         assert_eq!(err, ImportError::Empty);
@@ -343,6 +361,7 @@ mod tests {
         let t = RawTable {
             headers: vec!["line_id".into(), "hold_remark".into(), "hold_type".into()],
             rows: vec![vec![text("L-1"), text("x"), text("MISC.")]],
+            ..Default::default()
         };
         let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
         assert!(parsed.limited);
@@ -362,6 +381,7 @@ mod tests {
                 .enumerate()
                 .map(|(i, d)| vec![text(&format!("L-{i}")), text("x"), text("MISC."), d.clone()])
                 .collect(),
+            ..Default::default()
         }
     }
 
@@ -423,6 +443,7 @@ mod tests {
         RawTable {
             headers: vec!["line_id".into(), "hold_remark".into(), "hold_type".into()],
             rows,
+            ..Default::default()
         }
     }
 
@@ -462,6 +483,7 @@ mod tests {
                 "model_size".into(),
             ],
             rows: Vec::new(),
+            ..Default::default()
         };
         for (id, size) in [("NaN", "inf"), ("1.9", "NaN"), ("9007199254740993", "6")] {
             t.rows.push(vec![
@@ -501,6 +523,7 @@ mod tests {
                     ]
                 })
                 .collect(),
+            ..Default::default()
         }
     }
 
