@@ -14,6 +14,10 @@ pub const STATE_HASH_VERSION: u32 = 1;
 
 /// SHA-256 over the canonical encoding of every field of the hold. A size equal to zero, of
 /// either sign, is encoded as `0.0`, so holds that compare equal hash equal.
+///
+/// Sizes must be finite. A size that is not a number (NaN) is hashed by its bit pattern, but
+/// the store keeps it as an absent size and reads it back as absent, so the hold read back no
+/// longer has the hash it is stored under.
 pub fn state_hash(hold: &Hold) -> [u8; 32] {
     Sha256::digest(canonical_bytes(hold)).into()
 }
@@ -21,29 +25,48 @@ pub fn state_hash(hold: &Hold) -> [u8; 32] {
 /// The canonical encoding itself, for tests and debugging: the version, then every field of
 /// the hold in declaration order. Text is prefixed by its byte length, an optional value by a
 /// presence byte, a timestamp is whole seconds since the Unix epoch plus nanoseconds, a size is
-/// its `f64` bit pattern (a zero of either sign is encoded as `0.0`), and `extra` is its entry count followed by its entries in key order.
-/// Numbers are little-endian.
+/// its `f64` bit pattern (a zero of either sign is encoded as `0.0`), and `extra` is its entry
+/// count followed by its entries in key order. Numbers are little-endian.
 pub fn canonical_bytes(hold: &Hold) -> Vec<u8> {
+    // Every field is named and there is no `..`, so a field added to `Hold` does not compile
+    // until it is encoded here too, under a new `STATE_HASH_VERSION`.
+    let Hold {
+        source_id,
+        line_id,
+        name,
+        role,
+        remark,
+        hold_type,
+        discipline,
+        created,
+        released,
+        release_remark,
+        release_date,
+        model_size,
+        ldt_size,
+        stress_calc,
+        extra,
+    } = hold;
     let mut out = Vec::with_capacity(256);
     out.extend_from_slice(&STATE_HASH_VERSION.to_le_bytes());
-    put_option(&mut out, hold.source_id, |out, id| {
+    put_option(&mut out, *source_id, |out, id| {
         out.extend_from_slice(&id.to_le_bytes());
     });
-    put_text(&mut out, &hold.line_id);
-    put_text(&mut out, &hold.name);
-    put_text(&mut out, &hold.role);
-    put_text(&mut out, &hold.remark);
-    put_text(&mut out, &hold.hold_type);
-    put_text(&mut out, &hold.discipline);
-    put_option(&mut out, hold.created, put_time);
-    out.push(u8::from(hold.released));
-    put_text(&mut out, &hold.release_remark);
-    put_option(&mut out, hold.release_date, put_time);
-    put_option(&mut out, hold.model_size, put_size);
-    put_option(&mut out, hold.ldt_size, put_size);
-    put_text(&mut out, &hold.stress_calc);
-    out.extend_from_slice(&(hold.extra.len() as u64).to_le_bytes());
-    for (key, value) in &hold.extra {
+    put_text(&mut out, line_id);
+    put_text(&mut out, name);
+    put_text(&mut out, role);
+    put_text(&mut out, remark);
+    put_text(&mut out, hold_type);
+    put_text(&mut out, discipline);
+    put_option(&mut out, *created, put_time);
+    out.push(u8::from(*released));
+    put_text(&mut out, release_remark);
+    put_option(&mut out, *release_date, put_time);
+    put_option(&mut out, *model_size, put_size);
+    put_option(&mut out, *ldt_size, put_size);
+    put_text(&mut out, stress_calc);
+    out.extend_from_slice(&(extra.len() as u64).to_le_bytes());
+    for (key, value) in extra {
         put_text(&mut out, key);
         put_text(&mut out, value);
     }
@@ -128,7 +151,7 @@ mod tests {
     #[test]
     fn every_single_field_variation_changes_the_hash() {
         type Edit = fn(&mut Hold);
-        let edits: [Edit; 16] = [
+        let edits: [Edit; 19] = [
             |h| h.source_id = None,
             |h| h.source_id = Some(0),
             |h| h.line_id.push('x'),
@@ -142,8 +165,11 @@ mod tests {
             |h| h.released = false,
             |h| h.release_remark.clear(),
             |h| h.release_date = None,
+            |h| h.release_date = Some(ts(6)),
+            |h| h.model_size = None,
             |h| h.model_size = Some(f64::from_bits(4.0f64.to_bits() + 1)),
             |h| h.ldt_size = None,
+            |h| h.ldt_size = Some(f64::from_bits(6.0f64.to_bits() + 1)),
             |h| h.stress_calc.clear(),
         ];
         let base = full();
@@ -161,7 +187,7 @@ mod tests {
         changed.extra.insert("Area".into(), "South".into());
         assert!(hashes.insert(state_hash(&added)));
         assert!(hashes.insert(state_hash(&changed)));
-        assert_eq!(hashes.len(), 19);
+        assert_eq!(hashes.len(), 22);
     }
 
     #[test]
@@ -229,6 +255,20 @@ mod tests {
         assert_eq!(
             hex,
             "de61afd9f2295a0f7db4151db24322aa12e106719afc0fc77996aeebd8890224"
+        );
+    }
+
+    /// The fixed hold above has every optional value present and one extra entry. This pins
+    /// the encoding of an absent value and of an empty `extra`.
+    #[test]
+    fn pinned_hash_of_the_default_hold() {
+        let hex: String = state_hash(&Hold::default())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(
+            hex,
+            "b0c3077a37443ddc32445561403e99cdd03798988580207d30b73d0a4f51e971"
         );
     }
 
