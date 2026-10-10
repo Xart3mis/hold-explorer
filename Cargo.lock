@@ -407,6 +407,7 @@ dependencies = [
  "hx-synth",
  "regex",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
 ]

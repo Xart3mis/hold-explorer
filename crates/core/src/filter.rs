@@ -48,6 +48,7 @@ pub enum Status {
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FieldFilter {
     /// Values combine with OR. An empty list does not filter.
     pub values: Vec<String>,
@@ -57,6 +58,7 @@ pub struct FieldFilter {
 
 /// Fields combine with AND.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FilterSpec {
     pub status: Status,
     pub fields: BTreeMap<Dim, FieldFilter>,
@@ -277,5 +279,33 @@ mod tests {
             }),
             3
         );
+    }
+
+    #[test]
+    fn empty_json_object_is_the_default_filter() {
+        let spec: FilterSpec = serde_json::from_str("{}").unwrap();
+        assert_eq!(spec, FilterSpec::default());
+        let partial: FieldFilter = serde_json::from_str(r#"{"values":["Civil"]}"#).unwrap();
+        assert!(!partial.negate);
+    }
+
+    #[test]
+    fn filter_spec_round_trips_through_json() {
+        let spec = FilterSpec {
+            status: Status::All,
+            fields: BTreeMap::from([(
+                Dim::Discipline,
+                FieldFilter {
+                    values: vec!["Civil".to_string()],
+                    negate: true,
+                },
+            )]),
+            text: "pr".to_string(),
+            min_age_days: Some(3),
+            max_age_days: None,
+            size_mismatch: Some(true),
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        assert_eq!(serde_json::from_str::<FilterSpec>(&json).unwrap(), spec);
     }
 }
