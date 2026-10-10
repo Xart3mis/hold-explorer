@@ -38,7 +38,7 @@ CREATE TABLE row_state (
   extra_json TEXT NOT NULL
 ) STRICT;
 CREATE TABLE snapshot (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   taken_at TEXT NOT NULL,
   date_source TEXT NOT NULL,
   detected_at TEXT,
@@ -207,7 +207,7 @@ mod tests {
 
     fn table_names(conn: &Connection) -> Vec<String> {
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND substr(name, 1, 7) != 'sqlite_' ORDER BY name")
             .unwrap();
         let rows = stmt.query_map([], |r| r.get(0)).unwrap();
         rows.map(|r| r.unwrap()).collect()

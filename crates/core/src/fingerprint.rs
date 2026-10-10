@@ -12,7 +12,8 @@ use crate::model::Hold;
 /// Version of the canonical encoding. Changing the encoding requires a new version.
 pub const STATE_HASH_VERSION: u32 = 1;
 
-/// SHA-256 over the canonical encoding of every field of the hold.
+/// SHA-256 over the canonical encoding of every field of the hold. A size equal to zero, of
+/// either sign, is encoded as `0.0`, so holds that compare equal hash equal.
 pub fn state_hash(hold: &Hold) -> [u8; 32] {
     Sha256::digest(canonical_bytes(hold)).into()
 }
@@ -71,6 +72,7 @@ fn put_time(out: &mut Vec<u8>, time: NaiveDateTime) {
 }
 
 fn put_size(out: &mut Vec<u8>, size: f64) {
+    let size = if size == 0.0 { 0.0 } else { size };
     out.extend_from_slice(&size.to_bits().to_le_bytes());
 }
 
@@ -104,6 +106,18 @@ mod tests {
             stress_calc: "SC-1".into(),
             extra: BTreeMap::from([("Area".to_string(), "North".to_string())]),
         }
+    }
+
+    #[test]
+    fn the_sign_of_a_zero_size_does_not_change_the_hash() {
+        let with = |model: f64, ldt: f64| Hold {
+            model_size: Some(model),
+            ldt_size: Some(ldt),
+            ..full()
+        };
+        assert_eq!(with(0.0, 0.0), with(-0.0, -0.0));
+        assert_eq!(state_hash(&with(0.0, 0.0)), state_hash(&with(-0.0, 0.0)));
+        assert_eq!(state_hash(&with(0.0, 0.0)), state_hash(&with(0.0, -0.0)));
     }
 
     #[test]

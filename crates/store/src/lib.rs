@@ -4,13 +4,16 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod codec;
 mod directory;
 mod error;
 mod schema;
+mod snapshot;
 mod workspace;
 
 pub use error::StoreError;
 pub use schema::SCHEMA_VERSION;
 
 pub use directory::{delete_workspace, find_by_project, list_workspaces};
+pub use snapshot::{ImportOptions, SnapshotInfo};
 pub use workspace::{Workspace, WorkspaceInfo};

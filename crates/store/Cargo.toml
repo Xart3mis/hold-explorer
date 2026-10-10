@@ -16,3 +16,4 @@ thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+hx-synth = { path = "../synth" }

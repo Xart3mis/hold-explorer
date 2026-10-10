@@ -10,14 +10,12 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::codec::{decode_time, encode_time};
 use crate::error::{database, StoreError};
 use crate::schema::{open_database, peek_id, peek_version};
 
 /// The extension of a workspace file.
 pub(crate) const EXTENSION: &str = "holdx-ws";
-
-/// The text format of every stored timestamp: nine fractional digits, so text order is time order.
-const TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.9f";
 
 /// The name given to a workspace whose name is blank.
 const DEFAULT_NAME: &str = "Untitled workspace";
@@ -48,16 +46,6 @@ pub struct WorkspaceInfo {
 pub struct Workspace {
     pub(crate) conn: Connection,
     path: PathBuf,
-}
-
-fn format_timestamp(at: NaiveDateTime) -> String {
-    at.format(TIMESTAMP_FORMAT).to_string()
-}
-
-fn parse_timestamp(text: &str) -> Result<NaiveDateTime, StoreError> {
-    NaiveDateTime::parse_from_str(text, TIMESTAMP_FORMAT).map_err(|e| StoreError::Corrupt {
-        detail: format!("the stored time \"{text}\" is not a valid time ({e})"),
-    })
 }
 
 fn clean_name(name: &str) -> String {
@@ -132,7 +120,7 @@ impl Workspace {
             insert.execute(["id", id]).map_err(database)?;
             insert.execute(["name", name]).map_err(database)?;
             insert
-                .execute(["created_at", &format_timestamp(Utc::now().naive_utc())])
+                .execute(["created_at", &encode_time(Utc::now().naive_utc())])
                 .map_err(database)?;
         }
         tx.commit().map_err(database)?;
@@ -192,10 +180,10 @@ impl Workspace {
             id: self.required_meta("id")?,
             name: self.required_meta("name")?,
             project_numbers,
-            created_at: parse_timestamp(&self.required_meta("created_at")?)?,
+            created_at: decode_time(&self.required_meta("created_at")?)?,
             path: self.path.clone(),
             snapshot_count: usize::try_from(count).unwrap_or_default(),
-            latest_taken_at: latest.as_deref().map(parse_timestamp).transpose()?,
+            latest_taken_at: latest.as_deref().map(decode_time).transpose()?,
         })
     }
 
