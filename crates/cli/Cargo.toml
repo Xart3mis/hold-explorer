@@ -10,9 +10,12 @@ name = "hx-cli"
 path = "src/main.rs"
 
 [dependencies]
+chrono.workspace = true
 clap.workspace = true
 hx-core = { path = "../core" }
+hx-store = { path = "../store" }
 hx-synth = { path = "../synth" }
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
