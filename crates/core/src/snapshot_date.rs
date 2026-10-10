@@ -53,6 +53,7 @@ fn newest_timestamp(holds: &[Hold]) -> Option<NaiveDateTime> {
 struct NamePatterns {
     year_first: Regex,
     year_last: Regex,
+    month_year: Regex,
     month_name: Regex,
     day_month: Regex,
 }
@@ -64,6 +65,9 @@ fn patterns() -> &'static NamePatterns {
         NamePatterns {
             year_first: build(r"([0-9]{4})[-_.]([0-9]{1,2})[-_.]([0-9]{1,2})"),
             year_last: build(r"([0-9]{1,2})[-_.]([0-9]{1,2})[-_.]([0-9]{4})"),
+            month_year: build(
+                r"(?i)([0-9]{1,2})[-_ .]?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-_ .]?([0-9]{4})",
+            ),
             month_name: build(
                 r"(?i)([0-9]{1,2})[-_ .]?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)",
             ),
@@ -131,10 +135,11 @@ fn without_year(
     modified: Option<NaiveDateTime>,
 ) -> Option<NaiveDate> {
     let newest = newest?.date();
-    let mut date = NaiveDate::from_ymd_opt(newest.year(), month, day)?;
-    if date < newest {
-        date = NaiveDate::from_ymd_opt(newest.year().checked_add(1)?, month, day)?;
-    }
+    // The year of the newest timestamp, or the next year if the date does not exist this year
+    // (29 February) or would be earlier.
+    let date = NaiveDate::from_ymd_opt(newest.year(), month, day)
+        .filter(|d| *d >= newest)
+        .or_else(|| NaiveDate::from_ymd_opt(newest.year().checked_add(1)?, month, day))?;
     let latest = newest.checked_add_days(Days::new(92))?;
     if !YEARS.contains(&date.year()) || date > latest || after_modified(date, modified) {
         return None;
@@ -143,37 +148,66 @@ fn without_year(
 }
 
 /// A date written in the filename, trying the patterns in order: `yyyy-mm-dd`, `dd-mm-yyyy`,
-/// `dd-Mon`, `dd-mm`. Within a pattern the first match that passes validation wins.
+/// `dd-Mon-yyyy`, `dd-Mon`, `dd-mm`. Within a pattern the first match that passes validation
+/// wins. The year-less patterns ignore any match that overlaps a match of a written-year
+/// pattern, whether or not that one passed validation, so a rejected `2026-10-11` is not
+/// re-read as `10-11`.
 fn date_from_name(
     file_name: &str,
     newest: Option<NaiveDateTime>,
     modified: Option<NaiveDateTime>,
 ) -> Option<NaiveDate> {
     let p = patterns();
-    matches(&p.year_first, file_name)
+    let year_first = matches(&p.year_first, file_name);
+    let year_last = matches(&p.year_last, file_name);
+    let month_year = matches(&p.month_year, file_name);
+    let spans: Vec<(usize, usize)> = [&year_first, &year_last, &month_year]
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.get(0).map(|m| (m.start(), m.end())))
+        .collect();
+    let year_less = |re: &Regex| {
+        let mut found = matches(re, file_name);
+        found.retain(|c| {
+            c.get(0)
+                .is_some_and(|m| !spans.iter().any(|&(s, e)| m.start() < e && s < m.end()))
+        });
+        found
+    };
+    year_first
         .iter()
         .find_map(|c| {
             let date = NaiveDate::from_ymd_opt(number(c, 1)?, number(c, 2)?, number(c, 3)?);
             with_year(date, newest, modified)
         })
         .or_else(|| {
-            matches(&p.year_last, file_name).iter().find_map(|c| {
+            year_last.iter().find_map(|c| {
                 let date = NaiveDate::from_ymd_opt(number(c, 3)?, number(c, 2)?, number(c, 1)?);
                 with_year(date, newest, modified)
             })
         })
         .or_else(|| {
-            matches(&p.month_name, file_name).iter().find_map(|c| {
-                let name = c[2].to_lowercase();
-                let month = MONTHS.iter().position(|m| *m == name)? as u32 + 1;
-                without_year(number(c, 1)?, month, newest, modified)
+            month_year.iter().find_map(|c| {
+                let month = month_number(&c[2])?;
+                let date = NaiveDate::from_ymd_opt(number(c, 3)?, month, number(c, 1)?);
+                with_year(date, newest, modified)
             })
         })
         .or_else(|| {
-            matches(&p.day_month, file_name)
+            year_less(&p.month_name)
+                .iter()
+                .find_map(|c| without_year(number(c, 1)?, month_number(&c[2])?, newest, modified))
+        })
+        .or_else(|| {
+            year_less(&p.day_month)
                 .iter()
                 .find_map(|c| without_year(number(c, 1)?, number(c, 2)?, newest, modified))
         })
+}
+
+fn month_number(name: &str) -> Option<u32> {
+    let name = name.to_lowercase();
+    MONTHS.iter().position(|m| *m == name).map(|i| i as u32 + 1)
 }
 
 pub fn snapshot_date(
@@ -421,6 +455,52 @@ mod tests {
                 Some(modified)
             ),
             named("2026-10-08")
+        );
+    }
+
+    #[test]
+    fn rejected_written_year_is_not_re_read_from_its_tail() {
+        assert_eq!(
+            from_name("holds_2026-10-11.xlsx", "2026-11-05 09:00:00", None),
+            None
+        );
+        let modified = "2026-11-20 10:00:00";
+        assert_eq!(
+            from_name(
+                "holds_2026-12-11.xlsx",
+                "2026-11-10 09:00:00",
+                Some(modified)
+            ),
+            file_time(modified)
+        );
+    }
+
+    #[test]
+    fn month_name_glued_to_the_year_is_a_written_year() {
+        assert_eq!(
+            from_name("holds_07Oct2026.xlsx", "2026-10-06 09:00:00", None),
+            named("2026-10-07")
+        );
+    }
+
+    #[test]
+    fn rejected_month_name_year_is_not_re_read_without_the_year() {
+        let modified = "2026-10-10 15:00:00";
+        assert_eq!(
+            from_name(
+                "holds_07-Oct-2025.xlsx",
+                "2026-10-06 09:00:00",
+                Some(modified)
+            ),
+            file_time(modified)
+        );
+    }
+
+    #[test]
+    fn leap_day_without_a_year_may_fall_in_the_next_year() {
+        assert_eq!(
+            from_name("holds_29-Feb.xlsx", "2027-12-20 09:00:00", None),
+            named("2028-02-29")
         );
     }
 }
