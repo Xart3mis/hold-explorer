@@ -123,27 +123,27 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
         }
     }
 
-    // Unrecognized columns that share a name keep the first name and number the later ones.
-    // This is done here, not in `ColumnMap::auto`, because the map is data a user can edit.
-    let mut extra_names: Vec<(usize, String)> = Vec::with_capacity(map.extras.len());
-    for (column, name) in &map.extras {
-        let mut unique = name.clone();
-        let mut n = 1;
-        while extra_names.iter().any(|(_, taken)| *taken == unique) {
-            n += 1;
-            unique = format!("{name} ({n})");
-        }
-        if n > 1 {
+    // Unrecognized columns that share a name keep the first name and number the later ones;
+    // `ColumnMap::extra_names` decides the names, because the map is data a user can edit.
+    let names = map.extra_names();
+    for (extra, unique) in map.extras.iter().zip(&names) {
+        if *unique != extra.name {
             warnings.push(ImportWarning {
                 kind: WarningKind::DuplicateHeader,
                 row_number: None,
                 detail: format!(
-                    "The column header \"{name}\" appears more than once, so its later columns were named \"{unique}\" and so on. Rename the headers in the source if you want different names, and import again."
+                    "The column header \"{}\" appears more than once, so its later columns were named \"{unique}\" and so on. Rename the headers in the source if you want different names, and import again.",
+                    extra.name
                 ),
             });
         }
-        extra_names.push((*column, unique));
     }
+    let extra_names: Vec<(usize, &String)> = map
+        .extras
+        .iter()
+        .map(|extra| extra.column)
+        .zip(&names)
+        .collect();
 
     let mut holds = Vec::with_capacity(table.rows.len());
     let mut skipped = Vec::new();
@@ -180,7 +180,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
                 if value.is_empty() {
                     None
                 } else {
-                    Some((name.clone(), value))
+                    Some(((*name).clone(), value))
                 }
             })
             .collect();
@@ -256,6 +256,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mapping::ExtraColumn;
     use chrono::NaiveDate;
 
     fn text(s: &str) -> Cell {
@@ -796,7 +797,7 @@ mod tests {
         assert_eq!(back, parsed);
     }
 
-    fn area_table(map_extras: Option<Vec<(usize, String)>>) -> (RawTable, ColumnMap) {
+    fn area_table(map_extras: Option<Vec<ExtraColumn>>) -> (RawTable, ColumnMap) {
         let headers = [
             "line_id",
             "hold_remark",
@@ -843,7 +844,16 @@ mod tests {
 
     #[test]
     fn hand_edited_map_with_a_repeated_extra_name_is_renamed_too() {
-        let (table, map) = area_table(Some(vec![(3, "Zone".to_string()), (4, "Zone".to_string())]));
+        let (table, map) = area_table(Some(vec![
+            ExtraColumn {
+                column: 3,
+                name: "Zone".to_string(),
+            },
+            ExtraColumn {
+                column: 4,
+                name: "Zone".to_string(),
+            },
+        ]));
         let parsed = parse_table(&table, &map).unwrap();
         let extra = &parsed.holds[0].extra;
         assert_eq!(extra.get("Zone").map(String::as_str), Some("N"));
@@ -884,5 +894,64 @@ mod tests {
             parsed.holds[0].extra.get("created").map(String::as_str),
             Some("2026-09-02")
         );
+    }
+
+    #[test]
+    fn extra_names_decide_the_hold_extra_keys() {
+        let headers: Vec<String> = [
+            "line_id",
+            "hold_remark",
+            "hold_type",
+            "Area",
+            "Area",
+            "Area (2)",
+            "Area",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let table = RawTable {
+            headers: headers.clone(),
+            rows: vec![vec![
+                text("L-1"),
+                text("x"),
+                text("MISC."),
+                text("v1"),
+                text("v2"),
+                text("v3"),
+                text("v4"),
+            ]],
+            ..Default::default()
+        };
+        let map = ColumnMap::auto(&headers);
+        let names = map.extra_names();
+        let distinct: std::collections::HashSet<_> = names.iter().collect();
+        assert_eq!(distinct.len(), 4);
+        let parsed = parse_table(&table, &map).unwrap();
+        let extra = &parsed.holds[0].extra;
+        assert_eq!(extra.len(), 4);
+        for (name, value) in names.iter().zip(["v1", "v2", "v3", "v4"]) {
+            assert_eq!(extra.get(name).map(String::as_str), Some(value), "{name}");
+        }
+    }
+
+    #[test]
+    fn many_identical_extra_headers_are_fast() {
+        let mut headers: Vec<String> = ["line_id", "hold_remark", "hold_type"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        headers.extend(std::iter::repeat_n("Area".to_string(), 2000));
+        let mut row = vec![text("L-1"), text("x"), text("MISC.")];
+        row.extend(std::iter::repeat_n(text("v"), 2000));
+        let table = RawTable {
+            headers: headers.clone(),
+            rows: vec![row],
+            ..Default::default()
+        };
+        let started = std::time::Instant::now();
+        let parsed = parse_table(&table, &ColumnMap::auto(&headers)).unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_millis(200));
+        assert_eq!(parsed.holds[0].extra.len(), 2000);
     }
 }

@@ -64,6 +64,9 @@ pub struct Loaded {
     pub info: BTreeMap<String, String>,
     /// The sheet the holds were read from.
     pub sheet_name: String,
+    /// The headers of the table that was parsed, in column order. Pair with `map` to save the
+    /// mapping (`ColumnMap::to_saved`).
+    pub headers: Vec<String>,
     /// The column mapping that was used.
     pub map: ColumnMap,
     /// The holds, skipped rows, and warnings.
@@ -126,6 +129,7 @@ pub fn parse_opened(opened: &Opened, map: &ColumnMap) -> Result<Loaded, ImportEr
         content_hash: opened.content_hash.clone(),
         info: opened.info.clone(),
         sheet_name: opened.sheet_name.clone(),
+        headers: opened.table.headers.clone(),
         map: map.clone(),
         parsed,
         snapshot,
@@ -289,5 +293,30 @@ mod tests {
         let preview = opened.preview(10);
         assert_eq!(preview.len(), 2);
         assert_eq!(preview[1], vec!["4", "", ""]);
+    }
+
+    #[test]
+    fn a_saved_mapping_carries_to_a_file_with_another_column_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let path_a = dir.path().join("a.csv");
+        std::fs::write(&path_a, "Line,Why,Kind\nL-1,x,MISC.\n").unwrap();
+        let opened = open_file(&path_a).unwrap();
+        let fields = std::collections::BTreeMap::from([
+            (Field::LineId, 0),
+            (Field::Remark, 1),
+            (Field::HoldType, 2),
+        ]);
+        let map = ColumnMap::from_fields(&opened.table.headers, fields);
+        let loaded = parse_opened(&opened, &map).unwrap();
+        let saved = loaded.map.to_saved(&loaded.headers);
+
+        let path_b = dir.path().join("b.csv");
+        std::fs::write(&path_b, "Kind,Line,Why\nMISC.,L-2,y\n").unwrap();
+        let opened = open_file(&path_b).unwrap();
+        let map = ColumnMap::auto_with(&opened.table.headers, &saved);
+        let loaded = parse_opened(&opened, &map).unwrap();
+        assert_eq!(loaded.parsed.holds.len(), 1);
+        assert_eq!(loaded.parsed.holds[0].line_id, "L-2");
+        assert_eq!(loaded.parsed.holds[0].remark, "y");
     }
 }
