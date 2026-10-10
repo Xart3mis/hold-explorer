@@ -12,9 +12,14 @@ const MONTHS: [&str; 12] = [
     "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
 ];
 
-/// PlantIM writes the report date as `09/29/2026 01:16 PM`.
+/// PlantIM writes the report date month-first as `09/29/2026 01:16 PM`. A typed date cell
+/// reaches here as `2026-09-29 13:16:00`. The day-first default of the data columns does
+/// not apply to the report date.
 pub fn parse_report_date(text: &str) -> Option<NaiveDateTime> {
-    NaiveDateTime::parse_from_str(text.trim(), "%m/%d/%Y %I:%M %p").ok()
+    let text = text.trim();
+    NaiveDateTime::parse_from_str(text, "%m/%d/%Y %I:%M %p")
+        .or_else(|_| NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S"))
+        .ok()
 }
 
 fn newest_timestamp(holds: &[Hold]) -> Option<NaiveDateTime> {
@@ -127,6 +132,14 @@ mod tests {
             Some(at("2026-10-10 15:00:00")),
         );
         assert_eq!(got, Some(at("2026-09-29 13:16:00")));
+    }
+
+    #[test]
+    fn report_date_accepts_a_typed_date_cell_text() {
+        assert_eq!(
+            parse_report_date("2026-09-29 13:16:00"),
+            Some(at("2026-09-29 13:16:00"))
+        );
     }
 
     #[test]

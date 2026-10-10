@@ -4,7 +4,7 @@ use crate::error::ImportError;
 use crate::mapping::{ColumnMap, Field};
 use crate::model::Hold;
 use crate::normalize::{clean_text, discipline_or_default, or_dash};
-use crate::table::{Cell, RawTable};
+use crate::table::{ambiguous_parts, Cell, DateOrder, RawTable};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkippedRow {
@@ -22,6 +22,31 @@ pub struct Parsed {
 
 fn size(cell: &Cell) -> Option<f64> {
     cell.as_number().filter(|n| *n > 0.0)
+}
+
+/// Day/month order of one date column, from its text cells of the shape `a/b/yyyy`
+/// (also `a-b-yyyy`, `a.b.yyyy`). A first part above 12 means day-first; otherwise a second
+/// part above 12 means month-first; otherwise day-first, because the original tool reads
+/// `d/m/yyyy`.
+pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOrder {
+    let mut month_first = false;
+    for cell in cells {
+        let Cell::Text(text) = cell else { continue };
+        let Some((first, second)) = ambiguous_parts(text) else {
+            continue;
+        };
+        if first > 12 {
+            return DateOrder::DayFirst;
+        }
+        if second > 12 {
+            month_first = true;
+        }
+    }
+    if month_first {
+        DateOrder::MonthFirst
+    } else {
+        DateOrder::DayFirst
+    }
 }
 
 pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportError> {
@@ -43,6 +68,18 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             .unwrap_or(Cell::Empty)
     };
 
+    let order_of = |field: Field| {
+        let column = map.fields.get(&field).copied();
+        infer_date_order(
+            table
+                .rows
+                .iter()
+                .filter_map(|row| column.and_then(|index| row.get(index))),
+        )
+    };
+    let created_order = order_of(Field::Created);
+    let release_order = order_of(Field::ReleaseDate);
+
     let mut holds = Vec::with_capacity(table.rows.len());
     let mut skipped = Vec::new();
 
@@ -60,7 +97,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             });
             continue;
         }
-        let created = match cell(row, Field::Created).as_datetime() {
+        let created = match cell(row, Field::Created).as_datetime(created_order) {
             Ok(value) => value,
             Err(raw) => {
                 skipped.push(SkippedRow {
@@ -95,7 +132,9 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             created,
             released: cell(row, Field::Released).as_bool().unwrap_or(false),
             release_remark: clean_text(&cell(row, Field::ReleaseRemark).as_text()),
-            release_date: cell(row, Field::ReleaseDate).as_datetime().unwrap_or(None),
+            release_date: cell(row, Field::ReleaseDate)
+                .as_datetime(release_order)
+                .unwrap_or(None),
             model_size: size(&cell(row, Field::ModelSize)),
             ldt_size: size(&cell(row, Field::LdtSize)),
             stress_calc: clean_text(&cell(row, Field::StressCalc).as_text()),
@@ -293,5 +332,75 @@ mod tests {
         let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
         assert!(parsed.limited);
         assert_eq!(parsed.holds[0].source_id, None);
+    }
+
+    fn dated_table(dates: &[Cell]) -> RawTable {
+        RawTable {
+            headers: vec![
+                "line_id".into(),
+                "hold_remark".into(),
+                "hold_type".into(),
+                "date".into(),
+            ],
+            rows: dates
+                .iter()
+                .enumerate()
+                .map(|(i, d)| vec![text(&format!("L-{i}")), text("x"), text("MISC."), d.clone()])
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn column_order_is_inferred_from_the_cells() {
+        let cells = |texts: &[&str]| -> Vec<Cell> { texts.iter().map(|t| text(t)).collect() };
+        assert_eq!(
+            infer_date_order(&cells(&["02/09/2026", "25/09/2026"])),
+            DateOrder::DayFirst
+        );
+        assert_eq!(
+            infer_date_order(&cells(&["02/09/2026", "09/25/2026"])),
+            DateOrder::MonthFirst
+        );
+        assert_eq!(
+            infer_date_order(&cells(&["02/09/2026"])),
+            DateOrder::DayFirst
+        );
+        assert_eq!(
+            infer_date_order(&cells(&["09/25/2026 01:16 PM", "2026-09-02"])),
+            DateOrder::MonthFirst
+        );
+    }
+
+    #[test]
+    fn month_first_text_column_loads_with_the_right_dates() {
+        let t = dated_table(&[text("9/25/2026 13:16"), text("9/2/2026 8:05")]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        let dates: Vec<_> = parsed.holds.iter().map(|h| h.created).collect();
+        let expect = |m, d, h, mi| {
+            NaiveDate::from_ymd_opt(2026, m, d)
+                .unwrap()
+                .and_hms_opt(h, mi, 0)
+        };
+        assert_eq!(dates, vec![expect(9, 25, 13, 16), expect(9, 2, 8, 5)]);
+    }
+
+    #[test]
+    fn impossible_date_skips_the_row() {
+        let t = dated_table(&[text("13/13/2026"), text("2026-09-02")]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        assert_eq!(parsed.holds.len(), 1);
+        assert_eq!(parsed.skipped[0].reason, "unparseable date \"13/13/2026\"");
+    }
+
+    #[test]
+    fn excel_serial_in_a_date_column_is_a_date() {
+        let t = dated_table(&[Cell::Number(46294.5)]);
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        assert_eq!(
+            parsed.holds[0].created,
+            NaiveDate::from_ymd_opt(2026, 9, 29)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+        );
     }
 }

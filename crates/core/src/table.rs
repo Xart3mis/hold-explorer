@@ -1,6 +1,9 @@
 //! Format-independent view of a sheet: a header row and rows of typed cells.
 
-use chrono::{NaiveDate, NaiveDateTime};
+use std::sync::OnceLock;
+
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cell {
@@ -26,13 +29,114 @@ pub fn format_number(n: f64) -> String {
     }
 }
 
-const DATETIME_FORMATS: [&str; 3] = [
-    "%Y-%m-%d %H:%M:%S%.f",
-    "%Y-%m-%dT%H:%M:%S%.f",
-    "%m/%d/%Y %I:%M %p",
+/// How `a/b/yyyy` is read when both parts are 12 or less.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateOrder {
+    DayFirst,
+    MonthFirst,
+}
+
+const TIME: &str = r"(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?\s*([AaPp][Mm])?)?";
+
+struct DateShapes {
+    year_first: Regex,
+    month_name: Regex,
+    ambiguous: Regex,
+}
+
+fn shapes() -> &'static DateShapes {
+    static SHAPES: OnceLock<DateShapes> = OnceLock::new();
+    SHAPES.get_or_init(|| {
+        let literal = "pattern is a valid literal";
+        let build = |head: &str| Regex::new(&format!("^{head}{TIME}$")).expect(literal);
+        DateShapes {
+            year_first: build(r"(\d{4})[-/](\d{1,2})[-/](\d{1,2})"),
+            month_name: build(
+                r"(?i)(\d{1,2})[- ](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[- ](\d{4})",
+            ),
+            ambiguous: build(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})"),
+        }
+    })
+}
+
+const MONTHS: [&str; 12] = [
+    "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
 ];
 
-const DATE_FORMATS: [&str; 4] = ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"];
+/// The two leading numbers of an ambiguous `a/b/yyyy` text (separator `/`, `-`, or `.`,
+/// optional time), or `None` for any other text.
+pub(crate) fn ambiguous_parts(text: &str) -> Option<(u32, u32)> {
+    let c = shapes().ambiguous.captures(text.trim())?;
+    Some((c[1].parse().ok()?, c[2].parse().ok()?))
+}
+
+fn group<T: std::str::FromStr>(c: &regex::Captures, index: usize) -> Option<T> {
+    c.get(index)?.as_str().parse().ok()
+}
+
+/// Reads the optional time groups that start at `first` (hour, minute, second, fraction,
+/// AM/PM). No time part means midnight.
+fn time_of(c: &regex::Captures, first: usize) -> Option<NaiveTime> {
+    let Some(hour) = group::<u32>(c, first) else {
+        return NaiveTime::from_hms_opt(0, 0, 0);
+    };
+    let minute = group(c, first + 1)?;
+    let second = group(c, first + 2).unwrap_or(0);
+    let nanos = match c.get(first + 3) {
+        Some(fraction) => {
+            let digits: String = fraction.as_str().chars().take(9).collect();
+            format!("{digits:0<9}").parse().ok()?
+        }
+        None => 0,
+    };
+    let hour = match c.get(first + 4).map(|m| m.as_str().to_ascii_lowercase()) {
+        Some(meridiem) => {
+            if !(1..=12).contains(&hour) {
+                return None;
+            }
+            hour % 12 + if meridiem == "pm" { 12 } else { 0 }
+        }
+        None => hour,
+    };
+    NaiveTime::from_hms_nano_opt(hour, minute, second, nanos)
+}
+
+fn parse_text(text: &str, order: DateOrder) -> Option<NaiveDateTime> {
+    let shapes = shapes();
+    let (date, time) = if let Some(c) = shapes.year_first.captures(text) {
+        let date = NaiveDate::from_ymd_opt(group(&c, 1)?, group(&c, 2)?, group(&c, 3)?)?;
+        (date, time_of(&c, 4)?)
+    } else if let Some(c) = shapes.month_name.captures(text) {
+        let name = c[2].to_ascii_lowercase();
+        let month = MONTHS.iter().position(|m| *m == name)? as u32 + 1;
+        let date = NaiveDate::from_ymd_opt(group(&c, 3)?, month, group(&c, 1)?)?;
+        (date, time_of(&c, 4)?)
+    } else {
+        let c = shapes.ambiguous.captures(text)?;
+        let (a, b) = (group(&c, 1)?, group(&c, 2)?);
+        let (day, month) = match order {
+            DateOrder::DayFirst => (a, b),
+            DateOrder::MonthFirst => (b, a),
+        };
+        (
+            NaiveDate::from_ymd_opt(group(&c, 3)?, month, day)?,
+            time_of(&c, 4)?,
+        )
+    };
+    Some(date.and_time(time))
+}
+
+/// Excel counts days from 1899-12-30. Serials from 20000 to 80000 are the years 1954 to 2119.
+fn from_excel_serial(serial: f64) -> Option<NaiveDateTime> {
+    if !(20000.0..=80000.0).contains(&serial) {
+        return None;
+    }
+    let days = serial.floor();
+    let seconds = ((serial - days) * 86400.0).round() as i64;
+    NaiveDate::from_ymd_opt(1899, 12, 30)?
+        .and_hms_opt(0, 0, 0)?
+        .checked_add_signed(Duration::days(days as i64) + Duration::seconds(seconds))
+}
 
 impl Cell {
     pub fn as_text(&self) -> String {
@@ -67,8 +171,9 @@ impl Cell {
     }
 
     /// `Ok(None)` for a blank cell, `Err(original text)` for a value that is
-    /// present but is not a date.
-    pub fn as_datetime(&self) -> Result<Option<NaiveDateTime>, String> {
+    /// present but is not a date. `order` decides `a/b/yyyy`; a number in a
+    /// date column is an Excel serial.
+    pub fn as_datetime(&self, order: DateOrder) -> Result<Option<NaiveDateTime>, String> {
         match self {
             Cell::Empty => Ok(None),
             Cell::DateTime(d) => Ok(Some(*d)),
@@ -77,18 +182,11 @@ impl Cell {
                 if s.is_empty() {
                     return Ok(None);
                 }
-                for format in DATETIME_FORMATS {
-                    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format) {
-                        return Ok(Some(parsed));
-                    }
-                }
-                for format in DATE_FORMATS {
-                    if let Ok(parsed) = NaiveDate::parse_from_str(s, format) {
-                        return Ok(parsed.and_hms_opt(0, 0, 0));
-                    }
-                }
-                Err(s.to_string())
+                parse_text(s, order).map(Some).ok_or_else(|| s.to_string())
             }
+            Cell::Number(n) => from_excel_serial(*n)
+                .map(Some)
+                .ok_or_else(|| self.as_text()),
             other => Err(other.as_text()),
         }
     }
@@ -133,23 +231,31 @@ mod tests {
         let expected = NaiveDate::from_ymd_opt(2026, 9, 2).unwrap();
         assert_eq!(
             text("2026-09-02 08:00:00.123")
-                .as_datetime()
+                .as_datetime(DateOrder::DayFirst)
                 .unwrap()
                 .unwrap()
                 .date(),
             expected
         );
         assert_eq!(
-            text("2026-09-02").as_datetime().unwrap().unwrap().date(),
+            text("2026-09-02")
+                .as_datetime(DateOrder::DayFirst)
+                .unwrap()
+                .unwrap()
+                .date(),
             expected
         );
         assert_eq!(
-            text("02/09/2026").as_datetime().unwrap().unwrap().date(),
+            text("02/09/2026")
+                .as_datetime(DateOrder::DayFirst)
+                .unwrap()
+                .unwrap()
+                .date(),
             expected
         );
         assert_eq!(
             text("09/02/2026 01:16 PM")
-                .as_datetime()
+                .as_datetime(DateOrder::MonthFirst)
                 .unwrap()
                 .unwrap()
                 .date(),
@@ -159,11 +265,124 @@ mod tests {
 
     #[test]
     fn blank_datetime_is_none_and_garbage_is_error() {
-        assert_eq!(Cell::Empty.as_datetime(), Ok(None));
-        assert_eq!(text("  ").as_datetime(), Ok(None));
+        assert_eq!(Cell::Empty.as_datetime(DateOrder::DayFirst), Ok(None));
+        assert_eq!(text("  ").as_datetime(DateOrder::DayFirst), Ok(None));
         assert_eq!(
-            text("not a date").as_datetime(),
+            text("not a date").as_datetime(DateOrder::DayFirst),
             Err("not a date".to_string())
         );
+    }
+
+    fn parse(s: &str, order: DateOrder) -> Result<Option<NaiveDateTime>, String> {
+        text(s).as_datetime(order)
+    }
+
+    fn dt(y: i32, mo: u32, d: u32, h: u32, mi: u32, sec: u32) -> Option<NaiveDateTime> {
+        NaiveDate::from_ymd_opt(y, mo, d).and_then(|date| date.and_hms_opt(h, mi, sec))
+    }
+
+    #[test]
+    fn unambiguous_shapes_parse_under_both_orders() {
+        for order in [DateOrder::DayFirst, DateOrder::MonthFirst] {
+            assert_eq!(
+                parse("2026-09-02 08:00", order),
+                Ok(dt(2026, 9, 2, 8, 0, 0))
+            );
+            assert_eq!(parse("2026/09/02", order), Ok(dt(2026, 9, 2, 0, 0, 0)));
+            assert_eq!(
+                parse("2026-9-2T08:00:05", order),
+                Ok(dt(2026, 9, 2, 8, 0, 5))
+            );
+            assert_eq!(parse("02-Sep-2026", order), Ok(dt(2026, 9, 2, 0, 0, 0)));
+            assert_eq!(
+                parse("2 sep 2026 13:16", order),
+                Ok(dt(2026, 9, 2, 13, 16, 0))
+            );
+            assert_eq!(parse("02-SEP-2026", order), Ok(dt(2026, 9, 2, 0, 0, 0)));
+        }
+    }
+
+    #[test]
+    fn ambiguous_shapes_follow_the_order_with_or_without_time() {
+        let day_first = DateOrder::DayFirst;
+        let month_first = DateOrder::MonthFirst;
+        assert_eq!(parse("02/09/2026", day_first), Ok(dt(2026, 9, 2, 0, 0, 0)));
+        assert_eq!(
+            parse("02/09/2026 01:16 PM", day_first),
+            Ok(dt(2026, 9, 2, 13, 16, 0))
+        );
+        assert_eq!(
+            parse("02/09/2026", month_first),
+            Ok(dt(2026, 2, 9, 0, 0, 0))
+        );
+        assert_eq!(
+            parse("02/09/2026 01:16 PM", month_first),
+            Ok(dt(2026, 2, 9, 13, 16, 0))
+        );
+        assert_eq!(parse("2-9-2026", day_first), Ok(dt(2026, 9, 2, 0, 0, 0)));
+        assert_eq!(parse("2.9.2026", month_first), Ok(dt(2026, 2, 9, 0, 0, 0)));
+    }
+
+    #[test]
+    fn day_above_twelve_parses_only_in_the_matching_order() {
+        assert_eq!(
+            parse("25/09/2026", DateOrder::DayFirst),
+            Ok(dt(2026, 9, 25, 0, 0, 0))
+        );
+        assert_eq!(
+            parse("25/09/2026", DateOrder::MonthFirst),
+            Err("25/09/2026".to_string())
+        );
+        assert_eq!(
+            parse("02/13/2026", DateOrder::MonthFirst),
+            Ok(dt(2026, 2, 13, 0, 0, 0))
+        );
+        assert_eq!(
+            parse("13/13/2026", DateOrder::DayFirst),
+            Err("13/13/2026".to_string())
+        );
+        assert_eq!(
+            parse("13/13/2026", DateOrder::MonthFirst),
+            Err("13/13/2026".to_string())
+        );
+    }
+
+    #[test]
+    fn time_parts_are_read() {
+        let o = DateOrder::MonthFirst;
+        assert_eq!(parse("9/2/2026 13:16", o), Ok(dt(2026, 9, 2, 13, 16, 0)));
+        assert_eq!(
+            parse("09/02/2026 13:16:00", o),
+            Ok(dt(2026, 9, 2, 13, 16, 0))
+        );
+        assert_eq!(
+            parse("09/02/2026 01:16:22 PM", o),
+            Ok(dt(2026, 9, 2, 13, 16, 22))
+        );
+        assert_eq!(parse("9/2/2026 8:05", o), Ok(dt(2026, 9, 2, 8, 5, 0)));
+        assert_eq!(parse("9/2/2026 12:05 AM", o), Ok(dt(2026, 9, 2, 0, 5, 0)));
+        assert_eq!(parse("9/2/2026 12:05pm", o), Ok(dt(2026, 9, 2, 12, 5, 0)));
+        assert_eq!(
+            parse("9/2/2026 13:16 PM", o),
+            Err("9/2/2026 13:16 PM".to_string())
+        );
+        let with_fraction = parse("2026-09-02 08:00:00.123", o).unwrap().unwrap();
+        assert_eq!(with_fraction.and_utc().timestamp_subsec_millis(), 123);
+    }
+
+    #[test]
+    fn excel_serial_numbers_are_dates_in_range() {
+        let o = DateOrder::DayFirst;
+        assert_eq!(
+            Cell::Number(46294.5).as_datetime(o),
+            Ok(dt(2026, 9, 29, 12, 0, 0))
+        );
+        assert_eq!(
+            Cell::Number(46294.0).as_datetime(o),
+            Ok(dt(2026, 9, 29, 0, 0, 0))
+        );
+        assert!(Cell::Number(19999.0).as_datetime(o).is_err());
+        assert!(Cell::Number(80001.0).as_datetime(o).is_err());
+        assert!(Cell::Number(f64::NAN).as_datetime(o).is_err());
     }
 }
