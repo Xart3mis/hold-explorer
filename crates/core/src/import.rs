@@ -112,6 +112,28 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
         }
     }
 
+    // Unrecognized columns that share a name keep the first name and number the later ones.
+    // This is done here, not in `ColumnMap::auto`, because the map is data a user can edit.
+    let mut extra_names: Vec<(usize, String)> = Vec::with_capacity(map.extras.len());
+    for (column, name) in &map.extras {
+        let mut unique = name.clone();
+        let mut n = 1;
+        while extra_names.iter().any(|(_, taken)| *taken == unique) {
+            n += 1;
+            unique = format!("{name} ({n})");
+        }
+        if n > 1 {
+            warnings.push(ImportWarning {
+                kind: WarningKind::DuplicateHeader,
+                row_number: None,
+                detail: format!(
+                    "The column header \"{name}\" appears more than once, so its later columns were named \"{unique}\" and so on. Rename the headers in the source if you want different names, and import again."
+                ),
+            });
+        }
+        extra_names.push((*column, unique));
+    }
+
     let mut holds = Vec::with_capacity(table.rows.len());
     let mut skipped = Vec::new();
 
@@ -140,8 +162,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             }
         };
 
-        let extra = map
-            .extras
+        let extra = extra_names
             .iter()
             .filter_map(|(column, name)| {
                 let value = clean_text(&row.get(*column).map(Cell::as_text).unwrap_or_default());
@@ -762,5 +783,95 @@ mod tests {
         let json = serde_json::to_string(&parsed).unwrap();
         let back: Parsed = serde_json::from_str(&json).unwrap();
         assert_eq!(back, parsed);
+    }
+
+    fn area_table(map_extras: Option<Vec<(usize, String)>>) -> (RawTable, ColumnMap) {
+        let headers = [
+            "line_id",
+            "hold_remark",
+            "hold_type",
+            "Area",
+            "Area",
+            "Area",
+        ];
+        let table = RawTable {
+            headers: headers.iter().map(|s| s.to_string()).collect(),
+            rows: vec![vec![
+                text("L-1"),
+                text("x"),
+                text("MISC."),
+                text("N"),
+                text("S"),
+                text("E"),
+            ]],
+            ..Default::default()
+        };
+        let mut map = ColumnMap::auto(&table.headers);
+        if let Some(extras) = map_extras {
+            map.extras = extras;
+        }
+        (table, map)
+    }
+
+    #[test]
+    fn repeated_unrecognized_headers_are_numbered_and_warned() {
+        let (table, map) = area_table(None);
+        let parsed = parse_table(&table, &map).unwrap();
+        let extra = &parsed.holds[0].extra;
+        assert_eq!(extra.get("Area").map(String::as_str), Some("N"));
+        assert_eq!(extra.get("Area (2)").map(String::as_str), Some("S"));
+        assert_eq!(extra.get("Area (3)").map(String::as_str), Some("E"));
+        let found: Vec<_> = parsed
+            .warnings
+            .iter()
+            .filter(|w| w.kind == WarningKind::DuplicateHeader)
+            .collect();
+        assert_eq!(found.len(), 2);
+        assert!(found.iter().all(|w| w.detail.contains("Area")));
+    }
+
+    #[test]
+    fn hand_edited_map_with_a_repeated_extra_name_is_renamed_too() {
+        let (table, map) = area_table(Some(vec![(3, "Zone".to_string()), (4, "Zone".to_string())]));
+        let parsed = parse_table(&table, &map).unwrap();
+        let extra = &parsed.holds[0].extra;
+        assert_eq!(extra.get("Zone").map(String::as_str), Some("N"));
+        assert_eq!(extra.get("Zone (2)").map(String::as_str), Some("S"));
+        assert_eq!(
+            parsed
+                .warnings
+                .iter()
+                .filter(|w| w.kind == WarningKind::DuplicateHeader)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_recognized_field_repeated_is_not_a_duplicate_header() {
+        let table = RawTable {
+            headers: ["line_id", "hold_remark", "hold_type", "date", "created"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            rows: vec![vec![
+                text("L-1"),
+                text("x"),
+                text("MISC."),
+                text("2026-09-01"),
+                text("2026-09-02"),
+            ]],
+            ..Default::default()
+        };
+        let map = ColumnMap::auto(&table.headers);
+        let parsed = parse_table(&table, &map).unwrap();
+        assert!(parsed
+            .warnings
+            .iter()
+            .all(|w| w.kind != WarningKind::DuplicateHeader));
+        assert_eq!(
+            parsed.holds[0].extra.get("created").map(String::as_str),
+            Some("2026-09-02")
+        );
     }
 }

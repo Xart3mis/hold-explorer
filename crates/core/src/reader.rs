@@ -87,15 +87,66 @@ fn is_named(name: &str, wanted: &str) -> bool {
     name.trim().eq_ignore_ascii_case(wanted)
 }
 
+/// The text of a CSV file. A byte-order mark decides the encoding (UTF-8, UTF-16LE, UTF-16BE);
+/// without one, valid UTF-8 is UTF-8 and anything else is Windows-1252.
+fn decode_csv(bytes: &[u8]) -> String {
+    if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        return String::from_utf8_lossy(rest).into_owned();
+    }
+    if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        return encoding_rs::UTF_16LE
+            .decode_without_bom_handling(rest)
+            .0
+            .into_owned();
+    }
+    if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        return encoding_rs::UTF_16BE
+            .decode_without_bom_handling(rest)
+            .0
+            .into_owned();
+    }
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => encoding_rs::WINDOWS_1252
+            .decode_without_bom_handling(bytes)
+            .0
+            .into_owned(),
+    }
+}
+
+/// Of comma, semicolon, and tab, the delimiter that splits the first non-blank line into the
+/// most fields, not counting delimiters inside double quotes. A tie goes to the comma.
+fn detect_delimiter(text: &str) -> u8 {
+    let line = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let mut best = (b',', 0usize);
+    for candidate in *b",;\t" {
+        let mut in_quotes = false;
+        let mut count = 0usize;
+        for ch in line.chars() {
+            if ch == '"' {
+                in_quotes = !in_quotes;
+            } else if !in_quotes && ch == char::from(candidate) {
+                count += 1;
+            }
+        }
+        if count > best.1 {
+            best = (candidate, count);
+        }
+    }
+    best.0
+}
+
 fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
     if !path.exists() {
         return Err(not_found(path));
     }
+    let bytes = std::fs::read(path).map_err(|e| unreadable(path, e))?;
+    let text = decode_csv(&bytes);
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
-        .from_path(path)
-        .map_err(|e| unreadable(path, e))?;
+        .delimiter(detect_delimiter(&text))
+        .from_reader(text.as_bytes());
 
     let mut rows: Vec<Vec<Cell>> = Vec::new();
     let mut lines: Vec<usize> = Vec::new();
@@ -122,12 +173,7 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
     let headers = rows
         .remove(0)
         .iter()
-        .map(|c| {
-            c.as_text()
-                .trim_start_matches('\u{feff}')
-                .trim()
-                .to_string()
-        })
+        .map(|c| c.as_text().trim().to_string())
         .collect();
 
     Ok(WorkbookData {
@@ -320,6 +366,87 @@ mod tests {
         assert_eq!(parsed.holds.len(), 2);
         assert_eq!(parsed.skipped.len(), 1);
         assert_eq!(parsed.skipped[0].row_number, 4);
+    }
+
+    fn load_bytes(name: &str, bytes: &[u8]) -> crate::load::Loaded {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        crate::load::load_file(&path).unwrap()
+    }
+
+    #[test]
+    fn semicolon_csv_is_read() {
+        let loaded = load_bytes("s.csv", b"line_id;hold_remark;hold_type\nL-1;x;MISC.\n");
+        assert_eq!(loaded.parsed.holds.len(), 1);
+        assert_eq!(loaded.parsed.holds[0].line_id, "L-1");
+    }
+
+    #[test]
+    fn tab_csv_is_read() {
+        let loaded = load_bytes("t.csv", b"line_id\thold_remark\thold_type\nL-1\tx\tMISC.\n");
+        assert_eq!(loaded.parsed.holds.len(), 1);
+    }
+
+    #[test]
+    fn quoted_semicolons_do_not_change_a_comma_delimiter() {
+        let loaded = load_bytes(
+            "c.csv",
+            b"line_id,hold_remark,hold_type\nL-1,\"a;b;c\",MISC.\n",
+        );
+        assert_eq!(loaded.parsed.holds[0].remark, "a;b;c");
+    }
+
+    #[test]
+    fn delimiter_is_counted_outside_quotes_on_the_first_line() {
+        let loaded = load_bytes(
+            "q.csv",
+            b"line_id;hold_remark;hold_type\nL-1;\"a,b,c\";MISC.\n",
+        );
+        assert_eq!(loaded.parsed.holds[0].remark, "a,b,c");
+    }
+
+    #[test]
+    fn windows_1252_csv_is_decoded() {
+        let loaded = load_bytes(
+            "w.csv",
+            b"line_id;name;hold_type;hold_remark\nL-1;M\xFCller;MISC.;x\n",
+        );
+        assert_eq!(loaded.parsed.holds[0].name, "M\u{fc}ller");
+    }
+
+    #[test]
+    fn utf_16le_tab_delimited_csv_is_read() {
+        let text = "line_id\thold_remark\thold_type\nL-1\tx\tMISC.\n";
+        // `encoding_rs` cannot encode to UTF-16, so the units are written out by hand.
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        let loaded = load_bytes("u16.csv", &bytes);
+        assert_eq!(loaded.parsed.holds.len(), 1);
+        assert_eq!(loaded.parsed.holds[0].line_id, "L-1");
+    }
+
+    #[test]
+    fn utf_16be_csv_is_read() {
+        let text = "line_id,hold_remark,hold_type\nL-1,x,MISC.\n";
+        let mut bytes = vec![0xFE, 0xFF];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_be_bytes());
+        }
+        let loaded = load_bytes("u16be.csv", &bytes);
+        assert_eq!(loaded.parsed.holds.len(), 1);
+    }
+
+    #[test]
+    fn untidy_headers_are_mapped() {
+        let loaded = load_bytes(
+            "h.csv",
+            "Line  ID,Hold\u{a0}Remark,HOLD-TYPE\nL-1,x,MISC.\n".as_bytes(),
+        );
+        assert_eq!(loaded.parsed.holds.len(), 1);
+        assert_eq!(loaded.parsed.holds[0].remark, "x");
     }
 
     #[test]

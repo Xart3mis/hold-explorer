@@ -68,8 +68,23 @@ impl Field {
     }
 }
 
+/// Trimmed and lower-cased; each run of whitespace (non-breaking space included) and each
+/// hyphen becomes one underscore.
 fn header_key(header: &str) -> String {
-    header.trim().to_lowercase().replace(&[' ', '-'][..], "_")
+    let mut key = String::new();
+    let mut in_space = false;
+    for ch in header.trim().to_lowercase().chars() {
+        if ch.is_whitespace() {
+            if !in_space {
+                key.push('_');
+            }
+            in_space = true;
+        } else {
+            in_space = false;
+            key.push(if ch == '-' { '_' } else { ch });
+        }
+    }
+    key
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -182,5 +197,14 @@ mod tests {
         let map = ColumnMap::auto(&headers(&["date", "created"]));
         assert_eq!(map.fields[&Field::Created], 0);
         assert_eq!(map.extras, vec![(1, "created".to_string())]);
+    }
+
+    #[test]
+    fn whitespace_runs_and_non_breaking_spaces_match() {
+        let map = ColumnMap::auto(&headers(&["Line  ID", "Hold\u{a0}Remark", "HOLD-TYPE"]));
+        assert_eq!(map.fields[&Field::LineId], 0);
+        assert_eq!(map.fields[&Field::Remark], 1);
+        assert_eq!(map.fields[&Field::HoldType], 2);
+        assert!(map.extras.is_empty());
     }
 }

@@ -403,6 +403,7 @@ dependencies = [
  "calamine",
  "chrono",
  "csv",
+ "encoding_rs",
  "fancy-regex",
  "hx-synth",
  "regex",
