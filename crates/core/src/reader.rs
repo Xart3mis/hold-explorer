@@ -287,7 +287,7 @@ pub(crate) fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
 /// Parses the bytes of a file; `path` only gives the extension and the error messages. The
 /// format is chosen by the extension: `.csv`, `.tsv`, and `.txt` are delimited text, the rest
 /// are workbooks. `sheet` names the data sheet of a workbook; `None` lets the reader choose it.
-/// Delimited text has no sheets, so a `sheet` gives `NoDataSheet` with an empty list.
+/// Delimited text has no sheets, so a `sheet` gives `SheetNotFound` with an empty list.
 pub(crate) fn parse_workbook_bytes(
     path: &Path,
     bytes: &[u8],
@@ -300,7 +300,10 @@ pub(crate) fn parse_workbook_bytes(
         .to_ascii_lowercase();
     if matches!(extension.as_str(), "csv" | "tsv" | "txt") {
         return match sheet {
-            Some(_) => Err(ImportError::NoDataSheet { sheets: Vec::new() }),
+            Some(sheet) => Err(ImportError::SheetNotFound {
+                sheet: sheet.to_string(),
+                sheets: Vec::new(),
+            }),
             None => read_csv(path, bytes),
         };
     }
@@ -327,7 +330,10 @@ pub(crate) fn parse_workbook_bytes(
     if let Some(wanted) = sheet {
         let exact = names.iter().find(|n| n.as_str() == wanted);
         let Some(name) = exact.or_else(|| names.iter().find(|n| is_named(n, wanted))) else {
-            return Err(ImportError::NoDataSheet { sheets: names });
+            return Err(ImportError::SheetNotFound {
+                sheet: wanted.to_string(),
+                sheets: names,
+            });
         };
         let range = workbook
             .worksheet_range(name)

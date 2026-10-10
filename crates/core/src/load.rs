@@ -89,8 +89,9 @@ pub fn open_file(path: &Path) -> Result<Opened, ImportError> {
 }
 
 /// Reads the file with the workbook sheet called `sheet` as the data sheet, whatever its
-/// columns. An unknown name gives `NoDataSheet` listing the sheets; so does delimited text,
-/// with an empty list, because it has no sheets.
+/// columns. The name must match a sheet exactly, or else ignoring case and surrounding spaces.
+/// An unknown name gives `SheetNotFound` listing the sheets; so does delimited text, with an
+/// empty list, because it has no sheets.
 pub fn open_sheet(path: &Path, sheet: &str) -> Result<Opened, ImportError> {
     open_choosing(path, Some(sheet))
 }
@@ -435,7 +436,8 @@ mod tests {
         let err = open_sheet(&path, "Nope").unwrap_err();
         assert_eq!(
             err,
-            ImportError::NoDataSheet {
+            ImportError::SheetNotFound {
+                sheet: "Nope".into(),
                 sheets: vec!["data".into(), "Other".into()]
             }
         );
@@ -472,7 +474,13 @@ mod tests {
         std::fs::write(&path, "line_id,hold_remark,hold_type\nL-1,x,MISC.\n").unwrap();
         assert!(open_file(&path).unwrap().sheets.is_empty());
         let err = open_sheet(&path, "csv").unwrap_err();
-        assert_eq!(err, ImportError::NoDataSheet { sheets: Vec::new() });
+        assert_eq!(
+            err,
+            ImportError::SheetNotFound {
+                sheet: "csv".into(),
+                sheets: Vec::new()
+            }
+        );
     }
 
     #[test]

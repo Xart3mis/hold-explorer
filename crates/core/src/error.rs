@@ -41,6 +41,16 @@ pub enum ImportError {
         sheets: Vec<String>,
     },
 
+    #[error("The sheet named \"{sheet}\" is not in the file. {}", sheet_not_found_advice(.sheets))]
+    /// The sheet asked for is not in the file; `sheets` lists the sheets it has, which is empty
+    /// for delimited text.
+    SheetNotFound {
+        /// The sheet name that was asked for.
+        sheet: String,
+        /// Names of the sheets in the workbook; empty for delimited text.
+        sheets: Vec<String>,
+    },
+
     #[error("Missing required columns: {}. Map them to columns of the file.", .missing.iter().map(|f| f.label()).collect::<Vec<_>>().join(", "))]
     /// Required fields have no column mapped to them; `missing` lists those fields.
     MissingColumns {
@@ -60,6 +70,18 @@ pub enum ImportError {
         /// A description of one skipped row and why it was skipped.
         example: String,
     },
+}
+
+fn sheet_not_found_advice(sheets: &[String]) -> String {
+    if sheets.is_empty() {
+        "The file is delimited text and has no sheets; open it without choosing a sheet."
+            .to_string()
+    } else {
+        format!(
+            "The sheets in the file are: {}. Choose one of them.",
+            sheets.join(", ")
+        )
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +146,20 @@ mod tests {
                 "named \"data\"",
             ),
             (
+                ImportError::SheetNotFound {
+                    sheet: "nope".into(),
+                    sheets: vec!["data".into()],
+                },
+                "Choose one of them",
+            ),
+            (
+                ImportError::SheetNotFound {
+                    sheet: "nope".into(),
+                    sheets: Vec::new(),
+                },
+                "without choosing a sheet",
+            ),
+            (
                 ImportError::MissingColumns {
                     missing: vec![Field::Remark],
                 },
@@ -168,6 +204,32 @@ mod tests {
             serde_json::json!({"kind": "MissingColumns", "missing": ["Remark", "HoldType"]})
         );
         assert!(error.to_string().contains("hold_remark, hold_type"));
+    }
+
+    #[test]
+    fn sheet_not_found_names_the_sheet_and_lists_the_choices() {
+        let error = ImportError::SheetNotFound {
+            sheet: "nope".into(),
+            sheets: vec!["data".into(), "Other".into()],
+        };
+        let message = error.to_string();
+        assert!(message.contains("\"nope\" is not in the file"), "{message}");
+        assert!(message.contains("data, Other"), "{message}");
+        let text = ImportError::SheetNotFound {
+            sheet: "x".into(),
+            sheets: Vec::new(),
+        }
+        .to_string();
+        assert!(text.contains("delimited text"), "{text}");
+        assert!(!text.contains("sheets in the file"), "{text}");
+        assert_eq!(
+            serde_json::to_value(ImportError::SheetNotFound {
+                sheet: "nope".into(),
+                sheets: vec!["data".into()],
+            })
+            .unwrap(),
+            serde_json::json!({"kind": "SheetNotFound", "sheet": "nope", "sheets": ["data"]})
+        );
     }
 
     #[test]
