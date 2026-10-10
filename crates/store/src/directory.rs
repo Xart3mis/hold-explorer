@@ -56,6 +56,7 @@ pub fn delete_workspace(path: &Path) -> Result<(), StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{copy_with_hot_journal, journal_of};
     use rusqlite::Connection;
 
     fn names(list: &[WorkspaceInfo]) -> Vec<&str> {
@@ -161,6 +162,28 @@ mod tests {
             matches!(error, StoreError::NewerSchema { found: 99, .. }),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_workspace_whose_last_write_was_interrupted_is_recovered_and_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("ws");
+        let original = Workspace::create(dir.path(), "Crashed")
+            .unwrap()
+            .info()
+            .unwrap();
+        std::fs::create_dir(&folder).unwrap();
+        let crashed = folder.join("crashed.holdx-ws");
+        copy_with_hot_journal(
+            &original.path,
+            &crashed,
+            "INSERT INTO project (project_no) VALUES (?1)",
+        );
+        let list = list_workspaces(&folder).unwrap();
+        assert_eq!(names(&list), vec!["Crashed"]);
+        assert_eq!(list[0].id, original.id);
+        assert!(list[0].project_numbers.is_empty());
+        assert!(!journal_of(&crashed).exists());
     }
 
     #[test]

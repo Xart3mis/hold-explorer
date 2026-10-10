@@ -1,10 +1,13 @@
 //! The workspace file's schema and the runner that brings a file up to the newest version.
 
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension};
 
 use crate::error::{database, StoreError};
+use crate::workspace::io_error;
 
 /// The schema version this build reads and writes.
 pub const SCHEMA_VERSION: u32 = 1;
@@ -75,48 +78,132 @@ fn database_error(path: &Path, error: rusqlite::Error) -> StoreError {
     }
 }
 
-/// Reads the schema version of the existing workspace file at `path` without writing anything
-/// and without creating the file. A file that is not a workspace gives `NotAWorkspace`.
-pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
+/// The first bytes of every SQLite database file.
+const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
+
+/// Where the 100-byte database header keeps `user_version`, as a big-endian `u32`.
+const USER_VERSION_OFFSET: usize = 60;
+
+/// Where the 100-byte database header keeps `application_id`, as a big-endian `u32`.
+const APPLICATION_ID_OFFSET: usize = 68;
+
+fn header_u32(header: &[u8; 100], offset: usize) -> u32 {
+    u32::from_be_bytes([
+        header[offset],
+        header[offset + 1],
+        header[offset + 2],
+        header[offset + 3],
+    ])
+}
+
+/// Whether SQLite refused to read the file through a read-only connection because a writer
+/// died during a commit and left its rollback journal beside the file.
+fn interrupted_write(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(e, _)
+            if e.extended_code == rusqlite::ffi::SQLITE_READONLY_ROLLBACK
+    )
+}
+
+/// Lets SQLite finish the roll-back of an interrupted write to the workspace file at `path`,
+/// which brings the file back to what it held before that write and removes the journal.
+///
+/// The file is opened for writing only after its raw header shows that it is a workspace this
+/// build may write to; any other file is left exactly as it was.
+fn roll_back_interrupted_write(path: &Path) -> Result<(), StoreError> {
+    let not_a_workspace = || StoreError::NotAWorkspace {
+        path: path.display().to_string(),
+    };
+    let mut header = [0u8; 100];
+    match File::open(path).and_then(|mut file| file.read_exact(&mut header)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Err(not_a_workspace()),
+        Err(e) => return Err(io_error(path, &e)),
+    }
+    if &header[..SQLITE_MAGIC.len()] != SQLITE_MAGIC
+        || i64::from(header_u32(&header, APPLICATION_ID_OFFSET)) != APPLICATION_ID
+    {
+        return Err(not_a_workspace());
+    }
+    let found = header_u32(&header, USER_VERSION_OFFSET);
+    if found > SCHEMA_VERSION {
+        return Err(StoreError::NewerSchema {
+            path: path.display().to_string(),
+            found,
+            supported: SCHEMA_VERSION,
+        });
+    }
     let conn = Connection::open_with_flags(
         path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|e| database_error(path, e))?;
-    let application_id: i64 = conn
-        .query_row("PRAGMA application_id", [], |r| r.get(0))
-        .map_err(|e| database_error(path, e))?;
+    // Any read makes SQLite roll the journal back first.
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| {
+        r.get::<_, i64>(0)
+    })
+    .map_err(|e| database_error(path, e))?;
+    conn.close().map_err(|(_, e)| database_error(path, e))
+}
+
+/// Runs `read` on a read-only connection to the existing file at `path`, so nothing is written
+/// and the file is never created. When a writer died during a commit, SQLite refuses such a
+/// connection; the interrupted write of a workspace is then rolled back and `read` runs again.
+fn peek<T>(
+    path: &Path,
+    read: impl Fn(&Connection) -> rusqlite::Result<T>,
+) -> Result<T, StoreError> {
+    let attempt = || {
+        let conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        read(&conn)
+    };
+    match attempt() {
+        Err(error) if interrupted_write(&error) => {
+            roll_back_interrupted_write(path)?;
+            attempt().map_err(|e| database_error(path, e))
+        }
+        result => result.map_err(|e| database_error(path, e)),
+    }
+}
+
+/// Reads the schema version of the existing workspace file at `path` without creating the file.
+/// A file that is not a workspace gives `NotAWorkspace` and is left as it was. The only write
+/// this can cause is the roll-back of an interrupted write to a workspace.
+pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
+    let (application_id, version): (i64, u32) = peek(path, |conn| {
+        Ok((
+            conn.query_row("PRAGMA application_id", [], |r| r.get(0))?,
+            conn.query_row("PRAGMA user_version", [], |r| r.get(0))?,
+        ))
+    })?;
     if application_id != APPLICATION_ID {
         return Err(StoreError::NotAWorkspace {
             path: path.display().to_string(),
         });
     }
-    conn.query_row("PRAGMA user_version", [], |r| r.get(0))
-        .map_err(|e| database_error(path, e))
+    Ok(version)
 }
 
 /// Reads the workspace id of the existing workspace file at `path` through a read-only
-/// connection, so nothing is written, migrated, or backed up. `None` when `meta` has no id. Every
-/// schema version written by this app has the `meta` table; a file without one gives `None`.
+/// connection, so nothing is migrated or backed up. `None` when `meta` has no id. Every schema
+/// version written by this app has the `meta` table; a file without one gives `None`.
 pub(crate) fn peek_id(path: &Path) -> Result<Option<String>, StoreError> {
-    let conn = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|e| database_error(path, e))?;
-    let has_meta: bool = conn
-        .query_row(
+    peek(path, |conn| {
+        let has_meta: bool = conn.query_row(
             "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta')",
             [],
             |r| r.get(0),
-        )
-        .map_err(|e| database_error(path, e))?;
-    if !has_meta {
-        return Ok(None);
-    }
-    conn.query_row("SELECT value FROM meta WHERE key = 'id'", [], |r| r.get(0))
-        .optional()
-        .map_err(|e| database_error(path, e))
+        )?;
+        if !has_meta {
+            return Ok(None);
+        }
+        conn.query_row("SELECT value FROM meta WHERE key = 'id'", [], |r| r.get(0))
+            .optional()
+    })
 }
 
 /// Opens the workspace file at `path`, creating it when it does not exist, and brings it up to

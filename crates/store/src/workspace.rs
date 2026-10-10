@@ -261,6 +261,7 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{chain, copy_with_hot_journal, import_plain, journal_of, workspace};
     use hx_core::mapping::{Field, SavedColumn};
     use rusqlite::Connection;
 
@@ -485,6 +486,83 @@ mod tests {
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), b"just a few words\n");
         assert_eq!(files_in(dir.path()), vec!["short.holdx-ws".to_string()]);
+    }
+
+    #[test]
+    fn open_recovers_a_workspace_whose_last_write_was_interrupted() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = chain(dir.path(), 1).remove(0);
+        let mut ws = workspace(dir.path());
+        let snapshot = import_plain(&mut ws, &loaded);
+        let original = ws.info().unwrap().path;
+        drop(ws);
+        let crashed = dir.path().join("crashed.holdx-ws");
+        copy_with_hot_journal(
+            &original,
+            &crashed,
+            "INSERT INTO project (project_no) VALUES (?1)",
+        );
+        assert_ne!(
+            std::fs::read(&crashed).unwrap(),
+            std::fs::read(&original).unwrap()
+        );
+
+        let ws = Workspace::open(&crashed).unwrap();
+        assert_eq!(ws.snapshots().unwrap(), vec![snapshot.clone()]);
+        assert_eq!(ws.holds(snapshot.id).unwrap(), loaded.parsed.holds);
+        assert!(ws.info().unwrap().project_numbers.is_empty());
+        drop(ws);
+        assert!(!journal_of(&crashed).exists());
+        assert_eq!(
+            std::fs::read(&crashed).unwrap(),
+            std::fs::read(&original).unwrap()
+        );
+    }
+
+    #[test]
+    fn open_refuses_an_interrupted_file_that_is_not_a_workspace_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let foreign = dir.path().join("other.db");
+        Connection::open(&foreign)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (a TEXT)")
+            .unwrap();
+        let crashed = dir.path().join("crashed.holdx-ws");
+        copy_with_hot_journal(&foreign, &crashed, "INSERT INTO foo (a) VALUES (?1)");
+        let file = std::fs::read(&crashed).unwrap();
+        let journal = std::fs::read(journal_of(&crashed)).unwrap();
+
+        let error = Workspace::open(&crashed).err().unwrap();
+        assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
+        assert_eq!(std::fs::read(&crashed).unwrap(), file);
+        assert_eq!(std::fs::read(journal_of(&crashed)).unwrap(), journal);
+        assert_eq!(files_in(dir.path()).len(), 3);
+    }
+
+    #[test]
+    fn open_refuses_an_interrupted_workspace_of_a_newer_version_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = workspace(dir.path()).info().unwrap().path;
+        Connection::open(&original)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        let crashed = dir.path().join("crashed.holdx-ws");
+        copy_with_hot_journal(
+            &original,
+            &crashed,
+            "INSERT INTO project (project_no) VALUES (?1)",
+        );
+        let file = std::fs::read(&crashed).unwrap();
+        let journal = std::fs::read(journal_of(&crashed)).unwrap();
+
+        let error = Workspace::open(&crashed).err().unwrap();
+        assert!(
+            matches!(error, StoreError::NewerSchema { found: 99, .. }),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&crashed).unwrap(), file);
+        assert_eq!(std::fs::read(journal_of(&crashed)).unwrap(), journal);
     }
 
     #[test]
