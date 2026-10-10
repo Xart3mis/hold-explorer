@@ -5,9 +5,10 @@
 use std::time::{Duration, Instant};
 
 use hx_core::dataset::Dataset;
+use hx_core::filter::Status;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
-use hx_core::query::{group_by, lines, summary, LineQuery};
+use hx_core::query::{group_by, holds, lines, summary, HoldQuery, LineQuery};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -45,6 +46,29 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
         "filtered views took {views:?}"
     );
 
+    let all = FilterSpec {
+        status: Status::All,
+        ..Default::default()
+    };
+    let started = Instant::now();
+    let page = holds(
+        &ds,
+        &all,
+        &HoldQuery {
+            offset: 1000,
+            limit: Some(200),
+            ..Default::default()
+        },
+    );
+    let json = serde_json::to_string(&page).unwrap();
+    let paging = started.elapsed();
+    assert_eq!(page.rows.len(), 200);
+    assert!(!json.is_empty());
+    assert!(
+        paging < Duration::from_millis(100),
+        "a page of 200 holds took {paging:?}"
+    );
+
     let started = Instant::now();
     let plan = solve_plan(&ds, &FilterSpec::default(), None);
     let solve = started.elapsed();
@@ -54,5 +78,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
         "full solve order took {solve:?}"
     );
 
-    eprintln!("perf: import {import:?}, filtered views {views:?}, full solve order {solve:?}");
+    eprintln!(
+        "perf: import {import:?}, filtered views {views:?}, hold page {paging:?}, full solve order {solve:?}"
+    );
 }

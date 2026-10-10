@@ -211,9 +211,60 @@ pub struct LineQuery {
     pub single_hold_only: bool,
 }
 
-/// The selected holds, in file order.
-pub fn holds(ds: &Dataset, spec: &FilterSpec) -> Vec<Row> {
-    filtered(ds, spec).cloned().collect()
+/// How `holds` orders its result; ties stay in file order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum HoldSort {
+    /// The order of the file.
+    #[default]
+    FileOrder,
+    /// Greatest `Row::days` first; rows without one come last.
+    OldestFirst,
+    /// Line ID ascending, in byte order.
+    LineId,
+}
+
+/// Options for `holds`: the order and the page to return.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HoldQuery {
+    /// Order of the selected holds before the page is cut.
+    pub sort: HoldSort,
+    /// Number of sorted holds to skip. An offset at or past the total gives no rows.
+    pub offset: usize,
+    /// Most rows to return; `None` returns every row from `offset`.
+    pub limit: Option<usize>,
+}
+
+/// One page of the selected holds.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HoldPage {
+    /// Selected holds before paging.
+    pub total: usize,
+    /// The holds of the page, in the order `HoldQuery::sort` gives.
+    pub rows: Vec<Row>,
+}
+
+/// The page of the selected holds that `query` asks for, with the number of selected holds.
+pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
+    let mut selected: Vec<&Row> = filtered(ds, spec).collect();
+    match query.sort {
+        HoldSort::FileOrder => {}
+        HoldSort::OldestFirst => selected.sort_by(|a, b| match (a.days(), b.days()) {
+            (Some(x), Some(y)) => y.cmp(&x),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }),
+        HoldSort::LineId => selected.sort_by(|a, b| a.hold.line_id.cmp(&b.hold.line_id)),
+    }
+    let total = selected.len();
+    let rows = selected
+        .into_iter()
+        .skip(query.offset)
+        .take(query.limit.unwrap_or(usize::MAX))
+        .cloned()
+        .collect();
+    HoldPage { total, rows }
 }
 
 fn push_unique(list: &mut Vec<String>, value: &str) {
@@ -507,14 +558,65 @@ mod tests {
         assert_eq!(ids, vec!["L2", "L4"]);
     }
 
+    fn page(spec: &FilterSpec, query: HoldQuery) -> (usize, Vec<String>) {
+        let page = holds(&sample(), spec, &query);
+        let ids = page.rows.into_iter().map(|r| r.hold.line_id).collect();
+        (page.total, ids)
+    }
+
     #[test]
     fn holds_returns_selected_rows_in_file_order() {
-        let ids: Vec<String> = holds(&sample(), &open())
-            .into_iter()
-            .map(|r| r.hold.line_id)
-            .collect();
+        let (total, ids) = page(&open(), HoldQuery::default());
+        assert_eq!(total, 4);
         assert_eq!(ids, vec!["L1", "L1", "L2", "L4"]);
-        assert_eq!(holds(&sample(), &all()).len(), 5);
+        assert_eq!(page(&all(), HoldQuery::default()).0, 5);
+    }
+
+    #[test]
+    fn holds_page_by_offset_and_limit() {
+        let limited = HoldQuery {
+            limit: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), limited), (4, vec!["L1".into(), "L1".into()]));
+        let tail = HoldQuery {
+            offset: 3,
+            limit: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), tail), (4, vec!["L4".to_string()]));
+        let past = HoldQuery {
+            offset: 10,
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), past), (4, Vec::new()));
+    }
+
+    #[test]
+    fn holds_sort_oldest_first_and_by_line() {
+        let oldest = holds(
+            &sample(),
+            &open(),
+            &HoldQuery {
+                sort: HoldSort::OldestFirst,
+                ..Default::default()
+            },
+        );
+        let ages: Vec<_> = oldest.rows.iter().map(|r| r.age_days).collect();
+        assert_eq!(ages, vec![Some(40), Some(10), Some(5), Some(1)]);
+        let by_line = HoldQuery {
+            sort: HoldSort::LineId,
+            ..Default::default()
+        };
+        assert_eq!(page(&all(), by_line).1, vec!["L1", "L1", "L2", "L3", "L4"]);
+    }
+
+    #[test]
+    fn hold_query_defaults_from_empty_json() {
+        assert_eq!(
+            serde_json::from_str::<HoldQuery>("{}").unwrap(),
+            HoldQuery::default()
+        );
     }
 
     #[test]
