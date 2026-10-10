@@ -3,13 +3,13 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use chrono::{DateTime, Local, NaiveDateTime};
+use chrono::{DateTime, Local};
 
 use crate::error::ImportError;
 use crate::import::{parse_table, Parsed};
 use crate::mapping::ColumnMap;
 use crate::reader::read_workbook;
-use crate::snapshot_date::snapshot_date;
+use crate::snapshot_date::{snapshot_date, SnapshotDate};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Loaded {
@@ -18,7 +18,7 @@ pub struct Loaded {
     pub map: ColumnMap,
     pub parsed: Parsed,
     /// `None` when neither the file nor its name nor its timestamps give a date.
-    pub snapshot: Option<NaiveDateTime>,
+    pub snapshot: Option<SnapshotDate>,
 }
 
 /// Reads a file with the automatic column mapping.
@@ -49,6 +49,7 @@ pub fn load_file(path: &Path) -> Result<Loaded, ImportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::snapshot_date::SnapshotSource;
     use hx_synth::{generate, write_workbook, SynthConfig};
 
     #[test]
@@ -60,7 +61,11 @@ mod tests {
         write_workbook(&rows, &cfg, &path).unwrap();
 
         let loaded = load_file(&path).unwrap();
-        assert_eq!(loaded.snapshot, Some(cfg.report_date));
+        assert_eq!(loaded.snapshot.map(|s| s.at), Some(cfg.report_date));
+        assert_eq!(
+            loaded.snapshot.map(|s| s.source),
+            Some(SnapshotSource::InfoSheet)
+        );
         assert!(!loaded.parsed.limited);
         assert!(loaded.parsed.skipped.is_empty());
         assert_eq!(loaded.parsed.holds.len(), rows.len());
@@ -91,8 +96,12 @@ mod tests {
         assert!(loaded.parsed.limited);
         assert_eq!(loaded.parsed.holds.len(), 1);
         assert_eq!(
-            loaded.snapshot.map(|s| s.to_string()),
+            loaded.snapshot.map(|s| s.at.to_string()),
             Some("2026-10-07 00:00:00".to_string())
+        );
+        assert_eq!(
+            loaded.snapshot.map(|s| s.source),
+            Some(SnapshotSource::FileName)
         );
     }
 

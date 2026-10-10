@@ -61,7 +61,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             let limited = loaded.parsed.limited;
             let skipped = loaded.parsed.skipped.len();
 
-            let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot);
+            let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot.at);
             let open = FilterSpec::default();
             let top_lines: Vec<_> = lines(&ds, &open, LineSort::HoldsDesc)
                 .into_iter()
@@ -69,7 +69,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 .collect();
 
             let report = json!({
-                "snapshot": snapshot.to_string(),
+                "snapshot": snapshot.at.to_string(),
+                "snapshot_source": snapshot.source,
                 "project": project,
                 "sheet": loaded.sheet_name,
                 "limited": limited,

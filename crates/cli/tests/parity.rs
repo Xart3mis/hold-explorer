@@ -70,7 +70,7 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
     let ds = Dataset::build(
         loaded.parsed.holds,
         &RuleSet::builtin(),
-        loaded.snapshot.unwrap(),
+        loaded.snapshot.unwrap().at,
     );
     let open = FilterSpec::default();
 

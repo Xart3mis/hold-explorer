@@ -3,8 +3,9 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime};
+use chrono::{Datelike, Days, NaiveDate, NaiveDateTime};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 use crate::model::Hold;
 
@@ -22,63 +23,157 @@ pub fn parse_report_date(text: &str) -> Option<NaiveDateTime> {
         .ok()
 }
 
+const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
+
+/// Where the snapshot date came from, in order of trust.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotSource {
+    InfoSheet,
+    FileName,
+    FileTime,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SnapshotDate {
+    pub at: NaiveDateTime,
+    pub source: SnapshotSource,
+}
+
+/// The newest creation or release time in the data. Years outside 2000 to 2100 are
+/// typing mistakes and are ignored.
 fn newest_timestamp(holds: &[Hold]) -> Option<NaiveDateTime> {
     holds
         .iter()
         .flat_map(|h| [h.created, h.release_date])
         .flatten()
+        .filter(|t| YEARS.contains(&t.year()))
         .max()
 }
 
-fn full_date_regex() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(\d{4})[-_.](\d{1,2})[-_.](\d{1,2})").expect("pattern is a valid literal")
+struct NamePatterns {
+    year_first: Regex,
+    year_last: Regex,
+    month_name: Regex,
+    day_month: Regex,
+}
+
+fn patterns() -> &'static NamePatterns {
+    static PATTERNS: OnceLock<NamePatterns> = OnceLock::new();
+    PATTERNS.get_or_init(|| {
+        let build = |p: &str| Regex::new(p).expect("pattern is a valid literal");
+        NamePatterns {
+            year_first: build(r"([0-9]{4})[-_.]([0-9]{1,2})[-_.]([0-9]{1,2})"),
+            year_last: build(r"([0-9]{1,2})[-_.]([0-9]{1,2})[-_.]([0-9]{4})"),
+            month_name: build(
+                r"(?i)([0-9]{1,2})[-_ .]?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)",
+            ),
+            day_month: build(r"([0-9]{1,2})[-_.]([0-9]{1,2})"),
+        }
     })
 }
 
-fn month_name_regex() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(\d{1,2})[-_ .]?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)")
-            .expect("pattern is a valid literal")
-    })
-}
-
-fn day_month_regex() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(\d{1,2})[-_.](\d{1,2})").expect("pattern is a valid literal"))
-}
-
-fn number(text: &str) -> Option<u32> {
-    text.parse().ok()
-}
-
-/// A date written in the filename. A filename without a year borrows the year
-/// of the newest timestamp in the data; if that puts the date more than 180
-/// days before the newest timestamp, the file belongs to the following year.
-fn date_from_name(file_name: &str, newest: Option<NaiveDateTime>) -> Option<NaiveDate> {
-    if let Some(c) = full_date_regex().captures(file_name) {
-        let year: i32 = c[1].parse().ok()?;
-        return NaiveDate::from_ymd_opt(year, number(&c[2])?, number(&c[3])?);
+/// Every match of `re` in `name`, overlapping ones included, from left to right, except those
+/// whose first or last component touches another digit.
+fn matches<'h>(re: &Regex, name: &'h str) -> Vec<regex::Captures<'h>> {
+    let bytes = name.as_bytes();
+    let mut found = Vec::new();
+    let mut position = 0;
+    while let Some(captures) = re.captures_at(name, position) {
+        let Some(whole) = captures.get(0) else { break };
+        position = whole.start() + 1;
+        while !name.is_char_boundary(position) {
+            position += 1;
+        }
+        let touches = |index: Option<usize>| {
+            index
+                .and_then(|i| bytes.get(i))
+                .is_some_and(u8::is_ascii_digit)
+        };
+        if !touches(whole.start().checked_sub(1)) && !touches(Some(whole.end())) {
+            found.push(captures);
+        }
     }
+    found
+}
 
-    let (day, month) = if let Some(c) = month_name_regex().captures(file_name) {
-        let name = c[2].to_lowercase();
-        let month = MONTHS.iter().position(|m| *m == name)? as u32 + 1;
-        (number(&c[1])?, month)
-    } else {
-        let c = day_month_regex().captures(file_name)?;
-        (number(&c[1])?, number(&c[2])?)
-    };
+fn number<T: std::str::FromStr>(captures: &regex::Captures, index: usize) -> Option<T> {
+    captures.get(index)?.as_str().parse().ok()
+}
 
+/// A date with a written year: a real date, in range, not before the newest timestamp in the
+/// data, and not more than a day after the file was last modified.
+fn with_year(
+    date: Option<NaiveDate>,
+    newest: Option<NaiveDateTime>,
+    modified: Option<NaiveDateTime>,
+) -> Option<NaiveDate> {
+    let date = date.filter(|d| YEARS.contains(&d.year()))?;
+    if newest.is_some_and(|n| date < n.date()) || after_modified(date, modified) {
+        return None;
+    }
+    Some(date)
+}
+
+fn after_modified(date: NaiveDate, modified: Option<NaiveDateTime>) -> bool {
+    modified.is_some_and(|m| {
+        m.date()
+            .checked_add_days(Days::new(1))
+            .is_some_and(|l| date > l)
+    })
+}
+
+/// A date without a year takes the year of the newest timestamp, or the next year if that
+/// would be earlier. It must be at most 92 days after the newest timestamp.
+fn without_year(
+    day: u32,
+    month: u32,
+    newest: Option<NaiveDateTime>,
+    modified: Option<NaiveDateTime>,
+) -> Option<NaiveDate> {
     let newest = newest?.date();
-    let candidate = NaiveDate::from_ymd_opt(newest.year(), month, day)?;
-    if candidate < newest - Duration::days(180) {
-        NaiveDate::from_ymd_opt(newest.year() + 1, month, day)
-    } else {
-        Some(candidate)
+    let mut date = NaiveDate::from_ymd_opt(newest.year(), month, day)?;
+    if date < newest {
+        date = NaiveDate::from_ymd_opt(newest.year().checked_add(1)?, month, day)?;
     }
+    let latest = newest.checked_add_days(Days::new(92))?;
+    if !YEARS.contains(&date.year()) || date > latest || after_modified(date, modified) {
+        return None;
+    }
+    Some(date)
+}
+
+/// A date written in the filename, trying the patterns in order: `yyyy-mm-dd`, `dd-mm-yyyy`,
+/// `dd-Mon`, `dd-mm`. Within a pattern the first match that passes validation wins.
+fn date_from_name(
+    file_name: &str,
+    newest: Option<NaiveDateTime>,
+    modified: Option<NaiveDateTime>,
+) -> Option<NaiveDate> {
+    let p = patterns();
+    matches(&p.year_first, file_name)
+        .iter()
+        .find_map(|c| {
+            let date = NaiveDate::from_ymd_opt(number(c, 1)?, number(c, 2)?, number(c, 3)?);
+            with_year(date, newest, modified)
+        })
+        .or_else(|| {
+            matches(&p.year_last, file_name).iter().find_map(|c| {
+                let date = NaiveDate::from_ymd_opt(number(c, 3)?, number(c, 2)?, number(c, 1)?);
+                with_year(date, newest, modified)
+            })
+        })
+        .or_else(|| {
+            matches(&p.month_name, file_name).iter().find_map(|c| {
+                let name = c[2].to_lowercase();
+                let month = MONTHS.iter().position(|m| *m == name)? as u32 + 1;
+                without_year(number(c, 1)?, month, newest, modified)
+            })
+        })
+        .or_else(|| {
+            matches(&p.day_month, file_name)
+                .iter()
+                .find_map(|c| without_year(number(c, 1)?, number(c, 2)?, newest, modified))
+        })
 }
 
 pub fn snapshot_date(
@@ -86,14 +181,25 @@ pub fn snapshot_date(
     file_name: &str,
     holds: &[Hold],
     file_modified: Option<NaiveDateTime>,
-) -> Option<NaiveDateTime> {
-    if let Some(reported) = info.get("Report Date").and_then(|v| parse_report_date(v)) {
-        return Some(reported);
+) -> Option<SnapshotDate> {
+    if let Some(at) = info.get("Report Date").and_then(|v| parse_report_date(v)) {
+        return Some(SnapshotDate {
+            at,
+            source: SnapshotSource::InfoSheet,
+        });
     }
-    if let Some(date) = date_from_name(file_name, newest_timestamp(holds)) {
-        return date.and_hms_opt(0, 0, 0);
+    let named = date_from_name(file_name, newest_timestamp(holds), file_modified)
+        .and_then(|date| date.and_hms_opt(0, 0, 0));
+    if let Some(at) = named {
+        return Some(SnapshotDate {
+            at,
+            source: SnapshotSource::FileName,
+        });
     }
-    file_modified
+    file_modified.map(|at| SnapshotDate {
+        at,
+        source: SnapshotSource::FileTime,
+    })
 }
 
 #[cfg(test)]
@@ -131,7 +237,8 @@ mod tests {
             &holds_with_newest("2026-10-07 08:07:30"),
             Some(at("2026-10-10 15:00:00")),
         );
-        assert_eq!(got, Some(at("2026-09-29 13:16:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2026-09-29 13:16:00")));
+        assert_eq!(got.map(|g| g.source), Some(SnapshotSource::InfoSheet));
     }
 
     #[test]
@@ -150,7 +257,7 @@ mod tests {
             &holds_with_newest("2026-10-07 08:07:30"),
             None,
         );
-        assert_eq!(got, Some(at("2026-10-07 00:00:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2026-10-07 00:00:00")));
     }
 
     #[test]
@@ -161,13 +268,13 @@ mod tests {
             &holds_with_newest("2026-09-29 12:00:00"),
             None,
         );
-        assert_eq!(got, Some(at("2026-09-29 00:00:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2026-09-29 00:00:00")));
     }
 
     #[test]
     fn filename_with_full_date_needs_no_data() {
         let got = snapshot_date(&BTreeMap::new(), "holds_2026-10-07.xlsx", &[], None);
-        assert_eq!(got, Some(at("2026-10-07 00:00:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2026-10-07 00:00:00")));
     }
 
     #[test]
@@ -178,14 +285,15 @@ mod tests {
             &holds_with_newest("2026-12-30 09:00:00"),
             None,
         );
-        assert_eq!(got, Some(at("2027-01-02 00:00:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2027-01-02 00:00:00")));
     }
 
     #[test]
     fn falls_back_to_file_modified_time() {
         let modified = at("2026-10-10 15:00:00");
         let got = snapshot_date(&BTreeMap::new(), "export.xlsx", &[], Some(modified));
-        assert_eq!(got, Some(modified));
+        assert_eq!(got.map(|g| g.at), Some(modified));
+        assert_eq!(got.map(|g| g.source), Some(SnapshotSource::FileTime));
     }
 
     #[test]
@@ -196,7 +304,7 @@ mod tests {
             &holds_with_newest("2026-10-07 08:07:30"),
             None,
         );
-        assert_eq!(got, Some(at("2026-10-07 00:00:00")));
+        assert_eq!(got.map(|g| g.at), Some(at("2026-10-07 00:00:00")));
     }
 
     #[test]
@@ -204,6 +312,115 @@ mod tests {
         assert_eq!(
             snapshot_date(&BTreeMap::new(), "export.xlsx", &[], None),
             None
+        );
+    }
+
+    fn from_name(name: &str, newest: &str, modified: Option<&str>) -> Option<SnapshotDate> {
+        snapshot_date(
+            &BTreeMap::new(),
+            name,
+            &[Hold {
+                created: Some(at(newest)),
+                ..Default::default()
+            }],
+            modified.map(at),
+        )
+    }
+
+    fn named(date: &str) -> Option<SnapshotDate> {
+        Some(SnapshotDate {
+            at: at(&format!("{date} 00:00:00")),
+            source: SnapshotSource::FileName,
+        })
+    }
+
+    fn file_time(time: &str) -> Option<SnapshotDate> {
+        Some(SnapshotDate {
+            at: at(time),
+            source: SnapshotSource::FileTime,
+        })
+    }
+
+    #[test]
+    fn version_number_is_not_a_date() {
+        let modified = "2026-10-10 15:00:00";
+        assert_eq!(
+            from_name("holds_v1.2.xlsx", "2026-09-29 12:00:00", Some(modified)),
+            file_time(modified)
+        );
+        assert_eq!(
+            from_name("holds_v1.2.xlsx", "2026-09-29 12:00:00", None),
+            None
+        );
+    }
+
+    #[test]
+    fn implausible_leading_number_is_skipped_for_a_later_match() {
+        assert_eq!(
+            from_name("4521-10-02_holds_29-9.xlsx", "2026-09-29 12:00:00", None),
+            named("2026-09-29")
+        );
+    }
+
+    #[test]
+    fn written_year_is_used() {
+        assert_eq!(
+            from_name("holds_07.10.2026.xlsx", "2025-10-06 09:00:00", None),
+            named("2026-10-07")
+        );
+    }
+
+    #[test]
+    fn date_before_the_newest_data_falls_through() {
+        let modified = "2026-10-10 15:00:00";
+        assert_eq!(
+            from_name("holds_10-May.xlsx", "2025-10-20 09:00:00", Some(modified)),
+            file_time(modified)
+        );
+    }
+
+    #[test]
+    fn out_of_range_cell_date_does_not_panic_and_is_ignored() {
+        let mut holds = holds_with_newest("2026-09-29 12:00:00");
+        holds.push(Hold {
+            created: NaiveDate::MIN.and_hms_opt(0, 0, 0),
+            release_date: NaiveDate::MAX.and_hms_opt(0, 0, 0),
+            ..Default::default()
+        });
+        let got = snapshot_date(&BTreeMap::new(), "holds_29-9.xlsx", &holds, None);
+        assert_eq!(got, named("2026-09-29"));
+    }
+
+    #[test]
+    fn window_after_the_newest_timestamp_is_92_days() {
+        assert_eq!(
+            from_name("holds_30-12.xlsx", "2026-09-29 12:00:00", None),
+            named("2026-12-30")
+        );
+        assert_eq!(
+            from_name("holds_31-12.xlsx", "2026-09-29 12:00:00", None),
+            None
+        );
+    }
+
+    #[test]
+    fn date_more_than_a_day_after_the_file_time_is_rejected() {
+        let modified = "2026-10-07 10:00:00";
+        assert_eq!(
+            from_name(
+                "holds_2026-10-09.xlsx",
+                "2026-10-01 09:00:00",
+                Some(modified)
+            ),
+            file_time(modified)
+        );
+        assert_eq!(
+            from_name(
+                "holds_2026-10-08.xlsx",
+                "2026-10-01 09:00:00",
+                Some(modified)
+            ),
+            named("2026-10-08")
         );
     }
 }

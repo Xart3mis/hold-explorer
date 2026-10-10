@@ -25,7 +25,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     let ds = Dataset::build(
         loaded.parsed.holds,
         &RuleSet::builtin(),
-        loaded.snapshot.unwrap(),
+        loaded.snapshot.unwrap().at,
     );
     let import = started.elapsed();
     assert!(import < Duration::from_secs(2), "import took {import:?}");

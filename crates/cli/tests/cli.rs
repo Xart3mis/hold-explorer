@@ -31,6 +31,7 @@ fn synth_then_summary_round_trip() {
 
     let json: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(json["snapshot"], "2026-09-29 13:16:00");
+    assert_eq!(json["snapshot_source"], "InfoSheet");
     assert_eq!(json["project"], "0000-TEST");
     assert_eq!(json["sheet"], "data");
     assert_eq!(json["limited"], false);
