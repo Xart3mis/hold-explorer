@@ -173,7 +173,7 @@ fn make_remark(rng: &mut Rng, unit: usize) -> String {
             100 * (1 + rng.below(5))
         ),
         1 => format!("Pending {unit}-STR-{:03} issuance", 1 + rng.below(9)),
-        2 => "Hold Pending Xodus FIV/AIV Report".to_string(),
+        2 => "Hold Pending Acme FIV/AIV Report".to_string(),
         3 => "FIV/AIV REPORT\n".to_string(),
         4 => "Isometric by vendor".to_string(),
         5 => format!("control valve({unit}-PV-{:04}A)", 3000 + rng.below(80)),

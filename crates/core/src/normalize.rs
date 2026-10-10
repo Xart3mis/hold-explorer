@@ -6,10 +6,19 @@ pub const UNSPECIFIED: &str = "Unspecified";
 /// Shown when a hold has no name, role, or hold type.
 pub const DASH: &str = "—";
 
-/// Removes the literal `_x000D_` that Excel leaves in exported text, collapses
+/// Removes the literal `_x000D_` (any letter case) that Excel leaves in exported text, collapses
 /// every run of whitespace (line breaks included) to one space, and trims.
 pub fn clean_text(input: &str) -> String {
-    let without_escape = input.replace("_x000D_", " ").replace("_x000d_", " ");
+    // ASCII lower-casing keeps byte offsets, so matches in the copy locate the original.
+    const ESCAPE: &str = "_x000d_";
+    let mut without_escape = String::with_capacity(input.len());
+    let mut copied = 0;
+    for (start, _) in input.to_ascii_lowercase().match_indices(ESCAPE) {
+        without_escape.push_str(&input[copied..start]);
+        without_escape.push(' ');
+        copied = start + ESCAPE.len();
+    }
+    without_escape.push_str(&input[copied..]);
     without_escape
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -54,6 +63,8 @@ mod tests {
     fn clean_text_removes_excel_carriage_return_escape() {
         assert_eq!(clean_text("P&ID update_x000D_\nrev 2"), "P&ID update rev 2");
         assert_eq!(clean_text("a_x000d_b"), "a b");
+        assert_eq!(clean_text("a_X000d_b"), "a b");
+        assert_eq!(clean_text("a_x000D_b_X000D_c"), "a b c");
     }
 
     #[test]

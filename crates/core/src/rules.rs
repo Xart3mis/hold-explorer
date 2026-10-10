@@ -17,27 +17,28 @@ pub struct Blocker {
 /// An optional three-digit unit, a one-to-five-letter code, a hyphen, and a
 /// two-to-five-digit number with an optional single trailing letter. The
 /// number must not continue with another digit or with `-digit`.
-const TAG_PATTERN: &str =
-    r"\b(?:[0-9]{3}-)?([A-Z]{1,5})- ?([0-9]{2,5})(?:[A-Z](?![A-Z]))?(?![0-9]|-[0-9])";
+/// Word boundaries are ASCII-only, as in JavaScript. `fancy-regex` rejects `(?-u:\b)`, so the
+/// tag pattern states its start boundary as a lookbehind; the other patterns use `(?-u:\b)`.
+const TAG_PATTERN: &str = r"(?<![A-Za-z0-9_])(?:[0-9]{3}-)?([A-Z]{1,5})- ?([0-9]{2,5})(?:[A-Z](?![A-Z]))?(?![0-9]|-[0-9])";
 
-const TIE_IN_PATTERN: &str = r"\bT[0-9]{3}-R[0-9]{3}\b";
+const TIE_IN_PATTERN: &str = r"(?-u:\b)T[0-9]{3}-R[0-9]{3}(?-u:\b)";
 
 /// Tested in this order; the first hit wins.
 const KEYWORDS: [(&str, &str); 16] = [
-    (r"P\s?&\s?IDS?\b|\bPIDS?\b", "P&ID"),
+    (r"P\s?&\s?IDS?(?-u:\b)|(?-u:\b)PIDS?(?-u:\b)", "P&ID"),
     (r"SLEEPER", "SLEEPERS"),
     (r"MISC", "MISC."),
     (r"FIV|AIV", "FIV/AIV"),
-    (r"\bLDT\b", "LDT"),
+    (r"(?-u:\b)LDT(?-u:\b)", "LDT"),
     (r"LINE SIZE|HOLD SIZE", "LINE SIZE"),
     (r"DATA ?SHEET", "DATA SHEET"),
     (r"ISOMETRIC", "ISOMETRIC"),
     (r"PLOT PLAN", "PLOT PLAN"),
     (r"TAG NO", "INSTRUMENT TAG"),
-    (r"PIPING MATERIAL CLASS|\bPMC\b", "PMC"),
+    (r"PIPING MATERIAL CLASS|(?-u:\b)PMC(?-u:\b)", "PMC"),
     (r"PLATFORM", "PLATFORM"),
     (r"SUPPORT", "SUPPORT"),
-    (r"\bGA\b|\bGA'S", "GA DRAWING"),
+    (r"(?-u:\b)GA(?-u:\b)|(?-u:\b)GA'S", "GA DRAWING"),
     (r"VENDOR", "VENDOR"),
     (r"STRUCTURE|STEEL|STRU", "STRUCTURE"),
 ];
@@ -71,6 +72,8 @@ impl RuleSet {
 
         let mut position = 0;
         while position < upper.len() {
+            // The pattern is bounded, so a runtime error is not expected. If one happens the
+            // loop ends and the remark falls through to the later rules.
             let Ok(Some(captures)) = self.tag.captures_from_pos(&upper, position) else {
                 break;
             };
@@ -109,7 +112,15 @@ impl RuleSet {
 
         let rest = self.leading_hold.replace(&upper, "");
         let rest = self.leading_pending.replace(&rest, "");
-        let item: String = rest.chars().take(60).collect();
+        // JavaScript cuts at 60 UTF-16 code units; never split a character.
+        let mut units = 0;
+        let item: String = rest
+            .chars()
+            .take_while(|c| {
+                units += c.len_utf16();
+                units <= 60
+            })
+            .collect();
         Blocker {
             kind: "Other".to_string(),
             item: if item.is_empty() {
@@ -196,7 +207,7 @@ mod tests {
     fn keywords_in_priority_order() {
         assert_eq!(classify("FIV/AIV REPORT\n"), pair("FIV/AIV", "FIV/AIV"));
         assert_eq!(
-            classify("Hold Pending Xodus FIV/AIV Report"),
+            classify("Hold Pending Acme FIV/AIV Report"),
             pair("FIV/AIV", "FIV/AIV")
         );
         assert_eq!(
@@ -244,6 +255,25 @@ mod tests {
     fn other_is_cut_to_sixty_characters() {
         let long = "x".repeat(80);
         assert_eq!(classify(&long).1.chars().count(), 60);
+    }
+
+    #[test]
+    fn word_boundaries_are_ascii_only_like_javascript() {
+        assert_eq!(classify("é538-PR-100 pending"), pair("PR", "538-PR-100"));
+        assert_eq!(classify("wait T123-R456é"), pair("TIE-IN", "T123-R456"));
+        assert_eq!(classify("LDTé"), pair("LDT", "LDT"));
+        assert_eq!(classify("ÉLDT list"), pair("LDT", "LDT"));
+    }
+
+    #[test]
+    fn other_is_cut_at_sixty_utf16_units_without_splitting_a_character() {
+        let remark = format!("{}{}", "😀".repeat(40), "x".repeat(40));
+        let item = classify(&remark).1;
+        assert_eq!(item, "😀".repeat(30));
+        assert_eq!(item.encode_utf16().count(), 60);
+        // A character that would pass the limit is dropped whole.
+        let odd = format!("x{}", "😀".repeat(40));
+        assert_eq!(classify(&odd).1, format!("X{}", "😀".repeat(29)));
     }
 
     #[test]

@@ -137,3 +137,129 @@ fn matches_the_html_tool_on_a_dense_file() {
 fn matches_the_html_tool_at_real_scale() {
     check(3, 3600, 9300);
 }
+
+const CORPUS_FIXED: &[&str] = &[
+    "P&ID",
+    "P & IDs",
+    "PID",
+    "sleeper",
+    "misc items",
+    "FIV study",
+    "AIV study",
+    "LDT update",
+    "line size",
+    "hold size",
+    "data sheet",
+    "datasheet",
+    "isometric",
+    "plot plan",
+    "tag no",
+    "piping material class",
+    "PMC update",
+    "platform",
+    "support",
+    "GA drawing",
+    "GA's",
+    "vendor",
+    "structure",
+    "steel",
+    "577-PR-400",
+    "PR-400",
+    "538-PV-3064A",
+    "538-PR- 100",
+    "538-STRU-006",
+    "AB-123456",
+    "538-PR-100-200",
+    "538-PVAB-12",
+    "UNIT-577 hold for 538-V-104",
+    "UNIT-577-PR-400",
+    "UNIT-577",
+    "T123-R456",
+    "Tie-in T123-R456 vendor data",
+    "pending 538-PR-100 vendor data",
+    "Hold pending IA layout for Unit 577",
+    "on client decision",
+    "only later",
+    "Pending",
+    "",
+    "   \n\t ",
+    "P&ID update_x000D_\nrev 2",
+    "a_X000d_b",
+    "a_x000D_b",
+    "é538-PR-100 pending",
+    "wait T123-R456é",
+    "LDTé",
+    "ÉLDT list",
+    "caf\u{e9} support",
+    "pending\u{a0}538-PR-100",
+    "hold\u{a0}pending",
+    "\u{627}\u{644}\u{639}\u{631}\u{628}\u{64a}\u{629}",
+    "\u{627}\u{644}\u{639}\u{631}\u{628}\u{64a}\u{629} 538-PR-100",
+    "Hold Hold pending x",
+    "ON HOLD",
+    "on538-PR-100",
+    "PIDS and GA",
+    "GAS line",
+    "T123-R4567",
+    "T1234-R456",
+    "538-PR-100A",
+    "538-PR-100AB",
+    "5-PR-100",
+    "5381-PR-100",
+    "PR -100",
+    "pr-1",
+    "STRUCTURE 538-STR-006",
+    "x\u{1f600}y 538-PR-100",
+    "\u{1f600}LDT",
+    "ß support",
+    "İ vendor",
+    "hold  size\r\ndata",
+];
+
+#[test]
+fn classifies_a_remark_corpus_like_the_html_tool() {
+    let mut remarks: Vec<String> = CORPUS_FIXED.iter().map(|r| r.to_string()).collect();
+    remarks.push("x".repeat(80));
+    remarks.push(format!("{}{}", "\u{1f600}".repeat(30), "x".repeat(40)));
+    remarks.push(format!("{}{}", "\u{1f600}".repeat(40), "x".repeat(40)));
+
+    let input: Vec<Value> = remarks
+        .iter()
+        .enumerate()
+        .map(|(i, remark)| {
+            json!({
+                "l": format!("L{i}"),
+                "n": "Engineer 01",
+                "r": "Designer",
+                "m": remark,
+                "t": "MISC.",
+                "d": "Civil",
+            })
+        })
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("corpus.json");
+    std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+
+    let output = Command::new("node")
+        .arg(REFERENCE)
+        .arg(&path)
+        .output()
+        .expect("the parity test needs Node.js on the PATH");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let legacy: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let rules = RuleSet::builtin();
+    for (i, remark) in remarks.iter().enumerate() {
+        let blocker = rules.classify(remark);
+        assert_eq!(
+            legacy["rules"][i],
+            json!([blocker.kind, blocker.item]),
+            "remark {remark:?}"
+        );
+    }
+}

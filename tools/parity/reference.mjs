@@ -69,5 +69,6 @@ process.stdout.write(JSON.stringify({
   single:ls.filter(function(l){return BL[l].length===1}).length,
   by:{d:counts('d'),t:counts('t'),r:counts('r'),z:counts('z')},
   easy:easy().map(function(o){return o.l}),
-  plan:mapData().plan.map(function(p){return {k:p.k,gain:p.gain,cum:p.cum}})
+  plan:mapData().plan.map(function(p){return {k:p.k,gain:p.gain,cum:p.cum}}),
+  rules:R.map(function(x){return [x.z,x.e]})
 }));
