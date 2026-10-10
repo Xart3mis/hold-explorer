@@ -10,6 +10,7 @@ pub mod query;
 pub mod reader;
 pub mod rules;
 pub mod snapshot_date;
+pub mod solve;
 pub mod table;
 
 #[cfg(test)]
