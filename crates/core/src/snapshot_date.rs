@@ -135,8 +135,9 @@ fn after_modified(date: NaiveDate, modified: Option<NaiveDateTime>) -> bool {
     })
 }
 
-/// A date without a year takes the year of the newest timestamp, or the next year if that
-/// would be earlier. It must be at most 92 days after the newest timestamp.
+/// A date without a year takes the year of the newest timestamp in the data, or the next year
+/// if that would be earlier. It must be at most 92 days after the newest timestamp. The file's
+/// modified time only bounds it from above (at most a day later); it never supplies the year.
 fn without_year(
     day: u32,
     month: u32,
@@ -226,8 +227,8 @@ fn month_number(name: &str) -> Option<u32> {
 }
 
 /// Works out the snapshot date, trying in order the `Report Date` of the information sheet,
-/// a date in the file name (using the newest hold date or the modified time to settle a
-/// missing year), and the file's modified time. `None` when none gives a date.
+/// a date in the file name (the newest timestamp in the data settles a missing year, and
+/// the modified time is only an upper bound for it), and the file's modified time. `None` when none gives a date.
 pub fn snapshot_date(
     info: &BTreeMap<String, String>,
     file_name: &str,

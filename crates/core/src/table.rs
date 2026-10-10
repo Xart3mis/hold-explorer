@@ -28,7 +28,9 @@ pub struct RawTable {
     pub headers: Vec<String>,
     /// The data rows; a row may be shorter than `headers`, in which case the missing cells are blank.
     pub rows: Vec<Vec<Cell>>,
-    /// One-based row (sheet row or CSV line) of each entry of `rows`. May be empty for tables built by hand.
+    /// One-based row of each entry of `rows`: the sheet row of a workbook, or the line of a
+    /// delimited text file where the record starts, counting blank lines and the lines of
+    /// multi-line fields. May be empty for tables built by hand.
     pub row_numbers: Vec<usize>,
 }
 

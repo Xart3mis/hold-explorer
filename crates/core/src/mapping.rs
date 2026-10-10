@@ -11,7 +11,7 @@ pub enum Field {
     SourceId,
     /// The line the hold is on. Required.
     LineId,
-    /// Name of the person on the hold.
+    /// The person named on the hold.
     Name,
     /// Role of that person.
     Role,

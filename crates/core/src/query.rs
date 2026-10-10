@@ -195,7 +195,8 @@ pub enum LineSort {
     /// Most holds first.
     #[default]
     HoldsDesc,
-    /// Fewest disciplines, then fewest holds: the lines cheapest to free.
+    /// The lines cheapest to free first: fewest disciplines, then fewest holds, then the name of
+    /// the first-appearing discipline, then line ID.
     Easiest,
     /// Line with the oldest open hold first; lines with no open-hold age come last.
     OldestFirst,
@@ -274,7 +275,7 @@ fn push_unique(list: &mut Vec<String>, value: &str) {
 }
 
 /// One row per line that has a selected hold, in the order `query.sort` gives. Disciplines and
-/// hold types are listed in order of first appearance in the dataset.
+/// hold types are listed in order of first appearance among the selected holds.
 pub fn lines(ds: &Dataset, spec: &FilterSpec, query: &LineQuery) -> Vec<LineRow> {
     let mut index: HashMap<&str, usize> = HashMap::new();
     let mut out: Vec<LineRow> = Vec::new();

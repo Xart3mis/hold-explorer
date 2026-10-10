@@ -12,7 +12,7 @@ pub struct Hold {
     pub source_id: Option<i64>,
     /// The line the hold is on, as written in the export; holds with the same `line_id` belong to one line.
     pub line_id: String,
-    /// The `name` column (who raised the hold), or `—` when blank.
+    /// The person named on the hold (the `name` column), or `—` when blank.
     pub name: String,
     /// The `role` column, or `—` when blank.
     pub role: String,
