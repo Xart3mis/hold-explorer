@@ -530,3 +530,23 @@ impl std::fmt::Debug for RuleSet { /* prints the number of keyword rules, not th
 | Public API documentation; `RuleSet::builtin()` cost | 8 |
 | 64-bit integers in generated TypeScript | M1b-3, when the generator is configured |
 | Case-sensitive grouping of discipline, type, role, name | kept by decision (HTML tool parity), documented in Task 8 |
+
+## Post-review corrections (2026-10-11)
+
+The plan was executed, reviewed as a whole, and corrected in two fix waves. Where this plan's interfaces and the repository differ, the repository is right. The spec was updated to match (sections 6.1, 6.2, 6.3, 14).
+
+| Area | Plan said | Now |
+|---|---|---|
+| CSV row numbers (Tasks 1, 5) | Line numbers from each record's position. | The position is where the reader stood before the record, so CRLF files and blank lines gave wrong numbers; the offset now skips line breaks first. Six confirmed shapes are tests. |
+| Column mapping (not in plan) | `ColumnMap { fields, extras: Vec<(usize, String)> }`, by position only. | `extras: Vec<ExtraColumn { column, name }>`; `SavedMapping { columns: Vec<SavedColumn { key, occurrence, field }> }` saved by normalized header; `ColumnMap::auto_with`, `from_fields`, `to_saved`, `extra_names`; public `header_key`; `Loaded.headers`. |
+| Header matching (Task 4) | Whitespace runs and each hyphen become an underscore. | Any run of whitespace, hyphens, and underscores becomes one underscore. |
+| Warnings (Task 2) | Five kinds, with `row_number` and `detail`. | Nine kinds (adds `UnreadableSize`, `UnreadableId`, `DuplicateId`, `UnreadableReportDate`); `ImportWarning` also carries `column` and `value`; `SkippedRow` carries `kind` and `value`. |
+| Numbers (not in plan) | `as_number` parses plain numbers. | Also reads a decimal comma; a lone comma before three digits is not a number. Ids must be exact and within ±2^53, as text or number. `released` also accepts `y` and `n`. |
+| Hold rows (Task 7) | `holds(ds, spec) -> Vec<Row>`. | `holds(ds, spec, &HoldQuery { sort, offset, limit }) -> HoldPage { total, rows }`. |
+| Errors (Task 3) | Seven variants. | Adds `SheetNotFound { sheet, sheets }`. |
+| Reading (Task 5) | `open_file`. | Adds `open_sheet(path, sheet)`, `Opened.sheets`; `.tsv` and `.txt` are read as delimited text; `reader` is a private module (`load` is the public surface). |
+| Dataset | | Adds `Dataset::custom_dims()`. `SnapshotSource` gains `User`. |
+
+Test totals at the end: 231 in `hx-core`, 10 in `hx-synth`, 2 CLI, 5 parity, 1 performance.
+
+Notes for the next two plans are in the session scratch file `.superpowers/sdd/m1b-next-notes.md` and are restated in the M1b-2 plan.
