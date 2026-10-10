@@ -13,7 +13,9 @@ pub struct Row {
     pub blocker: Blocker,
     /// Case-folded remark, for grouping.
     pub remark_key: String,
-    /// Open: days from creation to the snapshot. Released: days from creation to release.
+    /// Calendar days. It has two meanings: for an open hold it is the age (snapshot date minus
+    /// creation date); for a released hold it is the duration (release date minus creation date).
+    /// A view that mixes open and released holds therefore mixes the two.
     pub age_days: Option<i64>,
 }
 
@@ -46,7 +48,9 @@ impl Dataset {
                     Some(snapshot)
                 };
                 let age_days = match (hold.created, end) {
-                    (Some(created), Some(end)) => Some((end - created).num_days().max(0)),
+                    (Some(created), Some(end)) => {
+                        Some((end.date() - created.date()).num_days().max(0))
+                    }
                     _ => None,
                 };
                 Row {
@@ -92,6 +96,39 @@ mod tests {
             ds.snapshot,
         );
         assert_eq!(rebuilt.rows[0].age_days, None);
+    }
+
+    fn age_of(mut hold: crate::model::Hold, snapshot: &str) -> Option<i64> {
+        hold.remark = "x".to_string();
+        let ds = super::Dataset::build(
+            vec![hold],
+            &crate::rules::RuleSet::builtin(),
+            crate::testkit::at(snapshot),
+        );
+        ds.rows[0].age_days
+    }
+
+    #[test]
+    fn open_age_counts_calendar_days() {
+        let mut h = crate::testkit::hold("L1", "Civil", "MISC.", "x", 0);
+        h.created = Some(crate::testkit::at("2026-09-30 18:00:00"));
+        assert_eq!(age_of(h, "2026-10-01 13:00:00"), Some(1));
+    }
+
+    #[test]
+    fn released_duration_counts_calendar_days() {
+        let mut h = crate::testkit::hold("L1", "Civil", "MISC.", "x", 0);
+        h.created = Some(crate::testkit::at("2026-09-01 23:30:00"));
+        h.released = true;
+        h.release_date = Some(crate::testkit::at("2026-09-03 00:10:00"));
+        assert_eq!(age_of(h, "2026-10-01 00:00:00"), Some(2));
+    }
+
+    #[test]
+    fn hold_created_after_the_snapshot_has_age_zero() {
+        let mut h = crate::testkit::hold("L1", "Civil", "MISC.", "x", 0);
+        h.created = Some(crate::testkit::at("2026-10-05 09:00:00"));
+        assert_eq!(age_of(h, "2026-10-01 13:00:00"), Some(0));
     }
 
     #[test]
