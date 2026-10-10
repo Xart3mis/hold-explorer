@@ -28,6 +28,18 @@ fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
     }
 }
 
+fn not_found(path: &Path) -> ImportError {
+    ImportError::NotFound {
+        path: path.display().to_string(),
+    }
+}
+
+fn empty_file(path: &Path) -> ImportError {
+    ImportError::EmptyFile {
+        path: path.display().to_string(),
+    }
+}
+
 fn to_cell(data: &Data) -> Cell {
     match data {
         Data::Empty | Data::Error(_) => Cell::Empty,
@@ -76,6 +88,9 @@ fn is_named(name: &str, wanted: &str) -> bool {
 }
 
 fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
+    if !path.exists() {
+        return Err(not_found(path));
+    }
     let mut reader = csv::ReaderBuilder::new()
         .has_headers(false)
         .flexible(true)
@@ -101,7 +116,7 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
         );
     }
     if rows.is_empty() {
-        return Err(ImportError::NoDataSheet);
+        return Err(empty_file(path));
     }
     lines.remove(0);
     let headers = rows
@@ -137,6 +152,9 @@ pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
         return read_csv(path);
     }
 
+    if !path.exists() {
+        return Err(not_found(path));
+    }
     let mut workbook = open_workbook_auto(path).map_err(|e| unreadable(path, e))?;
     let names: Vec<String> = workbook.sheet_names().to_vec();
 
@@ -157,11 +175,17 @@ pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
     }
 
     let mut tables: Vec<(String, RawTable, usize)> = Vec::new();
+    let mut first_sheet_error: Option<String> = None;
     for name in names.iter().filter(|n| !is_named(n, "info")) {
-        if let Ok(range) = workbook.worksheet_range(name) {
-            let (table, errors) = table_from_range(&range);
-            if !table.headers.is_empty() {
-                tables.push((name.clone(), table, errors));
+        match workbook.worksheet_range(name) {
+            Ok(range) => {
+                let (table, errors) = table_from_range(&range);
+                if !table.headers.is_empty() {
+                    tables.push((name.clone(), table, errors));
+                }
+            }
+            Err(e) => {
+                first_sheet_error.get_or_insert_with(|| format!("sheet \"{name}\": {e}"));
             }
         }
     }
@@ -186,7 +210,11 @@ pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
                 error_cells,
             })
         }
-        None => Err(ImportError::NoDataSheet),
+        None if names.is_empty() => Err(empty_file(path)),
+        None => Err(match first_sheet_error {
+            Some(detail) => unreadable(path, detail),
+            None => ImportError::NoDataSheet { sheets: names },
+        }),
     }
 }
 
@@ -334,9 +362,60 @@ mod tests {
     }
 
     #[test]
-    fn missing_file_is_unreadable() {
+    fn missing_file_is_not_found() {
         let err = read_workbook(std::path::Path::new("/no/such/holds.xlsx")).unwrap_err();
-        assert!(matches!(err, ImportError::Unreadable { .. }));
+        assert!(matches!(err, ImportError::NotFound { .. }), "{err:?}");
+        let message = err.to_string();
+        assert!(message.contains("not found"), "{message}");
+        assert!(!message.contains("password"), "{message}");
+        let err = read_workbook(std::path::Path::new("/no/such/holds.csv")).unwrap_err();
+        assert!(matches!(err, ImportError::NotFound { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn zero_byte_csv_is_an_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.csv");
+        std::fs::write(&path, "").unwrap();
+        let err = read_workbook(&path).unwrap_err();
+        assert!(matches!(err, ImportError::EmptyFile { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn workbook_with_only_an_info_sheet_has_no_data_sheet() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("info.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let sheet = book.add_worksheet();
+        sheet.set_name("info").unwrap();
+        sheet.write_string(0, 0, "Project No.").unwrap();
+        sheet.write_string(0, 1, "X").unwrap();
+        book.save(&path).unwrap();
+        let err = read_workbook(&path).unwrap_err();
+        assert_eq!(
+            err,
+            ImportError::NoDataSheet {
+                sheets: vec!["info".to_string()]
+            }
+        );
+        assert!(err.to_string().contains("info"));
+    }
+
+    #[test]
+    fn csv_with_unknown_headers_lists_the_missing_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("other.csv");
+        std::fs::write(&path, "Line,Why\nL-1,x\n").unwrap();
+        let err = crate::load::load_file(&path).unwrap_err();
+        assert_eq!(
+            err,
+            ImportError::MissingColumns {
+                missing: vec![
+                    crate::mapping::Field::Remark,
+                    crate::mapping::Field::HoldType
+                ]
+            }
+        );
     }
 
     #[test]
@@ -346,5 +425,6 @@ mod tests {
         std::fs::write(&path, "this is not a workbook").unwrap();
         let err = read_workbook(&path).unwrap_err();
         assert!(matches!(err, ImportError::Unreadable { .. }));
+        assert!(err.to_string().contains("password"));
     }
 }

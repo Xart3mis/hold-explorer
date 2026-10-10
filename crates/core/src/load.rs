@@ -61,6 +61,7 @@ pub fn load_file(path: &Path) -> Result<Loaded, ImportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mapping::Field;
     use crate::snapshot_date::SnapshotSource;
     use hx_synth::{generate, write_workbook, SynthConfig};
 
@@ -126,7 +127,9 @@ mod tests {
         let err = load_file(&path).unwrap_err();
         assert_eq!(
             err,
-            ImportError::MissingColumns(vec!["hold_remark".to_string(), "hold_type".to_string()])
+            ImportError::MissingColumns {
+                missing: vec![Field::Remark, Field::HoldType]
+            }
         );
     }
 }

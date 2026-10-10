@@ -55,5 +55,5 @@ fn summary_of_missing_file_fails_with_a_message() {
         .unwrap();
     assert!(!out.status.success());
     let message = String::from_utf8_lossy(&out.stderr);
-    assert!(message.contains("Could not read"), "{message}");
+    assert!(message.contains("not found"), "{message}");
 }

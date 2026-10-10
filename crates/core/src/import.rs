@@ -57,9 +57,7 @@ pub fn infer_date_order<'a>(cells: impl IntoIterator<Item = &'a Cell>) -> DateOr
 pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportError> {
     let missing = map.missing_required();
     if !missing.is_empty() {
-        return Err(ImportError::MissingColumns(
-            missing.iter().map(|f| f.label().to_string()).collect(),
-        ));
+        return Err(ImportError::MissingColumns { missing });
     }
     if table.rows.is_empty() {
         return Err(ImportError::Empty);
@@ -400,7 +398,9 @@ mod tests {
         let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
         assert_eq!(
             err,
-            ImportError::MissingColumns(vec!["hold_remark".to_string()])
+            ImportError::MissingColumns {
+                missing: vec![Field::Remark]
+            }
         );
     }
 
