@@ -122,7 +122,8 @@ pub struct SavedColumn {
     pub key: String,
     /// Which of the columns with this key it is, counting from 0 in column order.
     pub occurrence: usize,
-    /// The field the column holds, or `None` when the user left it unmapped on purpose.
+    /// The field the column holds, or `None` when the user left it unmapped on purpose. Only
+    /// columns whose key is an alias of some field are recorded as `None`.
     pub field: Option<Field>,
 }
 
@@ -234,15 +235,11 @@ impl ColumnMap {
 
     /// The mapping by header and occurrence, to save and apply to a file with the same headers
     /// in any order. Has one entry per column assigned to a field, plus an entry with no field
-    /// for each non-blank column the user left unassigned although [`ColumnMap::auto`] would
-    /// assign it. Blank headers and fields whose column is not in `headers` are left out.
+    /// for each non-blank column the user left unassigned whose key is an alias of any field
+    /// (`Field::aliases`), whether or not [`ColumnMap::auto`] would pick that very column, so
+    /// that a repeated alias header is not mapped by alias later. Blank headers and fields whose column is not in `headers` are left out.
     pub fn to_saved(&self, headers: &[String]) -> SavedMapping {
         let by_column: BTreeMap<usize, Field> = self.fields.iter().map(|(&f, &c)| (c, f)).collect();
-        let by_alias: BTreeMap<usize, Field> = ColumnMap::auto(headers)
-            .fields
-            .into_iter()
-            .map(|(f, c)| (c, f))
-            .collect();
         let columns = column_keys(headers)
             .into_iter()
             .enumerate()
@@ -250,7 +247,12 @@ impl ColumnMap {
                 let (key, occurrence) = key?;
                 let field = match by_column.get(&index) {
                     Some(&field) => Some(field),
-                    None if by_alias.contains_key(&index) => None,
+                    None if Field::ALL
+                        .iter()
+                        .any(|f| f.aliases().contains(&key.as_str())) =>
+                    {
+                        None
+                    }
                     None => return None,
                 };
                 Some(SavedColumn {
@@ -574,6 +576,30 @@ mod tests {
             BTreeMap::from([(Field::LineId, 3), (Field::Remark, 2), (Field::HoldType, 1)])
         );
         assert_eq!(map.extras, vec![extra(0, "name")]);
+    }
+
+    #[test]
+    fn every_unmapped_alias_column_is_remembered_even_when_auto_would_skip_it() {
+        let h = headers(&["line_id", "hold_remark", "hold_type", "hold_remark"]);
+        let fields = BTreeMap::from([(Field::LineId, 0), (Field::HoldType, 2)]);
+        let user = ColumnMap::from_fields(&h, fields);
+        let saved = user.to_saved(&h);
+        assert!(saved.columns.contains(&col("hold_remark", 0, None)));
+        assert!(saved.columns.contains(&col("hold_remark", 1, None)));
+        let again = ColumnMap::auto_with(&h, &saved);
+        assert_eq!(again.fields, user.fields);
+        assert_eq!(
+            again.extras,
+            vec![extra(1, "hold_remark"), extra(3, "hold_remark")]
+        );
+    }
+
+    #[test]
+    fn a_fully_auto_mapped_file_saves_no_unmapped_entries() {
+        let h = headers(&["line_id", "hold_remark", "hold_type", "name", "role"]);
+        let saved = ColumnMap::auto(&h).to_saved(&h);
+        assert_eq!(saved.columns.len(), 5);
+        assert!(saved.columns.iter().all(|c| c.field.is_some()));
     }
 
     #[test]
