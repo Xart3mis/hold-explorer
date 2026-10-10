@@ -114,11 +114,40 @@ pub struct ExtraColumn {
     pub name: String,
 }
 
+/// One remembered column of a saved mapping.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedColumn {
+    /// The normalized header ([`header_key`]).
+    pub key: String,
+    /// Which of the columns with this key it is, counting from 0 in column order.
+    pub occurrence: usize,
+    /// The field the column holds, or `None` when the user left it unmapped on purpose.
+    pub field: Option<Field>,
+}
+
 /// A mapping independent of column order, to be saved and applied to another file.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SavedMapping {
-    /// Normalized header (see [`header_key`]) to the field it supplies.
-    pub headers: BTreeMap<String, Field>,
+    /// The remembered columns. Columns with a blank header are never recorded.
+    pub columns: Vec<SavedColumn>,
+}
+
+/// The key and occurrence of every column, in column order; `None` for a blank header.
+fn column_keys(headers: &[String]) -> Vec<Option<(String, usize)>> {
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    headers
+        .iter()
+        .map(|header| {
+            if header.trim().is_empty() {
+                return None;
+            }
+            let key = header_key(header);
+            let count = seen.entry(key.clone()).or_insert(0);
+            let occurrence = *count;
+            *count += 1;
+            Some((key, occurrence))
+        })
+        .collect()
 }
 
 /// Which column of a table supplies which field.
@@ -139,22 +168,36 @@ impl ColumnMap {
         ColumnMap::auto_with(headers, &SavedMapping::default())
     }
 
-    /// Like [`ColumnMap::auto`], but a header named in `saved` takes its saved field first, even
-    /// when another column would match that field by alias. Saved entries whose header the file
-    /// does not have are ignored. Columns left over are matched by alias, then become extras.
+    /// Like [`ColumnMap::auto`], but a column named in `saved` (by header and occurrence among
+    /// columns with that header) takes its saved field first, even when another column would
+    /// match that field by alias. A column saved as unmapped is never matched by alias. Saved
+    /// entries the file has no column for are ignored. Columns left over are matched by alias,
+    /// then become extras.
     pub fn auto_with(headers: &[String], saved: &SavedMapping) -> ColumnMap {
+        let keys = column_keys(headers);
         let mut fields: BTreeMap<Field, usize> = BTreeMap::new();
-        let mut assigned = vec![false; headers.len()];
-        for (index, header) in headers.iter().enumerate() {
-            if let Some(&field) = saved.headers.get(&header_key(header)) {
-                if let std::collections::btree_map::Entry::Vacant(slot) = fields.entry(field) {
-                    slot.insert(index);
-                    assigned[index] = true;
+        let mut settled = vec![false; headers.len()];
+        for (index, key) in keys.iter().enumerate() {
+            let Some((key, occurrence)) = key else {
+                continue;
+            };
+            let entry = saved
+                .columns
+                .iter()
+                .find(|c| c.key == *key && c.occurrence == *occurrence);
+            match entry.map(|c| c.field) {
+                Some(Some(field)) => {
+                    if let std::collections::btree_map::Entry::Vacant(slot) = fields.entry(field) {
+                        slot.insert(index);
+                        settled[index] = true;
+                    }
                 }
+                Some(None) => settled[index] = true,
+                None => {}
             }
         }
         for (index, header) in headers.iter().enumerate() {
-            if assigned[index] {
+            if settled[index] {
                 continue;
             }
             let key = header_key(header);
@@ -163,7 +206,6 @@ impl ColumnMap {
                 .find(|f| !fields.contains_key(f) && f.aliases().contains(&key.as_str()));
             if let Some(field) = field {
                 fields.insert(field, index);
-                assigned[index] = true;
             }
         }
         ColumnMap::from_fields(headers, fields)
@@ -189,16 +231,35 @@ impl ColumnMap {
         ColumnMap { fields, extras }
     }
 
-    /// The mapping by header, to save and apply to a file with the same headers in any order.
-    /// Fields whose column is not in `headers` are left out.
+    /// The mapping by header and occurrence, to save and apply to a file with the same headers
+    /// in any order. Has one entry per column assigned to a field, plus an entry with no field
+    /// for each non-blank column the user left unassigned although [`ColumnMap::auto`] would
+    /// assign it. Blank headers and fields whose column is not in `headers` are left out.
     pub fn to_saved(&self, headers: &[String]) -> SavedMapping {
-        SavedMapping {
-            headers: self
-                .fields
-                .iter()
-                .filter_map(|(&field, &column)| headers.get(column).map(|h| (header_key(h), field)))
-                .collect(),
-        }
+        let by_column: BTreeMap<usize, Field> = self.fields.iter().map(|(&f, &c)| (c, f)).collect();
+        let by_alias: BTreeMap<usize, Field> = ColumnMap::auto(headers)
+            .fields
+            .into_iter()
+            .map(|(f, c)| (c, f))
+            .collect();
+        let columns = column_keys(headers)
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, key)| {
+                let (key, occurrence) = key?;
+                let field = match by_column.get(&index) {
+                    Some(&field) => Some(field),
+                    None if by_alias.contains_key(&index) => None,
+                    None => return None,
+                };
+                Some(SavedColumn {
+                    key,
+                    occurrence,
+                    field,
+                })
+            })
+            .collect();
+        SavedMapping { columns }
     }
 
     /// The names the extra columns get as keys of `Hold::extra`, in `extras` order. The first
@@ -362,24 +423,33 @@ mod tests {
         assert_eq!(map.extras, vec![extra(3, "Area")]);
     }
 
+    fn col(key: &str, occurrence: usize, field: Option<Field>) -> SavedColumn {
+        SavedColumn {
+            key: key.to_string(),
+            occurrence,
+            field,
+        }
+    }
+
     #[test]
     fn to_saved_keys_by_header() {
         let saved = ColumnMap::from_fields(&file_a(), hand_fields()).to_saved(&file_a());
-        let expected = BTreeMap::from([
-            ("line".to_string(), Field::LineId),
-            ("why".to_string(), Field::Remark),
-            ("kind".to_string(), Field::HoldType),
-        ]);
-        assert_eq!(saved.headers, expected);
+        let expected = vec![
+            col("line", 0, Some(Field::LineId)),
+            col("why", 0, Some(Field::Remark)),
+            col("kind", 0, Some(Field::HoldType)),
+        ];
+        assert_eq!(saved.columns, expected);
     }
 
     #[test]
     fn saved_mapping_applies_to_another_column_order() {
         let saved = ColumnMap::from_fields(&file_a(), hand_fields()).to_saved(&file_a());
         let map = ColumnMap::auto_with(&headers(&["Area", "Kind", "Why", "Line"]), &saved);
-        assert_eq!(map.fields[&Field::LineId], 3);
-        assert_eq!(map.fields[&Field::Remark], 2);
-        assert_eq!(map.fields[&Field::HoldType], 1);
+        assert_eq!(
+            map.fields,
+            BTreeMap::from([(Field::LineId, 3), (Field::Remark, 2), (Field::HoldType, 1)])
+        );
         assert_eq!(map.extras, vec![extra(0, "Area")]);
         assert!(map.missing_required().is_empty());
     }
@@ -387,20 +457,23 @@ mod tests {
     #[test]
     fn saved_entry_wins_over_an_alias() {
         let saved = SavedMapping {
-            headers: BTreeMap::from([("why".to_string(), Field::Remark)]),
+            columns: vec![col("why", 0, Some(Field::Remark))],
         };
         let map = ColumnMap::auto_with(
             &headers(&["line_id", "hold_remark", "Why", "hold_type"]),
             &saved,
         );
-        assert_eq!(map.fields[&Field::Remark], 2);
+        assert_eq!(
+            map.fields,
+            BTreeMap::from([(Field::LineId, 0), (Field::Remark, 2), (Field::HoldType, 3)])
+        );
         assert_eq!(map.extras, vec![extra(1, "hold_remark")]);
     }
 
     #[test]
     fn saved_header_the_file_lacks_is_ignored() {
         let saved = SavedMapping {
-            headers: BTreeMap::from([("nothing_here".to_string(), Field::Remark)]),
+            columns: vec![col("nothing_here", 0, Some(Field::Remark))],
         };
         let h = headers(&["line_id", "hold_remark", "hold_type"]);
         assert_eq!(ColumnMap::auto_with(&h, &saved), ColumnMap::auto(&h));
@@ -416,7 +489,104 @@ mod tests {
         let map = ColumnMap::from_fields(&file_a(), fields);
         assert!(!map.fields.contains_key(&Field::Role));
         assert_eq!(map.fields.len(), 3);
-        assert!(map.to_saved(&file_a()).headers.len() == 3);
+        assert!(map.to_saved(&file_a()).columns.len() == 3);
+    }
+
+    fn round_trip(h: &[String], fields: BTreeMap<Field, usize>) -> (ColumnMap, ColumnMap) {
+        let user = ColumnMap::from_fields(h, fields);
+        let again = ColumnMap::auto_with(h, &user.to_saved(h));
+        (user, again)
+    }
+
+    #[test]
+    fn repeated_date_headers_survive_a_round_trip() {
+        let h = headers(&["Line", "Why", "Kind", "Date", "Date"]);
+        let mut fields = hand_fields();
+        fields.insert(Field::Created, 3);
+        fields.insert(Field::ReleaseDate, 4);
+        let (user, again) = round_trip(&h, fields);
+        assert_eq!(again.fields, user.fields);
+        assert_eq!(again.extras, user.extras);
+    }
+
+    #[test]
+    fn repeated_size_headers_survive_a_round_trip() {
+        let h = headers(&["Line", "Why", "Kind", "Size", "Size"]);
+        let mut fields = hand_fields();
+        fields.insert(Field::ModelSize, 3);
+        fields.insert(Field::LdtSize, 4);
+        let (user, again) = round_trip(&h, fields);
+        assert_eq!(again.fields, user.fields);
+        assert_eq!(again.extras, user.extras);
+    }
+
+    #[test]
+    fn repeated_headers_apply_by_occurrence_in_a_reordered_file() {
+        let h = headers(&["Line", "Why", "Kind", "Date", "Date"]);
+        let mut fields = hand_fields();
+        fields.insert(Field::Created, 3);
+        fields.insert(Field::ReleaseDate, 4);
+        let saved = ColumnMap::from_fields(&h, fields).to_saved(&h);
+        let map = ColumnMap::auto_with(&headers(&["Date", "Kind", "Line", "Date", "Why"]), &saved);
+        assert_eq!(
+            map.fields,
+            BTreeMap::from([
+                (Field::Created, 0),
+                (Field::HoldType, 1),
+                (Field::LineId, 2),
+                (Field::ReleaseDate, 3),
+                (Field::Remark, 4),
+            ])
+        );
+        assert!(map.extras.is_empty());
+    }
+
+    #[test]
+    fn blank_headers_are_never_saved_or_matched() {
+        let h = headers(&["Line", "", "Kind"]);
+        let fields = BTreeMap::from([(Field::LineId, 0), (Field::Remark, 1), (Field::HoldType, 2)]);
+        let saved = ColumnMap::from_fields(&h, fields).to_saved(&h);
+        assert!(saved.columns.iter().all(|c| !c.key.is_empty()));
+        let map = ColumnMap::auto_with(
+            &headers(&["line_id", "hold_remark", "hold_type", "Area", ""]),
+            &saved,
+        );
+        assert_eq!(
+            map.fields,
+            BTreeMap::from([(Field::LineId, 0), (Field::Remark, 1), (Field::HoldType, 2)])
+        );
+        assert_eq!(map.extras, vec![extra(3, "Area")]);
+    }
+
+    #[test]
+    fn a_column_left_unmapped_on_purpose_is_remembered() {
+        let h = headers(&["line_id", "hold_remark", "hold_type", "name"]);
+        let fields = BTreeMap::from([(Field::LineId, 0), (Field::Remark, 1), (Field::HoldType, 2)]);
+        let saved = ColumnMap::from_fields(&h, fields).to_saved(&h);
+        assert!(saved.columns.contains(&col("name", 0, None)));
+        let map = ColumnMap::auto_with(
+            &headers(&["name", "hold_type", "hold_remark", "line_id"]),
+            &saved,
+        );
+        assert_eq!(
+            map.fields,
+            BTreeMap::from([(Field::LineId, 3), (Field::Remark, 2), (Field::HoldType, 1)])
+        );
+        assert_eq!(map.extras, vec![extra(0, "name")]);
+    }
+
+    #[test]
+    fn saved_mapping_json_shape_and_round_trip() {
+        let saved = SavedMapping {
+            columns: vec![col("why", 0, Some(Field::Remark)), col("name", 0, None)],
+        };
+        let json = serde_json::to_string(&saved).unwrap();
+        assert_eq!(
+            json,
+            r#"{"columns":[{"key":"why","occurrence":0,"field":"Remark"},{"key":"name","occurrence":0,"field":null}]}"#
+        );
+        let back: SavedMapping = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, saved);
     }
 
     #[test]
