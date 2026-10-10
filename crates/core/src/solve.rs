@@ -42,6 +42,8 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
     let mut node_index: HashMap<String, usize> = HashMap::new();
     let mut node_lines: Vec<Vec<usize>> = Vec::new();
 
+    // The original tool iterates JavaScript object keys, where integer-like keys sort first,
+    // so a purely numeric line ID could order differently there.
     let mut line_ids: Vec<String> = Vec::new();
     let mut line_index: HashMap<String, usize> = HashMap::new();
     let mut line_nodes: Vec<Vec<usize>> = Vec::new();
@@ -95,7 +97,8 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
 
     while steps.len() < limit {
         let mut best: Option<usize> = None;
-        let mut best_score = 0.0_f64;
+        let mut best_gain = 0usize;
+        let mut best_partial = 0.0_f64;
         for (node, lines) in node_lines.iter().enumerate() {
             if solved[node] {
                 continue;
@@ -112,10 +115,11 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
                     partial += 1.0 / remaining[line] as f64;
                 }
             }
-            let score = gain as f64 * 1000.0 + partial;
-            // Strictly greater: on a tie the earlier blocker keeps the lead.
-            if score > best_score {
-                best_score = score;
+            // Most lines freed first, then most partial progress. Strictly greater: on a tie the
+            // earlier blocker keeps the lead, and a blocker with neither is never chosen.
+            if gain > best_gain || (gain == best_gain && partial > best_partial) {
+                best_gain = gain;
+                best_partial = partial;
                 best = Some(node);
             }
         }
@@ -241,5 +245,20 @@ mod tests {
         let plan = solve_plan(&sample(), &spec, None);
         assert!(plan.nodes.is_empty());
         assert!(plan.steps.is_empty());
+    }
+
+    #[test]
+    fn lines_freed_outrank_partial_progress_on_very_large_selections() {
+        let mut holds = Vec::new();
+        for i in 0..2100 {
+            let line = format!("L{i}");
+            holds.push(hold(&line, "Civil", "MISC.", "Pending 538-PR-100", 1));
+            holds.push(hold(&line, "Civil", "MISC.", "Pending 538-PR-200", 1));
+        }
+        holds.push(hold("SOLO-LINE", "Civil", "MISC.", "Pending 538-PR-300", 1));
+        let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot());
+
+        let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
+        assert_eq!(brief(&plan), vec![("Civil|538-PR-300", 1, 1)]);
     }
 }
