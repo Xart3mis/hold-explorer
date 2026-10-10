@@ -2,6 +2,8 @@
 // copied without change. Used only by crates/cli/tests/parity.rs.
 // Input:  path to a JSON array of {l, n, r, m, t, d} (open holds, file order).
 // Output: JSON on stdout.
+// The test, not this file, does the row normalization: it trims the line ID and sends
+// `Unspecified` for a blank discipline. Group order, ages, and the median are not compared.
 import { readFileSync } from 'node:fs';
 
 var R = JSON.parse(readFileSync(process.argv[2], 'utf8'));

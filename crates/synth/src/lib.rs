@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Seeded generator of synthetic PlantIM-shaped hold exports.
 //!
 //! Reproduces the quirks of the real export: blank disciplines, remarks with
