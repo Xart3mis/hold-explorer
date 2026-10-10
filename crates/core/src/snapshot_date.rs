@@ -7,6 +7,7 @@ use chrono::{Datelike, Days, NaiveDate, NaiveDateTime};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::load::INFO_REPORT_DATE;
 use crate::model::Hold;
 
 const MONTHS: [&str; 12] = [
@@ -235,7 +236,10 @@ pub fn snapshot_date(
     holds: &[Hold],
     file_modified: Option<NaiveDateTime>,
 ) -> Option<SnapshotDate> {
-    if let Some(at) = info.get("Report Date").and_then(|v| parse_report_date(v)) {
+    if let Some(at) = info
+        .get(INFO_REPORT_DATE)
+        .and_then(|v| parse_report_date(v))
+    {
         return Some(SnapshotDate {
             at,
             source: SnapshotSource::InfoSheet,

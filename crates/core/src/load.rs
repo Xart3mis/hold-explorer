@@ -19,6 +19,17 @@ use crate::snapshot_date::{parse_report_date, snapshot_date, SnapshotDate};
 use crate::table::RawTable;
 use crate::warning::{ImportWarning, WarningKind};
 
+/// Key of the project number in the info sheet.
+pub const INFO_PROJECT_NO: &str = "Project No.";
+/// Key of the report date in the info sheet.
+pub const INFO_REPORT_DATE: &str = "Report Date";
+
+fn project_no_of(info: &BTreeMap<String, String>) -> Option<&str> {
+    info.get(INFO_PROJECT_NO)
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+}
+
 /// A file read but not yet parsed into holds: what the mapping screen shows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Opened {
@@ -44,6 +55,11 @@ pub struct Opened {
 }
 
 impl Opened {
+    /// The trimmed project number of the information sheet; `None` when absent or blank.
+    pub fn project_no(&self) -> Option<&str> {
+        project_no_of(&self.info)
+    }
+
     /// The first `rows` data rows as display text, one string per header.
     pub fn preview(&self, rows: usize) -> Vec<Vec<String>> {
         self.table
@@ -79,6 +95,13 @@ pub struct Loaded {
     pub parsed: Parsed,
     /// `None` when neither the file nor its name nor its timestamps give a date.
     pub snapshot: Option<SnapshotDate>,
+}
+
+impl Loaded {
+    /// The trimmed project number of the information sheet; `None` when absent or blank.
+    pub fn project_no(&self) -> Option<&str> {
+        project_no_of(&self.info)
+    }
 }
 
 /// Reads the file, choosing the data sheet of a workbook itself (the sheet named `data`, else
@@ -142,7 +165,7 @@ pub fn parse_opened(opened: &Opened, map: &ColumnMap) -> Result<Loaded, ImportEr
     }
     if let Some(text) = opened
         .info
-        .get("Report Date")
+        .get(INFO_REPORT_DATE)
         .filter(|t| !t.trim().is_empty())
     {
         if parse_report_date(text).is_none() {
@@ -284,6 +307,23 @@ mod tests {
         assert_eq!(preview.len(), 3);
         assert!(preview.iter().all(|r| r.len() == 14));
         assert!(a.preview(0).is_empty());
+    }
+
+    #[test]
+    fn project_no_is_trimmed_and_blank_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut opened = open_file(&synth_workbook(dir.path(), "a.xlsx", 1)).unwrap();
+        let mut loaded = load_file(&synth_workbook(dir.path(), "b.xlsx", 1)).unwrap();
+        opened.info = BTreeMap::from([(INFO_PROJECT_NO.to_string(), " 0000-TEST ".to_string())]);
+        loaded.info = opened.info.clone();
+        assert_eq!(opened.project_no(), Some("0000-TEST"));
+        assert_eq!(loaded.project_no(), Some("0000-TEST"));
+        opened
+            .info
+            .insert(INFO_PROJECT_NO.to_string(), "  ".to_string());
+        loaded.info.clear();
+        assert_eq!(opened.project_no(), None);
+        assert_eq!(loaded.project_no(), None);
     }
 
     #[test]

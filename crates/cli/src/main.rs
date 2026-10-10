@@ -59,7 +59,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             let snapshot = loaded
                 .snapshot
                 .ok_or("Could not work out the snapshot date. Rename the file to include it, for example holds_2026-10-07.xlsx.")?;
-            let project = loaded.info.get("Project No.").cloned();
+            let project = loaded.info.get(hx_core::load::INFO_PROJECT_NO).cloned();
             let limited = loaded.parsed.limited;
             let skipped = loaded.parsed.skipped.len();
             let warnings = loaded.parsed.warnings.len();
