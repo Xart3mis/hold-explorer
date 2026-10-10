@@ -98,7 +98,7 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
     while steps.len() < limit {
         let mut best: Option<usize> = None;
         let mut best_gain = 0usize;
-        let mut best_partial = 0.0_f64;
+        let mut best_score = 0.0_f64;
         for (node, lines) in node_lines.iter().enumerate() {
             if solved[node] {
                 continue;
@@ -115,11 +115,13 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
                     partial += 1.0 / remaining[line] as f64;
                 }
             }
-            // Most lines freed first, then most partial progress. Strictly greater: on a tie the
+            // Most lines freed first, then the original tool's score `gain * 1000 + partial`,
+            // which absorbs last-bit differences in `partial`. Strictly greater: on a tie the
             // earlier blocker keeps the lead, and a blocker with neither is never chosen.
-            if gain > best_gain || (gain == best_gain && partial > best_partial) {
+            let score = gain as f64 * 1000.0 + partial;
+            if gain > best_gain || (gain == best_gain && score > best_score) {
                 best_gain = gain;
-                best_partial = partial;
+                best_score = score;
                 best = Some(node);
             }
         }
@@ -260,5 +262,45 @@ mod tests {
 
         let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
         assert_eq!(brief(&plan), vec![("Civil|538-PR-300", 1, 1)]);
+    }
+
+    /// Blocker 100 is on four lines needing 2, 2, 3 and 7 blockers; blocker 101 is on four lines
+    /// needing 7, 3, 2 and 2. Each also has a line of its own. The two partial sums differ by
+    /// one rounding step, which the original's `gain * 1000 + partial` absorbs.
+    #[test]
+    fn partial_sums_that_differ_by_rounding_tie_like_the_original() {
+        let mut holds = Vec::new();
+        let mut next = 102;
+        let mut add_line = |holds: &mut Vec<_>, line: String, blocker: u32, total: u32| {
+            holds.push(hold(
+                &line,
+                "Civil",
+                "MISC.",
+                &format!("Pending 538-PR-{blocker}"),
+                1,
+            ));
+            for _ in 1..total {
+                holds.push(hold(
+                    &line,
+                    "Civil",
+                    "MISC.",
+                    &format!("Pending 538-PR-{next}"),
+                    1,
+                ));
+                next += 1;
+            }
+        };
+        for (i, total) in [2, 2, 3, 7].into_iter().enumerate() {
+            add_line(&mut holds, format!("A{i}"), 100, total);
+        }
+        add_line(&mut holds, "A-SOLO".into(), 100, 1);
+        for (i, total) in [7, 3, 2, 2].into_iter().enumerate() {
+            add_line(&mut holds, format!("B{i}"), 101, total);
+        }
+        add_line(&mut holds, "B-SOLO".into(), 101, 1);
+        let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot());
+
+        let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
+        assert_eq!(brief(&plan), vec![("Civil|538-PR-100", 1, 1)]);
     }
 }

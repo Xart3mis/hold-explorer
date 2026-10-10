@@ -6,8 +6,10 @@ use std::process::Command;
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
+use hx_core::model::Hold;
 use hx_core::query::{group_by, lines, summary, LineSort};
 use hx_core::rules::RuleSet;
+use hx_core::snapshot_date::parse_report_date;
 use hx_core::solve::solve_plan;
 use hx_synth::{generate, write_workbook, SynthConfig, SynthRow};
 use serde_json::{json, Map, Value};
@@ -262,4 +264,84 @@ fn classifies_a_remark_corpus_like_the_html_tool() {
             "remark {remark:?}"
         );
     }
+}
+
+/// Blocker 100 is on four lines needing 2, 2, 3 and 7 blockers in total; blocker 101 is on four
+/// lines needing 7, 3, 2 and 2. Each also has a line of its own. Their partial sums differ by one
+/// rounding step, so the original and a plain comparison of the sums choose different first steps.
+fn rounding_tie_remarks() -> Vec<(String, String)> {
+    let mut rows = Vec::new();
+    let mut next = 102;
+    let mut add_line = |line: String, blocker: u32, total: u32| {
+        rows.push((line.clone(), format!("Pending 538-PR-{blocker}")));
+        for _ in 1..total {
+            rows.push((line.clone(), format!("Pending 538-PR-{next}")));
+            next += 1;
+        }
+    };
+    for (i, total) in [2, 2, 3, 7].into_iter().enumerate() {
+        add_line(format!("A{i}"), 100, total);
+    }
+    add_line("A-SOLO".into(), 100, 1);
+    for (i, total) in [7, 3, 2, 2].into_iter().enumerate() {
+        add_line(format!("B{i}"), 101, total);
+    }
+    add_line("B-SOLO".into(), 101, 1);
+    rows
+}
+
+#[test]
+fn solve_tie_break_matches_the_html_tool_when_partial_sums_differ_by_rounding() {
+    let rows = rounding_tie_remarks();
+    let input: Vec<Value> = rows
+        .iter()
+        .map(|(line, remark)| {
+            json!({
+                "l": line,
+                "n": "Engineer 01",
+                "r": "Designer",
+                "m": remark,
+                "t": "MISC.",
+                "d": "Civil",
+            })
+        })
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("tie.json");
+    std::fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+
+    let output = Command::new("node")
+        .arg(REFERENCE)
+        .arg(&path)
+        .output()
+        .expect("the parity test needs Node.js on the PATH");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let legacy: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    let holds: Vec<Hold> = rows
+        .iter()
+        .map(|(line, remark)| Hold {
+            line_id: line.clone(),
+            name: "Engineer 01".to_string(),
+            role: "Designer".to_string(),
+            remark: remark.clone(),
+            hold_type: "MISC.".to_string(),
+            discipline: "Civil".to_string(),
+            ..Default::default()
+        })
+        .collect();
+    let snapshot = parse_report_date("2026-10-01 00:00:00").unwrap();
+    let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot);
+
+    let plan: Vec<Value> = solve_plan(&ds, &FilterSpec::default(), Some(20))
+        .steps
+        .iter()
+        .map(|step| json!({ "k": step.key, "gain": step.gain, "cum": step.cumulative }))
+        .collect();
+    assert_eq!(legacy["plan"], json!(plan));
+    assert_eq!(legacy["plan"][0]["k"], json!("Civil|538-PR-100"));
 }
