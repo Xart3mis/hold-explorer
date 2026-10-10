@@ -125,8 +125,20 @@ mod tests {
     #[test]
     fn raw_export_maps_every_column() {
         let map = ColumnMap::auto(&headers(&[
-            "id", "line_id", "name", "role", "hold_remark", "hold_type", "discipline", "date",
-            "released", "release_remark", "release_date", "model_size", "ldt_size", "stress_calc",
+            "id",
+            "line_id",
+            "name",
+            "role",
+            "hold_remark",
+            "hold_type",
+            "discipline",
+            "date",
+            "released",
+            "release_remark",
+            "release_date",
+            "model_size",
+            "ldt_size",
+            "stress_calc",
         ]));
         assert_eq!(map.fields.len(), 14);
         assert_eq!(map.fields[&Field::LineId], 1);
@@ -139,7 +151,12 @@ mod tests {
     #[test]
     fn trimmed_export_is_limited() {
         let map = ColumnMap::auto(&headers(&[
-            "line_id", "name", "role", "hold_remark", "hold_type", "discipline",
+            "line_id",
+            "name",
+            "role",
+            "hold_remark",
+            "hold_type",
+            "discipline",
         ]));
         assert!(map.missing_required().is_empty());
         assert!(map.is_limited());

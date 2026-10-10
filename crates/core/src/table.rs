@@ -132,18 +132,38 @@ mod tests {
     fn datetimes_parse_from_text_formats() {
         let expected = NaiveDate::from_ymd_opt(2026, 9, 2).unwrap();
         assert_eq!(
-            text("2026-09-02 08:00:00.123").as_datetime().unwrap().unwrap().date(),
+            text("2026-09-02 08:00:00.123")
+                .as_datetime()
+                .unwrap()
+                .unwrap()
+                .date(),
             expected
         );
-        assert_eq!(text("2026-09-02").as_datetime().unwrap().unwrap().date(), expected);
-        assert_eq!(text("02/09/2026").as_datetime().unwrap().unwrap().date(), expected);
-        assert_eq!(text("09/02/2026 01:16 PM").as_datetime().unwrap().unwrap().date(), expected);
+        assert_eq!(
+            text("2026-09-02").as_datetime().unwrap().unwrap().date(),
+            expected
+        );
+        assert_eq!(
+            text("02/09/2026").as_datetime().unwrap().unwrap().date(),
+            expected
+        );
+        assert_eq!(
+            text("09/02/2026 01:16 PM")
+                .as_datetime()
+                .unwrap()
+                .unwrap()
+                .date(),
+            expected
+        );
     }
 
     #[test]
     fn blank_datetime_is_none_and_garbage_is_error() {
         assert_eq!(Cell::Empty.as_datetime(), Ok(None));
         assert_eq!(text("  ").as_datetime(), Ok(None));
-        assert_eq!(text("not a date").as_datetime(), Err("not a date".to_string()));
+        assert_eq!(
+            text("not a date").as_datetime(),
+            Err("not a date".to_string())
+        );
     }
 }

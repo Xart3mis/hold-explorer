@@ -18,7 +18,11 @@ pub fn parse_report_date(text: &str) -> Option<NaiveDateTime> {
 }
 
 fn newest_timestamp(holds: &[Hold]) -> Option<NaiveDateTime> {
-    holds.iter().flat_map(|h| [h.created, h.release_date]).flatten().max()
+    holds
+        .iter()
+        .flat_map(|h| [h.created, h.release_date])
+        .flatten()
+        .max()
 }
 
 fn full_date_regex() -> &'static Regex {
@@ -38,9 +42,7 @@ fn month_name_regex() -> &'static Regex {
 
 fn day_month_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(\d{1,2})[-_.](\d{1,2})").expect("pattern is a valid literal")
-    })
+    RE.get_or_init(|| Regex::new(r"(\d{1,2})[-_.](\d{1,2})").expect("pattern is a valid literal"))
 }
 
 fn number(text: &str) -> Option<u32> {
@@ -60,10 +62,9 @@ fn date_from_name(file_name: &str, newest: Option<NaiveDateTime>) -> Option<Naiv
         let name = c[2].to_lowercase();
         let month = MONTHS.iter().position(|m| *m == name)? as u32 + 1;
         (number(&c[1])?, month)
-    } else if let Some(c) = day_month_regex().captures(file_name) {
-        (number(&c[1])?, number(&c[2])?)
     } else {
-        return None;
+        let c = day_month_regex().captures(file_name)?;
+        (number(&c[1])?, number(&c[2])?)
     };
 
     let newest = newest?.date();
@@ -93,8 +94,6 @@ pub fn snapshot_date(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
-    use chrono::NaiveDateTime;
     use crate::model::Hold;
 
     fn at(s: &str) -> NaiveDateTime {
@@ -103,7 +102,10 @@ mod tests {
 
     fn holds_with_newest(s: &str) -> Vec<Hold> {
         vec![
-            Hold { created: Some(at("2026-02-01 00:00:00")), ..Default::default() },
+            Hold {
+                created: Some(at("2026-02-01 00:00:00")),
+                ..Default::default()
+            },
             Hold {
                 created: Some(at("2026-03-01 00:00:00")),
                 release_date: Some(at(s)),
@@ -186,6 +188,9 @@ mod tests {
 
     #[test]
     fn nothing_to_go_on_gives_none() {
-        assert_eq!(snapshot_date(&BTreeMap::new(), "export.xlsx", &[], None), None);
+        assert_eq!(
+            snapshot_date(&BTreeMap::new(), "export.xlsx", &[], None),
+            None
+        );
     }
 }

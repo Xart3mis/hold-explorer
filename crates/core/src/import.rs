@@ -54,7 +54,10 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
 
         let line_id = clean_text(&cell(row, Field::LineId).as_text());
         if line_id.is_empty() {
-            skipped.push(SkippedRow { row_number, reason: "blank line_id".to_string() });
+            skipped.push(SkippedRow {
+                row_number,
+                reason: "blank line_id".to_string(),
+            });
             continue;
         }
         let created = match cell(row, Field::Created).as_datetime() {
@@ -100,7 +103,11 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
         });
     }
 
-    Ok(Parsed { holds, skipped, limited: map.is_limited() })
+    Ok(Parsed {
+        holds,
+        skipped,
+        limited: map.is_limited(),
+    })
 }
 
 #[cfg(test)]
@@ -113,40 +120,97 @@ mod tests {
     }
 
     fn at(y: i32, m: u32, d: u32, h: u32) -> Cell {
-        Cell::DateTime(NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(h, 0, 0).unwrap())
+        Cell::DateTime(
+            NaiveDate::from_ymd_opt(y, m, d)
+                .unwrap()
+                .and_hms_opt(h, 0, 0)
+                .unwrap(),
+        )
     }
 
     fn table() -> RawTable {
         let headers = [
-            "id", "line_id", "name", "role", "hold_remark", "hold_type", "discipline", "date",
-            "released", "release_date", "model_size", "ldt_size", "stress_calc", "Area",
+            "id",
+            "line_id",
+            "name",
+            "role",
+            "hold_remark",
+            "hold_type",
+            "discipline",
+            "date",
+            "released",
+            "release_date",
+            "model_size",
+            "ldt_size",
+            "stress_calc",
+            "Area",
         ];
         RawTable {
             headers: headers.iter().map(|s| s.to_string()).collect(),
             rows: vec![
                 vec![
-                    Cell::Number(1.0), text(" L-1 "), text("Engineer 01"), text("Designer"),
-                    text("FIV/AIV REPORT\n"), text("MISC."), Cell::Empty, at(2026, 9, 1, 10),
-                    Cell::Bool(false), Cell::Empty, text("4"), Cell::Number(0.0), text("NR"),
+                    Cell::Number(1.0),
+                    text(" L-1 "),
+                    text("Engineer 01"),
+                    text("Designer"),
+                    text("FIV/AIV REPORT\n"),
+                    text("MISC."),
+                    Cell::Empty,
+                    at(2026, 9, 1, 10),
+                    Cell::Bool(false),
+                    Cell::Empty,
+                    text("4"),
+                    Cell::Number(0.0),
+                    text("NR"),
                     text("North"),
                 ],
                 vec![
-                    Cell::Number(2.0), Cell::Empty, text("Engineer 02"), text("Designer"),
-                    text("x"), text("MISC."), text("Civil"), at(2026, 9, 1, 11),
-                    Cell::Bool(false), Cell::Empty, Cell::Empty, Cell::Empty, Cell::Empty,
+                    Cell::Number(2.0),
+                    Cell::Empty,
+                    text("Engineer 02"),
+                    text("Designer"),
+                    text("x"),
+                    text("MISC."),
+                    text("Civil"),
+                    at(2026, 9, 1, 11),
+                    Cell::Bool(false),
+                    Cell::Empty,
+                    Cell::Empty,
+                    Cell::Empty,
+                    Cell::Empty,
                     Cell::Empty,
                 ],
                 vec![
-                    Cell::Number(3.0), text("L-2"), text("Engineer 02"), text("Designer"),
-                    text("x"), text("MISC."), text("Civil"), text("not a date"),
-                    Cell::Bool(false), Cell::Empty, Cell::Empty, Cell::Empty, Cell::Empty,
+                    Cell::Number(3.0),
+                    text("L-2"),
+                    text("Engineer 02"),
+                    text("Designer"),
+                    text("x"),
+                    text("MISC."),
+                    text("Civil"),
+                    text("not a date"),
+                    Cell::Bool(false),
+                    Cell::Empty,
+                    Cell::Empty,
+                    Cell::Empty,
+                    Cell::Empty,
                     Cell::Empty,
                 ],
                 vec![Cell::Empty; 14],
                 vec![
-                    Cell::Number(4.0), text("L-3"), Cell::Empty, Cell::Empty, Cell::Empty,
-                    text("P&ID"), text("Civil"), text("2026-09-02 08:00:00.123"), text("True"),
-                    at(2026, 9, 20, 9), Cell::Number(6.0), Cell::Number(6.0), Cell::Empty,
+                    Cell::Number(4.0),
+                    text("L-3"),
+                    Cell::Empty,
+                    Cell::Empty,
+                    Cell::Empty,
+                    text("P&ID"),
+                    text("Civil"),
+                    text("2026-09-02 08:00:00.123"),
+                    text("True"),
+                    at(2026, 9, 20, 9),
+                    Cell::Number(6.0),
+                    Cell::Number(6.0),
+                    Cell::Empty,
                     Cell::Empty,
                 ],
             ],
@@ -204,7 +268,10 @@ mod tests {
             rows: vec![vec![text("L-1"), text("MISC.")]],
         };
         let err = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap_err();
-        assert_eq!(err, ImportError::MissingColumns(vec!["hold_remark".to_string()]));
+        assert_eq!(
+            err,
+            ImportError::MissingColumns(vec!["hold_remark".to_string()])
+        );
     }
 
     #[test]

@@ -10,7 +10,10 @@ pub const DASH: &str = "—";
 /// every run of whitespace (line breaks included) to one space, and trims.
 pub fn clean_text(input: &str) -> String {
     let without_escape = input.replace("_x000D_", " ").replace("_x000d_", " ");
-    without_escape.split_whitespace().collect::<Vec<_>>().join(" ")
+    without_escape
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Grouping key: cleaned and upper-cased, so remarks that differ only in case
