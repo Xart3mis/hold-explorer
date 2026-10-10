@@ -7,7 +7,7 @@ use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
 use hx_core::model::Hold;
-use hx_core::query::{group_by, lines, summary, LineSort};
+use hx_core::query::{group_by, lines, summary, LineQuery, LineSort};
 use hx_core::rules::RuleSet;
 use hx_core::snapshot_date::parse_report_date;
 use hx_core::solve::solve_plan;
@@ -38,7 +38,7 @@ fn legacy_input(rows: &[SynthRow]) -> Value {
     )
 }
 
-fn counts(ds: &Dataset, dim: Dim) -> Value {
+fn counts(ds: &Dataset, dim: &Dim) -> Value {
     let mut map = Map::new();
     for group in group_by(ds, &FilterSpec::default(), dim) {
         map.insert(group.key, json!([group.holds, group.lines]));
@@ -71,7 +71,7 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
     let loaded = load_file(&workbook).unwrap();
     let ds = Dataset::build(
         loaded.parsed.holds,
-        &RuleSet::builtin(),
+        RuleSet::builtin(),
         loaded.snapshot.unwrap().at,
     );
     let open = FilterSpec::default();
@@ -87,29 +87,36 @@ fn check(seed: u64, line_count: usize, hold_count: usize) {
 
     assert_eq!(
         legacy["by"]["d"],
-        counts(&ds, Dim::Discipline),
+        counts(&ds, &Dim::Discipline),
         "seed {seed}: by discipline"
     );
     assert_eq!(
         legacy["by"]["t"],
-        counts(&ds, Dim::HoldType),
+        counts(&ds, &Dim::HoldType),
         "seed {seed}: by hold type"
     );
     assert_eq!(
         legacy["by"]["r"],
-        counts(&ds, Dim::Role),
+        counts(&ds, &Dim::Role),
         "seed {seed}: by role"
     );
     assert_eq!(
         legacy["by"]["z"],
-        counts(&ds, Dim::BlockerType),
+        counts(&ds, &Dim::BlockerType),
         "seed {seed}: by blocker type"
     );
 
-    let easiest: Vec<String> = lines(&ds, &open, LineSort::Easiest)
-        .into_iter()
-        .map(|l| l.line_id)
-        .collect();
+    let easiest: Vec<String> = lines(
+        &ds,
+        &open,
+        &LineQuery {
+            sort: LineSort::Easiest,
+            ..Default::default()
+        },
+    )
+    .into_iter()
+    .map(|l| l.line_id)
+    .collect();
     assert_eq!(
         legacy["easy"],
         json!(easiest),
@@ -340,7 +347,7 @@ fn solve_tie_break_matches_the_html_tool_when_partial_sums_differ_by_rounding() 
         })
         .collect();
     let snapshot = parse_report_date("2026-10-01 00:00:00").unwrap();
-    let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot);
+    let ds = Dataset::build(holds, RuleSet::builtin(), snapshot);
 
     let plan: Vec<Value> = solve_plan(&ds, &FilterSpec::default(), Some(20))
         .steps

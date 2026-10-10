@@ -3,7 +3,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::dataset::{Dataset, Row};
 use crate::filter::{Dim, FilterSpec};
@@ -12,17 +12,37 @@ fn filtered<'a>(ds: &'a Dataset, spec: &'a FilterSpec) -> impl Iterator<Item = &
     ds.rows.iter().filter(move |row| spec.matches(row))
 }
 
+/// Headline numbers for a selection of holds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Summary {
+    /// Number of selected holds.
     pub holds: usize,
+    /// Number of distinct lines among the selected holds.
     pub lines: usize,
+    /// Number of lines that have exactly one selected hold.
     pub single_hold_lines: usize,
+    /// Lower median of the ages of the selected open holds, in days (the lower of the two middle
+    /// values when their count is even); `None` when no selected open hold has a creation date.
     pub median_age_days: Option<i64>,
+    /// Lower median of the durations of the selected released holds, in days; `None` when no
+    /// selected released hold has both a creation and a release date.
+    pub median_duration_days: Option<i64>,
 }
 
+fn lower_median(values: &mut [i64]) -> Option<i64> {
+    values.sort_unstable();
+    if values.is_empty() {
+        None
+    } else {
+        Some(values[(values.len() - 1) / 2])
+    }
+}
+
+/// Counts the holds and lines selected by `spec` and gives the median age and duration.
 pub fn summary(ds: &Dataset, spec: &FilterSpec) -> Summary {
     let mut per_line: HashMap<&str, usize> = HashMap::new();
     let mut ages: Vec<i64> = Vec::new();
+    let mut durations: Vec<i64> = Vec::new();
     let mut holds = 0;
     for row in filtered(ds, spec) {
         holds += 1;
@@ -30,38 +50,62 @@ pub fn summary(ds: &Dataset, spec: &FilterSpec) -> Summary {
         if let Some(age) = row.age_days {
             ages.push(age);
         }
+        if let Some(duration) = row.duration_days {
+            durations.push(duration);
+        }
     }
-    ages.sort_unstable();
     Summary {
         holds,
         lines: per_line.len(),
         single_hold_lines: per_line.values().filter(|n| **n == 1).count(),
-        median_age_days: if ages.is_empty() {
-            None
-        } else {
-            Some(ages[(ages.len() - 1) / 2])
-        },
+        median_age_days: lower_median(&mut ages),
+        median_duration_days: lower_median(&mut durations),
     }
 }
 
+/// One value of a dimension and how many holds and lines have it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Group {
+    /// The dimension value, compared exactly (case-sensitive); empty when the hold has none.
     pub key: String,
+    /// What to show for this group: `(blank)` for an empty key, the original remark of the
+    /// group's first hold for a remark group, `<discipline> / <item>` for a blocker group,
+    /// and the key otherwise.
+    pub label: String,
+    /// Number of selected holds with this value.
     pub holds: usize,
+    /// Number of distinct lines among those holds.
     pub lines: usize,
 }
 
-pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: Dim) -> Vec<Group> {
-    let mut groups: BTreeMap<String, (usize, BTreeSet<&str>)> = BTreeMap::new();
+fn label_for(dim: &Dim, key: &str, row: &Row) -> String {
+    if key.is_empty() {
+        return "(blank)".to_string();
+    }
+    match dim {
+        Dim::Remark => row.hold.remark.clone(),
+        Dim::Blocker => format!("{} / {}", row.hold.discipline, row.blocker.item),
+        _ => key.to_string(),
+    }
+}
+
+/// Groups the selected holds by `dim`. Groups are ordered by hold count, largest first, then by
+/// key in byte order. Grouping is case-sensitive.
+pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: &Dim) -> Vec<Group> {
+    let mut groups: BTreeMap<String, (String, usize, BTreeSet<&str>)> = BTreeMap::new();
     for row in filtered(ds, spec) {
-        let entry = groups.entry(dim.value(row)).or_default();
-        entry.0 += 1;
-        entry.1.insert(row.hold.line_id.as_str());
+        let key = dim.value(row);
+        let entry = groups
+            .entry(key)
+            .or_insert_with_key(|key| (label_for(dim, key, row), 0, BTreeSet::new()));
+        entry.1 += 1;
+        entry.2.insert(row.hold.line_id.as_str());
     }
     let mut out: Vec<Group> = groups
         .into_iter()
-        .map(|(key, (holds, lines))| Group {
+        .map(|(key, (label, holds, lines))| Group {
             key,
+            label,
             holds,
             lines: lines.len(),
         })
@@ -70,23 +114,29 @@ pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: Dim) -> Vec<Group> {
     out
 }
 
+/// Hold counts for every pair of values of two dimensions.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Matrix {
+    /// Row dimension values, ordered as `group_by` orders groups.
     pub rows: Vec<String>,
+    /// Display label of each entry of `rows`.
+    pub row_labels: Vec<String>,
+    /// Column dimension values, ordered as `group_by` orders groups.
     pub cols: Vec<String>,
+    /// Display label of each entry of `cols`.
+    pub col_labels: Vec<String>,
     /// `cells[r][c]` is the number of holds with row value `rows[r]` and column value `cols[c]`.
     pub cells: Vec<Vec<usize>>,
 }
 
-pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: Dim, col_dim: Dim) -> Matrix {
-    let rows: Vec<String> = group_by(ds, spec, row_dim)
-        .into_iter()
-        .map(|g| g.key)
-        .collect();
-    let cols: Vec<String> = group_by(ds, spec, col_dim)
-        .into_iter()
-        .map(|g| g.key)
-        .collect();
+/// Counts the selected holds for each pair of a `row_dim` value and a `col_dim` value.
+pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> Matrix {
+    let row_groups = group_by(ds, spec, row_dim);
+    let col_groups = group_by(ds, spec, col_dim);
+    let (rows, row_labels): (Vec<String>, Vec<String>) =
+        row_groups.into_iter().map(|g| (g.key, g.label)).unzip();
+    let (cols, col_labels): (Vec<String>, Vec<String>) =
+        col_groups.into_iter().map(|g| (g.key, g.label)).unzip();
     let row_index: HashMap<&str, usize> = rows
         .iter()
         .enumerate()
@@ -104,36 +154,118 @@ pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: Dim, col_dim: Dim) -> Ma
         let c = col_index[col_dim.value(row).as_str()];
         cells[r][c] += 1;
     }
-    Matrix { rows, cols, cells }
+    Matrix {
+        rows,
+        row_labels,
+        cols,
+        col_labels,
+        cells,
+    }
 }
 
 /// One line of a view. Sizes, stress calc, and the mismatch flag come from the line's first
 /// hold in the selection, because they are line-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct LineRow {
+    /// The line.
     pub line_id: String,
+    /// Number of selected holds on the line.
     pub holds: usize,
     /// In order of first appearance.
     pub disciplines: Vec<String>,
     /// In order of first appearance.
     pub hold_types: Vec<String>,
-    /// Number of distinct blockers.
+    /// Number of distinct blockers (by discipline and item) among the selected holds.
     pub blockers: usize,
+    /// Greatest age of the line's selected open holds, in days; `None` when none has an age.
     pub oldest_age_days: Option<i64>,
+    /// Model size of the line's first selected hold; `None` when it has none.
     pub model_size: Option<f64>,
+    /// LDT size of the line's first selected hold; `None` when it has none.
     pub ldt_size: Option<f64>,
+    /// Stress calculation of the line's first selected hold.
     pub stress_calc: String,
+    /// Whether the line's first selected hold has differing model and LDT sizes.
     pub size_mismatch: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How `lines` orders its result; ties end in line id order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum LineSort {
     /// Most holds first.
+    #[default]
     HoldsDesc,
-    /// Fewest disciplines, then fewest holds: the lines cheapest to free.
+    /// The lines cheapest to free first: fewest disciplines, then fewest holds, then the name of
+    /// the first-appearing discipline, then line ID.
     Easiest,
-    /// Oldest open hold first.
+    /// Line with the oldest open hold first; lines with no open-hold age come last.
     OldestFirst,
+}
+
+/// Options for `lines`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LineQuery {
+    /// Order of the result.
+    pub sort: LineSort,
+    /// Keep only lines with exactly one hold in the selection.
+    pub single_hold_only: bool,
+}
+
+/// How `holds` orders its result; ties stay in file order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum HoldSort {
+    /// The order of the file.
+    #[default]
+    FileOrder,
+    /// Greatest `Row::days` first; rows without one come last.
+    OldestFirst,
+    /// Line ID ascending, in byte order.
+    LineId,
+}
+
+/// Options for `holds`: the order and the page to return.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HoldQuery {
+    /// Order of the selected holds before the page is cut.
+    pub sort: HoldSort,
+    /// Number of sorted holds to skip. An offset at or past the total gives no rows.
+    pub offset: usize,
+    /// Most rows to return; `None` returns every row from `offset`.
+    pub limit: Option<usize>,
+}
+
+/// One page of the selected holds.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct HoldPage {
+    /// Selected holds before paging.
+    pub total: usize,
+    /// The holds of the page, in the order `HoldQuery::sort` gives.
+    pub rows: Vec<Row>,
+}
+
+/// The page of the selected holds that `query` asks for, with the number of selected holds.
+pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
+    let mut selected: Vec<&Row> = filtered(ds, spec).collect();
+    match query.sort {
+        HoldSort::FileOrder => {}
+        HoldSort::OldestFirst => selected.sort_by(|a, b| match (a.days(), b.days()) {
+            (Some(x), Some(y)) => y.cmp(&x),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        }),
+        HoldSort::LineId => selected.sort_by(|a, b| a.hold.line_id.cmp(&b.hold.line_id)),
+    }
+    let total = selected.len();
+    let rows = selected
+        .into_iter()
+        .skip(query.offset)
+        .take(query.limit.unwrap_or(usize::MAX))
+        .cloned()
+        .collect();
+    HoldPage { total, rows }
 }
 
 fn push_unique(list: &mut Vec<String>, value: &str) {
@@ -142,7 +274,9 @@ fn push_unique(list: &mut Vec<String>, value: &str) {
     }
 }
 
-pub fn lines(ds: &Dataset, spec: &FilterSpec, sort: LineSort) -> Vec<LineRow> {
+/// One row per line that has a selected hold, in the order `query.sort` gives. Disciplines and
+/// hold types are listed in order of first appearance among the selected holds.
+pub fn lines(ds: &Dataset, spec: &FilterSpec, query: &LineQuery) -> Vec<LineRow> {
     let mut index: HashMap<&str, usize> = HashMap::new();
     let mut out: Vec<LineRow> = Vec::new();
     let mut blocker_keys: Vec<Vec<String>> = Vec::new();
@@ -175,7 +309,11 @@ pub fn lines(ds: &Dataset, spec: &FilterSpec, sort: LineSort) -> Vec<LineRow> {
         line.blockers = keys.len();
     }
 
-    match sort {
+    if query.single_hold_only {
+        out.retain(|line| line.holds == 1);
+    }
+
+    match query.sort {
         LineSort::HoldsDesc => {
             out.sort_by(|a, b| {
                 b.holds
@@ -214,6 +352,20 @@ mod tests {
         FilterSpec::default()
     }
 
+    fn sorted(sort: LineSort) -> LineQuery {
+        LineQuery {
+            sort,
+            ..Default::default()
+        }
+    }
+
+    fn all() -> FilterSpec {
+        FilterSpec {
+            status: Status::All,
+            ..Default::default()
+        }
+    }
+
     fn keys(groups: &[Group]) -> Vec<(&str, usize, usize)> {
         groups
             .iter()
@@ -230,7 +382,8 @@ mod tests {
                 holds: 4,
                 lines: 3,
                 single_hold_lines: 2,
-                median_age_days: Some(5)
+                median_age_days: Some(5),
+                median_duration_days: None
             }
         );
     }
@@ -248,14 +401,15 @@ mod tests {
                 holds: 0,
                 lines: 0,
                 single_hold_lines: 0,
-                median_age_days: None
+                median_age_days: None,
+                median_duration_days: None
             }
         );
     }
 
     #[test]
     fn groups_sort_by_holds_then_key() {
-        let groups = group_by(&sample(), &open(), Dim::Discipline);
+        let groups = group_by(&sample(), &open(), &Dim::Discipline);
         assert_eq!(
             keys(&groups),
             vec![("Civil", 2, 2), ("Piping", 1, 1), ("Unspecified", 1, 1)]
@@ -268,13 +422,13 @@ mod tests {
             status: Status::All,
             ..Default::default()
         };
-        let groups = group_by(&sample(), &all, Dim::HoldType);
+        let groups = group_by(&sample(), &all, &Dim::HoldType);
         assert_eq!(keys(&groups), vec![("MISC.", 3, 3), ("P&ID", 2, 2)]);
     }
 
     #[test]
     fn groups_by_blocker_type() {
-        let groups = group_by(&sample(), &open(), Dim::BlockerType);
+        let groups = group_by(&sample(), &open(), &Dim::BlockerType);
         assert_eq!(
             keys(&groups),
             vec![("PR", 2, 2), ("P&ID", 1, 1), ("VENDOR", 1, 1)]
@@ -283,7 +437,7 @@ mod tests {
 
     #[test]
     fn matrix_counts_holds_per_cell() {
-        let m = matrix(&sample(), &open(), Dim::Discipline, Dim::HoldType);
+        let m = matrix(&sample(), &open(), &Dim::Discipline, &Dim::HoldType);
         assert_eq!(m.rows, vec!["Civil", "Piping", "Unspecified"]);
         assert_eq!(m.cols, vec!["MISC.", "P&ID"]);
         assert_eq!(m.cells, vec![vec![2, 0], vec![0, 1], vec![1, 0]]);
@@ -291,7 +445,7 @@ mod tests {
 
     #[test]
     fn line_rows_aggregate_their_holds() {
-        let rows = lines(&sample(), &open(), LineSort::HoldsDesc);
+        let rows = lines(&sample(), &open(), &LineQuery::default());
         let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
         assert_eq!(ids, vec!["L1", "L2", "L4"]);
 
@@ -312,14 +466,14 @@ mod tests {
 
     #[test]
     fn easiest_puts_single_discipline_single_hold_lines_first() {
-        let rows = lines(&sample(), &open(), LineSort::Easiest);
+        let rows = lines(&sample(), &open(), &sorted(LineSort::Easiest));
         let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
         assert_eq!(ids, vec!["L2", "L4", "L1"]);
     }
 
     #[test]
     fn oldest_first() {
-        let rows = lines(&sample(), &open(), LineSort::OldestFirst);
+        let rows = lines(&sample(), &open(), &sorted(LineSort::OldestFirst));
         let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
         assert_eq!(ids, vec!["L1", "L2", "L4"]);
     }
@@ -338,8 +492,152 @@ mod tests {
         let mut ds = sample();
         // L2 has a single open hold; without a creation date it has no age.
         ds.rows[2].age_days = None;
-        let rows = lines(&ds, &open(), LineSort::OldestFirst);
+        let rows = lines(&ds, &open(), &sorted(LineSort::OldestFirst));
         let ids: Vec<&str> = rows.iter().map(|r| r.line_id.as_str()).collect();
         assert_eq!(ids, vec!["L1", "L4", "L2"]);
+    }
+
+    #[test]
+    fn summary_of_all_holds_separates_age_and_duration() {
+        let s = summary(&sample(), &all());
+        assert_eq!(s.median_age_days, Some(5));
+        assert_eq!(s.median_duration_days, Some(30));
+        assert_eq!(summary(&sample(), &open()).median_duration_days, None);
+    }
+
+    fn label_of<'a>(groups: &'a [Group], key: &str) -> &'a str {
+        &groups.iter().find(|g| g.key == key).unwrap().label
+    }
+
+    #[test]
+    fn remark_groups_show_the_cleaned_remark() {
+        let groups = group_by(&sample(), &open(), &Dim::Remark);
+        assert_eq!(
+            label_of(&groups, "PENDING 538-PR-100"),
+            "Pending 538-PR-100"
+        );
+    }
+
+    #[test]
+    fn blocker_groups_show_discipline_and_item() {
+        let groups = group_by(&sample(), &open(), &Dim::Blocker);
+        assert_eq!(label_of(&groups, "Civil|538-PR-100"), "Civil / 538-PR-100");
+    }
+
+    #[test]
+    fn an_empty_key_is_labelled_blank() {
+        let groups = group_by(&sample(), &open(), &Dim::StressCalc);
+        assert_eq!(label_of(&groups, ""), "(blank)");
+        assert_eq!(label_of(&groups, "NR"), "NR");
+        let custom = group_by(&sample(), &open(), &Dim::Custom("Area".into()));
+        assert_eq!(label_of(&custom, ""), "(blank)");
+    }
+
+    #[test]
+    fn matrix_labels_follow_the_group_rule() {
+        let m = matrix(&sample(), &open(), &Dim::Discipline, &Dim::HoldType);
+        assert_eq!(m.row_labels, m.rows);
+        assert_eq!(m.col_labels, m.cols);
+        assert_eq!(m.cells, vec![vec![2, 0], vec![0, 1], vec![1, 0]]);
+        let b = matrix(&sample(), &open(), &Dim::Blocker, &Dim::StressCalc);
+        let civil = b.rows.iter().position(|k| k == "Civil|538-PR-100").unwrap();
+        assert_eq!(b.row_labels[civil], "Civil / 538-PR-100");
+        let blank = b.cols.iter().position(|k| k.is_empty()).unwrap();
+        assert_eq!(b.col_labels[blank], "(blank)");
+    }
+
+    #[test]
+    fn single_hold_only_keeps_lines_with_one_selected_hold() {
+        let query = LineQuery {
+            single_hold_only: true,
+            ..Default::default()
+        };
+        let ids: Vec<String> = lines(&sample(), &open(), &query)
+            .into_iter()
+            .map(|r| r.line_id)
+            .collect();
+        assert_eq!(ids, vec!["L2", "L4"]);
+    }
+
+    fn page(spec: &FilterSpec, query: HoldQuery) -> (usize, Vec<String>) {
+        let page = holds(&sample(), spec, &query);
+        let ids = page.rows.into_iter().map(|r| r.hold.line_id).collect();
+        (page.total, ids)
+    }
+
+    #[test]
+    fn holds_returns_selected_rows_in_file_order() {
+        let (total, ids) = page(&open(), HoldQuery::default());
+        assert_eq!(total, 4);
+        assert_eq!(ids, vec!["L1", "L1", "L2", "L4"]);
+        assert_eq!(page(&all(), HoldQuery::default()).0, 5);
+    }
+
+    #[test]
+    fn holds_page_by_offset_and_limit() {
+        let limited = HoldQuery {
+            limit: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), limited), (4, vec!["L1".into(), "L1".into()]));
+        let tail = HoldQuery {
+            offset: 3,
+            limit: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), tail), (4, vec!["L4".to_string()]));
+        let past = HoldQuery {
+            offset: 10,
+            ..Default::default()
+        };
+        assert_eq!(page(&open(), past), (4, Vec::new()));
+    }
+
+    #[test]
+    fn holds_sort_oldest_first_and_by_line() {
+        let oldest = holds(
+            &sample(),
+            &open(),
+            &HoldQuery {
+                sort: HoldSort::OldestFirst,
+                ..Default::default()
+            },
+        );
+        let ages: Vec<_> = oldest.rows.iter().map(|r| r.age_days).collect();
+        assert_eq!(ages, vec![Some(40), Some(10), Some(5), Some(1)]);
+        let by_line = HoldQuery {
+            sort: HoldSort::LineId,
+            ..Default::default()
+        };
+        assert_eq!(page(&all(), by_line).1, vec!["L1", "L1", "L2", "L3", "L4"]);
+    }
+
+    #[test]
+    fn hold_query_defaults_from_empty_json() {
+        assert_eq!(
+            serde_json::from_str::<HoldQuery>("{}").unwrap(),
+            HoldQuery::default()
+        );
+    }
+
+    #[test]
+    fn line_query_round_trips_and_defaults_from_empty_json() {
+        let query = LineQuery {
+            sort: LineSort::OldestFirst,
+            single_hold_only: true,
+        };
+        let json = serde_json::to_string(&query).unwrap();
+        assert_eq!(serde_json::from_str::<LineQuery>(&json).unwrap(), query);
+        assert_eq!(
+            serde_json::from_str::<LineQuery>("{}").unwrap(),
+            LineQuery::default()
+        );
+    }
+
+    #[test]
+    fn oldest_age_ignores_released_holds() {
+        let rows = lines(&sample(), &all(), &LineQuery::default());
+        let l3 = rows.iter().find(|r| r.line_id == "L3").unwrap();
+        assert_eq!(l3.oldest_age_days, None);
     }
 }

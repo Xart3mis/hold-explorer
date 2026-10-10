@@ -7,36 +7,50 @@ use serde::Serialize;
 use crate::dataset::Dataset;
 use crate::filter::FilterSpec;
 
+/// One blocker among the selected holds, with the lines it is on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct BlockerNode {
     /// `<discipline>|<item>`.
     pub key: String,
+    /// The discipline that owns the blocker (the discipline of its holds).
     pub discipline: String,
-    /// Blocker type.
+    /// Blocker type, such as `PR` or `P&ID`.
     pub kind: String,
+    /// The specific thing waited for.
     pub item: String,
+    /// Number of selected holds waiting for this blocker.
     pub holds: usize,
     /// Lines this blocker is on, in order of first appearance.
     pub lines: Vec<String>,
 }
 
+/// One blocker to solve, in plan order.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Step {
+    /// The `key` of the blocker solved in this step.
     pub key: String,
     /// Lines freed by this step.
     pub gain: usize,
     /// Lines freed by this step and all steps before it.
     pub cumulative: usize,
+    /// The lines freed by this step, in the order of the blocker's `lines`.
     pub freed: Vec<String>,
 }
 
+/// The order in which to solve blockers, and every blocker it is drawn from.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SolvePlan {
     /// Every blocker, in order of first appearance.
     pub nodes: Vec<BlockerNode>,
+    /// The blockers to solve, in order.
     pub steps: Vec<Step>,
 }
 
+/// Plans which blockers of the selected holds to solve first, one greedy step at a time. Each
+/// step picks the blocker that frees the most lines (a line is freed when none of its blockers
+/// remain), breaking ties by a score that favors blockers sharing lines with few other
+/// blockers; remaining ties go to the blocker that appeared first. Stops after `max_steps`
+/// steps (`None` for no limit) or when no blocker makes progress.
 pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> SolvePlan {
     let mut nodes: Vec<BlockerNode> = Vec::new();
     let mut node_index: HashMap<String, usize> = HashMap::new();
@@ -171,7 +185,7 @@ mod tests {
                 hold("L4", "Civil", "MISC.", c, 1),
                 hold("L5", "Civil", "MISC.", c, 1),
             ],
-            &RuleSet::builtin(),
+            RuleSet::builtin(),
             snapshot(),
         )
     }
@@ -258,7 +272,7 @@ mod tests {
             holds.push(hold(&line, "Civil", "MISC.", "Pending 538-PR-200", 1));
         }
         holds.push(hold("SOLO-LINE", "Civil", "MISC.", "Pending 538-PR-300", 1));
-        let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot());
+        let ds = Dataset::build(holds, RuleSet::builtin(), snapshot());
 
         let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
         assert_eq!(brief(&plan), vec![("Civil|538-PR-300", 1, 1)]);
@@ -298,7 +312,7 @@ mod tests {
             add_line(&mut holds, format!("B{i}"), 101, total);
         }
         add_line(&mut holds, "B-SOLO".into(), 101, 1);
-        let ds = Dataset::build(holds, &RuleSet::builtin(), snapshot());
+        let ds = Dataset::build(holds, RuleSet::builtin(), snapshot());
 
         let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
         assert_eq!(brief(&plan), vec![("Civil|538-PR-100", 1, 1)]);

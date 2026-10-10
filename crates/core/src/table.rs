@@ -4,20 +4,41 @@ use std::sync::OnceLock;
 
 use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// One cell of a sheet, typed as the file format stored it.
 pub enum Cell {
+    /// A blank cell.
     Empty,
+    /// Text.
     Text(String),
+    /// A number, including an Excel date serial.
     Number(f64),
+    /// A true/false value.
     Bool(bool),
+    /// A date with a time of day (midnight for a plain date).
     DateTime(NaiveDateTime),
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+/// A sheet as a header row and the rows beneath it.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct RawTable {
+    /// Header texts in column order, as written in the file.
     pub headers: Vec<String>,
+    /// The data rows; a row may be shorter than `headers`, in which case the missing cells are blank.
     pub rows: Vec<Vec<Cell>>,
+    /// One-based row of each entry of `rows`: the sheet row of a workbook, or the line of a
+    /// delimited text file where the record starts, counting blank lines and the lines of
+    /// multi-line fields. May be empty for tables built by hand.
+    pub row_numbers: Vec<usize>,
+}
+
+impl RawTable {
+    /// The recorded row number of `rows[index]`, or `index + 2` when none was recorded.
+    pub fn row_number(&self, index: usize) -> usize {
+        self.row_numbers.get(index).copied().unwrap_or(index + 2)
+    }
 }
 
 /// Prints whole numbers without a fractional part: `4`, not `4.0`.
@@ -30,9 +51,11 @@ pub fn format_number(n: f64) -> String {
 }
 
 /// How `a/b/yyyy` is read when both parts are 12 or less.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DateOrder {
+    /// `03/04/2026` is 3 April.
     DayFirst,
+    /// `03/04/2026` is 4 March.
     MonthFirst,
 }
 
@@ -140,6 +163,7 @@ fn from_excel_serial(serial: f64) -> Option<NaiveDateTime> {
 }
 
 impl Cell {
+    /// The cell as display text; numbers print without a needless `.0`, dates as `yyyy-mm-dd hh:mm:ss`.
     pub fn as_text(&self) -> String {
         match self {
             Cell::Empty => String::new(),
@@ -150,18 +174,37 @@ impl Cell {
         }
     }
 
+    /// The cell as a finite number; text is parsed after trimming, anything else gives `None`.
+    /// Text with exactly one comma and no dot reads the comma as a decimal point (`1,5` is 1.5);
+    /// `1,234,567` and `1.234,5` are not numbers, and neither is a thousands separator: a comma
+    /// followed by exactly three digits after a part other than `0` (`1,000`, `12,500`), while
+    /// `0,125` is 0.125.
     pub fn as_number(&self) -> Option<f64> {
         match self {
             Cell::Number(n) => Some(*n),
-            Cell::Text(s) => s.trim().parse().ok(),
+            Cell::Text(s) => {
+                let text = s.trim();
+                text.parse().ok().or_else(|| {
+                    let (whole, fraction) = text.split_once(',')?;
+                    let single = !fraction.contains(',') && !text.contains('.');
+                    let thousands = fraction.len() == 3
+                        && fraction.bytes().all(|b| b.is_ascii_digit())
+                        && !matches!(whole, "0" | "-0");
+                    if single && !thousands {
+                        text.replace(',', ".").parse().ok()
+                    } else {
+                        None
+                    }
+                })
+            }
             _ => None,
         }
         .filter(|n| n.is_finite())
     }
 
-    /// A whole-number id. Text counts only as an optional sign and digits, optionally followed
-    /// by a decimal point and zeros, and is parsed exactly as `i64`. A number
-    /// counts only if it is finite, whole, and within +-2^53, so it is exact as an `f64`.
+    /// A whole-number id, exact and within +-2^53. Text counts only as an optional sign and
+    /// digits, optionally followed by a decimal point and zeros. A number counts only if it is
+    /// finite and whole.
     pub fn as_id(&self) -> Option<i64> {
         const LIMIT: f64 = 9_007_199_254_740_992.0;
         let whole =
@@ -180,20 +223,25 @@ impl Cell {
                 if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
                     return None;
                 }
-                whole_part.parse().ok()
+                whole_part
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|n| n.unsigned_abs() <= 1u64 << 53)
             }
             Cell::Number(n) => whole(*n),
             _ => None,
         }
     }
 
+    /// The cell as a flag: a number is true unless zero; text is `true`/`1`/`yes`/`y` or
+    /// `false`/`0`/`no`/`n` in any letter case; anything else gives `None`.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Cell::Bool(b) => Some(*b),
             Cell::Number(n) if n.is_finite() => Some(*n != 0.0),
             Cell::Text(s) => match s.trim().to_ascii_lowercase().as_str() {
-                "true" | "1" | "yes" => Some(true),
-                "false" | "0" | "no" => Some(false),
+                "true" | "1" | "yes" | "y" => Some(true),
+                "false" | "0" | "no" | "n" => Some(false),
                 _ => None,
             },
             _ => None,
@@ -429,14 +477,15 @@ mod tests {
     fn ids_must_be_exact_whole_numbers() {
         assert_eq!(text("NaN").as_id(), None);
         assert_eq!(text("1.9").as_id(), None);
-        assert_eq!(text("9007199254740993").as_id(), Some(9007199254740993));
+        assert_eq!(text("9007199254740993").as_id(), None);
+        assert_eq!(text("9007199254740992").as_id(), Some(9007199254740992));
         assert_eq!(text(" 42 ").as_id(), Some(42));
         assert_eq!(text("87763.0").as_id(), Some(87763));
         assert_eq!(text(" 87763 ").as_id(), Some(87763));
         assert_eq!(text("inf").as_id(), None);
         assert_eq!(text("87763").as_id(), Some(87763));
         assert_eq!(text("87763.000").as_id(), Some(87763));
-        assert_eq!(text("9007199254740993.0").as_id(), Some(9007199254740993));
+        assert_eq!(text("9007199254740993.0").as_id(), None);
         assert_eq!(text("87763.00000000000000001").as_id(), None);
         assert_eq!(text("1e3").as_id(), None);
         assert_eq!(text(".").as_id(), None);
@@ -451,5 +500,32 @@ mod tests {
             Some(9007199254740992)
         );
         assert_eq!(Cell::Number(9007199254740994.0).as_id(), None);
+    }
+
+    #[test]
+    fn a_single_comma_is_a_decimal_point() {
+        assert_eq!(text("1,5").as_number(), Some(1.5));
+        assert_eq!(text(" 0,75 ").as_number(), Some(0.75));
+        assert_eq!(text("1,234,567").as_number(), None);
+        assert_eq!(text("1.234,5").as_number(), None);
+        assert_eq!(text("1.5").as_number(), Some(1.5));
+        assert_eq!(text(",").as_number(), None);
+    }
+
+    #[test]
+    fn a_lone_thousands_separator_is_not_a_decimal_comma() {
+        assert_eq!(text("1,5").as_number(), Some(1.5));
+        assert_eq!(text("0,75").as_number(), Some(0.75));
+        assert_eq!(text("0,125").as_number(), Some(0.125));
+        assert_eq!(text("12,25").as_number(), Some(12.25));
+        assert_eq!(text("1,000").as_number(), None);
+        assert_eq!(text("1,234").as_number(), None);
+        assert_eq!(text("12,500").as_number(), None);
+    }
+
+    #[test]
+    fn y_and_n_are_flags() {
+        assert_eq!(text("Y").as_bool(), Some(true));
+        assert_eq!(text("n").as_bool(), Some(false));
     }
 }

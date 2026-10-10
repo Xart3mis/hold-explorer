@@ -28,14 +28,23 @@ const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
 /// Where the snapshot date came from, in order of trust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SnapshotSource {
+    /// The `Report Date` entry of the workbook's information sheet.
     InfoSheet,
+    /// A date written in the file name; midnight of that day.
     FileName,
+    /// The file's last-modified time.
     FileTime,
+    /// A date the user entered. Nothing in this crate produces it; a caller uses it when the
+    /// user types the snapshot date because the file gave none or a wrong one.
+    User,
 }
 
+/// The moment a report was taken and how that was found out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotDate {
+    /// When the snapshot was taken.
     pub at: NaiveDateTime,
+    /// Where `at` came from.
     pub source: SnapshotSource,
 }
 
@@ -126,8 +135,9 @@ fn after_modified(date: NaiveDate, modified: Option<NaiveDateTime>) -> bool {
     })
 }
 
-/// A date without a year takes the year of the newest timestamp, or the next year if that
-/// would be earlier. It must be at most 92 days after the newest timestamp.
+/// A date without a year takes the year of the newest timestamp in the data, or the next year
+/// if that would be earlier. It must be at most 92 days after the newest timestamp. The file's
+/// modified time only bounds it from above (at most a day later); it never supplies the year.
 fn without_year(
     day: u32,
     month: u32,
@@ -216,6 +226,9 @@ fn month_number(name: &str) -> Option<u32> {
     MONTHS.iter().position(|m| *m == name).map(|i| i as u32 + 1)
 }
 
+/// Works out the snapshot date, trying in order the `Report Date` of the information sheet,
+/// a date in the file name (the newest timestamp in the data settles a missing year, and
+/// the modified time is only an upper bound for it), and the file's modified time. `None` when none gives a date.
 pub fn snapshot_date(
     info: &BTreeMap<String, String>,
     file_name: &str,
@@ -519,6 +532,15 @@ mod tests {
         assert_eq!(
             from_name("holds_29-Feb.xlsx", "2027-12-20 09:00:00", None),
             named("2028-02-29")
+        );
+    }
+
+    #[test]
+    fn user_source_round_trips_through_json() {
+        let json = serde_json::to_string(&SnapshotSource::User).unwrap();
+        assert_eq!(
+            serde_json::from_str::<SnapshotSource>(&json).unwrap(),
+            SnapshotSource::User
         );
     }
 }

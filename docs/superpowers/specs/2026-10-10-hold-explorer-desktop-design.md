@@ -118,10 +118,10 @@ The app makes no network request except the update check. Fonts and libraries ar
 
 ### 6.1 Pipeline
 
-1. Open an `.xlsx`, `.xls`, or `.csv` file. Choose the sheet named `data`; failing that, the first sheet whose header row maps the required columns. Read `info` when present.
-2. Map columns. Known headers and aliases map automatically, case-insensitively and ignoring surrounding space. An unknown layout opens the mapping step.
+1. Open a workbook (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`) or a delimited text file (`.csv`, `.tsv`, `.txt`). In a workbook, choose the sheet named `data`; failing that, the first sheet whose header row maps the required columns; failing that, the first sheet with rows, and let the user pick another sheet in the mapping step. Read `info` when present. For delimited text, detect the encoding (a byte-order mark decides; otherwise UTF-8 when valid, else Windows-1252) and the delimiter (comma, semicolon, or tab, whichever splits the first line into the most fields).
+2. Map columns. Known headers and aliases map automatically, ignoring case and treating runs of spaces, hyphens, and underscores alike. An unknown layout opens the mapping step. The mapping is saved per workspace by header, not by column position, so it applies to later files whose columns are in another order. It remembers which of several same-named columns holds which field, and which columns the user chose to leave unmapped.
 3. Normalize every row (6.2).
-4. Show the import review: project number, snapshot date and time, open and released counts, warnings, target workspace. The user confirms or edits.
+4. Show the import review: project number, snapshot date and time with its source, open and released counts, skipped rows, warnings grouped by kind, target workspace. The user confirms or edits.
 5. Write the snapshot in a single database transaction.
 6. Open History on "Changes since previous snapshot" and show a notice. Before milestone 2 delivers that screen, the app opens Overview instead.
 
@@ -136,11 +136,14 @@ The import review and the mapping step are page-level flows, not modal dialogs.
 - A row with a blank `line_id` or an unparseable creation date is skipped, counted, and listed with its row number. The import continues.
 - Date cells are read as dates. Text is read as a date in these shapes: `yyyy-mm-dd` and `yyyy/mm/dd`; `dd-Mon-yyyy`; and the numeric shapes `a/b/yyyy`, `a-b-yyyy`, `a.b.yyyy`; each with an optional 24-hour or AM/PM time. A number in a date column is read as an Excel serial date.
 - The numeric shapes are ambiguous, so the day and month order is decided once per date column: a first component above 12 anywhere in the column means day-first, a second component above 12 means month-first. An undecided column takes the order of the other date column when that one is decided; otherwise day-first, as the HTML tool reads `d/m/yyyy`.
-- A source `id` is used only when it is an exact whole number. Sizes must be finite and above zero.
+- A source `id` is used only when it is an exact whole number. Sizes must be finite and above zero. A number written with a decimal comma (`1,5`) is read as a number; a lone comma followed by three digits (`1,000`) is not, because it may be a thousands separator.
+- Rows are reported by their real position: the sheet row in a workbook, the line in a text file.
+- Two extra columns with the same header are both kept; the later ones are named `<name> (2)`, `<name> (3)`.
+- The import never changes a value silently. Each of these keeps the hold and adds a warning to the review, with the row and the value: a release date that cannot be read; a `released` value that is not recognized (the hold is treated as open); a size that is not a number; an id that is not an exact whole number; an id already seen on an earlier row. One warning each is added for: a date column whose day and month order had to be assumed; cells holding spreadsheet errors, read as blank; repeated extra headers; a report date in the `info` sheet that cannot be read.
 
 ### 6.3 Snapshot date
 
-In order of trust: the `info` sheet's Report Date; a date in the filename; the file's modified time. The app records which of the three it used, and the review shows the date with its source and lets the user change it. The app never assumes the current year.
+In order of trust: the `info` sheet's Report Date; a date in the filename; the file's modified time. The app records which of the three it used, and the review shows the date with its source and lets the user change it; a date the user enters is recorded as entered by the user. The app never assumes the current year.
 
 A filename date is used only when it is plausible:
 
@@ -399,7 +402,7 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 
 ## 14. Error handling
 
-- An import failure names its cause and its fix: an unreadable or password-protected file, no recognizable sheet, missing required columns (listed, and the mapping step opens), no data rows, or no row from which a hold could be read (the message gives the number of skipped rows and an example).
+- An import failure names its cause and its fix: a file that is not found; a file that cannot be read (not a workbook or text file, corrupt, password-protected, or not permitted); an empty file; no recognizable sheet (the sheets found are listed); a chosen sheet that is not in the file; missing required columns (listed, and the mapping step opens); no data rows; or no row from which a hold could be read (the message gives the number of skipped rows and an example).
 - An import either completes or changes nothing.
 - An export to a file that is open elsewhere says to close the file or choose another name.
 - A second launch focuses the running window; two instances never write the same data.

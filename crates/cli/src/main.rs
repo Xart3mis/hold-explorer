@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::load::load_file;
-use hx_core::query::{group_by, lines, summary, LineSort};
+use hx_core::query::{group_by, lines, summary, LineQuery};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -62,10 +62,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             let project = loaded.info.get("Project No.").cloned();
             let limited = loaded.parsed.limited;
             let skipped = loaded.parsed.skipped.len();
+            let warnings = loaded.parsed.warnings.len();
 
-            let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot.at);
+            let ds = Dataset::build(loaded.parsed.holds, RuleSet::builtin(), snapshot.at);
             let open = FilterSpec::default();
-            let top_lines: Vec<_> = lines(&ds, &open, LineSort::HoldsDesc)
+            let top_lines: Vec<_> = lines(&ds, &open, &LineQuery::default())
                 .into_iter()
                 .take(10)
                 .collect();
@@ -77,9 +78,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 "sheet": loaded.sheet_name,
                 "limited": limited,
                 "skipped": skipped,
+                "warnings": warnings,
                 "summary": summary(&ds, &open),
-                "by_discipline": group_by(&ds, &open, Dim::Discipline),
-                "by_hold_type": group_by(&ds, &open, Dim::HoldType),
+                "by_discipline": group_by(&ds, &open, &Dim::Discipline),
+                "by_hold_type": group_by(&ds, &open, &Dim::HoldType),
                 "top_lines": top_lines,
                 "solve": solve_plan(&ds, &open, Some(10)).steps,
             });
