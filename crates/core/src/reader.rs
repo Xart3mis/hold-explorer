@@ -693,7 +693,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let lower = dir.path().join("holds.xlsx");
         write_workbook(&rows, &cfg, &lower).unwrap();
-        let upper = dir.path().join("HOLDS.XLSX");
+        // A second directory: on Windows the two names are the same file.
+        let upper_dir = tempfile::tempdir().unwrap();
+        let upper = upper_dir.path().join("HOLDS.XLSX");
         std::fs::copy(&lower, &upper).unwrap();
 
         let a = read_workbook(&lower).unwrap();
