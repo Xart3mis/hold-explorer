@@ -3,7 +3,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::dataset::{Dataset, Row};
 use crate::filter::{Dim, FilterSpec};
@@ -126,7 +126,7 @@ pub struct LineRow {
     pub size_mismatch: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LineSort {
     /// Most holds first.
     HoldsDesc,

@@ -62,6 +62,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
             let project = loaded.info.get("Project No.").cloned();
             let limited = loaded.parsed.limited;
             let skipped = loaded.parsed.skipped.len();
+            let warnings = loaded.parsed.warnings.len();
 
             let ds = Dataset::build(loaded.parsed.holds, &RuleSet::builtin(), snapshot.at);
             let open = FilterSpec::default();
@@ -77,6 +78,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
                 "sheet": loaded.sheet_name,
                 "limited": limited,
                 "skipped": skipped,
+                "warnings": warnings,
                 "summary": summary(&ds, &open),
                 "by_discipline": group_by(&ds, &open, Dim::Discipline),
                 "by_hold_type": group_by(&ds, &open, Dim::HoldType),

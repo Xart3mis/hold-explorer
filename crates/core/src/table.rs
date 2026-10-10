@@ -4,8 +4,9 @@ use std::sync::OnceLock;
 
 use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime};
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Cell {
     Empty,
     Text(String),
@@ -14,7 +15,7 @@ pub enum Cell {
     DateTime(NaiveDateTime),
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct RawTable {
     pub headers: Vec<String>,
     pub rows: Vec<Vec<Cell>>,
@@ -39,7 +40,7 @@ pub fn format_number(n: f64) -> String {
 }
 
 /// How `a/b/yyyy` is read when both parts are 12 or less.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DateOrder {
     DayFirst,
     MonthFirst,

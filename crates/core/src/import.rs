@@ -5,18 +5,21 @@ use crate::mapping::{ColumnMap, Field};
 use crate::model::Hold;
 use crate::normalize::{clean_text, discipline_or_default, or_dash};
 use crate::table::{ambiguous_parts, Cell, DateOrder, RawTable};
+use crate::warning::{ImportWarning, WarningKind};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkippedRow {
     /// One-based row number in the sheet, counting the header as row 1.
     pub row_number: usize,
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parsed {
     pub holds: Vec<Hold>,
     pub skipped: Vec<SkippedRow>,
+    pub warnings: Vec<ImportWarning>,
     pub limited: bool,
 }
 
@@ -85,6 +88,32 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
     let created_order = created.or(release).unwrap_or(DateOrder::DayFirst);
     let release_order = release.or(created).unwrap_or(DateOrder::DayFirst);
 
+    let mut warnings = Vec::new();
+    for (field, own, other) in [
+        (Field::Created, created, release),
+        (Field::ReleaseDate, release, created),
+    ] {
+        let Some(&column) = map.fields.get(&field) else {
+            continue;
+        };
+        let has_ambiguous = table.rows.iter().any(|row| {
+            matches!(row.get(column), Some(Cell::Text(text)) if ambiguous_parts(text).is_some())
+        });
+        if own.is_none() && other.is_none() && has_ambiguous {
+            let name = table
+                .headers
+                .get(column)
+                .map_or(field.label(), String::as_str);
+            warnings.push(ImportWarning {
+                kind: WarningKind::AssumedDateOrder,
+                row_number: None,
+                detail: format!(
+                    "The dates in column \"{name}\" such as 02/09/2026 could be day/month or month/day, and no value settles it, so they were read day-first. If they are month-first, change the dates to an unambiguous form such as 2026-09-02 in the source and import again."
+                ),
+            });
+        }
+    }
+
     let mut holds = Vec::with_capacity(table.rows.len());
     let mut skipped = Vec::new();
 
@@ -135,11 +164,40 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             hold_type: or_dash(&cell(row, Field::HoldType).as_text()),
             discipline: discipline_or_default(&cell(row, Field::Discipline).as_text()),
             created,
-            released: cell(row, Field::Released).as_bool().unwrap_or(false),
+            released: {
+                let value = cell(row, Field::Released);
+                match value.as_bool() {
+                    Some(flag) => flag,
+                    None => {
+                        let raw = value.as_text();
+                        if !raw.trim().is_empty() {
+                            warnings.push(ImportWarning {
+                                kind: WarningKind::UnrecognizedReleased,
+                                row_number: Some(row_number),
+                                detail: format!(
+                                    "Row {row_number}: the released value \"{}\" is not a recognized true or false value, so the hold is treated as open. Correct the value in the source (for example TRUE or FALSE) and import again.",
+                                    raw.trim()
+                                ),
+                            });
+                        }
+                        false
+                    }
+                }
+            },
             release_remark: clean_text(&cell(row, Field::ReleaseRemark).as_text()),
-            release_date: cell(row, Field::ReleaseDate)
-                .as_datetime(release_order)
-                .unwrap_or(None),
+            release_date: match cell(row, Field::ReleaseDate).as_datetime(release_order) {
+                Ok(date) => date,
+                Err(raw) => {
+                    warnings.push(ImportWarning {
+                        kind: WarningKind::UnreadableReleaseDate,
+                        row_number: Some(row_number),
+                        detail: format!(
+                            "Row {row_number}: the release date \"{raw}\" could not be read as a date, so the hold has no release date. Correct the value in the source and import again."
+                        ),
+                    });
+                    None
+                }
+            },
             model_size: size(&cell(row, Field::ModelSize)),
             ldt_size: size(&cell(row, Field::LdtSize)),
             stress_calc: clean_text(&cell(row, Field::StressCalc).as_text()),
@@ -160,6 +218,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
     Ok(Parsed {
         holds,
         skipped,
+        warnings,
         limited: map.is_limited(),
     })
 }
@@ -570,5 +629,138 @@ mod tests {
         };
         assert_eq!(parsed.holds[0].created, day(2, 9));
         assert_eq!(parsed.holds[0].release_date, day(3, 9));
+    }
+
+    /// Columns: line_id, hold_remark, hold_type, date, released, release_date.
+    fn warn_table(rows: Vec<[Cell; 3]>, with_release: bool) -> RawTable {
+        let mut headers: Vec<String> = ["line_id", "hold_remark", "hold_type", "date"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        if with_release {
+            headers.push("released".into());
+            headers.push("release_date".into());
+        }
+        let rows = rows
+            .into_iter()
+            .map(|[date, released, release_date]| {
+                let mut row = vec![text("L-1"), text("x"), text("MISC."), date];
+                if with_release {
+                    row.push(released);
+                    row.push(release_date);
+                }
+                row
+            })
+            .collect();
+        RawTable {
+            headers,
+            rows,
+            ..Default::default()
+        }
+    }
+
+    fn parse(t: &RawTable) -> Parsed {
+        parse_table(t, &ColumnMap::auto(&t.headers)).unwrap()
+    }
+
+    fn kinds(parsed: &Parsed, kind: WarningKind) -> Vec<&ImportWarning> {
+        parsed.warnings.iter().filter(|w| w.kind == kind).collect()
+    }
+
+    #[test]
+    fn unreadable_release_date_is_kept_open_ended_and_warned() {
+        let mut t = warn_table(
+            vec![
+                [at(2026, 9, 1, 9), Cell::Bool(true), Cell::Empty],
+                [at(2026, 9, 1, 9), Cell::Bool(true), text("soon")],
+            ],
+            true,
+        );
+        t.row_numbers = vec![5, 7];
+        let parsed = parse(&t);
+        assert_eq!(parsed.holds.len(), 2);
+        assert_eq!(parsed.holds[1].release_date, None);
+        assert_eq!(parsed.warnings.len(), 1);
+        let w = &parsed.warnings[0];
+        assert_eq!(w.kind, WarningKind::UnreadableReleaseDate);
+        assert_eq!(w.row_number, Some(7));
+        assert!(w.detail.contains("soon"));
+    }
+
+    #[test]
+    fn unrecognized_released_value_is_open_and_warned() {
+        let t = warn_table(
+            vec![
+                [at(2026, 9, 1, 9), text("maybe"), Cell::Empty],
+                [at(2026, 9, 1, 9), Cell::Empty, Cell::Empty],
+            ],
+            true,
+        );
+        let parsed = parse(&t);
+        assert!(!parsed.holds[0].released);
+        assert!(!parsed.holds[1].released);
+        assert_eq!(parsed.warnings.len(), 1, "a blank released cell is silent");
+        let w = &parsed.warnings[0];
+        assert_eq!(w.kind, WarningKind::UnrecognizedReleased);
+        assert_eq!(w.row_number, Some(2));
+        assert!(w.detail.contains("maybe"));
+    }
+
+    fn created_only(dates: &[Cell]) -> RawTable {
+        warn_table(
+            dates
+                .iter()
+                .map(|d| [d.clone(), Cell::Empty, Cell::Empty])
+                .collect(),
+            false,
+        )
+    }
+
+    #[test]
+    fn undecided_date_column_with_ambiguous_dates_is_warned() {
+        let parsed = parse(&created_only(&[text("02/09/2026"), text("03/09/2026")]));
+        let found = kinds(&parsed, WarningKind::AssumedDateOrder);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].row_number, None);
+        assert!(found[0].detail.contains("\"date\""));
+        assert!(found[0].detail.contains("day-first"));
+    }
+
+    #[test]
+    fn decided_or_real_date_columns_are_not_warned() {
+        let decided = parse(&created_only(&[text("02/09/2026"), text("25/09/2026")]));
+        assert!(kinds(&decided, WarningKind::AssumedDateOrder).is_empty());
+        let real = parse(&created_only(&[at(2026, 9, 2, 9), at(2026, 9, 3, 9)]));
+        assert!(kinds(&real, WarningKind::AssumedDateOrder).is_empty());
+    }
+
+    #[test]
+    fn column_adopting_the_other_columns_order_is_not_warned() {
+        let t = warn_table(
+            vec![
+                [text("02/09/2026"), Cell::Bool(true), text("09/25/2026")],
+                [text("03/09/2026"), Cell::Bool(true), text("09/26/2026")],
+            ],
+            true,
+        );
+        let parsed = parse(&t);
+        assert!(kinds(&parsed, WarningKind::AssumedDateOrder).is_empty());
+    }
+
+    #[test]
+    fn parsed_survives_a_serde_json_round_trip() {
+        let mut t = created_only(&[text("02/09/2026")]);
+        t.rows
+            .push(vec![Cell::Empty, text("x"), text("MISC."), Cell::Empty]);
+        let mut parsed = parse(&t);
+        assert_eq!(parsed.holds.len(), 1);
+        parsed.skipped.push(SkippedRow {
+            row_number: 3,
+            reason: "blank line_id".into(),
+        });
+        assert_eq!(parsed.warnings.len(), 1);
+        let json = serde_json::to_string(&parsed).unwrap();
+        let back: Parsed = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, parsed);
     }
 }

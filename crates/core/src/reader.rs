@@ -6,15 +6,19 @@ use std::path::Path;
 use calamine::{open_workbook_auto, Data, DataType, Range, Reader};
 
 use crate::error::ImportError;
+use serde::{Deserialize, Serialize};
+
 use crate::mapping::ColumnMap;
 use crate::table::{Cell, RawTable};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkbookData {
     /// Key and value pairs of the `info` sheet. Empty when there is none.
     pub info: BTreeMap<String, String>,
     pub sheet_name: String,
     pub table: RawTable,
+    /// Cells holding an Excel error (#N/A, #REF!, ...) in the chosen sheet, read as blank.
+    pub error_cells: usize,
 }
 
 fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
@@ -40,7 +44,13 @@ fn to_cell(data: &Data) -> Cell {
     }
 }
 
-fn table_from_range(range: &Range<Data>) -> RawTable {
+/// The table of a sheet and the number of Excel error cells in it.
+fn table_from_range(range: &Range<Data>) -> (RawTable, usize) {
+    let errors = range
+        .rows()
+        .flatten()
+        .filter(|c| matches!(c, Data::Error(_)))
+        .count();
     let mut rows = range.rows();
     let headers = match rows.next() {
         Some(first) => first
@@ -53,11 +63,12 @@ fn table_from_range(range: &Range<Data>) -> RawTable {
     // its first row, so the first data row is one-based `start_row + 2`.
     let first_data_row = range.start().map_or(2, |(row, _)| row as usize + 2);
     let rows: Vec<Vec<Cell>> = rows.map(|row| row.iter().map(to_cell).collect()).collect();
-    RawTable {
+    let table = RawTable {
         headers,
         row_numbers: (first_data_row..first_data_row + rows.len()).collect(),
         rows,
-    }
+    };
+    (table, errors)
 }
 
 fn is_named(name: &str, wanted: &str) -> bool {
@@ -112,6 +123,7 @@ fn read_csv(path: &Path) -> Result<WorkbookData, ImportError> {
             rows,
             row_numbers: lines,
         },
+        error_cells: 0,
     })
 }
 
@@ -144,33 +156,34 @@ pub fn read_workbook(path: &Path) -> Result<WorkbookData, ImportError> {
         }
     }
 
-    let mut tables: Vec<(String, RawTable)> = Vec::new();
+    let mut tables: Vec<(String, RawTable, usize)> = Vec::new();
     for name in names.iter().filter(|n| !is_named(n, "info")) {
         if let Ok(range) = workbook.worksheet_range(name) {
-            let table = table_from_range(&range);
+            let (table, errors) = table_from_range(&range);
             if !table.headers.is_empty() {
-                tables.push((name.clone(), table));
+                tables.push((name.clone(), table, errors));
             }
         }
     }
 
     let chosen = tables
         .iter()
-        .position(|(name, _)| is_named(name, "data"))
+        .position(|(name, _, _)| is_named(name, "data"))
         .or_else(|| {
             tables
                 .iter()
-                .position(|(_, t)| ColumnMap::auto(&t.headers).missing_required().is_empty())
+                .position(|(_, t, _)| ColumnMap::auto(&t.headers).missing_required().is_empty())
         })
-        .or_else(|| tables.iter().position(|(_, t)| !t.rows.is_empty()));
+        .or_else(|| tables.iter().position(|(_, t, _)| !t.rows.is_empty()));
 
     match chosen {
         Some(index) => {
-            let (sheet_name, table) = tables.swap_remove(index);
+            let (sheet_name, table, error_cells) = tables.swap_remove(index);
             Ok(WorkbookData {
                 info,
                 sheet_name,
                 table,
+                error_cells,
             })
         }
         None => Err(ImportError::NoDataSheet),
@@ -279,6 +292,45 @@ mod tests {
         assert_eq!(parsed.holds.len(), 2);
         assert_eq!(parsed.skipped.len(), 1);
         assert_eq!(parsed.skipped[0].row_number, 4);
+    }
+
+    #[test]
+    fn excel_error_cells_are_read_as_blank_and_counted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("errors.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let sheet = book.add_worksheet();
+        sheet.set_name("data").unwrap();
+        for (i, h) in ["line_id", "hold_remark", "hold_type"].iter().enumerate() {
+            sheet.write_string(0, i as u16, *h).unwrap();
+        }
+        sheet.write_string(1, 0, "L-1").unwrap();
+        sheet.write_string(1, 1, "x").unwrap();
+        sheet.write_string(1, 2, "MISC.").unwrap();
+        sheet.write_string(2, 0, "L-2").unwrap();
+        sheet
+            .write_formula(
+                2,
+                1,
+                rust_xlsxwriter::Formula::new("=NA()").set_result("#N/A"),
+            )
+            .unwrap();
+        sheet.write_string(2, 2, "MISC.").unwrap();
+        book.save(&path).unwrap();
+
+        let wb = read_workbook(&path).unwrap();
+        assert_eq!(wb.error_cells, 1);
+        assert_eq!(wb.table.rows[1][1], Cell::Empty);
+
+        let loaded = crate::load::load_file(&path).unwrap();
+        let found: Vec<_> = loaded
+            .parsed
+            .warnings
+            .iter()
+            .filter(|w| w.kind == crate::warning::WarningKind::ErrorCells)
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert!(found[0].detail.contains('1'));
     }
 
     #[test]

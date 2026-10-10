@@ -4,14 +4,16 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use chrono::{DateTime, Local};
+use serde::{Deserialize, Serialize};
 
 use crate::error::ImportError;
 use crate::import::{parse_table, Parsed};
 use crate::mapping::ColumnMap;
 use crate::reader::read_workbook;
 use crate::snapshot_date::{snapshot_date, SnapshotDate};
+use crate::warning::{ImportWarning, WarningKind};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Loaded {
     pub info: BTreeMap<String, String>,
     pub sheet_name: String,
@@ -25,7 +27,17 @@ pub struct Loaded {
 pub fn load_file(path: &Path) -> Result<Loaded, ImportError> {
     let workbook = read_workbook(path)?;
     let map = ColumnMap::auto(&workbook.table.headers);
-    let parsed = parse_table(&workbook.table, &map)?;
+    let mut parsed = parse_table(&workbook.table, &map)?;
+    if workbook.error_cells > 0 {
+        parsed.warnings.push(ImportWarning {
+            kind: WarningKind::ErrorCells,
+            row_number: None,
+            detail: format!(
+                "{} cell(s) in the sheet \"{}\" hold an Excel error such as #N/A or #REF! and were read as blank. Fix those cells in the source file and import it again if they matter.",
+                workbook.error_cells, workbook.sheet_name
+            ),
+        });
+    }
 
     let file_name = path
         .file_name()
@@ -68,6 +80,7 @@ mod tests {
         );
         assert!(!loaded.parsed.limited);
         assert!(loaded.parsed.skipped.is_empty());
+        assert!(loaded.parsed.warnings.is_empty());
         assert_eq!(loaded.parsed.holds.len(), rows.len());
 
         let open = loaded.parsed.holds.iter().filter(|h| !h.released).count();

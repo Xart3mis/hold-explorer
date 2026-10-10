@@ -14,6 +14,7 @@ pub mod rules;
 pub mod snapshot_date;
 pub mod solve;
 pub mod table;
+pub mod warning;
 
 #[cfg(test)]
 pub(crate) mod testkit;

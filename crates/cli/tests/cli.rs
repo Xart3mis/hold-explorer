@@ -36,6 +36,7 @@ fn synth_then_summary_round_trip() {
     assert_eq!(json["sheet"], "data");
     assert_eq!(json["limited"], false);
     assert_eq!(json["skipped"], 0);
+    assert_eq!(json["warnings"], 0);
 
     let holds = json["summary"]["holds"].as_u64().unwrap();
     assert!(holds > 0 && holds < 500, "open holds only, got {holds}");
