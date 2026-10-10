@@ -106,9 +106,13 @@ The core keeps the active workspace in memory. At the expected scale, each query
 
 ### 5.3 Storage
 
-One SQLite file per workspace. A small global settings file holds the workspace list, theme, density, language, author name, and update preference.
+One SQLite file per workspace, in one workspace folder. The workspaces are the files in that folder; there is no separate list to fall out of step. A small global settings file holds the folder, theme, density, language, author name, and update preference.
 
 Schema migrations run automatically when a newer executable opens older data. The app copies the file before migrating. An executable that meets data written by a newer version refuses to open it, asks the user to update, and writes nothing.
+
+Before the app writes to a file, read-only checks show that it is a workspace of a version this executable supports. A file that is refused is left byte for byte as it was. A workspace left by an interrupted write (a crash or a power cut during a save) is restored to its last complete state when it is next opened.
+
+The workspace list shows the workspaces that can be read and, apart from them, the workspace files that cannot, each with its reason: written by a newer version, damaged, or in use. One unreadable file never hides the others. A workspace is deleted only when the file is a workspace.
 
 ### 5.4 Network
 
@@ -154,6 +158,8 @@ A filename date is used only when it is plausible:
 
 Timestamps outside 2000 to 2100 are ignored when finding the newest timestamp.
 
+A snapshot's date and time are the file's own local date and time, as the export states them. The times the app records itself, when a workspace was created and when a snapshot was imported, are kept in UTC and shown in local time. The date field in the interface accepts years 2000 to 2100; the store itself refuses a date outside years 0000 to 9999, because such a date would sort out of order.
+
 ### 6.4 Workspace matching
 
 A file whose project number matches a workspace targets that workspace. With no match, the user picks a workspace or creates one. The review always shows the target.
@@ -162,7 +168,9 @@ A file whose project number matches a workspace targets that workspace. With no 
 
 - The same file imported twice, detected by content hash, is refused with a message.
 - A file older than the newest snapshot is accepted and placed in date order.
-- Importing the same snapshots in any order yields an identical database.
+- Importing the same snapshots in any order yields the same stored content: the same snapshots, each with the same rows in the same order. Only internal row numbers and import times differ.
+- A snapshot may replace an earlier one in the same transaction. Replacing or deleting a snapshot removes the rows that no other snapshot uses.
+- A snapshot's number is never given to another snapshot, also after a deletion, so a reference to a deleted snapshot cannot come to mean a different one.
 
 ### 6.6 Bulk import
 
@@ -178,6 +186,7 @@ Dropping a file anywhere on the window starts an import.
 
 - `snapshot`: date and time with its source, source filename, content hash, row counts, full or limited, the `info` values, the headers and the mapping used, the skipped rows and the warnings, and the ordered list of its rows.
 - `row_state`: one record for each distinct hold row, all fields included. A row that is identical in 500 snapshots is stored once.
+- A row state is addressed by a hash of its content: every field in a fixed order, each with its length, under a version number. Two rows that compare equal have the same hash; a zero size hashes alike whatever its sign. A new hash version needs a migration that rehashes the stored rows.
 - A snapshot's ordered list refers to row states, so the file order of the holds is kept exactly and a snapshot read back from the store gives the same numbers as the file it came from. One list takes 20 to 30 KB for 10,000 holds, which keeps 500 snapshots near 15 MB.
 - Each snapshot is complete in itself, so the order in which snapshots are imported cannot affect what is stored, and deleting a snapshot affects no other.
 - Sizes and stress calc are stored with each hold row, as the export gives them.
@@ -404,7 +413,8 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 ## 14. Error handling
 
 - An import failure names its cause and its fix: a file that is not found; a file that cannot be read (not a workbook or text file, corrupt, password-protected, or not permitted); an empty file; no recognizable sheet (the sheets found are listed); a chosen sheet that is not in the file; missing required columns (listed, and the mapping step opens); no data rows; or no row from which a hold could be read (the message gives the number of skipped rows and an example).
-- An import either completes or changes nothing.
+- An import either completes or changes nothing. A workspace whose last write was interrupted opens in its last complete state.
+- A workspace file that cannot be opened is named with its reason and what to do: update the app, close the other program, or restore a copy. It is never changed and never hides other workspaces.
 - An export to a file that is open elsewhere says to close the file or choose another name.
 - A second launch focuses the running window; two instances never write the same data.
 - A crash writes a log to the data folder. About offers "Copy diagnostics". The app sends no telemetry.
@@ -413,7 +423,7 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 ## 15. Testing
 
 - Core logic is written test-first: normalization, rules (with cases taken from the HTML tool's behavior), identity, diff, blockers, forecast.
-- A property test checks that any import order yields the same database.
+- A test checks that every import order yields the same stored content.
 - A parity test checks that counts and solve order match the HTML tool's logic on the same synthetic input.
 - The synthetic generator is seeded and reproduces the real quirks: blank disciplines, `_x000D_`, trailing line breaks, bulk timestamps, and edits and releases between snapshots. It serves the tests, the demo workspace, and screenshots.
 - Export tests reopen the written workbook and check its content. Each schema version has a migration test.

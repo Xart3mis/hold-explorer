@@ -503,3 +503,31 @@ hx-cli ws summary <workspace-file> [--snapshot <id>]
 | 15 migration test; generator of edits and releases between snapshots | 2, 3 |
 
 Left for later plans: 7.2 identity and 7.3 events (M2, at comparison time); 7.5 history bundle (M2); undo of snapshot deletion (M1b-3 or M2, at the interface); workspace-level tables for rules, saved views, notes, watchlist (the plans that introduce those features, each as a schema migration).
+
+## Post-review corrections (2026-10-11)
+
+The plan was executed task by task, reviewed as a whole, and corrected in one fix wave. Where this plan's interfaces and the repository differ, the repository is right. The spec was updated to match (sections 5.3, 6.3, 6.5, 7.1, 14, 15).
+
+| Area | Plan said | Now |
+|---|---|---|
+| Content hash (Task 1) | A size is hashed by its bit pattern. | A zero size of either sign is hashed as `0.0`: SQLite returns `-0.0` as `0.0`, and `Hold` equality already treats the two alike. `canonical_bytes` destructures `Hold` without `..`, so a new field cannot be left out. The hash of `Hold::default()` is pinned beside the full hold. Sizes must be finite; the parser never produces another. |
+| Hash version (Task 3) | No link between hash version and schema. | The store asserts at compile time that `STATE_HASH_VERSION` is 1; a new hash version needs a migration that rehashes `row_state`. |
+| Snapshot ids (Task 3) | `id INTEGER PRIMARY KEY`. | `AUTOINCREMENT`: an id is never reused, so a reference to a deleted snapshot cannot come to mean another one. Schema version 1 was changed in place; it had not shipped. |
+| Public API (Tasks 3, 4) | `open_database` and the modules were public for a time; `From<rusqlite::Error>` on `StoreError`. | No `rusqlite` type appears in the public API. The conversion is a crate-private function. |
+| Opening a file (Tasks 3, 4) | `open` migrated, then checked for a workspace id. | Read-only checks come first: application id, version, `meta` table, workspace id. A newer version is reported before the id is looked for. `open_database` never creates a file. A refused file is unchanged, byte for byte. |
+| Interrupted write (not in the plan) | Not considered. | A workspace with a hot rollback journal could not be opened at all, because the read-only check blocked SQLite's recovery. `open` now reads the raw header and, when it is this app's workspace of a supported version, lets SQLite roll back, then checks again. |
+| Listing (Task 4) | `list_workspaces -> Vec<WorkspaceInfo>`; a newer-version file appears in no list; any other error aborted the listing. | `list_workspaces -> WorkspaceList { workspaces, unreadable }`. A file that is not a workspace is skipped. A newer-version, damaged, or locked workspace is listed in `unreadable` with its error. Only an unreadable folder is an error. |
+| `delete_workspace` (Task 4) | Deletes the given file. | Refuses a file that is not a workspace. |
+| Atomicity test (Task 5) | Simulate a failure with `replace` pointing at a missing id. | That fails before anything is written, so it could not catch a missing transaction. A trigger now aborts the snapshot insert after the writes, and the test was shown to fail without the transaction. |
+| `replace` (Tasks 5, 6) | Deletes the old snapshot. | Also removes the row states no snapshot uses, with the same removal as `delete_snapshot`. |
+| Time base (Tasks 4, 5) | Not stated; `created_at` was UTC and `imported_at` local. | Both are UTC. `taken_at` is the file's own local date and time. |
+| Snapshot date range (Tasks 5, 6) | Any `NaiveDateTime`. | Years outside 0000 to 9999 are refused with `SnapshotDateOutOfRange`, because their text form sorts out of order. |
+| Reading (Task 5) | One lookup per row state. | The same lookups inside one read transaction. Reading a 10,000-row snapshot as a dataset went from about 140 ms to about 80 ms. |
+| Stored formats (Task 5) | Round-trip tests only. | A test pins the text of the date sources and of every JSON column as version 1 writes them, so a rename in `hx-core` cannot silently break stored files. |
+| `logical_dump` (Task 7) | In `snapshot.rs`. | In `dump.rs`; shared test helpers in `test_support.rs`. |
+| CLI date rule (Task 8) | Fails when no date is detected. | A file always has a modified time, so that never happened. Without `--date`, a date known only from the file's modified time is refused and the message asks for `--date`. |
+| CLI `ws list` (Task 8) | Prints an array of workspaces. | Prints the `WorkspaceList` object. |
+
+Measured on the final commit (release build, 10,000 rows): load and build 163 ms, filtered views 9 ms, a page of 200 holds 0.5 ms, full solve order 30 ms, import into a workspace 54 ms, read back as a dataset 86 ms.
+
+Carried into later plans (kept in the working notes for M1b-3 and M2): writing the saved mapping and the project number inside the import transaction; a message beside the `kind` of a serialized error; single-instance enforcement; listing must not migrate once schema version 2 exists; the synthetic generator can re-issue a source id after the highest-id row is removed.
