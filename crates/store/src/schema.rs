@@ -100,6 +100,20 @@ fn header_u32(header: &[u8; 100], offset: usize) -> u32 {
     ])
 }
 
+/// The schema version of the workspace at `path` from its stored `user_version`, which SQLite
+/// keeps as a signed number. Call it only once the file is known to carry this app's
+/// application id: a negative version in a workspace is damage, in any other file it is none of
+/// this app's business.
+fn schema_version(path: &Path, user_version: i64) -> Result<u32, StoreError> {
+    u32::try_from(user_version).map_err(|_| StoreError::Corrupt {
+        detail: format!(
+            "the workspace {} has the schema version {user_version}, which no version of Hold \
+             Explorer writes",
+            path.display()
+        ),
+    })
+}
+
 /// Whether SQLite refused to read the file through a read-only connection because a writer
 /// died during a commit and left its rollback journal beside the file.
 fn interrupted_write(error: &rusqlite::Error) -> bool {
@@ -130,7 +144,9 @@ fn roll_back_interrupted_write(path: &Path) -> Result<(), StoreError> {
     {
         return Err(not_a_workspace());
     }
-    let found = header_u32(&header, USER_VERSION_OFFSET);
+    // The header holds the version as a signed number, like the pragma reads it.
+    let user_version = header_u32(&header, USER_VERSION_OFFSET) as i32;
+    let found = schema_version(path, i64::from(user_version))?;
     if found > SCHEMA_VERSION {
         return Err(StoreError::NewerSchema {
             path: path.display().to_string(),
@@ -178,18 +194,19 @@ fn peek<T>(
 /// A file that is not a workspace gives `NotAWorkspace` and is left as it was. The only write
 /// this can cause is the roll-back of an interrupted write to a workspace.
 pub(crate) fn peek_version(path: &Path) -> Result<u32, StoreError> {
-    let (application_id, version): (i64, u32) = peek(path, |conn| {
+    let (application_id, user_version): (i64, i64) = peek(path, |conn| {
         Ok((
             conn.query_row("PRAGMA application_id", [], |r| r.get(0))?,
             conn.query_row("PRAGMA user_version", [], |r| r.get(0))?,
         ))
     })?;
+    // The id comes first: the version of a file that is not a workspace means nothing here.
     if application_id != APPLICATION_ID {
         return Err(StoreError::NotAWorkspace {
             path: path.display().to_string(),
         });
     }
-    Ok(version)
+    schema_version(path, user_version)
 }
 
 /// Reads the workspace id of the existing workspace file at `path` through a read-only

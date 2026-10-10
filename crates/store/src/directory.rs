@@ -75,7 +75,8 @@ pub fn find_by_project(dir: &Path, project_no: &str) -> Result<Vec<WorkspaceInfo
         .collect())
 }
 
-/// Deletes the workspace file at `path`, and only that file.
+/// Deletes the workspace file at `path`, and with it the rollback journal `<path>-journal` when
+/// an interrupted write left one. Nothing else is deleted.
 ///
 /// The file must be a workspace: any other file gives `NotAWorkspace` and is left where it is.
 /// A workspace a newer version wrote is deleted too, since the user may remove a workspace this
@@ -90,7 +91,15 @@ pub fn delete_workspace(path: &Path) -> Result<(), StoreError> {
         Ok(_) | Err(StoreError::NewerSchema { .. }) => {}
         Err(error) => return Err(error),
     }
-    std::fs::remove_file(path).map_err(|e| io_error(path, &e))
+    std::fs::remove_file(path).map_err(|e| io_error(path, &e))?;
+    // A journal without its database would be applied to whatever file takes this name next.
+    let mut journal = path.as_os_str().to_owned();
+    journal.push("-journal");
+    let journal = PathBuf::from(journal);
+    match std::fs::remove_file(&journal) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(io_error(&journal, &e)),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -251,8 +260,65 @@ mod tests {
             &crashed,
             "INSERT INTO project (project_no) VALUES (?1)",
         );
+        assert!(journal_of(&crashed).exists());
         delete_workspace(&crashed).unwrap();
         assert!(!crashed.exists());
+        assert!(!journal_of(&crashed).exists());
+        assert!(original.path.exists());
+    }
+
+    #[test]
+    fn a_foreign_file_with_a_negative_version_is_not_a_workspace_to_the_list_or_to_delete() {
+        let dir = tempfile::tempdir().unwrap();
+        let healthy = Workspace::create(dir.path(), "Ok").unwrap().info().unwrap();
+        let foreign = dir.path().join("other.holdx-ws");
+        Connection::open(&foreign)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (a INTEGER); PRAGMA user_version = -5;")
+            .unwrap();
+        let before = std::fs::read(&foreign).unwrap();
+
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(list.workspaces, vec![healthy]);
+        assert_eq!(list.unreadable, vec![]);
+        assert_eq!(
+            delete_workspace(&foreign).unwrap_err(),
+            StoreError::NotAWorkspace {
+                path: foreign.display().to_string(),
+            }
+        );
+        assert_eq!(std::fs::read(&foreign).unwrap(), before);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn a_workspace_with_a_negative_version_is_listed_as_unreadable_and_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let damaged = Workspace::create(dir.path(), "Damaged")
+            .unwrap()
+            .info()
+            .unwrap()
+            .path;
+        Connection::open(&damaged)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = -5")
+            .unwrap();
+        let before = std::fs::read(&damaged).unwrap();
+
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(list.workspaces, vec![]);
+        assert_eq!(list.unreadable.len(), 1, "{:?}", list.unreadable);
+        assert_eq!(list.unreadable[0].path, damaged);
+        assert!(
+            matches!(
+                &list.unreadable[0].error,
+                StoreError::Corrupt { detail } if detail.contains("schema version -5")
+            ),
+            "{}",
+            list.unreadable[0].error
+        );
+        assert_eq!(std::fs::read(&damaged).unwrap(), before);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
     }
 
     #[test]

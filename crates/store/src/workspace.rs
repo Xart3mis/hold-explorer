@@ -629,6 +629,74 @@ mod tests {
     }
 
     #[test]
+    fn open_refuses_a_foreign_file_with_a_negative_version_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("other.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (a INTEGER); PRAGMA user_version = -5;")
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let error = Workspace::open(&path).unwrap_err();
+        assert_eq!(
+            error,
+            StoreError::NotAWorkspace {
+                path: path.display().to_string(),
+            }
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()), vec!["other.holdx-ws".to_string()]);
+    }
+
+    #[test]
+    fn open_reports_a_workspace_with_a_negative_version_as_damaged_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = Workspace::create(dir.path(), "A")
+            .unwrap()
+            .info()
+            .unwrap()
+            .path;
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = -5")
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let error = Workspace::open(&path).unwrap_err();
+        assert!(
+            matches!(&error, StoreError::Corrupt { detail } if detail.contains("schema version -5")),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()).len(), 1);
+    }
+
+    #[test]
+    fn open_reports_an_interrupted_workspace_with_a_negative_version_as_damaged() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = workspace(dir.path()).info().unwrap().path;
+        Connection::open(&original)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = -5")
+            .unwrap();
+        let crashed = dir.path().join("crashed.holdx-ws");
+        copy_with_hot_journal(
+            &original,
+            &crashed,
+            "INSERT INTO project (project_no) VALUES (?1)",
+        );
+        let file = std::fs::read(&crashed).unwrap();
+        let journal = std::fs::read(journal_of(&crashed)).unwrap();
+
+        let error = Workspace::open(&crashed).unwrap_err();
+        assert!(
+            matches!(&error, StoreError::Corrupt { detail } if detail.contains("schema version -5")),
+            "{error}"
+        );
+        assert_eq!(std::fs::read(&crashed).unwrap(), file);
+        assert_eq!(std::fs::read(journal_of(&crashed)).unwrap(), journal);
+    }
+
+    #[test]
     fn created_at_is_stored_with_nine_fractional_digits() {
         let dir = tempfile::tempdir().unwrap();
         let ws = Workspace::create(dir.path(), "A").unwrap();
