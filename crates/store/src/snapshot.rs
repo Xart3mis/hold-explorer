@@ -199,6 +199,47 @@ fn remove_unused_row_states(conn: &Connection) -> Result<(), StoreError> {
     .map_err(database)
 }
 
+/// The holds of a snapshot, in file order, or `SnapshotNotFound`.
+///
+/// Opens no transaction of its own. The caller holds one, so the list of row states and every
+/// row state are read from one state of the file, under one lock instead of one per row.
+fn holds_in(conn: &Connection, snapshot_id: i64) -> Result<Vec<Hold>, StoreError> {
+    let rows: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT rows FROM snapshot WHERE id = ?1",
+            [snapshot_id],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(database)?;
+    let ids = decode_ids(&rows.ok_or(StoreError::SnapshotNotFound { snapshot_id })?)?;
+    let mut find = conn
+        .prepare_cached(&format!(
+            "SELECT {HOLD_COLUMNS} FROM row_state WHERE id = ?1"
+        ))
+        .map_err(database)?;
+    // Where each row state first appears, so a repeated row is copied instead of read again.
+    let mut first_position: HashMap<i64, usize> = HashMap::new();
+    let mut holds: Vec<Hold> = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(&position) = first_position.get(&id) {
+            let repeated = holds[position].clone();
+            holds.push(repeated);
+            continue;
+        }
+        let mut rows = find.query([id]).map_err(database)?;
+        let row = rows
+            .next()
+            .map_err(database)?
+            .ok_or_else(|| StoreError::Corrupt {
+                detail: format!("a snapshot refers to the hold state {id}, which is not stored"),
+            })?;
+        first_position.insert(id, holds.len());
+        holds.push(hold_from_row(row)?);
+    }
+    Ok(holds)
+}
+
 impl Workspace {
     /// Stores `loaded` as a snapshot dated `taken`. Nothing is stored when it fails.
     ///
@@ -492,56 +533,16 @@ impl Workspace {
         self.snapshot(snapshot_id)
     }
 
-    /// The snapshot's id list, or `SnapshotNotFound`.
-    fn row_ids(&self, snapshot_id: i64) -> Result<Vec<i64>, StoreError> {
-        let rows: Option<Vec<u8>> = self
-            .conn
-            .query_row(
-                "SELECT rows FROM snapshot WHERE id = ?1",
-                [snapshot_id],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(database)?;
-        decode_ids(&rows.ok_or(StoreError::SnapshotNotFound { snapshot_id })?)
-    }
-
     /// The holds of a snapshot, in file order.
     pub fn holds(&self, snapshot_id: i64) -> Result<Vec<Hold>, StoreError> {
-        let ids = self.row_ids(snapshot_id)?;
-        let mut find = self
-            .conn
-            .prepare_cached(&format!(
-                "SELECT {HOLD_COLUMNS} FROM row_state WHERE id = ?1"
-            ))
-            .map_err(database)?;
-        let mut by_id: HashMap<i64, Hold> = HashMap::new();
-        let mut holds = Vec::with_capacity(ids.len());
-        for id in ids {
-            if let Some(hold) = by_id.get(&id) {
-                holds.push(hold.clone());
-                continue;
-            }
-            let mut rows = find.query([id]).map_err(database)?;
-            let row = rows
-                .next()
-                .map_err(database)?
-                .ok_or_else(|| StoreError::Corrupt {
-                    detail: format!(
-                        "a snapshot refers to the hold state {id}, which is not stored"
-                    ),
-                })?;
-            let hold = hold_from_row(row)?;
-            by_id.insert(id, hold.clone());
-            holds.push(hold);
-        }
-        Ok(holds)
+        let tx = self.conn.unchecked_transaction().map_err(database)?;
+        holds_in(&tx, snapshot_id)
     }
 
     /// The snapshot's holds as a dataset dated by the snapshot.
     pub fn dataset(&self, snapshot_id: i64, rules: &RuleSet) -> Result<Dataset, StoreError> {
-        let (taken_at, date_source): (String, String) = self
-            .conn
+        let tx = self.conn.unchecked_transaction().map_err(database)?;
+        let (taken_at, date_source): (String, String) = tx
             .query_row(
                 "SELECT taken_at, date_source FROM snapshot WHERE id = ?1",
                 [snapshot_id],
@@ -551,7 +552,9 @@ impl Workspace {
             .map_err(database)?
             .ok_or(StoreError::SnapshotNotFound { snapshot_id })?;
         source_from_text(&date_source)?;
-        let holds = self.holds(snapshot_id)?;
+        let holds = holds_in(&tx, snapshot_id)?;
+        // Nothing was written, so ending the transaction only releases the file.
+        drop(tx);
         Ok(Dataset::build(holds, rules, decode_time(&taken_at)?))
     }
 }
@@ -790,6 +793,56 @@ mod tests {
         assert_eq!(info.row_count, 500);
         assert_eq!(ws.holds(info.id).unwrap(), holds);
         assert_eq!(count(&ws, "row_state"), 1);
+    }
+
+    #[test]
+    fn repeated_rows_come_back_in_file_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = small(dir.path());
+        let hold = |line: &str| Hold {
+            line_id: line.into(),
+            ..Hold::default()
+        };
+        let holds = vec![
+            hold("A"),
+            hold("B"),
+            hold("A"),
+            hold("C"),
+            hold("B"),
+            hold("A"),
+        ];
+        let loaded = hand_built(&base, "repeats", holds.clone());
+        let mut ws = workspace(dir.path());
+        let info = ws
+            .import(&loaded, taken_of(&loaded), &ImportOptions::default())
+            .unwrap();
+        assert_eq!(count(&ws, "row_state"), 3);
+        assert_eq!(ws.holds(info.id).unwrap(), holds);
+        let built = Dataset::build(holds, RuleSet::builtin(), info.taken_at);
+        assert_eq!(ws.dataset(info.id, RuleSet::builtin()).unwrap(), built);
+    }
+
+    #[test]
+    fn reading_leaves_no_transaction_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let info = import_plain(&mut ws, &loaded);
+        for _ in 0..2 {
+            ws.holds(info.id).unwrap();
+            assert!(ws.conn.is_autocommit());
+            ws.dataset(info.id, RuleSet::builtin()).unwrap();
+            assert!(ws.conn.is_autocommit());
+            assert!(ws.holds(info.id + 1).is_err());
+            assert!(ws.conn.is_autocommit());
+            assert!(ws.dataset(info.id + 1, RuleSet::builtin()).is_err());
+            assert!(ws.conn.is_autocommit());
+        }
+        // A writer on another connection is not held up by an earlier read.
+        let other = rusqlite::Connection::open(ws.info().unwrap().path).unwrap();
+        other
+            .execute("INSERT INTO project (project_no) VALUES ('P1')", [])
+            .unwrap();
     }
 
     #[test]
