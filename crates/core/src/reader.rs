@@ -396,6 +396,7 @@ pub(crate) fn parse_workbook_bytes(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::load::{INFO_PROJECT_NO, INFO_REPORT_DATE};
     use hx_synth::{generate, write_workbook, SynthConfig};
 
     #[test]
@@ -409,11 +410,11 @@ mod tests {
         let wb = read_workbook(&path).unwrap();
         assert_eq!(wb.sheet_name, "data");
         assert_eq!(
-            wb.info.get("Project No.").map(String::as_str),
+            wb.info.get(INFO_PROJECT_NO).map(String::as_str),
             Some("0000-TEST")
         );
         assert_eq!(
-            wb.info.get("Report Date").map(String::as_str),
+            wb.info.get(INFO_REPORT_DATE).map(String::as_str),
             Some("09/29/2026 01:16 PM")
         );
         assert_eq!(wb.table.headers, hx_synth::HEADERS);
@@ -760,7 +761,7 @@ mod tests {
         let mut book = rust_xlsxwriter::Workbook::new();
         let sheet = book.add_worksheet();
         sheet.set_name("info").unwrap();
-        sheet.write_string(0, 0, "Project No.").unwrap();
+        sheet.write_string(0, 0, INFO_PROJECT_NO).unwrap();
         sheet.write_string(0, 1, "X").unwrap();
         book.save(&path).unwrap();
         let err = read_workbook(&path).unwrap_err();

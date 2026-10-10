@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::codec::{decode_time, encode_time};
-use crate::error::{database, StoreError};
-use crate::schema::{open_database, peek_id, peek_version};
+use crate::error::{database, io_error, StoreError};
+use crate::schema::{open_database, peek_id, peek_version, SCHEMA_VERSION};
 
 /// The extension of a workspace file.
 pub(crate) const EXTENSION: &str = "holdx-ws";
@@ -48,6 +48,15 @@ pub struct Workspace {
     path: PathBuf,
 }
 
+/// Shows the file and leaves out the database connection.
+impl std::fmt::Debug for Workspace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Workspace")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
+}
+
 fn clean_name(name: &str) -> String {
     let name = name.trim();
     if name.is_empty() {
@@ -72,13 +81,6 @@ fn new_id(name: &str) -> String {
         .take(8)
         .map(|byte| format!("{byte:02x}"))
         .collect()
-}
-
-pub(crate) fn io_error(path: &Path, error: &std::io::Error) -> StoreError {
-    StoreError::Io {
-        path: path.display().to_string(),
-        detail: error.to_string(),
-    }
 }
 
 impl Workspace {
@@ -131,9 +133,19 @@ impl Workspace {
     }
 
     /// Opens the existing workspace at `path`, bringing it up to the newest schema version. A
-    /// missing file is an `Io` error; a file that is not a workspace is left as it was.
+    /// missing file is an `Io` error; a file that is not a workspace, or that a newer version
+    /// wrote, is left as it was. A workspace whose last write was interrupted is first rolled
+    /// back to what it held before that write.
     pub fn open(path: &Path) -> Result<Workspace, StoreError> {
-        peek_version(path)?;
+        let found = peek_version(path)?;
+        // Checked before the id, which a newer version may keep somewhere else.
+        if found > SCHEMA_VERSION {
+            return Err(StoreError::NewerSchema {
+                path: path.display().to_string(),
+                found,
+                supported: SCHEMA_VERSION,
+            });
+        }
         if peek_id(path)?.is_none() {
             return Err(StoreError::NotAWorkspace {
                 path: path.display().to_string(),
@@ -403,7 +415,7 @@ mod tests {
     fn open_of_a_missing_file_is_an_io_error_and_creates_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("missing.holdx-ws");
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(
             matches!(&error, StoreError::Io { path: p, .. } if *p == path.display().to_string()),
             "{error}"
@@ -416,7 +428,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("empty.holdx-ws");
         std::fs::write(&path, b"").unwrap();
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
     }
@@ -434,9 +446,10 @@ mod tests {
     fn open_refuses_a_file_without_a_workspace_id_and_changes_nothing() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("w.holdx-ws");
+        std::fs::write(&path, b"").unwrap();
         drop(crate::schema::open_database(&path).unwrap());
         let before = std::fs::read(&path).unwrap();
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
@@ -456,7 +469,7 @@ mod tests {
             )
             .unwrap();
         let before = std::fs::read(&path).unwrap();
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
@@ -471,10 +484,47 @@ mod tests {
             .execute_batch("PRAGMA application_id = 1213749075;")
             .unwrap();
         let before = std::fs::read(&path).unwrap();
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
+    }
+
+    /// A newer version may keep the id elsewhere, so the version is checked before the id.
+    #[test]
+    fn open_reports_a_newer_version_before_it_looks_for_the_workspace_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("w.holdx-ws");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch(
+                "PRAGMA application_id = 1213749075;
+                 PRAGMA user_version = 99;
+                 CREATE TABLE elsewhere (a INTEGER) STRICT;",
+            )
+            .unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let error = Workspace::open(&path).unwrap_err();
+        assert_eq!(
+            error,
+            StoreError::NewerSchema {
+                path: path.display().to_string(),
+                found: 99,
+                supported: 1,
+            }
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(dir.path()), vec!["w.holdx-ws".to_string()]);
+    }
+
+    #[test]
+    fn the_debug_form_of_a_workspace_names_its_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = Workspace::create(dir.path(), "A").unwrap();
+        let path = ws.info().unwrap().path;
+        let text = format!("{ws:?}");
+        assert!(text.starts_with("Workspace"), "{text}");
+        assert!(text.contains(&format!("{path:?}")), "{text}");
     }
 
     #[test]
@@ -482,7 +532,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("short.holdx-ws");
         std::fs::write(&path, "just a few words\n").unwrap();
-        let error = Workspace::open(&path).err().unwrap();
+        let error = Workspace::open(&path).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&path).unwrap(), b"just a few words\n");
         assert_eq!(files_in(dir.path()), vec!["short.holdx-ws".to_string()]);
@@ -532,7 +582,7 @@ mod tests {
         let file = std::fs::read(&crashed).unwrap();
         let journal = std::fs::read(journal_of(&crashed)).unwrap();
 
-        let error = Workspace::open(&crashed).err().unwrap();
+        let error = Workspace::open(&crashed).unwrap_err();
         assert!(matches!(error, StoreError::NotAWorkspace { .. }), "{error}");
         assert_eq!(std::fs::read(&crashed).unwrap(), file);
         assert_eq!(std::fs::read(journal_of(&crashed)).unwrap(), journal);
@@ -556,7 +606,7 @@ mod tests {
         let file = std::fs::read(&crashed).unwrap();
         let journal = std::fs::read(journal_of(&crashed)).unwrap();
 
-        let error = Workspace::open(&crashed).err().unwrap();
+        let error = Workspace::open(&crashed).unwrap_err();
         assert!(
             matches!(error, StoreError::NewerSchema { found: 99, .. }),
             "{error}"

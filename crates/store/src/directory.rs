@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::StoreError;
-use crate::schema::{peek_version, SCHEMA_VERSION};
-use crate::workspace::{io_error, Workspace, WorkspaceInfo, EXTENSION};
+use crate::error::{io_error, StoreError};
+use crate::schema::peek_version;
+use crate::workspace::{Workspace, WorkspaceInfo, EXTENSION};
 
 /// The workspaces of a folder, and the workspace files that could not be read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -24,20 +24,6 @@ pub struct UnreadableWorkspace {
     pub path: PathBuf,
     /// Why it could not be opened.
     pub error: StoreError,
-}
-
-/// What the workspace file at `path` says about itself. A file a newer version wrote is refused
-/// before anything else is read from it.
-fn read_info(path: &Path) -> Result<WorkspaceInfo, StoreError> {
-    let found = peek_version(path)?;
-    if found > SCHEMA_VERSION {
-        return Err(StoreError::NewerSchema {
-            path: path.display().to_string(),
-            found,
-            supported: SCHEMA_VERSION,
-        });
-    }
-    Workspace::open(path)?.info()
 }
 
 /// Every file in `dir` named `*.holdx-ws`: the workspaces that could be read, and the ones that
@@ -66,7 +52,7 @@ pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
         if !named_like_a_workspace || !path.is_file() {
             continue;
         }
-        match read_info(&path) {
+        match Workspace::open(&path).and_then(|workspace| workspace.info()) {
             Ok(info) => list.workspaces.push(info),
             Err(StoreError::NotAWorkspace { .. }) => {}
             Err(error) => list.unreadable.push(UnreadableWorkspace { path, error }),
@@ -89,8 +75,21 @@ pub fn find_by_project(dir: &Path, project_no: &str) -> Result<Vec<WorkspaceInfo
         .collect())
 }
 
-/// Deletes the workspace file, and only that file.
+/// Deletes the workspace file at `path`, and only that file.
+///
+/// The file must be a workspace: any other file gives `NotAWorkspace` and is left where it is.
+/// A workspace a newer version wrote is deleted too, since the user may remove a workspace this
+/// version cannot open. A missing file gives `Io`.
+///
+/// Close the workspace first, by dropping every `Workspace` opened on it: Windows refuses to
+/// delete a file that is open.
 pub fn delete_workspace(path: &Path) -> Result<(), StoreError> {
+    match peek_version(path) {
+        // A newer version is reported as an error only for a workspace whose last write was
+        // interrupted; the file is a workspace all the same.
+        Ok(_) | Err(StoreError::NewerSchema { .. }) => {}
+        Err(error) => return Err(error),
+    }
     std::fs::remove_file(path).map_err(|e| io_error(path, &e))
 }
 
@@ -197,6 +196,66 @@ mod tests {
     }
 
     #[test]
+    fn delete_refuses_a_file_that_is_not_a_workspace_and_leaves_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let notes = dir.path().join("notes.holdx-ws");
+        std::fs::write(&notes, "just text\n".repeat(50)).unwrap();
+        let foreign = dir.path().join("other.holdx-ws");
+        Connection::open(&foreign)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (a INTEGER)")
+            .unwrap();
+        for path in [&notes, &foreign] {
+            let before = std::fs::read(path).unwrap();
+            let error = delete_workspace(path).unwrap_err();
+            assert_eq!(
+                error,
+                StoreError::NotAWorkspace {
+                    path: path.display().to_string(),
+                }
+            );
+            assert_eq!(std::fs::read(path).unwrap(), before);
+        }
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn delete_removes_a_workspace_from_a_newer_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let newer = Workspace::create(dir.path(), "Newer")
+            .unwrap()
+            .info()
+            .unwrap();
+        Connection::open(&newer.path)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        delete_workspace(&newer.path).unwrap();
+        assert!(!newer.path.exists());
+    }
+
+    #[test]
+    fn delete_removes_a_newer_workspace_whose_last_write_was_interrupted() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = Workspace::create(dir.path(), "Newer")
+            .unwrap()
+            .info()
+            .unwrap();
+        Connection::open(&original.path)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        let crashed = dir.path().join("crashed.holdx-ws");
+        copy_with_hot_journal(
+            &original.path,
+            &crashed,
+            "INSERT INTO project (project_no) VALUES (?1)",
+        );
+        delete_workspace(&crashed).unwrap();
+        assert!(!crashed.exists());
+    }
+
+    #[test]
     fn a_workspace_from_a_newer_version_is_listed_as_unreadable_and_untouched() {
         let dir = tempfile::tempdir().unwrap();
         Workspace::create(dir.path(), "Ok").unwrap();
@@ -223,7 +282,7 @@ mod tests {
             }]
         );
         assert_eq!(std::fs::read(&newer.path).unwrap(), before);
-        let error = Workspace::open(&newer.path).err().unwrap();
+        let error = Workspace::open(&newer.path).unwrap_err();
         assert!(
             matches!(error, StoreError::NewerSchema { found: 99, .. }),
             "{error}"

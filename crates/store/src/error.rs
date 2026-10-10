@@ -1,5 +1,7 @@
 //! The error a failed store operation reports.
 
+use std::path::Path;
+
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -79,6 +81,14 @@ pub enum StoreError {
 /// appears in the public API.
 pub(crate) fn database(error: rusqlite::Error) -> StoreError {
     StoreError::Database {
+        detail: error.to_string(),
+    }
+}
+
+/// Reports a failed read or write of the file or folder at `path`.
+pub(crate) fn io_error(path: &Path, error: &std::io::Error) -> StoreError {
+    StoreError::Io {
+        path: path.display().to_string(),
         detail: error.to_string(),
     }
 }

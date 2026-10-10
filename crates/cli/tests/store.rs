@@ -1,8 +1,11 @@
 //! The workspace commands, driven through the binary.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+use hx_core::mapping::{ColumnMap, Field};
+use hx_store::Workspace;
 use hx_synth::{evolve, generate, write_workbook, SynthConfig};
 use serde_json::Value;
 
@@ -238,14 +241,17 @@ fn the_list_names_a_workspace_it_cannot_read_beside_the_ones_it_can() {
 }
 
 #[test]
-fn a_second_workspace_has_no_saved_mapping() {
+fn import_stores_a_saved_mapping_and_uses_the_one_of_its_own_workspace() {
     let dir = tempfile::tempdir().unwrap();
     let (first, _) = create(dir.path(), "First");
     json(&import(&first, &synth_file(dir.path()), &[]));
+    let stored = Workspace::open(&first).unwrap().saved_mapping().unwrap();
+    assert!(stored.is_some_and(|mapping| !mapping.columns.is_empty()));
+
+    // The mapping saved in the first workspace does not reach the second one.
     let (second, _) = create(dir.path(), "Second");
     let odd = dir.path().join("odd.csv");
     std::fs::write(&odd, "Kind,Line,Why\nMISC.,L-1,x\n").unwrap();
-
     let out = import(&second, &odd, &["--date", "2026-01-02"]);
     assert!(!out.status.success());
     assert!(
@@ -253,6 +259,24 @@ fn a_second_workspace_has_no_saved_mapping() {
         "{}",
         stderr(&out)
     );
+
+    // With a mapping saved for these headers, the same import succeeds and follows it.
+    let headers: Vec<String> = ["Kind", "Line", "Why"].map(String::from).to_vec();
+    let fields = BTreeMap::from([(Field::HoldType, 0), (Field::LineId, 1), (Field::Remark, 2)]);
+    let saved = ColumnMap::from_fields(&headers, fields).to_saved(&headers);
+    Workspace::open(&second)
+        .unwrap()
+        .set_saved_mapping(&saved)
+        .unwrap();
+    let snapshot = json(&import(&second, &odd, &["--date", "2026-01-02"]));
+    assert_eq!(snapshot["row_count"], 1);
+    let ws = Workspace::open(&second).unwrap();
+    let holds = ws.holds(snapshot["id"].as_i64().unwrap()).unwrap();
+    assert_eq!(holds.len(), 1);
+    assert_eq!(holds[0].hold_type, "MISC.");
+    assert_eq!(holds[0].line_id, "L-1");
+    assert_eq!(holds[0].remark, "x");
+    assert_eq!(ws.saved_mapping().unwrap(), Some(saved));
 }
 
 #[test]

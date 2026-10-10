@@ -258,6 +258,9 @@ fn holds_in(conn: &Connection, snapshot_id: i64) -> Result<Vec<Hold>, StoreError
 impl Workspace {
     /// Stores `loaded` as a snapshot dated `taken`. Nothing is stored when it fails.
     ///
+    /// The sizes of a hold must be finite. A size that is not a number (NaN) is stored as absent
+    /// and reads back as absent, so that hold does not come back equal to the one imported.
+    ///
     /// The import is refused with `AlreadyImported` when a snapshot of the same file exists,
     /// unless that snapshot is the one `options.replace` names. A date the user typed keeps the
     /// date the file gave as the detected date. A date whose year is outside 0000 to 9999 is
@@ -326,24 +329,43 @@ impl Workspace {
                 let id = match stored {
                     Some(id) => id,
                     None => {
+                        // Every field is named and there is no `..`, so a field added to `Hold`
+                        // does not compile until it is stored here too.
+                        let Hold {
+                            source_id,
+                            line_id,
+                            name,
+                            role,
+                            remark,
+                            hold_type,
+                            discipline,
+                            created,
+                            released,
+                            release_remark,
+                            release_date,
+                            model_size,
+                            ldt_size,
+                            stress_calc,
+                            extra,
+                        } = hold;
                         insert
                             .execute(rusqlite::params![
                                 hash.as_slice(),
-                                hold.source_id,
-                                hold.line_id,
-                                hold.name,
-                                hold.role,
-                                hold.remark,
-                                hold.hold_type,
-                                hold.discipline,
-                                hold.created.map(encode_time),
-                                hold.released,
-                                hold.release_remark,
-                                hold.release_date.map(encode_time),
-                                hold.model_size,
-                                hold.ldt_size,
-                                hold.stress_calc,
-                                to_json(&hold.extra, "extra columns of a hold")?,
+                                source_id,
+                                line_id,
+                                name,
+                                role,
+                                remark,
+                                hold_type,
+                                discipline,
+                                created.map(encode_time),
+                                released,
+                                release_remark,
+                                release_date.map(encode_time),
+                                model_size,
+                                ldt_size,
+                                stress_calc,
+                                to_json(extra, "extra columns of a hold")?,
                             ])
                             .map_err(database)?;
                         tx.last_insert_rowid()
@@ -589,10 +611,13 @@ mod tests {
 
     use chrono::{NaiveDate, NaiveDateTime};
     use hx_core::dataset::Dataset;
+    use hx_core::import::{SkipKind, SkippedRow};
     use hx_core::load::{load_file, Loaded};
+    use hx_core::mapping::{ColumnMap, ExtraColumn, Field, SavedColumn, SavedMapping};
     use hx_core::model::Hold;
     use hx_core::rules::RuleSet;
     use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
+    use hx_core::warning::{ImportWarning, WarningKind};
     use hx_synth::{evolve, generate, SynthConfig};
 
     use super::*;
@@ -1505,6 +1530,227 @@ mod tests {
         assert_eq!(ws.latest().unwrap(), Some(last.clone()));
         assert_eq!(ws.snapshots_on(in_year(0)).unwrap(), vec![first]);
         assert_eq!(ws.snapshots_on(in_year(9999)).unwrap(), vec![last]);
+    }
+
+    fn warning(
+        kind: WarningKind,
+        row_number: Option<usize>,
+        column: Option<&str>,
+        value: Option<&str>,
+        detail: &str,
+    ) -> ImportWarning {
+        ImportWarning {
+            kind,
+            row_number,
+            column: column.map(str::to_string),
+            value: value.map(str::to_string),
+            detail: detail.to_string(),
+        }
+    }
+
+    /// What the literals of `the_stored_text_forms_of_version_1_still_read` stand for.
+    struct Version1 {
+        info_sheet: BTreeMap<String, String>,
+        headers: Vec<String>,
+        mapping: ColumnMap,
+        skipped: Vec<SkippedRow>,
+        warnings: Vec<ImportWarning>,
+    }
+
+    fn version_1() -> Version1 {
+        let info_sheet = BTreeMap::from([
+            ("Project No.".to_string(), "0000-TEST".to_string()),
+            ("Report Date".to_string(), "09/29/2026 01:16 PM".to_string()),
+        ]);
+        let headers: Vec<String> = ["id", "line_id", "Notes", "Notes", "Ünï \"q\""]
+            .iter()
+            .map(|h| h.to_string())
+            .collect();
+        let mapping = ColumnMap {
+            fields: Field::ALL
+                .iter()
+                .enumerate()
+                .map(|(column, &field)| (field, column))
+                .collect(),
+            extras: vec![
+                ExtraColumn {
+                    column: 14,
+                    name: "Notes".into(),
+                },
+                ExtraColumn {
+                    column: 15,
+                    name: "Notes".into(),
+                },
+            ],
+        };
+        let skipped = vec![
+            SkippedRow {
+                row_number: 3,
+                kind: SkipKind::BlankLineId,
+                value: None,
+                reason: "blank line_id".into(),
+            },
+            SkippedRow {
+                row_number: 4,
+                kind: SkipKind::UnreadableDate,
+                value: Some("soon".into()),
+                reason: "unreadable date \"soon\"".into(),
+            },
+        ];
+        let warnings = vec![
+            warning(
+                WarningKind::UnreadableReleaseDate,
+                Some(5),
+                Some("release_date"),
+                Some("soon"),
+                "a",
+            ),
+            warning(
+                WarningKind::UnrecognizedReleased,
+                Some(6),
+                Some("released"),
+                Some("maybe"),
+                "b",
+            ),
+            warning(WarningKind::AssumedDateOrder, None, Some("date"), None, "c"),
+            warning(WarningKind::ErrorCells, None, None, None, "d"),
+            warning(WarningKind::DuplicateHeader, None, Some("Notes"), None, "e"),
+            warning(
+                WarningKind::UnreadableSize,
+                Some(7),
+                Some("model_size"),
+                Some("big"),
+                "f",
+            ),
+            warning(
+                WarningKind::UnreadableId,
+                Some(8),
+                Some("id"),
+                Some("1.5"),
+                "g",
+            ),
+            warning(
+                WarningKind::DuplicateId,
+                Some(9),
+                Some("id"),
+                Some("1"),
+                "h",
+            ),
+            warning(
+                WarningKind::UnreadableReportDate,
+                None,
+                None,
+                Some("someday"),
+                "i",
+            ),
+        ];
+        Version1 {
+            info_sheet,
+            headers,
+            mapping,
+            skipped,
+            warnings,
+        }
+    }
+
+    /// The stored forms of version 1, written out. They are an on-disk format: a renamed field
+    /// or variant in `hx-core` must not stop this build from reading a stored workspace. A
+    /// failure here means the stored form changed, which needs a migration, not a new literal.
+    #[test]
+    fn the_stored_text_forms_of_version_1_still_read() {
+        const SOURCES: [(&str, SnapshotSource); 4] = [
+            ("InfoSheet", SnapshotSource::InfoSheet),
+            ("FileName", SnapshotSource::FileName),
+            ("FileTime", SnapshotSource::FileTime),
+            ("User", SnapshotSource::User),
+        ];
+        const INFO: &str = r#"{"Project No.":"0000-TEST","Report Date":"09/29/2026 01:16 PM"}"#;
+        const HEADERS: &str = r#"["id","line_id","Notes","Notes","Ünï \"q\""]"#;
+        const MAPPING: &str = concat!(
+            r#"{"fields":{"SourceId":0,"LineId":1,"Name":2,"Role":3,"Remark":4,"HoldType":5,"#,
+            r#""Discipline":6,"Created":7,"Released":8,"ReleaseRemark":9,"ReleaseDate":10,"#,
+            r#""ModelSize":11,"LdtSize":12,"StressCalc":13},"#,
+            r#""extras":[{"column":14,"name":"Notes"},{"column":15,"name":"Notes"}]}"#,
+        );
+        const SKIPPED: &str = concat!(
+            r#"[{"row_number":3,"kind":"BlankLineId","value":null,"reason":"blank line_id"},"#,
+            r#"{"row_number":4,"kind":"UnreadableDate","value":"soon","#,
+            r#""reason":"unreadable date \"soon\""}]"#,
+        );
+        const WARNINGS: &str = concat!(
+            r#"[{"kind":"UnreadableReleaseDate","row_number":5,"column":"release_date","#,
+            r#""value":"soon","detail":"a"},"#,
+            r#"{"kind":"UnrecognizedReleased","row_number":6,"column":"released","#,
+            r#""value":"maybe","detail":"b"},"#,
+            r#"{"kind":"AssumedDateOrder","row_number":null,"column":"date","value":null,"#,
+            r#""detail":"c"},"#,
+            r#"{"kind":"ErrorCells","row_number":null,"column":null,"value":null,"detail":"d"},"#,
+            r#"{"kind":"DuplicateHeader","row_number":null,"column":"Notes","value":null,"#,
+            r#""detail":"e"},"#,
+            r#"{"kind":"UnreadableSize","row_number":7,"column":"model_size","value":"big","#,
+            r#""detail":"f"},"#,
+            r#"{"kind":"UnreadableId","row_number":8,"column":"id","value":"1.5","detail":"g"},"#,
+            r#"{"kind":"DuplicateId","row_number":9,"column":"id","value":"1","detail":"h"},"#,
+            r#"{"kind":"UnreadableReportDate","row_number":null,"column":null,"#,
+            r#""value":"someday","detail":"i"}]"#,
+        );
+        const SAVED_MAPPING: &str = concat!(
+            r#"{"columns":[{"key":"line","occurrence":0,"field":"LineId"},"#,
+            r#"{"key":"remark","occurrence":0,"field":"Remark"},"#,
+            r#"{"key":"remark","occurrence":1,"field":null}]}"#,
+        );
+        const DETECTED_AT: &str = "2026-09-01T08:30:15.000000007";
+
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let id = import_plain(&mut ws, &loaded).id;
+        let expected = version_1();
+        ws.conn
+            .execute(
+                "UPDATE snapshot SET info_json = ?1, headers_json = ?2, mapping_json = ?3, \
+                 skipped_json = ?4, warnings_json = ?5, detected_at = ?6 WHERE id = ?7",
+                rusqlite::params![INFO, HEADERS, MAPPING, SKIPPED, WARNINGS, DETECTED_AT, id],
+            )
+            .unwrap();
+        for (text, source) in SOURCES {
+            ws.conn
+                .execute(
+                    "UPDATE snapshot SET date_source = ?1, detected_source = ?1 WHERE id = ?2",
+                    rusqlite::params![text, id],
+                )
+                .unwrap();
+            let detail = ws.snapshot_detail(id).unwrap();
+            assert_eq!(detail.info.date_source, source);
+            assert_eq!(detail.detected, Some(SnapshotDate { at: at(7), source }));
+            assert_eq!(detail.info_sheet, expected.info_sheet);
+            assert_eq!(detail.headers, expected.headers);
+            assert_eq!(detail.mapping, expected.mapping);
+            assert_eq!(detail.skipped, expected.skipped);
+            assert_eq!(detail.warnings, expected.warnings);
+        }
+
+        ws.conn
+            .execute(
+                "INSERT INTO setting (key, value_json) VALUES ('saved_mapping', ?1)",
+                [SAVED_MAPPING],
+            )
+            .unwrap();
+        let column = |key: &str, occurrence, field| SavedColumn {
+            key: key.into(),
+            occurrence,
+            field,
+        };
+        assert_eq!(
+            ws.saved_mapping().unwrap(),
+            Some(SavedMapping {
+                columns: vec![
+                    column("line", 0, Some(Field::LineId)),
+                    column("remark", 0, Some(Field::Remark)),
+                    column("remark", 1, None),
+                ],
+            })
+        );
     }
 
     #[test]

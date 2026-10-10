@@ -6,11 +6,15 @@ use std::path::Path;
 
 use rusqlite::{Connection, ErrorCode, OpenFlags, OptionalExtension};
 
-use crate::error::{database, StoreError};
-use crate::workspace::io_error;
+use crate::error::{database, io_error, StoreError};
 
 /// The schema version this build reads and writes.
 pub const SCHEMA_VERSION: u32 = 1;
+
+// Stored row-state hashes carry no version of their own. A new hash version must come with a
+// migration that rehashes every row of `row_state`; otherwise new rows would silently stop
+// matching the rows already stored.
+const _: () = assert!(hx_core::fingerprint::STATE_HASH_VERSION == 1);
 
 /// The `application_id` of a workspace file (the ASCII letters "HXWS"), which tells a workspace
 /// from any other SQLite file.
@@ -206,15 +210,14 @@ pub(crate) fn peek_id(path: &Path) -> Result<Option<String>, StoreError> {
     })
 }
 
-/// Opens the workspace file at `path`, creating it when it does not exist, and brings it up to
-/// the newest schema version. Nothing is written until the file is known to be a workspace (or
-/// new), so a foreign file stays exactly as it was.
+/// Opens the existing file at `path` and brings it up to the newest schema version. The file is
+/// never created: a new workspace starts as the empty file `Workspace::create` reserves, and a
+/// missing file is an `Io` error. Nothing is written until the file is known to be a workspace
+/// (or empty), so a foreign file stays exactly as it was.
 pub(crate) fn open_database(path: &Path) -> Result<Connection, StoreError> {
     let mut conn = Connection::open_with_flags(
         path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_CREATE
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|e| database_error(path, e))?;
     let not_a_workspace = || StoreError::NotAWorkspace {
@@ -311,8 +314,21 @@ mod tests {
 
     fn new_workspace(dir: &Path) -> PathBuf {
         let path = dir.join("w.hxw");
+        std::fs::write(&path, b"").unwrap();
         open_database(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn a_missing_file_is_an_io_error_and_is_not_created() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("gone.hxw");
+        let error = open_database(&path).unwrap_err();
+        assert!(
+            matches!(&error, StoreError::Io { path: p, .. } if *p == path.display().to_string()),
+            "{error}"
+        );
+        assert_eq!(files_in(dir.path()), Vec::<String>::new());
     }
 
     #[test]
@@ -397,6 +413,35 @@ mod tests {
             .query_row("SELECT count(*) FROM project", [], |r| r.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_failed_backup_stops_the_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = new_workspace(dir.path());
+        let mut conn = open_database(&path).unwrap();
+        conn.execute("INSERT INTO project (project_no) VALUES ('P1')", [])
+            .unwrap();
+        // A directory where the backup belongs, so the copy cannot be made.
+        std::fs::create_dir(dir.path().join("w.hxw.backup-v1")).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let list = [
+            step(1, V1_SQL),
+            step(2, "CREATE TABLE two (a INTEGER) STRICT;"),
+        ];
+        let error = migrate(&mut conn, &path, &list).unwrap_err();
+        assert!(
+            matches!(&error, StoreError::Io { detail, .. } if detail.contains("backup")),
+            "{error}"
+        );
+        assert!(!table_names(&conn).contains(&"two".to_string()));
+        drop(conn);
+        assert_eq!(user_version(&path), 1);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(
+            files_in(dir.path()),
+            vec!["w.hxw".to_string(), "w.hxw.backup-v1".to_string()]
+        );
     }
 
     #[test]
