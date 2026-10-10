@@ -25,7 +25,7 @@ Each task gives the files, the exact public interface (commands, types, componen
 3. **Commands address a workspace by its id**, never by a path. The interface receives paths only as display text and sends paths only when they come from a file dialog or a drop.
 4. **The file being imported stays in Rust state.** The interface receives a slim view (headers, a preview, the proposed mapping) and sends back only the mapping the user edited.
 5. **One open workspace, one import draft at a time.** State is one `Mutex`.
-6. **The sidebar shows only destinations that exist.** In this plan: Overview and Settings. M1c adds the rest. No screen says "coming soon".
+6. **The sidebar shows every destination of the spec; those not built yet open a "coming soon" screen** (decided by the owner, 2026-10-11). In this plan Overview and Settings are real. Breakdown, Lines, Blockers, History, People, Follow-up, and Rules each open a screen that names the destination, says in one or two sentences what it will show, and says it is not available yet. These screens are a product decision, not unfinished work: each is a complete, tested page, and the plan that builds a destination replaces its screen.
 7. **Not in this plan:** bulk import (spec 6.6), deleting a workspace or a snapshot from the interface, the history bundle, the update check, signed or published builds, and end-to-end tests through WebDriver. Each belongs to the plan named in "Left for later plans".
 8. **Interface libraries.** React Aria Components for controls (keyboard and focus behaviour, a table with arrow-key movement, a drop zone); TanStack Query for command results (a refetch keeps the previous result on screen, as spec 13.1 asks); React Router for the page-level flows; CSS Modules over design tokens, no utility framework; i18next for text.
 
@@ -66,6 +66,7 @@ ui/src/features/workspaces/                switcher, create, rename
 ui/src/features/import/                    file entry, sheet choice, mapping page, review page
 ui/src/features/overview/                  first Overview
 ui/src/features/settings/                  theme, data folder
+ui/src/features/coming-soon/               the screen for destinations not built yet
 ui/src/locales/en.json
 ui/src/test/                               setup, IPC mock helpers, fixtures
 src-tauri/Cargo.toml, build.rs, tauri.conf.json, capabilities/default.json, icons/
@@ -456,13 +457,25 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 
 ### Task 8: Shell, first run, workspaces, and settings
 
-**Files:** `ui/src/features/{shell, welcome, workspaces, settings}/*`, `ui/src/app/router.tsx`, `ui/src/main.tsx`, `ui/src/locales/en.json`.
+**Files:** `ui/src/features/{shell, welcome, workspaces, settings, coming-soon}/*`, `ui/src/app/{router.tsx, destinations.ts}`, `ui/src/main.tsx`, `ui/src/locales/en.json`.
 
-**Interface (routes):** `/welcome` (no workspace open), `/overview`, `/settings`, `/import/*` (Task 9). `AppLayout` renders the top bar, the sidebar, and the page. `useApp()` gives the `AppStart` state and the actions that change it (`openWorkspace`, `createWorkspace`, `renameWorkspace`, `selectSnapshot`, `setTheme`), each a mutation that updates the cached state.
+**Interface (routes):** `/welcome` (no workspace open), `/overview`, `/breakdown`, `/lines`, `/blockers`, `/history`, `/people`, `/follow-up`, `/rules`, `/settings`, `/import/*` (Task 9).
+
+```ts
+// destinations.ts: the one list the sidebar, the router, and the shortcuts are built from
+export type DestinationId = 'overview' | 'breakdown' | 'lines' | 'blockers' | 'history' | 'people' | 'follow-up' | 'rules' | 'settings';
+export interface Destination { id: DestinationId; path: string; shortcut?: string; available: boolean; group: 'data' | 'setup' }
+export const destinations: readonly Destination[];
+// coming-soon: one component, driven by the destination
+export function ComingSoon(props: { destination: DestinationId }): JSX.Element;
+``` `AppLayout` renders the top bar, the sidebar, and the page. `useApp()` gives the `AppStart` state and the actions that change it (`openWorkspace`, `createWorkspace`, `renameWorkspace`, `selectSnapshot`, `setTheme`), each a mutation that updates the cached state.
 
 **Rules:**
 - Top bar, left to right: the workspace switcher (the open workspace's name; a list of the others; "New workspace"; "Rename"), the snapshot selector (date, time, and row count of each snapshot, newest first; the selected one marked), and the Import button (primary). Global search arrives with M1c and has no control here.
-- Sidebar: Overview and Settings, each with a label and an icon, the current one marked for assistive technology and visually. `Ctrl+1` opens Overview; `Ctrl+I` starts an import; `Ctrl+,` opens Settings. Shortcuts do not fire while a text field has focus, except those with `Ctrl`.
+- Sidebar, in the order of spec 9.1: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then, set apart, Rules and Settings. Each has a label and an icon; the current one is marked for assistive technology and visually. A destination that is not built yet looks and behaves like the others in the sidebar except for a quiet "Soon" tag after its label, which is also part of its accessible name; it is never disabled, since a disabled item explains nothing.
+- `Ctrl+1` to `Ctrl+7` open the first seven destinations in sidebar order, built or not; `Ctrl+I` starts an import; `Ctrl+,` opens Settings. Shortcuts do not fire while a text field has focus, except those with `Ctrl`.
+- A destination that is not built yet opens its "coming soon" screen: the destination's name as the page heading; one or two sentences, from the text catalog, that say what the destination will show, written from spec 9.2 in the product's plain tone; a line that says it is not available in this version; and one action, "Go to Overview". It uses the `EmptyState` component inside the normal layout, with the top bar and sidebar working as everywhere else. It names no date, no version number, and no internal plan name, and it has no sign-up, progress bar, or illustration.
+- `destinations.ts` is the only place that says which destinations are available. Making a destination real is changing its `available` flag and its route's element; the sidebar tag and the screen go away with it.
 - When the selected snapshot is not the newest, a notice under the top bar names the snapshot in view and offers "Go to newest".
 - With no workspace open, the app shows the welcome page: a drop zone and an "Open a file" button that start an import, and "Open demo workspace". When workspaces exist they are listed with their snapshot counts and latest dates, to open. Unreadable workspace files are listed apart with the reason and a "Show in folder" action; they never block the page.
 - Creating a workspace asks for a name on the page (an inline form, not a dialog) and opens it. Rename edits in place, saves on `Enter`, cancels on `Esc`, and offers undo in a toast.
@@ -471,7 +484,7 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 - Dropping a file anywhere on the window starts an import (Task 9 supplies the page; until then the drop handler is wired to the route). While a file is dragged over the window, the whole window shows the drop target.
 - Focus moves to the page's heading on navigation. The page title in the top bar and the document title name the current page.
 
-**Tests:** with `mockCommands`: no workspaces shows welcome with the drop zone and the demo button; the demo button calls `demo_create` and lands on Overview; existing workspaces are listed and open on activation; an unreadable workspace shows its reason and does not hide the readable ones; the switcher lists, opens, creates, and renames, and a failed create shows the error with its fix; rename undo restores the old name; the snapshot selector selects, and selecting an older one shows the notice, whose action returns to the newest; theme changes call the command and set the attribute; `Ctrl+1`, `Ctrl+,`, and `Ctrl+I` navigate, and plain keys typed in a field do not; a first load shows skeletons, and a failed load shows the error and retries; every page passes the accessibility checker; each page is operable with the keyboard alone (a test walks the tab order of the shell).
+**Tests:** with `mockCommands`: the sidebar lists the nine destinations in order, in two groups; the seven that are not built carry the "Soon" tag in their accessible name and Overview and Settings do not; each of the seven routes renders its own heading and description, the not-available line, and "Go to Overview", which navigates there; `Ctrl+1` to `Ctrl+7` open the seven first destinations; a destination marked available in a test copy of the list renders its real element and loses the tag; each coming-soon screen passes the accessibility checker and is reached and left by keyboard alone; no workspaces shows welcome with the drop zone and the demo button; the demo button calls `demo_create` and lands on Overview; existing workspaces are listed and open on activation; an unreadable workspace shows its reason and does not hide the readable ones; the switcher lists, opens, creates, and renames, and a failed create shows the error with its fix; rename undo restores the old name; the snapshot selector selects, and selecting an older one shows the notice, whose action returns to the newest; theme changes call the command and set the attribute; `Ctrl+,` and `Ctrl+I` navigate, and plain keys typed in a field do not; a first load shows skeletons, and a failed load shows the error and retries; every page passes the accessibility checker; each page is operable with the keyboard alone (a test walks the tab order of the shell).
 
 **Commit:** `feat(ui): add the shell, first run, workspaces, and settings`
 
@@ -508,7 +521,7 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 - Bars in one group use one color; the label carries identity. Blank discipline shows as the label the core returns. No chart library is added in this plan.
 - A workspace without snapshots shows an empty state whose action starts an import.
 - Tiles follow `DESIGN.md`'s stat tile: no gradient, no decorative icon, proportional figures.
-- Deltas, the trend, top blockers, top lines, and the attention list arrive with M1c and M2; nothing on this page refers to them.
+- Deltas, the trend, top blockers, top lines, and the attention list arrive with M1c and M2; nothing on this page refers to them. (Whole destinations that are not built have their own "coming soon" screens; parts of a built page do not.)
 
 **Tests:** from a fixture `OverviewView`: the four tiles show formatted numbers; bar rows are in the order given with labels and both counts; the table switch shows the same rows; the empty state starts an import; loading shows skeletons shaped like tiles and bars; an error shows `ErrorState` with retry; a snapshot change refetches and dims the previous render; the page passes the accessibility checker; bar widths are proportional to the largest count.
 
@@ -523,8 +536,8 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 - [ ] `node tools/design/check-tokens.mjs` passes.
 - [ ] `git diff main -- tools/parity/reference.mjs crates/cli/tests/parity.rs` is empty; no data file is tracked.
 - [ ] `pnpm tauri build --no-bundle` on Linux; the binary starts; its size is recorded. `pnpm tauri build --bundles appimage` on Linux; the AppImage starts. CI builds the Windows binary and records its size against the 25 MB limit of spec 17.
-- [ ] By hand on Linux, with a synthetic file made by `hx-cli synth`: first run shows welcome; the demo workspace opens with four snapshots; a new workspace is created; the file is imported through review; the same file is refused; a text file with other headers goes through mapping; the next file with those headers needs no mapping; an older snapshot is selected and the notice appears; the theme switches; a second launch focuses the first window; the app restarts into the last workspace; a workspace file whose version is set to 99 is listed as unreadable and the others still open. Cold start is timed against the 2 s limit of spec 17.
-- [ ] Screens are captured in both themes at 1280 by 800 and at 1920 by 1080: welcome, Overview, mapping, review (clean and with warnings), Settings, an error state. They are audited with the design skill's audit and critique against `PRODUCT.md`, `DESIGN.md`, and spec 13; findings rated major or worse are fixed in this plan.
+- [ ] By hand on Linux, with a synthetic file made by `hx-cli synth`: first run shows welcome; each of the seven coming-soon destinations opens from the sidebar and by its shortcut; the demo workspace opens with four snapshots; a new workspace is created; the file is imported through review; the same file is refused; a text file with other headers goes through mapping; the next file with those headers needs no mapping; an older snapshot is selected and the notice appears; the theme switches; a second launch focuses the first window; the app restarts into the last workspace; a workspace file whose version is set to 99 is listed as unreadable and the others still open. Cold start is timed against the 2 s limit of spec 17.
+- [ ] Screens are captured in both themes at 1280 by 800 and at 1920 by 1080: welcome, Overview, mapping, review (clean and with warnings), Settings, one coming-soon screen, an error state. They are audited with the design skill's audit and critique against `PRODUCT.md`, `DESIGN.md`, and spec 13; findings rated major or worse are fixed in this plan.
 
 ---
 
@@ -533,6 +546,7 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 - The app starts on Linux and Windows, remembers its theme and last workspace, and lists workspaces with those it cannot read set apart.
 - A file is imported through an optional mapping step and a review page into a workspace; the mapping is remembered; duplicates and same-day snapshots are handled.
 - The first Overview shows a stored snapshot's headline numbers; the snapshot selector shows older states.
+- The sidebar shows all nine destinations; the seven not built yet open a "coming soon" screen that says what each will show.
 - The boundary is typed from the Rust side, and CI keeps it so.
 
 ## Spec coverage of this plan
@@ -546,7 +560,8 @@ export const queryClient: QueryClient;                 // refetches keep the pre
 | 6.4 workspace matching | 5, 9 |
 | 6.5 same file refused; replace | 5, 9 |
 | 6.7 drag and drop | 8, 9 |
-| 9.1 shell: top bar, sidebar, snapshot selector and banner | 8 |
+| 9.1 shell: top bar, sidebar with every destination, snapshot selector and banner | 8 |
+| 9.2 the destinations not built yet, each as a "coming soon" screen | 8 |
 | 9.2 Overview (first part), Settings (theme, data folder, About) | 8, 10 |
 | 9.4 first run: drop zone, demo workspace | 6, 8 |
 | 13 design direction, interface rules, design context files | 1, 7, 11 |
