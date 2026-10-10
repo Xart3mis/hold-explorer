@@ -155,12 +155,26 @@ impl Cell {
             Cell::Text(s) => s.trim().parse().ok(),
             _ => None,
         }
+        .filter(|n| n.is_finite())
+    }
+
+    /// A whole-number id: text parsed as `i64`; a number only if it is finite, whole, and
+    /// within +-2^53, so it is exact as an `f64`.
+    pub fn as_id(&self) -> Option<i64> {
+        const LIMIT: f64 = 9_007_199_254_740_992.0;
+        match self {
+            Cell::Text(s) => s.trim().parse().ok(),
+            Cell::Number(n) if n.is_finite() && n.fract() == 0.0 && n.abs() <= LIMIT => {
+                Some(*n as i64)
+            }
+            _ => None,
+        }
     }
 
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Cell::Bool(b) => Some(*b),
-            Cell::Number(n) => Some(*n != 0.0),
+            Cell::Number(n) if n.is_finite() => Some(*n != 0.0),
             Cell::Text(s) => match s.trim().to_ascii_lowercase().as_str() {
                 "true" | "1" | "yes" => Some(true),
                 "false" | "0" | "no" => Some(false),
@@ -384,5 +398,31 @@ mod tests {
         assert!(Cell::Number(19999.0).as_datetime(o).is_err());
         assert!(Cell::Number(80001.0).as_datetime(o).is_err());
         assert!(Cell::Number(f64::NAN).as_datetime(o).is_err());
+    }
+
+    #[test]
+    fn non_finite_numbers_are_not_numbers() {
+        assert_eq!(text("NaN").as_number(), None);
+        assert_eq!(text("inf").as_number(), None);
+        assert_eq!(text("-infinity").as_number(), None);
+        assert_eq!(Cell::Number(f64::INFINITY).as_number(), None);
+        assert_eq!(Cell::Number(f64::NAN).as_bool(), None);
+    }
+
+    #[test]
+    fn ids_must_be_exact_whole_numbers() {
+        assert_eq!(text("NaN").as_id(), None);
+        assert_eq!(text("1.9").as_id(), None);
+        assert_eq!(text("9007199254740993").as_id(), Some(9007199254740993));
+        assert_eq!(text(" 42 ").as_id(), Some(42));
+        assert_eq!(Cell::Number(42.0).as_id(), Some(42));
+        assert_eq!(Cell::Number(1.9).as_id(), None);
+        assert_eq!(Cell::Number(f64::NAN).as_id(), None);
+        assert_eq!(Cell::Number(1e300).as_id(), None);
+        assert_eq!(
+            Cell::Number(9007199254740992.0).as_id(),
+            Some(9007199254740992)
+        );
+        assert_eq!(Cell::Number(9007199254740994.0).as_id(), None);
     }
 }

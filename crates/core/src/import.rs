@@ -20,8 +20,9 @@ pub struct Parsed {
     pub limited: bool,
 }
 
+/// A model or LDT size: finite and greater than zero.
 fn size(cell: &Cell) -> Option<f64> {
-    cell.as_number().filter(|n| *n > 0.0)
+    cell.as_number().filter(|n| n.is_finite() && *n > 0.0)
 }
 
 /// Day/month order of one date column, from its text cells of the shape `a/b/yyyy`
@@ -122,7 +123,7 @@ pub fn parse_table(table: &RawTable, map: &ColumnMap) -> Result<Parsed, ImportEr
             .collect();
 
         holds.push(Hold {
-            source_id: cell(row, Field::SourceId).as_number().map(|n| n as i64),
+            source_id: cell(row, Field::SourceId).as_id(),
             line_id,
             name: or_dash(&cell(row, Field::Name).as_text()),
             role: or_dash(&cell(row, Field::Role).as_text()),
@@ -444,5 +445,33 @@ mod tests {
         let message = err.to_string();
         assert!(message.contains("4 rows"), "{message}");
         assert!(message.contains("row 2: blank line_id"), "{message}");
+    }
+
+    #[test]
+    fn odd_ids_and_sizes_are_dropped_not_coerced() {
+        let mut t = RawTable {
+            headers: vec![
+                "id".into(),
+                "line_id".into(),
+                "hold_remark".into(),
+                "hold_type".into(),
+                "model_size".into(),
+            ],
+            rows: Vec::new(),
+        };
+        for (id, size) in [("NaN", "inf"), ("1.9", "NaN"), ("9007199254740993", "6")] {
+            t.rows.push(vec![
+                text(id),
+                text("L-1"),
+                text("x"),
+                text("MISC."),
+                text(size),
+            ]);
+        }
+        let parsed = parse_table(&t, &ColumnMap::auto(&t.headers)).unwrap();
+        let ids: Vec<_> = parsed.holds.iter().map(|h| h.source_id).collect();
+        assert_eq!(ids, vec![None, None, Some(9007199254740993)]);
+        let sizes: Vec<_> = parsed.holds.iter().map(|h| h.model_size).collect();
+        assert_eq!(sizes, vec![None, None, Some(6.0)]);
     }
 }
