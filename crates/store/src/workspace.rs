@@ -32,13 +32,13 @@ pub struct WorkspaceInfo {
     pub name: String,
     /// The project numbers this workspace covers, sorted.
     pub project_numbers: Vec<String>,
-    /// When the workspace was created.
+    /// When the workspace was created, in UTC.
     pub created_at: NaiveDateTime,
     /// The file the workspace was opened or created with.
     pub path: PathBuf,
     /// How many snapshots the workspace holds.
     pub snapshot_count: usize,
-    /// Date of the newest snapshot.
+    /// Date of the newest snapshot: the date and time its file gives, not converted to UTC.
     pub latest_taken_at: Option<NaiveDateTime>,
 }
 
@@ -563,6 +563,19 @@ mod tests {
         );
         assert_eq!(std::fs::read(&crashed).unwrap(), file);
         assert_eq!(std::fs::read(journal_of(&crashed)).unwrap(), journal);
+    }
+
+    #[test]
+    fn the_creation_time_is_in_utc() {
+        let dir = tempfile::tempdir().unwrap();
+        let before = Utc::now().naive_utc();
+        let info = Workspace::create(dir.path(), "A").unwrap().info().unwrap();
+        let after = Utc::now().naive_utc();
+        assert!(
+            before <= info.created_at && info.created_at <= after,
+            "{} is not between {before} and {after}",
+            info.created_at
+        );
     }
 
     #[test]

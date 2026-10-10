@@ -44,6 +44,13 @@ pub enum StoreError {
         snapshot_id: i64,
     },
 
+    #[error("The snapshot date {at} cannot be stored, because snapshots are kept in date order and only years 0000 to 9999 sort correctly. Enter a date whose year is between 0000 and 9999, for example 2026-10-07.")]
+    /// The snapshot date has a year the store cannot keep in order.
+    SnapshotDateOutOfRange {
+        /// The date that was refused.
+        at: NaiveDateTime,
+    },
+
     #[error("Could not read or write {path}: {}. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.", .detail.trim_end_matches('.'))]
     /// A workspace file could not be read or written.
     Io {
@@ -79,6 +86,7 @@ pub(crate) fn database(error: rusqlite::Error) -> StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Datelike;
 
     fn every_variant() -> Vec<(StoreError, &'static str)> {
         let taken_at = chrono::NaiveDate::from_ymd_opt(2026, 3, 1)
@@ -110,6 +118,18 @@ mod tests {
             (
                 StoreError::SnapshotNotFound { snapshot_id: 7 },
                 "choose a snapshot",
+            ),
+            (
+                StoreError::SnapshotDateOutOfRange {
+                    at: taken_at.with_year(10_000).expect("a valid date"),
+                },
+                "Enter a date",
+            ),
+            (
+                StoreError::SnapshotDateOutOfRange {
+                    at: taken_at.with_year(-1).expect("a valid date"),
+                },
+                "Enter a date",
             ),
             (
                 StoreError::Io {
@@ -168,6 +188,21 @@ mod tests {
             let back: StoreError = serde_json::from_value(json).unwrap();
             assert_eq!(back, error);
         }
+    }
+
+    #[test]
+    fn a_date_out_of_range_serializes_with_its_kind_and_names_the_date() {
+        let at = chrono::NaiveDate::from_ymd_opt(12_345, 12, 31)
+            .and_then(|d| d.and_hms_opt(0, 0, 0))
+            .expect("a valid date");
+        let error = StoreError::SnapshotDateOutOfRange { at };
+        assert_eq!(
+            serde_json::to_value(&error).unwrap(),
+            serde_json::json!({"kind": "SnapshotDateOutOfRange", "at": "+12345-12-31T00:00:00"})
+        );
+        let message = error.to_string();
+        assert!(message.contains("+12345-12-31"), "{message}");
+        assert!(message.contains("0000 to 9999"), "{message}");
     }
 
     #[test]

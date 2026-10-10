@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::{Local, NaiveDateTime};
+use chrono::{Datelike, NaiveDateTime, Utc};
 use hx_core::dataset::Dataset;
 use hx_core::fingerprint::state_hash;
 use hx_core::import::SkippedRow;
@@ -24,7 +24,8 @@ use crate::workspace::Workspace;
 pub struct SnapshotInfo {
     /// The snapshot's id in this workspace.
     pub id: i64,
-    /// When the snapshot was taken.
+    /// When the snapshot was taken: the date and time the file itself gives, in the local time of
+    /// whoever wrote the file, not converted to UTC. Its year is between 0000 and 9999.
     pub taken_at: NaiveDateTime,
     /// Where `taken_at` came from.
     pub date_source: SnapshotSource,
@@ -32,7 +33,7 @@ pub struct SnapshotInfo {
     pub file_name: String,
     /// Lower-case hex SHA-256 of the imported file's bytes.
     pub content_hash: String,
-    /// When the file was imported, in local time.
+    /// When the file was imported, in UTC.
     pub imported_at: NaiveDateTime,
     /// Whether the file lacked the `id` or `released` column.
     pub limited: bool,
@@ -95,6 +96,20 @@ fn to_json<T: Serialize>(value: &T, what: &str) -> Result<String, StoreError> {
 
 fn count_i64(n: usize) -> i64 {
     i64::try_from(n).unwrap_or(i64::MAX)
+}
+
+/// Refuses a snapshot date whose stored text would not sort by time: a year outside 0000 to
+/// 9999 is written with a sign, and text with a sign sorts before every four-digit year.
+fn check_snapshot_date(at: NaiveDateTime) -> Result<(), StoreError> {
+    if sorts_as_text(at) {
+        Ok(())
+    } else {
+        Err(StoreError::SnapshotDateOutOfRange { at })
+    }
+}
+
+fn sorts_as_text(at: NaiveDateTime) -> bool {
+    (0..=9999).contains(&at.year())
 }
 
 fn optional_time(text: Option<String>) -> Result<Option<NaiveDateTime>, StoreError> {
@@ -245,13 +260,15 @@ impl Workspace {
     ///
     /// The import is refused with `AlreadyImported` when a snapshot of the same file exists,
     /// unless that snapshot is the one `options.replace` names. A date the user typed keeps the
-    /// date the file gave as the detected date.
+    /// date the file gave as the detected date. A date whose year is outside 0000 to 9999 is
+    /// refused with `SnapshotDateOutOfRange`.
     pub fn import(
         &mut self,
         loaded: &Loaded,
         taken: SnapshotDate,
         options: &ImportOptions,
     ) -> Result<SnapshotInfo, StoreError> {
+        check_snapshot_date(taken.at)?;
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -342,7 +359,7 @@ impl Workspace {
             _ => None,
         };
         let open_count = holds.iter().filter(|h| !h.released).count();
-        let imported_at = Local::now().naive_local();
+        let imported_at = Utc::now().naive_utc();
         tx.execute(
             "INSERT INTO snapshot (taken_at, date_source, detected_at, detected_source, file_name, \
              content_hash, imported_at, limited, row_count, open_count, info_json, headers_json, \
@@ -423,8 +440,12 @@ impl Workspace {
             .ok_or(StoreError::SnapshotNotFound { snapshot_id })
     }
 
-    /// Snapshots dated on the same calendar day as `at`, oldest first.
+    /// Snapshots dated on the same calendar day as `at`, oldest first. A date whose year is
+    /// outside 0000 to 9999 has none, because no snapshot can be given such a date.
     pub fn snapshots_on(&self, at: NaiveDateTime) -> Result<Vec<SnapshotInfo>, StoreError> {
+        if !sorts_as_text(at) {
+            return Ok(Vec::new());
+        }
         let day = encode_time(at).chars().take(10).collect::<String>();
         self.infos("WHERE substr(taken_at, 1, 10) = ?1", &[&day])
     }
@@ -497,11 +518,13 @@ impl Workspace {
 
     /// Sets a date entered by the user. The first detected date is kept: when the snapshot had
     /// none and its date did not come from the user, the previous date becomes the detected one.
+    /// A date whose year is outside 0000 to 9999 is refused with `SnapshotDateOutOfRange`.
     pub fn set_snapshot_date(
         &mut self,
         snapshot_id: i64,
         at: NaiveDateTime,
     ) -> Result<SnapshotInfo, StoreError> {
+        check_snapshot_date(at)?;
         let user = source_text(SnapshotSource::User)?;
         let tx = self
             .conn
@@ -1363,6 +1386,125 @@ mod tests {
             ws.snapshot_detail(first.id).unwrap().detected,
             Some(original)
         );
+    }
+
+    #[test]
+    fn the_import_time_is_in_utc() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let before = chrono::Utc::now().naive_utc();
+        let info = import_plain(&mut ws, &loaded);
+        let after = chrono::Utc::now().naive_utc();
+        assert!(
+            before <= info.imported_at && info.imported_at <= after,
+            "{} is not between {before} and {after}",
+            info.imported_at
+        );
+        assert_eq!(ws.snapshot(info.id).unwrap().imported_at, info.imported_at);
+    }
+
+    fn in_year(year: i32) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(year, 6, 15)
+            .and_then(|d| d.and_hms_opt(12, 0, 0))
+            .unwrap()
+    }
+
+    /// Every stored value of the snapshot table, to show that nothing changed.
+    fn stored_snapshots(ws: &Workspace) -> Vec<String> {
+        ws.conn
+            .prepare(
+                "SELECT id || '|' || taken_at || '|' || date_source || '|' || \
+                 coalesce(detected_at, '') || '|' || coalesce(detected_source, '') || '|' || \
+                 content_hash || '|' || imported_at || '|' || hex(rows) FROM snapshot ORDER BY id",
+            )
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn import_refuses_a_date_outside_years_0000_to_9999_and_stores_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = small(dir.path());
+        let mut other = loaded.clone();
+        other.content_hash = "other bytes".into();
+        let mut ws = workspace(dir.path());
+        let kept = import_plain(&mut ws, &loaded);
+        let (snapshots, states) = (stored_snapshots(&ws), count(&ws, "row_state"));
+        for year in [10_000, -1, 12_345] {
+            let taken = SnapshotDate {
+                at: in_year(year),
+                source: SnapshotSource::User,
+            };
+            for options in [
+                ImportOptions::default(),
+                ImportOptions {
+                    replace: Some(kept.id),
+                },
+            ] {
+                let error = ws.import(&other, taken, &options).unwrap_err();
+                assert_eq!(
+                    error,
+                    StoreError::SnapshotDateOutOfRange { at: in_year(year) }
+                );
+                assert_eq!(stored_snapshots(&ws), snapshots);
+                assert_eq!(count(&ws, "row_state"), states);
+            }
+        }
+    }
+
+    #[test]
+    fn set_snapshot_date_refuses_a_date_outside_years_0000_to_9999_and_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let loaded = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let info = import_plain(&mut ws, &loaded);
+        let snapshots = stored_snapshots(&ws);
+        for year in [10_000, -1, 12_345] {
+            let error = ws.set_snapshot_date(info.id, in_year(year)).unwrap_err();
+            assert_eq!(
+                error,
+                StoreError::SnapshotDateOutOfRange { at: in_year(year) }
+            );
+            assert_eq!(stored_snapshots(&ws), snapshots);
+            assert_eq!(ws.snapshot(info.id).unwrap(), info);
+            assert!(ws.snapshots_on(in_year(year)).unwrap().is_empty());
+        }
+        assert_eq!(ws.latest().unwrap(), Some(info));
+    }
+
+    #[test]
+    fn years_0000_and_9999_are_accepted_and_list_in_time_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let middle = import_plain(&mut ws, &base);
+        let mut first = base.clone();
+        first.content_hash = "year 0".into();
+        let mut last = base.clone();
+        last.content_hash = "year 9999".into();
+        let user = |year| SnapshotDate {
+            at: in_year(year),
+            source: SnapshotSource::User,
+        };
+        let last = ws
+            .import(&last, user(9999), &ImportOptions::default())
+            .unwrap();
+        let first = ws
+            .import(&first, user(2000), &ImportOptions::default())
+            .unwrap();
+        let first = ws.set_snapshot_date(first.id, in_year(0)).unwrap();
+        assert_eq!(first.taken_at, in_year(0));
+        assert_eq!(last.taken_at, in_year(9999));
+
+        let order: Vec<i64> = ws.snapshots().unwrap().iter().map(|s| s.id).collect();
+        assert_eq!(order, vec![first.id, middle.id, last.id]);
+        assert_eq!(ws.latest().unwrap(), Some(last.clone()));
+        assert_eq!(ws.snapshots_on(in_year(0)).unwrap(), vec![first]);
+        assert_eq!(ws.snapshots_on(in_year(9999)).unwrap(), vec![last]);
     }
 
     #[test]

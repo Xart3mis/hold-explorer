@@ -5,7 +5,9 @@ use chrono::NaiveDateTime;
 
 use crate::error::StoreError;
 
-/// The text format of every stored timestamp: nine fractional digits, so text order is time order.
+/// The text format of every stored timestamp: nine fractional digits, so text order is time order
+/// for years 0000 to 9999. A year outside that range is written with a sign and sorts wrongly,
+/// which is why a snapshot date outside it is refused before it is stored.
 const TIMESTAMP_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.9f";
 
 /// Encodes row-state ids as unsigned LEB128 values, one after another, in the order given.
