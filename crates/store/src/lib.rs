@@ -15,5 +15,5 @@ pub use error::StoreError;
 pub use schema::SCHEMA_VERSION;
 
 pub use directory::{delete_workspace, find_by_project, list_workspaces};
-pub use snapshot::{ImportOptions, SnapshotInfo};
+pub use snapshot::{ImportOptions, SnapshotDetail, SnapshotInfo};
 pub use workspace::{Workspace, WorkspaceInfo};

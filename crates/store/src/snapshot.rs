@@ -5,11 +5,14 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::{Local, NaiveDateTime};
 use hx_core::dataset::Dataset;
 use hx_core::fingerprint::state_hash;
+use hx_core::import::SkippedRow;
 use hx_core::load::Loaded;
+use hx_core::mapping::ColumnMap;
 use hx_core::model::Hold;
 use hx_core::rules::RuleSet;
 use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
-use rusqlite::{OptionalExtension, Row, TransactionBehavior};
+use hx_core::warning::ImportWarning;
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 use crate::codec::{decode_ids, decode_time, encode_ids, encode_time};
@@ -37,6 +40,25 @@ pub struct SnapshotInfo {
     pub row_count: usize,
     /// How many of them are not released.
     pub open_count: usize,
+}
+
+/// A snapshot with everything the import review showed, apart from its holds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotDetail {
+    /// The snapshot's summary.
+    pub info: SnapshotInfo,
+    /// The date the app detected, when the user replaced it.
+    pub detected: Option<SnapshotDate>,
+    /// The key/value pairs of the file's information sheet.
+    pub info_sheet: BTreeMap<String, String>,
+    /// The headers of the table that was imported, in column order.
+    pub headers: Vec<String>,
+    /// The column mapping that was used.
+    pub mapping: ColumnMap,
+    /// The rows that were left out of the import.
+    pub skipped: Vec<SkippedRow>,
+    /// The warnings the import gave.
+    pub warnings: Vec<ImportWarning>,
 }
 
 /// How an import treats an existing snapshot.
@@ -105,6 +127,76 @@ fn hold_from_row(row: &Row<'_>) -> Result<Hold, StoreError> {
         stress_calc: row.get(13).map_err(database)?,
         extra,
     })
+}
+
+const INFO_COLUMNS: &str =
+    "id, taken_at, date_source, file_name, content_hash, imported_at, limited, row_count, open_count";
+
+const INFO_ORDER: &str = "ORDER BY taken_at, imported_at, id";
+
+fn info_from_row(row: &Row<'_>) -> Result<SnapshotInfo, StoreError> {
+    let taken_at: String = row.get(1).map_err(database)?;
+    let date_source: String = row.get(2).map_err(database)?;
+    let imported_at: String = row.get(5).map_err(database)?;
+    let row_count: i64 = row.get(7).map_err(database)?;
+    let open_count: i64 = row.get(8).map_err(database)?;
+    Ok(SnapshotInfo {
+        id: row.get(0).map_err(database)?,
+        taken_at: decode_time(&taken_at)?,
+        date_source: source_from_text(&date_source)?,
+        file_name: row.get(3).map_err(database)?,
+        content_hash: row.get(4).map_err(database)?,
+        imported_at: decode_time(&imported_at)?,
+        limited: row.get::<_, i64>(6).map_err(database)? != 0,
+        row_count: count_usize(row_count)?,
+        open_count: count_usize(open_count)?,
+    })
+}
+
+fn count_usize(n: i64) -> Result<usize, StoreError> {
+    usize::try_from(n).map_err(|_| StoreError::Corrupt {
+        detail: format!("a stored count ({n}) is negative"),
+    })
+}
+
+fn from_json<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<T, StoreError> {
+    serde_json::from_str(text).map_err(|e| StoreError::Corrupt {
+        detail: format!("the {what} of a snapshot could not be read ({e})"),
+    })
+}
+
+/// Deletes every row state that no snapshot lists. Set-based: the ids still in use go into a
+/// temporary table, and one statement removes the rest.
+fn remove_unused_row_states(conn: &Connection) -> Result<(), StoreError> {
+    let mut used = std::collections::HashSet::new();
+    {
+        let mut lists = conn
+            .prepare("SELECT rows FROM snapshot")
+            .map_err(database)?;
+        let mut rows = lists.query([]).map_err(database)?;
+        while let Some(row) = rows.next().map_err(database)? {
+            let blob: Vec<u8> = row.get(0).map_err(database)?;
+            used.extend(decode_ids(&blob)?);
+        }
+    }
+    conn.execute_batch(
+        "DROP TABLE IF EXISTS temp.used_row_state; \
+         CREATE TEMP TABLE used_row_state (id INTEGER PRIMARY KEY);",
+    )
+    .map_err(database)?;
+    {
+        let mut add = conn
+            .prepare("INSERT INTO temp.used_row_state (id) VALUES (?1)")
+            .map_err(database)?;
+        for id in used {
+            add.execute([id]).map_err(database)?;
+        }
+    }
+    conn.execute_batch(
+        "DELETE FROM row_state WHERE id NOT IN (SELECT id FROM temp.used_row_state); \
+         DROP TABLE temp.used_row_state;",
+    )
+    .map_err(database)
 }
 
 impl Workspace {
@@ -236,6 +328,9 @@ impl Workspace {
         )
         .map_err(database)?;
         let id = tx.last_insert_rowid();
+        if options.replace.is_some() {
+            remove_unused_row_states(&tx)?;
+        }
         tx.commit().map_err(database)?;
 
         Ok(SnapshotInfo {
@@ -249,6 +344,152 @@ impl Workspace {
             row_count: holds.len(),
             open_count,
         })
+    }
+
+    fn infos(
+        &self,
+        filter: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<Vec<SnapshotInfo>, StoreError> {
+        let mut query = self
+            .conn
+            .prepare_cached(&format!(
+                "SELECT {INFO_COLUMNS} FROM snapshot {filter} {INFO_ORDER}"
+            ))
+            .map_err(database)?;
+        let mut rows = query.query(params).map_err(database)?;
+        let mut infos = Vec::new();
+        while let Some(row) = rows.next().map_err(database)? {
+            infos.push(info_from_row(row)?);
+        }
+        Ok(infos)
+    }
+
+    /// Every snapshot, oldest first: by date, then by time of import, then by id.
+    pub fn snapshots(&self) -> Result<Vec<SnapshotInfo>, StoreError> {
+        self.infos("", &[])
+    }
+
+    /// The newest snapshot by the same order, or `None` when there is none.
+    pub fn latest(&self) -> Result<Option<SnapshotInfo>, StoreError> {
+        Ok(self.snapshots()?.pop())
+    }
+
+    /// One snapshot, or `SnapshotNotFound`.
+    pub fn snapshot(&self, snapshot_id: i64) -> Result<SnapshotInfo, StoreError> {
+        self.infos("WHERE id = ?1", &[&snapshot_id])?
+            .pop()
+            .ok_or(StoreError::SnapshotNotFound { snapshot_id })
+    }
+
+    /// Snapshots dated on the same calendar day as `at`, oldest first.
+    pub fn snapshots_on(&self, at: NaiveDateTime) -> Result<Vec<SnapshotInfo>, StoreError> {
+        let day = encode_time(at).chars().take(10).collect::<String>();
+        self.infos("WHERE substr(taken_at, 1, 10) = ?1", &[&day])
+    }
+
+    /// A snapshot with its information sheet, headers, mapping, skipped rows, and warnings.
+    pub fn snapshot_detail(&self, snapshot_id: i64) -> Result<SnapshotDetail, StoreError> {
+        let info = self.snapshot(snapshot_id)?;
+        let (detected_at, detected_source, info_json, headers, mapping, skipped, warnings): (
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+            String,
+            String,
+            String,
+        ) = self
+            .conn
+            .query_row(
+                "SELECT detected_at, detected_source, info_json, headers_json, mapping_json, \
+                 skipped_json, warnings_json FROM snapshot WHERE id = ?1",
+                [snapshot_id],
+                |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(database)?
+            .ok_or(StoreError::SnapshotNotFound { snapshot_id })?;
+        let detected = match (optional_time(detected_at)?, detected_source) {
+            (Some(at), Some(source)) => Some(SnapshotDate {
+                at,
+                source: source_from_text(&source)?,
+            }),
+            _ => None,
+        };
+        Ok(SnapshotDetail {
+            info,
+            detected,
+            info_sheet: from_json(&info_json, "information sheet")?,
+            headers: from_json(&headers, "headers")?,
+            mapping: from_json(&mapping, "column mapping")?,
+            skipped: from_json(&skipped, "skipped rows")?,
+            warnings: from_json(&warnings, "warnings")?,
+        })
+    }
+
+    /// Deletes a snapshot and the row states no other snapshot uses.
+    pub fn delete_snapshot(&mut self, snapshot_id: i64) -> Result<(), StoreError> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database)?;
+        let deleted = tx
+            .execute("DELETE FROM snapshot WHERE id = ?1", [snapshot_id])
+            .map_err(database)?;
+        if deleted == 0 {
+            return Err(StoreError::SnapshotNotFound { snapshot_id });
+        }
+        remove_unused_row_states(&tx)?;
+        tx.commit().map_err(database)
+    }
+
+    /// Sets a date entered by the user. The first detected date is kept: when the snapshot had
+    /// none and its date did not come from the user, the previous date becomes the detected one.
+    pub fn set_snapshot_date(
+        &mut self,
+        snapshot_id: i64,
+        at: NaiveDateTime,
+    ) -> Result<SnapshotInfo, StoreError> {
+        let user = source_text(SnapshotSource::User)?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(database)?;
+        let (taken_at, date_source, detected_at): (String, String, Option<String>) = tx
+            .query_row(
+                "SELECT taken_at, date_source, detected_at FROM snapshot WHERE id = ?1",
+                [snapshot_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()
+            .map_err(database)?
+            .ok_or(StoreError::SnapshotNotFound { snapshot_id })?;
+        source_from_text(&date_source)?;
+        if detected_at.is_none() && date_source != user {
+            tx.execute(
+                "UPDATE snapshot SET detected_at = ?2, detected_source = ?3 WHERE id = ?1",
+                rusqlite::params![snapshot_id, taken_at, date_source],
+            )
+            .map_err(database)?;
+        }
+        tx.execute(
+            "UPDATE snapshot SET taken_at = ?2, date_source = ?3 WHERE id = ?1",
+            rusqlite::params![snapshot_id, encode_time(at), user],
+        )
+        .map_err(database)?;
+        tx.commit().map_err(database)?;
+        self.snapshot(snapshot_id)
     }
 
     /// The snapshot's id list, or `SnapshotNotFound`.
@@ -857,5 +1098,253 @@ mod tests {
             ws.dataset(info.id, RuleSet::builtin()),
             Err(StoreError::Corrupt { .. })
         ));
+    }
+
+    fn chain(dir: &Path, n: usize) -> Vec<Loaded> {
+        let cfg = SynthConfig::new(3, 60, 600);
+        let mut rows = generate(&cfg);
+        let mut cfg = cfg;
+        let mut out = vec![synth(dir, "s0.xlsx", &rows, &cfg)];
+        for i in 1..n {
+            let (next, next_cfg, _) = evolve(&rows, &cfg, 50 + i as u64, 14);
+            out.push(synth(dir, &format!("s{i}.xlsx"), &next, &next_cfg));
+            rows = next;
+            cfg = next_cfg;
+        }
+        out
+    }
+
+    fn distinct_states(files: &[&Loaded]) -> i64 {
+        files
+            .iter()
+            .flat_map(|l| l.parsed.holds.iter().map(state_hash))
+            .collect::<std::collections::HashSet<_>>()
+            .len() as i64
+    }
+
+    fn import_plain(ws: &mut Workspace, loaded: &Loaded) -> SnapshotInfo {
+        ws.import(loaded, taken_of(loaded), &ImportOptions::default())
+            .unwrap()
+    }
+
+    #[test]
+    fn snapshots_list_oldest_first_whatever_the_import_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = chain(dir.path(), 3);
+        let mut ws = workspace(dir.path());
+        let second = import_plain(&mut ws, &files[1]);
+        let first = import_plain(&mut ws, &files[0]);
+        let third = import_plain(&mut ws, &files[2]);
+        assert!(first.taken_at < second.taken_at && second.taken_at < third.taken_at);
+        let listed = ws.snapshots().unwrap();
+        assert_eq!(listed, vec![first.clone(), second.clone(), third.clone()]);
+        assert_eq!(ws.latest().unwrap(), Some(third.clone()));
+        assert_eq!(ws.snapshot(second.id).unwrap(), second);
+    }
+
+    #[test]
+    fn latest_of_an_empty_workspace_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let ws = workspace(dir.path());
+        assert_eq!(ws.latest().unwrap(), None);
+        assert!(ws.snapshots().unwrap().is_empty());
+    }
+
+    #[test]
+    fn snapshots_of_the_same_date_list_by_import_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = small(dir.path());
+        let day = SnapshotDate {
+            at: at(0),
+            source: SnapshotSource::User,
+        };
+        let mut ws = workspace(dir.path());
+        let mut ids = Vec::new();
+        for n in 0..3 {
+            let mut next = base.clone();
+            next.content_hash = format!("bytes {n}");
+            ids.push(ws.import(&next, day, &ImportOptions::default()).unwrap().id);
+        }
+        let listed: Vec<i64> = ws.snapshots().unwrap().iter().map(|s| s.id).collect();
+        assert_eq!(listed, ids);
+        assert_eq!(ws.latest().unwrap().unwrap().id, ids[2]);
+    }
+
+    #[test]
+    fn snapshots_on_finds_every_snapshot_of_the_calendar_day() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = small(dir.path());
+        let day = |h, m, s, n| {
+            NaiveDate::from_ymd_opt(2026, 9, 1)
+                .and_then(|d| d.and_hms_nano_opt(h, m, s, n))
+                .unwrap()
+        };
+        let mut ws = workspace(dir.path());
+        let mut stored = Vec::new();
+        for (n, when) in [day(0, 0, 0, 0), day(23, 59, 59, 999_999_999)]
+            .into_iter()
+            .enumerate()
+        {
+            let mut next = base.clone();
+            next.content_hash = format!("bytes {n}");
+            let taken = SnapshotDate {
+                at: when,
+                source: SnapshotSource::User,
+            };
+            stored.push(ws.import(&next, taken, &ImportOptions::default()).unwrap());
+        }
+        let mut other = base.clone();
+        other.content_hash = "other day".into();
+        let later = SnapshotDate {
+            at: day(0, 0, 0, 0) + chrono::Duration::days(1),
+            source: SnapshotSource::User,
+        };
+        ws.import(&other, later, &ImportOptions::default()).unwrap();
+
+        assert_eq!(ws.snapshots_on(day(12, 0, 0, 0)).unwrap(), stored);
+        assert_eq!(ws.snapshots_on(day(0, 0, 0, 1)).unwrap(), stored);
+        assert_eq!(ws.snapshots_on(day(23, 0, 0, 0)).unwrap(), stored);
+        let next_day = day(12, 0, 0, 0) + chrono::Duration::days(2);
+        assert!(ws.snapshots_on(next_day).unwrap().is_empty());
+    }
+
+    #[test]
+    fn snapshot_detail_returns_what_was_imported() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("messy.csv");
+        std::fs::write(
+            &path,
+            "id,line_id,hold_remark,hold_type,date,released,release_date\n\
+             1,L-1,fine,MISC.,2026-10-01 09:00:00,FALSE,\n\
+             2,,no line,MISC.,2026-10-01 09:00:00,FALSE,\n\
+             3,L-3,odd flag,MISC.,2026-10-01 09:00:00,maybe,\n\
+             4,L-4,odd date,MISC.,2026-10-01 09:00:00,TRUE,soon\n",
+        )
+        .unwrap();
+        let loaded = load_file(&path).unwrap();
+        assert!(!loaded.parsed.skipped.is_empty());
+        let kinds: Vec<_> = loaded.parsed.warnings.iter().map(|w| w.kind).collect();
+        assert!(kinds.contains(&hx_core::warning::WarningKind::UnrecognizedReleased));
+        assert!(kinds.contains(&hx_core::warning::WarningKind::UnreadableReleaseDate));
+        assert!(!loaded.headers.is_empty());
+
+        let mut ws = workspace(dir.path());
+        let taken = loaded.snapshot.unwrap();
+        let info = ws
+            .import(&loaded, taken, &ImportOptions::default())
+            .unwrap();
+        let detail = ws.snapshot_detail(info.id).unwrap();
+        assert_eq!(detail.info, info);
+        assert_eq!(detail.detected, None);
+        assert_eq!(detail.info_sheet, loaded.info);
+        assert_eq!(detail.headers, loaded.headers);
+        assert_eq!(detail.mapping, loaded.map);
+        assert_eq!(detail.skipped, loaded.parsed.skipped);
+        assert_eq!(detail.warnings, loaded.parsed.warnings);
+
+        let user = SnapshotDate {
+            at: at(0),
+            source: SnapshotSource::User,
+        };
+        let mut again = loaded.clone();
+        again.content_hash = "again".into();
+        let info = ws.import(&again, user, &ImportOptions::default()).unwrap();
+        assert_eq!(ws.snapshot_detail(info.id).unwrap().detected, Some(taken));
+    }
+
+    #[test]
+    fn deleting_the_middle_snapshot_keeps_the_others_and_their_row_states() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = chain(dir.path(), 3);
+        let mut ws = workspace(dir.path());
+        let a = import_plain(&mut ws, &files[0]);
+        let b = import_plain(&mut ws, &files[1]);
+        let c = import_plain(&mut ws, &files[2]);
+        ws.delete_snapshot(b.id).unwrap();
+        assert_eq!(ws.snapshots().unwrap(), vec![a.clone(), c.clone()]);
+        assert_eq!(ws.holds(a.id).unwrap(), files[0].parsed.holds);
+        assert_eq!(ws.holds(c.id).unwrap(), files[2].parsed.holds);
+        assert_eq!(
+            count(&ws, "row_state"),
+            distinct_states(&[&files[0], &files[2]])
+        );
+        assert!(matches!(
+            ws.snapshot(b.id),
+            Err(StoreError::SnapshotNotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn deleting_every_snapshot_empties_both_tables() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = chain(dir.path(), 2);
+        let mut ws = workspace(dir.path());
+        let ids: Vec<i64> = files.iter().map(|f| import_plain(&mut ws, f).id).collect();
+        for id in ids {
+            ws.delete_snapshot(id).unwrap();
+        }
+        assert_eq!(count(&ws, "snapshot"), 0);
+        assert_eq!(count(&ws, "row_state"), 0);
+    }
+
+    #[test]
+    fn replacing_the_only_snapshot_drops_the_states_only_it_used() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = chain(dir.path(), 2);
+        let mut ws = workspace(dir.path());
+        let old = import_plain(&mut ws, &files[0]);
+        let new = ws
+            .import(
+                &files[1],
+                taken_of(&files[1]),
+                &ImportOptions {
+                    replace: Some(old.id),
+                },
+            )
+            .unwrap();
+        assert_eq!(count(&ws, "row_state"), distinct_states(&[&files[1]]));
+        assert_eq!(ws.holds(new.id).unwrap(), files[1].parsed.holds);
+    }
+
+    #[test]
+    fn set_snapshot_date_keeps_the_first_detected_date_and_reorders() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = chain(dir.path(), 2);
+        let mut ws = workspace(dir.path());
+        let first = import_plain(&mut ws, &files[0]);
+        let second = import_plain(&mut ws, &files[1]);
+        let original = taken_of(&files[0]);
+        assert_eq!(original.source, SnapshotSource::InfoSheet);
+
+        let moved = second.taken_at + chrono::Duration::days(3);
+        let info = ws.set_snapshot_date(first.id, moved).unwrap();
+        assert_eq!(info.taken_at, moved);
+        assert_eq!(info.date_source, SnapshotSource::User);
+        assert_eq!(ws.snapshot(first.id).unwrap(), info);
+        assert_eq!(
+            ws.snapshot_detail(first.id).unwrap().detected,
+            Some(original)
+        );
+        let order: Vec<i64> = ws.snapshots().unwrap().iter().map(|s| s.id).collect();
+        assert_eq!(order, vec![second.id, first.id]);
+        assert_eq!(ws.latest().unwrap().unwrap().id, first.id);
+
+        let again = ws.set_snapshot_date(first.id, at(5)).unwrap();
+        assert_eq!(again.taken_at, at(5));
+        assert_eq!(
+            ws.snapshot_detail(first.id).unwrap().detected,
+            Some(original)
+        );
+    }
+
+    #[test]
+    fn unknown_ids_are_not_found_by_every_method() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut ws = workspace(dir.path());
+        let missing = StoreError::SnapshotNotFound { snapshot_id: 9 };
+        assert_eq!(ws.snapshot(9).unwrap_err(), missing);
+        assert_eq!(ws.snapshot_detail(9).unwrap_err(), missing);
+        assert_eq!(ws.delete_snapshot(9).unwrap_err(), missing);
+        assert_eq!(ws.set_snapshot_date(9, at(0)).unwrap_err(), missing);
     }
 }
