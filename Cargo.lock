@@ -291,6 +291,7 @@ dependencies = [
  "chrono",
  "csv",
  "fancy-regex",
+ "hx-synth",
  "regex",
  "serde",
  "tempfile",
