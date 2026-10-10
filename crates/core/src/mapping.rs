@@ -110,7 +110,8 @@ pub fn header_key(header: &str) -> String {
 pub struct ExtraColumn {
     /// Zero-based column index.
     pub column: usize,
-    /// The header as written, trimmed. It names the column's values in `Hold::extra`.
+    /// The header as written, trimmed. The key of the column's values in `Hold::extra` is what
+    /// [`ColumnMap::extra_names`] returns, which differs from this when names repeat.
     pub name: String,
 }
 

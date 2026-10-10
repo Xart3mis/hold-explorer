@@ -1049,7 +1049,9 @@ mod tests {
         };
         let started = std::time::Instant::now();
         let parsed = parse_table(&table, &ColumnMap::auto(&headers)).unwrap();
-        assert!(started.elapsed() < std::time::Duration::from_millis(200));
+        // The bound is loose so a busy machine does not fail the test; the old cubic code needed
+        // about 10 s for this input, so a regression is still caught.
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
         assert_eq!(parsed.holds[0].extra.len(), 2000);
     }
 

@@ -7,8 +7,10 @@
 //! 1. Open: [`load::open_file`] reads a `.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`, or delimited
 //!    text (`.csv`, `.tsv`, `.txt`) file into an [`load::Opened`] (the raw table, a content hash,
 //!    and a proposed column mapping); [`load::open_sheet`] opens a named sheet instead.
-//! 2. Map: [`mapping::ColumnMap::auto`] proposes which column supplies which field; a caller
-//!    may edit the map before parsing.
+//! 2. Map: [`mapping::ColumnMap::auto`] proposes which column supplies which field;
+//!    [`mapping::ColumnMap::auto_with`] does so with a [`mapping::SavedMapping`] remembered from
+//!    an earlier file taking precedence; [`mapping::ColumnMap::from_fields`] builds a map from
+//!    the user's own choices.
 //! 3. Parse: [`load::parse_opened`] (or [`import::parse_table`] on a bare table) turns the rows
 //!    into [`model::Hold`] values, skipped rows, and warnings, and finds the snapshot date with
 //!    [`snapshot_date::snapshot_date`]. [`load::load_file`] runs steps 1 to 3 with the
