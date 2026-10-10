@@ -6,14 +6,18 @@
 
 mod codec;
 mod directory;
+mod dump;
 mod error;
 mod schema;
 mod snapshot;
+#[cfg(test)]
+mod test_support;
 mod workspace;
 
 pub use error::StoreError;
 pub use schema::SCHEMA_VERSION;
 
 pub use directory::{delete_workspace, find_by_project, list_workspaces};
+pub use dump::logical_dump;
 pub use snapshot::{ImportOptions, SnapshotDetail, SnapshotInfo};
 pub use workspace::{Workspace, WorkspaceInfo};

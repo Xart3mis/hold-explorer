@@ -70,7 +70,7 @@ pub struct ImportOptions {
 }
 
 /// The stored text of a snapshot date source.
-fn source_text(source: SnapshotSource) -> Result<String, StoreError> {
+pub(crate) fn source_text(source: SnapshotSource) -> Result<String, StoreError> {
     match serde_json::to_value(source) {
         Ok(serde_json::Value::String(text)) => Ok(text),
         _ => Err(StoreError::Corrupt {
@@ -567,24 +567,11 @@ mod tests {
     use hx_core::model::Hold;
     use hx_core::rules::RuleSet;
     use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
-    use hx_synth::{evolve, generate, write_workbook, SynthConfig, SynthRow};
+    use hx_synth::{evolve, generate, SynthConfig};
 
     use super::*;
+    use crate::test_support::{chain, distinct_states, import_plain, synth, taken_of, workspace};
     use crate::{StoreError, Workspace};
-
-    fn synth(dir: &Path, name: &str, rows: &[SynthRow], cfg: &SynthConfig) -> Loaded {
-        let path = dir.join(name);
-        write_workbook(rows, cfg, &path).unwrap();
-        load_file(&path).unwrap()
-    }
-
-    fn taken_of(loaded: &Loaded) -> SnapshotDate {
-        loaded.snapshot.expect("the synthetic file carries a date")
-    }
-
-    fn workspace(dir: &Path) -> Workspace {
-        Workspace::create(&dir.join("ws"), "Test").unwrap()
-    }
 
     fn count(ws: &Workspace, table: &str) -> i64 {
         ws.conn
@@ -1100,33 +1087,6 @@ mod tests {
         ));
     }
 
-    fn chain(dir: &Path, n: usize) -> Vec<Loaded> {
-        let cfg = SynthConfig::new(3, 60, 600);
-        let mut rows = generate(&cfg);
-        let mut cfg = cfg;
-        let mut out = vec![synth(dir, "s0.xlsx", &rows, &cfg)];
-        for i in 1..n {
-            let (next, next_cfg, _) = evolve(&rows, &cfg, 50 + i as u64, 14);
-            out.push(synth(dir, &format!("s{i}.xlsx"), &next, &next_cfg));
-            rows = next;
-            cfg = next_cfg;
-        }
-        out
-    }
-
-    fn distinct_states(files: &[&Loaded]) -> i64 {
-        files
-            .iter()
-            .flat_map(|l| l.parsed.holds.iter().map(state_hash))
-            .collect::<std::collections::HashSet<_>>()
-            .len() as i64
-    }
-
-    fn import_plain(ws: &mut Workspace, loaded: &Loaded) -> SnapshotInfo {
-        ws.import(loaded, taken_of(loaded), &ImportOptions::default())
-            .unwrap()
-    }
-
     #[test]
     fn snapshots_list_oldest_first_whatever_the_import_order() {
         let dir = tempfile::tempdir().unwrap();
@@ -1165,9 +1125,19 @@ mod tests {
             next.content_hash = format!("bytes {n}");
             ids.push(ws.import(&next, day, &ImportOptions::default()).unwrap().id);
         }
+        // Make the import times run against the ids, so only the import time can explain the order.
+        for (n, id) in ids.iter().enumerate() {
+            ws.conn
+                .execute(
+                    "UPDATE snapshot SET imported_at = ?1 WHERE id = ?2",
+                    rusqlite::params![encode_time(at(3 - n as u32)), id],
+                )
+                .unwrap();
+        }
+        let by_time: Vec<i64> = ids.iter().rev().copied().collect();
         let listed: Vec<i64> = ws.snapshots().unwrap().iter().map(|s| s.id).collect();
-        assert_eq!(listed, ids);
-        assert_eq!(ws.latest().unwrap().unwrap().id, ids[2]);
+        assert_eq!(listed, by_time);
+        assert_eq!(ws.latest().unwrap().unwrap().id, ids[0]);
     }
 
     #[test]
@@ -1204,8 +1174,13 @@ mod tests {
         assert_eq!(ws.snapshots_on(day(12, 0, 0, 0)).unwrap(), stored);
         assert_eq!(ws.snapshots_on(day(0, 0, 0, 1)).unwrap(), stored);
         assert_eq!(ws.snapshots_on(day(23, 0, 0, 0)).unwrap(), stored);
-        let next_day = day(12, 0, 0, 0) + chrono::Duration::days(2);
-        assert!(ws.snapshots_on(next_day).unwrap().is_empty());
+        let following = ws.snapshots_on(day(12, 0, 0, 0) + chrono::Duration::days(1));
+        let following = following.unwrap();
+        assert_eq!(following.len(), 1);
+        assert_eq!(following[0].taken_at, later.at);
+        assert_eq!(following[0].content_hash, "other day");
+        let day_after = day(12, 0, 0, 0) + chrono::Duration::days(2);
+        assert!(ws.snapshots_on(day_after).unwrap().is_empty());
     }
 
     #[test]
