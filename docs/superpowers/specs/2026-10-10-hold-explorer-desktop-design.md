@@ -176,15 +176,16 @@ Dropping a file anywhere on the window starts an import.
 
 ### 7.1 Tables
 
-- `snapshot`: date and time, source filename, content hash, row counts, full or limited, the `info` values.
-- `hold`: identity. Carries the source `id` when the file has one.
-- `hold_version`: the field values of a hold and the range of snapshots over which they held. A new row is written only when a value changes, which keeps 500 snapshots small.
-- `line_version`: the same pattern for `model_size`, `ldt_size`, and `stress_calc`.
+- `snapshot`: date and time with its source, source filename, content hash, row counts, full or limited, the `info` values, the headers and the mapping used, the skipped rows and the warnings, and the ordered list of its rows.
+- `row_state`: one record for each distinct hold row, all fields included. A row that is identical in 500 snapshots is stored once.
+- A snapshot's ordered list refers to row states, so the file order of the holds is kept exactly and a snapshot read back from the store gives the same numbers as the file it came from. One list takes 20 to 30 KB for 10,000 holds, which keeps 500 snapshots near 15 MB.
+- Each snapshot is complete in itself, so the order in which snapshots are imported cannot affect what is stored, and deleting a snapshot affects no other.
+- Sizes and stress calc are stored with each hold row, as the export gives them.
 - Workspace-level tables for rules, overrides, remark merges, column mapping, age bands, saved views, notes, follow-ups, watchlist entries, and what-if scenarios.
 
 ### 7.2 Identity
 
-With a source `id`, matching is exact. Without one, the app matches on line plus creation timestamp, then on the closest remark on the same line, and flags the pair "possible edit".
+Identity is not stored; it is worked out when two snapshots are compared. With a source `id`, matching is exact. Without one, the app matches on line plus creation timestamp, then on the closest remark on the same line, and flags the pair "possible edit". Rows that are identical in every field are matched one to one in file order.
 
 ### 7.3 Events
 
