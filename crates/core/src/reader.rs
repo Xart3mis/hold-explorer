@@ -198,7 +198,13 @@ fn read_csv(path: &Path, bytes: &[u8]) -> Result<WorkbookData, ImportError> {
         let record = record.map_err(|e| unreadable(path, e))?;
         let line = match record.position() {
             Some(p) => {
-                let offset = (p.byte() as usize).min(text.len());
+                // The position is where the reader stood before the record, not where the
+                // record starts: it may sit before blank lines or between `\r` and `\n`.
+                let bytes = text.as_bytes();
+                let mut offset = (p.byte() as usize).min(bytes.len());
+                while offset < bytes.len() && matches!(bytes[offset], b'\r' | b'\n') {
+                    offset += 1;
+                }
                 if offset > counted_to {
                     breaks += count_line_breaks(&text.as_bytes()[counted_to..offset]);
                     counted_to = offset;
@@ -742,6 +748,67 @@ mod tests {
                 ]
             }
         );
+    }
+
+    fn csv_row_numbers(text: &[u8]) -> Vec<usize> {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rows.csv");
+        std::fs::write(&path, text).unwrap();
+        read_workbook(&path).unwrap().table.row_numbers
+    }
+
+    const H: &str = "line_id,hold_remark,hold_type";
+
+    #[test]
+    fn row_numbers_crlf_without_blank_lines() {
+        let text = format!("{H}\r\nL-1,a,M\r\nL-2,b,M\r\nL-3,c,M\r\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn row_numbers_lf_one_blank_line_after_header() {
+        let text = format!("{H}\n\nL-1,a,M\nL-2,b,M\nL-3,c,M\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![3, 4, 5]);
+    }
+
+    #[test]
+    fn row_numbers_lf_two_blank_lines_between_rows() {
+        let text = format!("{H}\nL-1,a,M\n\n\nL-2,b,M\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![2, 5]);
+    }
+
+    #[test]
+    fn row_numbers_crlf_two_blank_lines_between_rows() {
+        let text = format!("{H}\r\nL-1,a,M\r\n\r\n\r\nL-2,b,M\r\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![2, 5]);
+    }
+
+    #[test]
+    fn row_numbers_crlf_quoted_field_spanning_two_lines() {
+        let text = format!("{H}\r\nL-1,\"a\r\nb\",M\r\nL-2,c,M\r\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![2, 4]);
+    }
+
+    #[test]
+    fn row_numbers_lf_leading_blank_lines_and_blank_between_rows() {
+        let text = format!("\n\n{H}\nL-1,a,M\n\nL-2,b,M\n");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![4, 6]);
+    }
+
+    #[test]
+    fn row_numbers_lone_cr_line_endings() {
+        let text = format!("{H}\rL-1,a,M\rL-2,b,M\r");
+        assert_eq!(csv_row_numbers(text.as_bytes()), vec![2, 3]);
+    }
+
+    #[test]
+    fn row_numbers_utf_16le_crlf_without_blank_lines() {
+        let text = format!("{H}\r\nL-1,a,M\r\nL-2,b,M\r\nL-3,c,M\r\n");
+        let mut bytes = vec![0xFF, 0xFE];
+        for unit in text.encode_utf16() {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        assert_eq!(csv_row_numbers(&bytes), vec![2, 3, 4]);
     }
 
     #[test]
