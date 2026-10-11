@@ -8,6 +8,10 @@
 //   node tools/design/check-tokens.mjs --css           print the tokens as CSS custom properties
 //   node tools/design/check-tokens.mjs --orders        list every order of the categorical slots that
 //                                                      passes the series check, best first
+//   node tools/design/check-tokens.mjs --dir <path> [...]
+//                                                      read DESIGN.md and PRODUCT.md from <path> and not
+//                                                      from the repository root; goes before any other
+//                                                      option (the tests in check-tokens.test.mjs use it)
 //
 // What it reads from DESIGN.md:
 //   - Token tables: any Markdown table whose first header cell is "Token". Each row names one CSS
@@ -17,7 +21,7 @@
 //   - The pairs table: the Markdown table whose first header cell is "Foreground". Each row names a
 //     foreground token, a background token, a minimum contrast ratio, and a kind.
 //   - The fills table: the Markdown table whose first header cell is "Fill". Each row names a fill
-//     token and says "yes" or "no" under "Carries marks".
+//     token and says "yes" or "no" under "Carries marks" and under "Carries a primary button".
 //   - The roles table: the Markdown table whose first header cell is "Role". Each row names a
 //     --text- token, its letter spacing token, and its figure style token.
 //
@@ -28,25 +32,31 @@
 //      come near the accent hue.
 //   3. Contrast pairs: every pair in the pairs table meets its minimum WCAG contrast ratio, and no
 //      minimum is set below the floor of its kind.
-//   4. Chart marks: every chart mark token meets 3:1 on every fill that carries marks, and every
-//      surface token is classified in the fills table.
-//   5. Chart series: the categorical slots, compared in slot order, stay inside the lightness band,
-//      above the chroma floor, and far enough apart in normal and simulated color-blind vision.
-//   6. Chart status: the status marks are far enough from each other and from every series slot.
-//   7. Chart ramps: each ramp keeps one hue, changes lightness in one direction by a visible step,
-//      and every sequential step is the background of a text pair.
-//   8. Token references: every token named anywhere in DESIGN.md (outside commands) is defined in a
+//   4. Fills: every fill token (every surface, every subtle tint, the chart band, and every
+//      background of the pairs table) is classified in the fills table.
+//   5. Chart marks: every chart mark token meets 3:1 on every fill that carries marks.
+//   6. Primary button: on every fill that carries a primary button, its fill meets 3:1 at rest and
+//      on hover, and 2.5:1 while pressed.
+//   7. Chart series: the categorical slots are numbered without a gap and, compared in slot order,
+//      stay inside the lightness band, above the chroma floor, and far enough apart in normal and
+//      simulated color-blind vision.
+//   8. Chart status: the status marks are far enough from each other and from every series slot.
+//      The color-blind distance between a series slot and a status mark is reported, not enforced.
+//   9. Chart ramps: each ramp is numbered without a gap, keeps one hue, changes lightness in one
+//      direction by a visible step, and every sequential step is the background of a text pair.
+//  10. Token references: every token named anywhere in DESIGN.md (outside commands) is defined in a
 //      token table, and none is defined twice.
-//   9. Type: the font sizes are at least a ratio of 1.25 apart, and every text role has one row in
+//  11. Type: the font sizes are at least a ratio of 1.25 apart, and every text role has one row in
 //      the roles table.
-//  10. Motion: every duration lies between 150 and 250 ms.
-//  11. Text: DESIGN.md and PRODUCT.md contain no em dash.
+//  12. Motion: every duration lies between 150 and 250 ms.
+//  13. Text: DESIGN.md and PRODUCT.md contain no em dash.
 
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** The directory DESIGN.md and PRODUCT.md are read from. The command line can replace it with --dir. */
+let root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const THEMES = ["dark", "light"];
 
 /** Lowest minimum a pair of each kind may declare. */
@@ -74,6 +84,23 @@ const ACCENT_FAMILY = /^--color-(?:accent(?:-[a-z0-9]+)*|focus-ring|text-on-acce
 export const MARK_CONTRAST_MIN = 3;
 /** Chart tokens that are not marks: cell fills, the cell label ink, and chart chrome. */
 const NOT_A_MARK = /^--color-chart-(?:seq-[0-9]+|text-inverse|grid|axis|band)$/;
+
+/**
+ * A token is a fill, and must be classified in the fills table, when its name says so (a surface,
+ * a subtle tint, the chart band) or when the pairs table uses it as a background.
+ */
+const FILL_BY_NAME = /^--color-(?:chart-band|surface-[a-z0-9-]+|(?!border-)[a-z0-9-]+-subtle(?:-[a-z0-9]+)*)$/;
+
+/**
+ * The fill of the primary button in its three states, with the contrast each must reach on every
+ * fill that carries a primary button. The pressed state is transient and its label carries it, so
+ * it has a lower minimum that only keeps it from eroding.
+ */
+export const PRIMARY_BUTTON = [
+  { state: "rest", token: "--color-accent", min: 3 },
+  { state: "hover", token: "--color-accent-hover", min: 3 },
+  { state: "pressed", token: "--color-accent-active", min: 2.5 },
+];
 
 // Distances are Euclidean in OKLab, times 100, between the painted 8-bit colors. The color-blind
 // thresholds are calibrated to the simulation of Machado, Oliveira and Fernandes (2009) at
@@ -222,7 +249,7 @@ export function readTables(markdown) {
  * Tokens, contrast pairs, fills, and text roles of a DESIGN.md.
  * tokens: Map name -> { columns: { [column]: value }, line }
  * pairs: [{ fg, bg, min, kind, usedBy, line }]
- * fills: [{ name, carries, line }]
+ * fills: [{ name, carries, primary, line }]
  * roles: [{ name, letterSpacing, figures, line }]
  */
 export function parseDesign(markdown) {
@@ -267,7 +294,12 @@ export function parseDesign(markdown) {
       });
     } else if (head[0] === "fill") {
       table.rows.forEach((row, r) => {
-        fills.push({ name: cell(row, "fill"), carries: cell(row, "carries marks").toLowerCase(), line: table.line + 2 + r });
+        fills.push({
+          name: cell(row, "fill"),
+          carries: cell(row, "carries marks").toLowerCase(),
+          primary: cell(row, "carries a primary button").toLowerCase(),
+          line: table.line + 2 + r,
+        });
       });
     } else if (head[0] === "role") {
       table.rows.forEach((row, r) => {
@@ -327,6 +359,14 @@ function numbered(tokens, prefix) {
   return [...tokens.keys()]
     .filter((name) => name.startsWith(prefix) && /^[0-9]+$/.test(name.slice(prefix.length)))
     .sort((a, b) => Number(a.slice(prefix.length)) - Number(b.slice(prefix.length)));
+}
+
+/** Fails when tokens named prefix + number do not run 1, 2, 3, ... without a gap. */
+function checkNumbering(names, prefix, out) {
+  names.forEach((name, i) => {
+    const number = Number(name.slice(prefix.length));
+    if (number !== i + 1) out.fail(`${name} is numbered ${number} where ${prefix}${i + 1} is expected; the numbers run from 1 without a gap`);
+  });
 }
 
 const short = (name) => name.replace(/^--color-/, "");
@@ -456,33 +496,52 @@ export function markTokens(tokens) {
   return [...tokens.keys()].filter((name) => name.startsWith("--color-chart-") && !NOT_A_MARK.test(name));
 }
 
-function checkMarks(tokens, fills, out) {
+/** Every token that must have a row in the fills table. */
+export function fillTokens(tokens, pairs) {
+  const names = new Set([...tokens.keys()].filter((name) => FILL_BY_NAME.test(name)));
+  for (const pair of pairs) if (tokens.has(pair.bg)) names.add(pair.bg);
+  return [...names];
+}
+
+/**
+ * Reads the fills table and requires a row for every fill token. Returns the fills that carry
+ * marks and the fills that carry a primary button, or null when there is no fills table.
+ */
+function checkFills(tokens, pairs, fills, out) {
   if (fills.length === 0) {
     out.fail('no fills table found (a table whose first header cell is "Fill")');
-    return;
+    return null;
   }
   const listed = new Map();
+  const rows = new Set();
   for (const fill of fills) {
     if (!tokens.has(fill.name)) {
       out.fail(`line ${fill.line}: ${fill.name} is not defined in a token table`);
       continue;
     }
-    if (fill.carries !== "yes" && fill.carries !== "no") {
-      out.fail(`line ${fill.line}: ${fill.name} must say "yes" or "no" under "Carries marks", not "${fill.carries}"`);
-      continue;
-    }
+    rows.add(fill.name);
     if (listed.has(fill.name)) {
       out.fail(`line ${fill.line}: ${fill.name} is listed twice in the fills table`);
       continue;
     }
-    listed.set(fill.name, fill.carries);
-  }
-  for (const name of tokens.keys()) {
-    if (name.startsWith("--color-surface-") && !listed.has(name)) {
-      out.fail(`${name} is a surface that the fills table does not list; say whether it carries chart marks`);
+    let valid = true;
+    for (const [column, value] of [["Carries marks", fill.carries], ["Carries a primary button", fill.primary]]) {
+      if (value === "yes" || value === "no") continue;
+      out.fail(`line ${fill.line}: ${fill.name} must say "yes" or "no" under "${column}", not "${value}"`);
+      valid = false;
     }
+    if (valid) listed.set(fill.name, fill);
   }
-  const carriers = [...listed].filter(([, carries]) => carries === "yes").map(([name]) => name);
+  const required = fillTokens(tokens, pairs);
+  for (const name of required) {
+    if (!rows.has(name)) out.fail(`${name} is a fill that the fills table does not list; say whether it carries chart marks and a primary button`);
+  }
+  const carrying = (key) => [...listed.values()].filter((fill) => fill[key] === "yes").map((fill) => fill.name);
+  out.note(`${required.length} fill tokens to classify; the fills table has ${listed.size} valid rows`);
+  return { marks: carrying("carries"), primary: carrying("primary") };
+}
+
+function checkMarks(tokens, carriers, out) {
   const marks = markTokens(tokens);
   if (carriers.length === 0 || marks.length === 0) {
     out.fail("the fills table lists no fill that carries marks, or no chart mark token is defined");
@@ -521,6 +580,33 @@ function checkMarks(tokens, fills, out) {
   out.note(`fills: ${carriers.map(short).join(", ")}`);
 }
 
+function checkPrimaryButton(tokens, carriers, out) {
+  if (carriers.length === 0) {
+    out.fail("the fills table lists no fill that carries a primary button");
+    return;
+  }
+  const width = Math.max(...PRIMARY_BUTTON.map(({ token }) => token.length));
+  out.table(`  ${"state".padEnd(8)} ${"fill of the button".padEnd(width)}  ${"on".padEnd(22)}   min   dark  light`);
+  for (const { state, token, min } of PRIMARY_BUTTON) {
+    for (const fill of carriers) {
+      const ratios = THEMES.map((theme) => {
+        const fg = tryColor(tokens, token, theme);
+        const bg = tryColor(tokens, fill, theme);
+        if (!fg || !bg) {
+          out.fail(`${token} on ${fill} (primary button, ${state}, ${theme}) cannot be read`);
+          return null;
+        }
+        const ratio = contrastRatio(fg.lch, bg.lch);
+        if (ratio < min) out.fail(`${token} on ${fill} (primary button, ${state}, ${theme}): ${ratio.toFixed(2)} is below ${min}`);
+        return ratio;
+      });
+      const cell = (ratio) => (ratio === null ? "    ? " : ratio.toFixed(2).padStart(5) + (ratio < min ? "!" : " "));
+      out.table(`  ${state.padEnd(8)} ${token.padEnd(width)}  ${short(fill).padEnd(22)}  ${min.toFixed(1).padStart(4)}  ${cell(ratios[0])} ${cell(ratios[1])}`);
+    }
+  }
+  out.note(`a primary button sits only on: ${carriers.map(short).join(", ")}`);
+}
+
 /** The pair with the smallest distance among the given index pairs. */
 function worstPair(colors, names, pairs, measure) {
   let worst = null;
@@ -540,6 +626,7 @@ function checkSeries(tokens, out) {
     out.fail("fewer than two categorical slots (--color-chart-1, --color-chart-2, ...) found");
     return [];
   }
+  checkNumbering(slots, "--color-chart-", out);
   for (const theme of THEMES) {
     const colors = slots.map((name) => tryColor(tokens, name, theme)?.lch);
     if (colors.some((c) => !c)) continue; // reported by the color check
@@ -585,15 +672,21 @@ function checkStatus(tokens, slots, out) {
     if (cvd.d < STATUS.cvdMin) out.fail(`${cvd.a} and ${cvd.b} (${theme}) are ${cvd.d.toFixed(1)} apart under simulated color blindness; the minimum is ${STATUS.cvdMin}`);
     if (normal.d < STATUS.normalMin) out.fail(`${normal.a} and ${normal.b} (${theme}) are ${normal.d.toFixed(1)} apart in normal vision; the minimum is ${STATUS.normalMin}`);
     let nearest = null;
+    let nearestBlind = null;
     slots.forEach((slot, i) => {
       marks.forEach((mark, j) => {
         const d = colorDistance(series[i], colors[j]);
         if (d < STATUS.seriesMin) out.fail(`${slot} and ${mark} (${theme}) are ${d.toFixed(1)} apart; a series slot keeps at least ${STATUS.seriesMin} from every status mark`);
         if (!nearest || d < nearest.d) nearest = { d, a: slot, b: mark };
+        const blind = colorBlindDistance(series[i], colors[j]);
+        if (!nearestBlind || blind < nearestBlind.d) nearestBlind = { d: blind, a: slot, b: mark };
       });
     });
     out.note(`${theme}, status marks, every pair: closest ${cvd.d.toFixed(1)} color-blind (${short(cvd.a)}, ${short(cvd.b)}), ${normal.d.toFixed(1)} normal (${short(normal.a)}, ${short(normal.b)})`);
     if (nearest) out.note(`${theme}, series slot against status mark: closest ${nearest.d.toFixed(1)} (${short(nearest.a)}, ${short(nearest.b)})`);
+    if (nearestBlind) {
+      out.note(`${theme}, series slot against status mark, color-blind (reported, not enforced): closest ${nearestBlind.d.toFixed(1)} (${short(nearestBlind.a)}, ${short(nearestBlind.b)})`);
+    }
   }
   out.note(`minimums ${STATUS.cvdMin} color-blind and ${STATUS.normalMin} normal between status marks, ${STATUS.seriesMin} between a series slot and a status mark`);
 }
@@ -605,6 +698,7 @@ function checkRamps(tokens, pairs, out) {
       out.fail(`fewer than three ${prefix}N tokens found`);
       continue;
     }
+    checkNumbering(names, prefix, out);
     for (const theme of THEMES) {
       const colors = names.map((name) => tryColor(tokens, name, theme)?.lch);
       if (colors.some((c) => !c)) continue; // reported by the color check
@@ -732,7 +826,7 @@ function checkDashes(files, out) {
 // ---------------------------------------------------------------------------------------------
 
 function load() {
-  const designPath = resolve(ROOT, "DESIGN.md");
+  const designPath = resolve(root, "DESIGN.md");
   if (!existsSync(designPath)) {
     console.error(`DESIGN.md not found at ${designPath}`);
     process.exit(2);
@@ -771,8 +865,9 @@ function runCss() {
       block(":root", "value", (c) => "value" in c),
       block(':root, :root[data-theme="dark"]', "dark", (c) => "dark" in c),
       block(':root[data-theme="light"]', "light", (c) => "light" in c),
-      block(':root, :root[data-density="comfortable"]', "comfortable", (c) => "comfortable" in c),
-      block(':root[data-density="compact"]', "compact", (c) => "compact" in c),
+      // Density may also be set on a table, so these two selectors are not tied to the root element.
+      block(':root, [data-density="comfortable"]', "comfortable", (c) => "comfortable" in c),
+      block('[data-density="compact"]', "compact", (c) => "compact" in c),
     ].join("\n\n"),
   );
 }
@@ -838,8 +933,14 @@ function runChecks() {
   checkHues(tokens, out);
   console.log("\nContrast pairs (WCAG 2 ratio; text 4.5, large text 3, control border 3, focus ring 3, graphic 3)");
   checkPairs(tokens, pairs, out);
-  console.log(`\nChart marks on fills (WCAG 2 ratio, minimum ${MARK_CONTRAST_MIN}; every mark on every fill that carries marks)`);
-  checkMarks(tokens, fills, out);
+  console.log("\nFills");
+  const carriers = checkFills(tokens, pairs, fills, out);
+  if (carriers) {
+    console.log(`\nChart marks on fills (WCAG 2 ratio, minimum ${MARK_CONTRAST_MIN}; every mark on every fill that carries marks)`);
+    checkMarks(tokens, carriers.marks, out);
+    console.log("\nPrimary button on fills (WCAG 2 ratio; the button's fill on every fill that carries a primary button)");
+    checkPrimaryButton(tokens, carriers.primary, out);
+  }
   console.log("\nChart series (distance in OKLab times 100)");
   const slots = checkSeries(tokens, out);
   console.log("\nChart status (distance in OKLab times 100)");
@@ -855,7 +956,7 @@ function runChecks() {
   checkDurations(tokens, out);
   console.log("\nText");
   const files = [["DESIGN.md", markdown]];
-  const productPath = resolve(ROOT, "PRODUCT.md");
+  const productPath = resolve(root, "PRODUCT.md");
   if (existsSync(productPath)) files.push(["PRODUCT.md", readFileSync(productPath, "utf8")]);
   else out.fail("PRODUCT.md not found");
   checkDashes(files, out);
@@ -871,12 +972,20 @@ function runChecks() {
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   const args = process.argv.slice(2);
+  if (args[0] === "--dir") {
+    if (!args[1]) {
+      console.error("usage: check-tokens.mjs --dir <path> [...]");
+      process.exit(2);
+    }
+    root = resolve(args[1]);
+    args.splice(0, 2);
+  }
   if (args[0] === "--hex") runHex(args.slice(1));
   else if (args[0] === "--css") runCss();
   else if (args[0] === "--orders") runOrders();
   else if (args.length === 0) runChecks();
   else {
-    console.error("usage: check-tokens.mjs [--hex <dark|light> <token> ...] [--css] [--orders]");
+    console.error("usage: check-tokens.mjs [--dir <path>] [--hex <dark|light> <token> ...] [--css] [--orders]");
     process.exit(2);
   }
 }

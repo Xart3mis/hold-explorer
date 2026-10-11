@@ -9,13 +9,13 @@ This file is the visual specification of Hold Explorer. `PRODUCT.md` says who us
 
 **The token tables are the source of truth.** Every color, size, and duration a component uses is a token in a table below. Interface code uses no literal color, size, or duration. The front matter above carries only the name and description on purpose: the tables hold two themes and two densities, which the front matter format cannot, and one source is better than two.
 
-**How the tables are read by tools.** A token table is a Markdown table whose first header cell is `Token`. The first cell of each row is a CSS custom property name. Columns named `Dark` and `Light` hold themed values, `Comfortable` and `Compact` hold density values, `Value` holds the rest, and `Use` is prose. A value may refer to another token with `var()`. Three more tables are read by their first header cell: `Foreground` (the contrast pairs), `Fill` (the fills a chart mark can sit on), and `Role` (the letter spacing and figure style of each text role). `node tools/design/check-tokens.mjs` checks the tables; `node tools/design/check-tokens.mjs --css` prints the tokens as CSS custom properties.
+**How the tables are read by tools.** A token table is a Markdown table whose first header cell is `Token`. The first cell of each row is a CSS custom property name. Columns named `Dark` and `Light` hold themed values, `Comfortable` and `Compact` hold density values, `Value` holds the rest, and `Use` is prose. A value may refer to another token with `var()`. Three more tables are read by their first header cell: `Foreground` (the contrast pairs), `Fill` (what each fill may carry: chart marks, a primary button), and `Role` (the letter spacing and figure style of each text role). `node tools/design/check-tokens.mjs` checks the tables; `node tools/design/check-tokens.mjs --css` prints the tokens as CSS custom properties.
 
 ## 1. Overview
 
 **Creative North Star: "The Ruled Register"**
 
-Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, and focus. Everything else is tinted neutral, the bars that draw the data included.
+Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, and focus. Everything else is tinted neutral, the plain single-series bars included.
 
 The register is **product**, the color strategy is **Restrained**, and density is **hybrid**: Overview and History are roomy enough to read from across a meeting room; Lines, Breakdown, and Blockers are tables first, as dense as the user chooses.
 
@@ -70,7 +70,7 @@ Two rules bind the hues, and the checker enforces both.
 
 - **Hue 200.** The state colors sit at hue 27 (danger), 70 to 85 (warning), 140 (success), and 258 (info). Hue 200 is 60 degrees from success and 58 degrees from info, the midpoint of the gap between them, so a selection cannot be read as "released" or as "information". Success was moved from the usual green (about 150) to a yellower green at 140 to open that gap, and info was set at a clear blue (258) and not a cyan-blue. The chart colors nearest to the accent, jade at 165 and sky at 230, stay 30 degrees or more away.
 - **Calm chroma.** The chroma of the fills and inks stays between 0.06 and 0.11, and the selection tints are lower still. Teal at these lightness levels cannot be more saturated inside sRGB anyway, and a petrol teal beside tables of numbers all day should read as ink, not as a highlight pen.
-- **Dark theme: a deep fill, not a bright one.** The primary button is a deep petrol (lightness 0.50) with near-white text, not a bright aqua with dark text. A bright fill would be the lightest object on a dark screen and pull the eye from the table. At 0.50 the fill clears 3:1 against the app and panel surfaces and its label clears 4.5:1. Hover goes lighter (0.545), the direction that reads as "lit" on a dark surface; it stops there because that is the last step at which the label still clears 4.5:1.
+- **Dark theme: a deep fill, not a bright one.** The primary button is a deep petrol (lightness 0.50) with near-white text, not a bright aqua with dark text. A bright fill would be the lightest object on a dark screen and pull the eye from the table. At 0.50 the fill clears 3:1 against the app and panel surfaces and its label clears 4.5:1. Hover goes lighter (0.545), the direction that reads as "lit" on a dark surface; it stops there because that is the last step at which the label still clears 4.5:1. The pressed step goes darker (0.46) and so falls under 3:1 against those surfaces: 2.80 on the app surface and 2.65 on the panel. The 3:1 claim for the primary fill therefore holds at rest and on hover. The pressed state lasts only as long as the press, and the label, at 6.56:1, carries the button through it. A pressed step that cleared 3:1 would have to sit between the rest and hover steps, where a press could not be told from either. The pressed fill is still checked, against a minimum of 2.5, so that it cannot erode further.
 - **Light theme: one step does both jobs.** At lightness 0.47 the accent is dark enough to carry near-white text as a fill (6.3:1) and to be read as ink on every light surface, so `--color-accent` and `--color-accent-text` have the same value. Hover and active go darker.
 - **Accent as ink is a separate token.** On dark surfaces a deep fill cannot be read as text, so `--color-accent-text` is a light teal (0.80) for links, the selected tab indicator, and the border of a checked checkbox. A checked checkbox carries that border because the deep fill alone is under 3:1 on raised and overlay surfaces.
 - **Selection is a tint, not a fill.** `--color-accent-subtle` is a low-chroma teal wash under the selected row, the current sidebar item, and an active filter chip. Primary, secondary, and muted text all clear 4.5:1 on it and on its hover step.
@@ -114,13 +114,13 @@ Two rules bind the hues, and the checker enforces both.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `--color-accent` | `oklch(0.500 0.085 var(--hue-accent))` | `oklch(0.470 0.079 var(--hue-accent))` | Fill of the primary button, a checked checkbox, the progress bar. |
+| `--color-accent` | `oklch(0.500 0.085 var(--hue-accent))` | `oklch(0.470 0.079 var(--hue-accent))` | Fill of the primary button and of a checked checkbox. |
 | `--color-accent-hover` | `oklch(0.545 0.092 var(--hue-accent))` | `oklch(0.420 0.070 var(--hue-accent))` | Hover step of the accent fill: lighter in dark, darker in light. |
 | `--color-accent-active` | `oklch(0.460 0.077 var(--hue-accent))` | `oklch(0.370 0.062 var(--hue-accent))` | Pressed step of the accent fill. |
 | `--color-accent-subtle` | `oklch(0.285 0.040 var(--hue-accent))` | `oklch(0.945 0.025 var(--hue-accent))` | Background of the current selection: selected row, current sidebar item, active filter chip. |
 | `--color-accent-subtle-hover` | `oklch(0.320 0.046 var(--hue-accent))` | `oklch(0.915 0.034 var(--hue-accent))` | Hover over a selected element. |
 | `--color-accent-border` | `oklch(0.440 0.070 var(--hue-accent))` | `oklch(0.800 0.055 var(--hue-accent))` | Hairline around an accent-subtle element such as an active filter chip. Decorative. |
-| `--color-accent-text` | `oklch(0.800 0.090 var(--hue-accent))` | `oklch(0.470 0.079 var(--hue-accent))` | Accent as ink on a surface: links, the selected tab indicator, the border of a checked checkbox, the active drop zone. |
+| `--color-accent-text` | `oklch(0.800 0.090 var(--hue-accent))` | `oklch(0.470 0.079 var(--hue-accent))` | Accent as ink on a surface: links, the selected tab indicator, the border of a checked checkbox, the active drop zone, the fill of the progress bar. |
 | `--color-focus-ring` | `oklch(0.820 0.110 var(--hue-accent))` | `oklch(0.520 0.087 var(--hue-accent))` | The keyboard focus ring, on every focusable element. |
 
 ### State colors
@@ -181,9 +181,9 @@ What the set guarantees, and what it does not:
 - **Neighbouring slots are told apart.** Slots k and k+1 are at least 8 apart under simulated protanopia and deuteranopia (closest pair 9.9 in dark, 9.2 in light) and at least 15 apart in normal vision (20.9 in dark, 21.1 in light). Distances are Euclidean in OKLab, times 100.
 - **The first three slots are told apart in any arrangement.** With every pair of slots 1 to 3 compared, the closest pair is still 10.3 in dark and 9.2 in light under simulated color blindness, and 22.1 and 21.1 in normal vision.
 - **All six are not told apart in any arrangement, and no order of six hues can be.** With every pair compared, the closest pair in normal vision is blue and sky at 10.3 in dark, and jade and olive at 11.4 in light; under simulated color blindness some pairs fall near 2.
-- **So the order of the marks is fixed, not left to the data.** Stacked segments, stacked areas, and lines are drawn in slot order, so that only neighbouring slots touch. They are never re-sorted by value. Where sorting by value is wanted, the chart is a bar row group in the neutral color and the labels carry identity. Where any two marks can touch (the blocker graph, a scatter), color is a second cue at most: every mark carries its label, as the spec requires, and at most the first three slots are used without one.
-- **A series is never taken for a state.** Every slot is at least 10 from every status mark in the same theme (closest pair: burnt orange and danger at 10.7 in dark, olive and success at 10.2 in light). Before this rule the green and gold of the set sat 3.1 and 3.7 from success and warning. 10 is the largest minimum the set holds with rose and burnt orange in it: burnt orange lies between danger red and warning amber on the hue circle, and rose lies beside danger. In the dark theme every status mark is also brighter than every series slot, and in both themes a status mark never appears without an icon and a label.
-- **Every slot is a visible mark everywhere.** Each slot clears 3:1 on every fill that carries marks (see the fills table below). In dark that puts all six between lightness 0.605 and 0.665, so no series outweighs another. Every slot also stays inside the lightness band of a series (0.48 to 0.67 in dark, 0.43 to 0.77 in light) and above a chroma of 0.10, below which a hue reads as gray.
+- **So the order of the marks is fixed, not left to the data.** Stacked segments, stacked areas, and lines are drawn in slot order, so that only neighbouring slots touch. They are never re-sorted by value. Where sorting by value is wanted, the chart is a bar row group in the neutral color and the labels carry identity. Where any two marks can touch (the blocker graph, a scatter), every mark carries its label, without exception. Color is a second cue there, and the guarantee for the first three slots says how far that cue reaches.
+- **A series is kept apart from a state, by a small margin.** Every slot is at least 10 from every status mark in the same theme, in normal vision. 10 is not a comfortable distance. It is what this set achieves with rose and burnt orange in it, which the owner chose to keep knowing the cost: burnt orange lies between danger red and warning amber on the hue circle, and rose lies beside danger. The closest pairs, dark then light: burnt orange and danger, 10.7 and 10.3; rose and danger, 11.4 and 10.4. In the light theme three more pairs sit near the minimum: burnt orange and warning 10.4, olive and warning 10.3, olive and success 10.2. Rose moved closer to danger in this revision (it was 13.8 and 15.5), because every mark now has to clear 3:1 on every fill. In exchange the two near-identical pairs of the first version are gone: its green and gold sat 3.1 and 3.7 from success and warning. Jade and olive now sit on either side of the success green. Under simulated red-green color blindness the distance is not held at all: the closest pair is 1.5 in dark (jade and danger) and 2.0 in light (burnt orange and success). For those readers a status mark is told from a series by its icon and label alone, which is why a status mark never appears without them. The checker enforces the minimum of 10 and reports the color-blind figure on every run without enforcing it, so that a later change is seen. In the dark theme every status mark is also brighter than every series slot.
+- **Every slot is a visible mark everywhere.** Each slot clears 3:1 on every fill that carries marks (see "Fills" after this section). In dark that puts all six between lightness 0.605 and 0.665, so no series outweighs another. Every slot also stays inside the lightness band of a series (0.48 to 0.67 in dark, 0.43 to 0.77 in light) and above a chroma of 0.10, below which a hue reads as gray.
 
 **Sequential: magnitude.** One hue, blue, seven steps. Low values recede toward the surface, so the ramp runs dark to light in the dark theme and light to dark in the light theme. Used for the heatmap. Every cell prints its value: the label uses `--color-text-primary` on steps 1 to 4 and `--color-chart-text-inverse` on steps 5 to 7, and both clear 4.5:1 in both themes. A cell with no holds is left unfilled. Because the printed value carries the number and a gap separates the cells, the lowest steps are allowed to sit close to the surface: the sequential steps are cell fills, not marks, and are exempt from the 3:1 rule for marks. The checker instead requires each step to be the background of a text pair.
 
@@ -226,28 +226,11 @@ What the set guarantees, and what it does not:
 
 Axis labels use `--color-text-muted`, value labels `--color-text-secondary`, and titles `--color-text-primary`. Text in a chart never wears a series color.
 
-**Where a mark can sit.** A chart mark is any `--color-chart-` token except the sequential steps, `--color-chart-text-inverse`, and the chart chrome: the three neutral steps, the six slots, Other, the five ordinal steps, and the three status marks. Marks are not listed in the contrast pairs table. The checker runs every mark against every fill below that carries marks, in both themes, with a minimum of 3:1, so no combination of a mark and a fill can go unchecked. Every `--color-surface-` token must appear in this table; a new surface fails the check until it is classified.
-
-| Fill | Carries marks | Why |
-|---|---|---|
-| `--color-surface-app` | yes | Charts and bar rows in the content area. |
-| `--color-surface-panel` | yes | Charts and bar rows in the detail panel; a legend in the filter bar. |
-| `--color-surface-raised` | yes | A mark in a table header or in the stat tile group. |
-| `--color-surface-overlay` | yes | Legend swatches in a chart tooltip. |
-| `--color-surface-hover` | yes | A bar row or a table row under the pointer. |
-| `--color-surface-pressed` | yes | The same row while pressed. |
-| `--color-surface-overlay-hover` | yes | A swatch in a highlighted item of a filter picker. |
-| `--color-accent-subtle` | yes | A bar row in the active filter; a selected table row. |
-| `--color-accent-subtle-hover` | yes | The same row under the pointer. |
-| `--color-chart-band` | yes | The forecast range behind a trend line. |
-| `--color-surface-field` | no | The inside of a field holds text and icons only. |
-| `--color-surface-disabled` | no | A disabled control holds no mark. |
-
 **Chart rules.**
 
-- Thirteen disciplines exceed the six-color set. Discipline bars use one color, `--color-chart-neutral`. The graph and stacked trends color the six largest disciplines and fold the rest into `--color-chart-other`. Labels always carry identity.
+- Thirteen disciplines exceed the six-color set. Discipline bars use one color, `--color-chart-neutral`. The graph and stacked trends color the six disciplines that hold a slot and fold the rest into `--color-chart-other`. Labels always carry identity.
 - Stacked segments, stacked areas, and lines are drawn in slot order, never in value order. A chart that is sorted by value is a bar row group in the neutral color.
-- Color follows the entity, never its rank. Filtering never repaints the survivors.
+- A slot belongs to an entity (for example a discipline), never to a rank. The first time a workspace needs slots, its entities take them in descending order of hold count in the snapshot in view. The assignment is then kept for the workspace, so an entity keeps its color across snapshots, filters, and sessions, and filtering never repaints the survivors. An entity without a slot is drawn as Other. Where the assignment is stored is decided by the plan that first draws a multi-color chart.
 - The open-holds trend is a line in `--color-chart-neutral`. Its forecast range is a band in `--color-chart-band` behind the line, and the projected part of the line is dashed.
 - No chart has two value axes.
 - Every chart has a tooltip, keyboard focus that shows what hover shows, and a table view.
@@ -261,22 +244,64 @@ node <dataviz skill>/scripts/validate_palette.js "<hex list>" --mode dark --surf
 node <dataviz skill>/scripts/validate_palette.js "<hex list of --color-chart-ord-1 to 5>" --mode dark --surface "<hex>" --ordinal
 ```
 
+### Fills
+
+What a fill may carry is written down once, here, and checked.
+
+**Chart marks.** A chart mark is any `--color-chart-` token except the sequential steps, `--color-chart-text-inverse`, and the chart chrome: the three neutral steps, the six slots, Other, the five ordinal steps, and the three status marks. Marks are not listed in the contrast pairs table. The checker runs every mark against every fill below that carries marks, in both themes, with a minimum of 3:1, so no combination of a mark and a fill can go unchecked.
+
+**The primary button.** Its fill is an accent step, and a deep accent only stands out from the two base surfaces. The table says which fills carry a primary button, and on each of them the checker measures the button's fill: at least 3:1 at rest (`--color-accent`) and on hover (`--color-accent-hover`), and at least 2.5:1 while pressed (`--color-accent-active`; the accent section says why the pressed step has a lower minimum). What the checker cannot see is whether a component obeys the table: it reads this file, not interface code. Putting a primary button only on a fill marked "yes" is therefore a rule for whoever builds and reviews a component.
+
+**Every fill is classified.** A fill is any surface token, any subtle tint, the chart band, and any token the contrast pairs table uses as a background. Each must have a row; a new one fails the check until someone decides what it may carry.
+
+| Fill | Carries marks | Carries a primary button | Why |
+|---|---|---|---|
+| `--color-surface-app` | yes | yes | The content area: charts, bar rows, and the one primary button of a page. |
+| `--color-surface-panel` | yes | yes | Top bar, detail panel, filter bar: Import in the top bar; charts in the detail panel; a legend in the filter bar. |
+| `--color-surface-raised` | yes | no | A mark in a table header or in the stat tile group. The accent fill is 2.89:1 here in dark. |
+| `--color-surface-overlay` | yes | no | Legend swatches in a chart tooltip. A menu or a toast holds quiet buttons only. |
+| `--color-surface-hover` | yes | no | A bar row or a table row under the pointer. A hover fill is never put under a primary button. |
+| `--color-surface-pressed` | yes | no | The same row while pressed. |
+| `--color-surface-overlay-hover` | yes | no | A swatch in a highlighted item of a filter picker. |
+| `--color-accent-subtle` | yes | no | A bar row in the active filter; a selected table row; the active drop zone, which hides its button. |
+| `--color-accent-subtle-hover` | yes | no | The same row under the pointer. |
+| `--color-chart-band` | yes | no | The forecast range behind a trend line. |
+| `--color-surface-field` | no | no | The inside of a field holds text and icons only. |
+| `--color-surface-disabled` | no | no | A disabled control holds its own label only. |
+| `--color-danger-subtle` | no | no | A notice or a tag holds text, an icon, quiet buttons, and links. |
+| `--color-warning-subtle` | no | no | As above. |
+| `--color-success-subtle` | no | no | As above. |
+| `--color-info-subtle` | no | no | As above. |
+| `--color-accent` | no | no | The fill of a control. It holds that control's label or check mark only. |
+| `--color-accent-hover` | no | no | As above. |
+| `--color-accent-active` | no | no | As above. |
+| `--color-border-default` | no | no | The progress track. It holds the progress fill only. |
+| `--color-chart-seq-1` | no | no | A heatmap cell. It holds its printed value only. |
+| `--color-chart-seq-2` | no | no | As above. |
+| `--color-chart-seq-3` | no | no | As above. |
+| `--color-chart-seq-4` | no | no | As above. |
+| `--color-chart-seq-5` | no | no | As above. |
+| `--color-chart-seq-6` | no | no | As above. |
+| `--color-chart-seq-7` | no | no | As above. |
+
 ### Contrast pairs
 
-Every pair of a text, border, or ring color and a fill that a component uses is listed here and checked in both themes by `node tools/design/check-tokens.mjs`. Kinds and their floors: `text` 4.5, `large-text` 3, `control-border` 3, `focus-ring` 3, and `graphic` 3 for a meaningful graphic that is not a chart mark (none is listed today). No role in this system relies on the large-text allowance: headings and stat values use `--color-text-primary`, which clears 4.5:1 everywhere. A component may only combine a foreground and a background that appear together in this table.
+Every pair of a text, border, or ring color and a fill that a component uses is listed here and checked in both themes by `node tools/design/check-tokens.mjs`. Kinds and their floors: `text` 4.5, `large-text` 3, `control-border` 3, `focus-ring` 3, and `graphic` 3 for a meaningful graphic that is not a chart mark (the progress fill against its track). No role in this system relies on the large-text allowance: headings and stat values use `--color-text-primary`, which clears 4.5:1 everywhere. A component may only combine a foreground and a background that appear together in this table.
 
 Three things are deliberately not in the table:
 
-- **Chart marks.** They are covered by a wider rule: every mark on every fill that carries marks, as set out under "Where a mark can sit" in the chart palette.
+- **Chart marks.** They are covered by a wider rule: every mark on every fill that carries marks, as set out under "Fills".
+- **The fill of the primary button.** Also covered under "Fills": the three accent steps on every fill that carries a primary button. Its label is in the table.
 - **Decorative colors.** `--color-border-subtle`, `--color-border-default`, the hairlines `--color-accent-border`, `--color-danger-border`, `--color-warning-border`, `--color-success-border`, and `--color-info-border`, and `--color-skeleton` separate or stand in for content and carry no information of their own, so they have no minimum.
 - **Disabled controls.** `--color-text-disabled` on `--color-surface-disabled` is exempt, as WCAG exempts inactive controls.
+- **The progress track against the surface.** The track is `--color-border-default`, a decorative color: about 1.5:1 on the app surface in dark and 1.4:1 in light. It is exempt on purpose. The track only hints at the full length, and nothing depends on seeing it: the label above every progress bar gives the count and the total in words. What must be seen is the fill, and that is checked twice: against the track (the `graphic` row) and against the surface the bar sits on.
 
 | Foreground | Background | Minimum | Kind | Used by |
 |---|---|---|---|---|
 | `--color-text-primary` | `--color-surface-app` | 4.5 | text | Content area: tables, bar rows, page headers, empty states. |
 | `--color-text-primary` | `--color-surface-panel` | 4.5 | text | Top bar, sidebar, detail panel, filter bar. |
 | `--color-text-primary` | `--color-surface-raised` | 4.5 | text | Table header, stat tiles. |
-| `--color-text-primary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, command palette. |
+| `--color-text-primary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, tooltips, command palette. |
 | `--color-text-primary` | `--color-surface-field` | 4.5 | text | Typed text in fields and selects. |
 | `--color-text-primary` | `--color-surface-hover` | 4.5 | text | Hovered rows, sidebar items, tiles, buttons. |
 | `--color-text-primary` | `--color-surface-pressed` | 4.5 | text | Pressed rows, sidebar items, buttons. |
@@ -287,10 +312,10 @@ Three things are deliberately not in the table:
 | `--color-text-primary` | `--color-warning-subtle` | 4.5 | text | Warning notice and tag. |
 | `--color-text-primary` | `--color-success-subtle` | 4.5 | text | Success notice and tag. |
 | `--color-text-primary` | `--color-info-subtle` | 4.5 | text | Info notice and tag. |
-| `--color-text-secondary` | `--color-surface-app` | 4.5 | text | Content area: tables, bar rows, page headers, empty states. |
+| `--color-text-secondary` | `--color-surface-app` | 4.5 | text | Content area: tables, bar rows, page headers, empty states. Also the border of a hovered drop zone. |
 | `--color-text-secondary` | `--color-surface-panel` | 4.5 | text | Top bar, sidebar, detail panel, filter bar. |
 | `--color-text-secondary` | `--color-surface-raised` | 4.5 | text | Table header, stat tiles. |
-| `--color-text-secondary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, command palette. |
+| `--color-text-secondary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, tooltips, command palette. |
 | `--color-text-secondary` | `--color-surface-field` | 4.5 | text | Typed text in fields and selects. |
 | `--color-text-secondary` | `--color-surface-hover` | 4.5 | text | Hovered rows, sidebar items, tiles, buttons. |
 | `--color-text-secondary` | `--color-surface-pressed` | 4.5 | text | Pressed rows, sidebar items, buttons. |
@@ -304,7 +329,7 @@ Three things are deliberately not in the table:
 | `--color-text-muted` | `--color-surface-app` | 4.5 | text | Captions, units, the Soon tag on content area: tables, bar rows, page headers, empty states. |
 | `--color-text-muted` | `--color-surface-panel` | 4.5 | text | Captions, units, the Soon tag on top bar, sidebar, detail panel, filter bar. |
 | `--color-text-muted` | `--color-surface-raised` | 4.5 | text | Captions, units, the Soon tag on table header, stat tiles. |
-| `--color-text-muted` | `--color-surface-overlay` | 4.5 | text | Captions, units, the Soon tag on menus, toasts, command palette. |
+| `--color-text-muted` | `--color-surface-overlay` | 4.5 | text | Captions, units, the Soon tag on menus, toasts, tooltips, command palette. |
 | `--color-text-muted` | `--color-surface-field` | 4.5 | text | Placeholder text. |
 | `--color-text-muted` | `--color-surface-hover` | 4.5 | text | Captions, units, the Soon tag on hovered rows, sidebar items, tiles, buttons. |
 | `--color-text-muted` | `--color-surface-pressed` | 4.5 | text | Captions, units, the Soon tag on pressed rows, sidebar items, buttons. |
@@ -381,19 +406,17 @@ Three things are deliberately not in the table:
 | `--color-border-strong` | `--color-surface-field` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-hover` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-pressed` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-accent` | `--color-surface-app` | 3 | control-border | Edge of the primary button and of the progress fill. |
-| `--color-accent` | `--color-surface-panel` | 3 | control-border | Edge of the primary button and of the progress fill. |
-| `--color-accent` | `--color-surface-field` | 3 | control-border | Edge of the primary button and of the progress fill. |
-| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-panel` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-raised` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
-| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
+| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-panel` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-raised` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-danger-text` | `--color-surface-app` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-panel` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-field` | 3 | control-border | Border of a field in error and of a danger button. |
+| `--color-accent-text` | `--color-border-default` | 3 | graphic | The progress fill against its track. |
 | `--color-focus-ring` | `--color-surface-app` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-panel` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-raised` | 3 | focus-ring | Focus ring. |
@@ -414,6 +437,8 @@ Three things are deliberately not in the table:
 **The One Ink Rule.** Teal is used for the primary action, the current selection, focus, and links, on at most a tenth of a screen. Anything teal can be acted on or is selected. It is never used for decoration, for headings, for icons that are not interactive, or for data: plain data is neutral gray (`--color-chart-neutral`), ramps are blue, and no chart color lies within 25 degrees of the accent hue.
 
 **The Every Mark Rule.** A chart mark clears 3:1 on every fill that carries marks, in both themes. There is no list of approved combinations to keep up to date and no exception to remember: the checker runs all of them.
+
+**The Two Surfaces Rule.** A primary button sits on `--color-surface-app` or `--color-surface-panel` and nowhere else. Nothing that fills on hover, press, or selection holds one.
 
 **The Icon and Label Rule.** A state color never appears alone. Danger, warning, success, and info always come with an icon and a text label, so the teal accent, the green of success, and the blue of info can never be confused, including by a reader who cannot tell the hues apart.
 
@@ -545,7 +570,16 @@ Flat by default. Depth is shown first by surface steps and hairlines, and by sha
 
 ## 5. Components
 
+Every component a screen of the first desktop version needs is specified here with all its states. Two parts of a chart are not specified yet, on purpose: the heatmap cell and the chart legend. Their colors and rules are fixed in the chart palette above; their anatomy and states are written by the plan that builds the Breakdown matrix and the stacked trends, which will know what they need. They are not forgotten.
+
 ### Foundations
+
+**Theme and density selection.** Both are attributes on the root element, and a stylesheet reads nothing else.
+
+- **Theme** is a stored setting with three values: Dark (the default), Light, and System. System follows the operating system and its changes while the app runs. The theme is applied as `data-theme="dark"` or `data-theme="light"` on the root element. System is resolved to one of the two before it is applied, so a stylesheet never sees a third value and needs no media query of its own. The `Dark` column of a token table applies under `data-theme="dark"` and when the attribute is absent; the `Light` column applies under `data-theme="light"`.
+- **Density** is `data-density="comfortable"` (the default) or `data-density="compact"` on the root element. A table may override it locally by carrying the attribute itself; the density tokens then take that value for the table and everything inside it.
+
+`node tools/design/check-tokens.mjs --css` prints the tokens under exactly these selectors.
 
 **Spacing.** A 4 px base. Gaps inside a control use `--space-1` to `--space-3`; gaps between controls `--space-2` to `--space-4`; gaps between sections `--space-6` to `--space-12`. Vary the gaps: related things sit close, sections sit apart.
 
@@ -602,6 +636,7 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | `--size-dropzone-min-height` | `200px` | Least height of a drop zone. |
 | `--size-toast-min-width` | `280px` | Narrowest toast. |
 | `--size-toast-max-width` | `480px` | Widest toast. |
+| `--size-tooltip-max-width` | `280px` | Widest tooltip; longer text wraps. |
 | `--opacity-stale` | `0.6` | Opacity of the previous render while a refetch is in flight. |
 
 Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name.
@@ -617,6 +652,7 @@ Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn
 | `--ease-linear` | `linear` | Timing of the one loop, and of nothing else. |
 | `--motion-loop-period` | `1200ms` | The one loop: the spinner and the indeterminate progress bar, with `--ease-linear`. |
 | `--timeout-toast` | `8000ms` | How long a toast stays. The timer pauses while the toast is hovered or focused. |
+| `--delay-tooltip` | `500ms` | How long the pointer rests on a control before its tooltip shows. Keyboard focus shows it at once. |
 
 Only `opacity`, `transform`, `color`, `background-color`, `border-color`, and `outline-color` are animated. Layout properties (width, height, padding, margin, position offsets) are never animated. Something that appears to grow or travel does so by `transform`: the progress fill and the tab indicator are moved and scaled, not resized. Content that expands in place, such as a group of rows, appears at once and may fade in over `--duration-fast`.
 
@@ -659,12 +695,12 @@ Regions and their surfaces: top bar, sidebar, filter bar, and detail panel are `
 Plain and rectangular. A button names its action with a verb.
 
 - **Shape:** height `--density-control-height`, horizontal padding `--space-3`, corner `--radius-sm`, text `--text-label`, optional leading icon at `--size-icon` with a `--space-1-5` gap. An icon-only button is square, has an accessible name, and has a tooltip.
-- **Primary:** fill `--color-accent`, text `--color-text-on-accent`, no border. Hover `--color-accent-hover`. Active `--color-accent-active`. One primary button per region: Import in the top bar, and at most one on a page (for example "Import" on the import review). A primary button sits on `--color-surface-app` or `--color-surface-panel` only, the two surfaces on which its fill clears 3:1 in both themes.
+- **Primary:** fill `--color-accent`, text `--color-text-on-accent`, no border. Hover `--color-accent-hover`. Active `--color-accent-active`. One primary button per region: Import in the top bar, and at most one on a page (for example "Import" on the import review). A primary button sits on `--color-surface-app` or `--color-surface-panel` only (the Two Surfaces Rule; the fills table under "Fills" is the checked form of it). On those two its fill clears 3:1 at rest and on hover in both themes. The pressed fill is under 3:1 in dark and is carried by the label for the length of the press.
 - **Secondary:** transparent fill, `--border-width-thin` border in `--color-border-strong`, text `--color-text-primary`. Hover fill `--color-surface-hover`. Active fill `--color-surface-pressed`.
 - **Quiet:** no border, transparent fill, text `--color-text-secondary`. Hover fill `--color-surface-hover` and text `--color-text-primary`. Active fill `--color-surface-pressed`. Inside an overlay the hover fill is `--color-surface-overlay-hover`.
 - **Danger:** as secondary, with text and border in `--color-danger-text`. Hover and active fill `--color-danger-subtle`. Used only where the action destroys something and cannot be placed behind an undo.
 - **Focus:** the focus ring, on every variant.
-- **Disabled:** fill `--color-surface-disabled`, text `--color-text-disabled`, border `--color-border-default` where the variant has one. Not focusable. A disabled button says why in a tooltip or in text beside it.
+- **Disabled:** fill `--color-surface-disabled`, text `--color-text-disabled`, border `--color-border-default` where the variant has one. Not focusable. A disabled button says why in text beside it. A tooltip may repeat the reason for pointer users, but is never the only place it is given.
 - **Loading:** the label stays, the leading icon becomes the spinner (`--size-icon`, one turn per `--motion-loop-period`), the button keeps its colors, ignores presses, and has `aria-busy`. The width does not change.
 - **Error:** a button has no error state of its own. A failed action shows an inline danger notice beside or under the button.
 - **Transitions:** background, border, and text color over `--duration-fast` with `--ease-out`.
@@ -722,7 +758,7 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
 - **Selected:** text `--color-text-primary` and a `--border-width-thick` indicator in `--color-accent-text` on the bottom edge. The indicator is moved and scaled to the new tab with `transform` over `--duration-base`; its size is never animated.
 - **Focus:** the inset focus ring. Left and right arrows move between tabs.
 - **Active:** fill `--color-surface-pressed`.
-- **Disabled:** text `--color-text-disabled`; the tab says why in a tooltip.
+- **Disabled:** text `--color-text-disabled`. The reason is given in text on the page, in the panel that is shown; a tooltip on the tab may repeat it.
 - **Loading and error:** belong to the tab's panel, not to the tab.
 
 ### Stat tile
@@ -779,6 +815,20 @@ A short confirmation that floats, then leaves. The home of Undo.
 - **Timing:** stays for `--timeout-toast`; the timer pauses while the toast is hovered or holds focus. It enters by fading in and rising `--space-2` over `--duration-base` and leaves by fading over `--duration-fast`.
 - **Focus:** a toast never takes focus. It is announced politely, and its buttons are reachable by Tab and show the focus ring.
 - **Error:** a failure that needs reading is an inline notice, not a toast.
+
+### Tooltip
+
+A short label that names or explains the control it points to. It floats, it is never interactive, and it is never the only source of what it says.
+
+- **Use:** the name of an icon-only button, the shortcut of a control, the full text of a label or a cell that was cut with an ellipsis, the exact value of a chart mark.
+- **Never the only place:** a tooltip repeats or names. It never holds information that is available nowhere else. Its text is also the control's accessible name or description, a truncated text is shown in full in the detail panel, a chart value is in the table view, and anything the user must know in order to act (why a control is disabled, what is wrong with a field) is in text on the page.
+- **Shape:** fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-sm`, `--shadow-overlay`, padding `--space-1` above and below and `--space-2` at the sides, at most `--size-tooltip-max-width` wide, at `--z-tooltip`. Longer text wraps. No title, no button, no link, and no arrow.
+- **Text:** `--text-caption` in `--color-text-primary`. A shortcut follows the label after a `--space-2` gap, in `--text-mono` and `--color-text-muted`. A chart tooltip is the same component with one row per series: a swatch in the mark's color, the label in `--color-text-secondary`, and the value in `--color-text-primary` with tabular figures.
+- **Placement:** `--space-1` from the control, under it by default, moved to another side where it would leave the window. It never covers the control it describes.
+- **Showing:** on hover, after the pointer has rested on the control for `--delay-tooltip`. On keyboard focus, at once. It fades in over `--duration-fast`; nothing moves.
+- **Dismissing:** it goes when the pointer has left both the control and the tooltip, when focus leaves the control, when the control is pressed, and on Esc. Esc closes only the tooltip: it does not move focus and closes nothing else. It stays while the pointer is on the tooltip itself, so its text can be read without hurry, and it has no timeout.
+- **States:** none of its own. It takes no focus, and it has no hover, active, disabled, loading, or error state.
+- **Reduced motion:** the fade keeps `--duration-fast`, as every opacity change does.
 
 ### Skeleton
 
@@ -848,16 +898,16 @@ A small, non-interactive label on a row or an item.
 
 - **Shape:** at least `--size-dropzone-min-height` tall, padding `--space-10`, corner `--radius-md`, a `--border-width-thin` dashed border in `--color-border-strong`, no fill.
 - **Content:** a title (`--text-section-title`), one sentence (`--text-body`, `--color-text-secondary`), a primary button to choose a file (so the drop zone is never the only way in), and the accepted file types (`--text-caption`, `--color-text-muted`).
-- **Hover:** fill `--color-surface-hover`.
+- **Hover:** the dashed border becomes `--color-text-secondary`, as a field's border does, and the sentence becomes `--color-text-primary`. The zone takes no fill on hover: it holds a primary button, and a primary button never sits on a hover fill.
 - **Focus:** the focus ring on the button inside it.
 - **Active (a file is dragged over it):** a `--border-width-thick` dashed border in `--color-accent-text`, fill `--color-accent-subtle`, the title changes to say what dropping will do, and the sentence names the file. The button and the file types are hidden while the file is over the zone: nothing can be pressed during a drag, and a primary button does not sit on the selection tint.
 - **Disabled and loading:** while an import runs, the content is replaced by the progress component.
 - **Error:** a file that cannot be imported gives a `--border-width-thin` dashed border in `--color-danger-text` and an inline danger notice under the zone that says why and what to do.
-- **Window-wide drop:** while a file is dragged anywhere over the window, the window is covered at `--z-drop-target` by one large drop zone in its active state: `--space-2` from the window edges, fill `--color-accent-subtle`, a `--border-width-thick` dashed border in `--color-accent-text`, corner `--radius-md`, and a centered title (`--text-section-title`, `--color-text-primary`) that says what dropping will do. It is opaque and uses no scrim, so its border and its title are checked pairs. A dashed accent border over `--color-scrim` would fall under 3:1 in the light theme.
+- **Window-wide drop:** while a file is dragged anywhere over the window, the window is covered at `--z-drop-target` by one large drop zone in its active state: `--space-2` from the window edges, fill `--color-accent-subtle`, a `--border-width-thick` dashed border in `--color-accent-text`, corner `--radius-md`, and a centered title (`--text-section-title`, `--color-text-primary`) that says what dropping will do. It is opaque and uses no scrim, so its border and its title are checked pairs. The `--space-2` margin around it shows the window as it is, undimmed and unchanged, so the frame reads as a sheet laid over the app. A dashed accent border over `--color-scrim` would fall under 3:1 in the light theme.
 
 ### Progress
 
-- **Bar:** a track `--size-progress-height` thick in `--color-border-default` with corner `--radius-full`, which clips a fill in `--color-accent` with the same corner. A progress bar sits on `--color-surface-app`, `--color-surface-panel`, or `--color-surface-field`.
+- **Bar:** a track `--size-progress-height` thick in `--color-border-default` with corner `--radius-full`, which clips a fill in `--color-accent-text` with the same corner. The fill is the accent as ink, not the deep accent of a button: a thin line has to clear 3:1 against its own track as well as against the surface, and it does (7.01 in dark, 4.43 in light, against the track). A progress bar sits on `--color-surface-app`, `--color-surface-panel`, or `--color-surface-field`.
 - **Label:** above the bar, what is happening and how far (`--text-body`, `--color-text-primary`), with the count in tabular figures: "Reading rows, 4,200 of 9,300". A bar never appears without a label.
 - **Determinate:** the fill is as wide as the track and is moved along it with `transform: translateX()` so that its leading edge marks the reported progress. The transform changes over `--duration-fast` with `--ease-out`. The width of the fill is never animated.
 - **Indeterminate:** when no total is known, a segment `--size-progress-segment` wide travels along the track by `transform`, once per `--motion-loop-period` with `--ease-linear`. Under reduced motion the segment rests at the start of the track and the label carries the state.

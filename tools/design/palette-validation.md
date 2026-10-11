@@ -11,12 +11,13 @@ Run on 2026-10-11 against the token values of that day. Distances are Euclidean 
 
 ```
 node tools/design/check-tokens.mjs
+node --test tools/design/
 node tools/design/check-tokens.mjs --orders
 node tools/design/check-tokens.mjs --hex <dark|light> <tokens of the set>
 node <dataviz skill>/scripts/validate_palette.js "<hex list>" --mode <dark|light> --surface "<hex of the surface>" [--pairs all] [--ordinal]
 ```
 
-The third command prints the hex list and the surface hex that the fourth takes. Each set below names its tokens and its flags. Every set was run in both themes against the two surfaces a chart is drawn on, `--color-surface-app` and `--color-surface-panel`. The validator checks contrast against that one surface only; contrast against every fill a mark can sit on is the checker's job.
+The second command runs the checker's own tests: each makes one value bad in a temporary copy and expects the checker to fail. The fourth command prints the hex list and the surface hex that the fifth takes. Each set below names its tokens and its flags. Every set was run in both themes against the two surfaces a chart is drawn on, `--color-surface-app` and `--color-surface-panel`. The validator checks contrast against that one surface only; contrast against every fill a mark can sit on is the checker's job.
 
 ## Summary
 
@@ -307,8 +308,10 @@ Chart series (distance in OKLab times 100)
 Chart status (distance in OKLab times 100)
   dark, status marks, every pair: closest 6.5 color-blind (chart-status-warning, chart-status-success), 15.9 normal (chart-status-warning, chart-status-success)
   dark, series slot against status mark: closest 10.7 (chart-3, chart-status-danger)
+  dark, series slot against status mark, color-blind (reported, not enforced): closest 1.5 (chart-2, chart-status-danger)
   light, status marks, every pair: closest 6.9 color-blind (chart-status-danger, chart-status-success), 20.5 normal (chart-status-warning, chart-status-success)
   light, series slot against status mark: closest 10.2 (chart-6, chart-status-success)
+  light, series slot against status mark, color-blind (reported, not enforced): closest 2.0 (chart-3, chart-status-success)
   minimums 6 color-blind and 15 normal between status marks, 10 between a series slot and a status mark
 
 Chart ramps
@@ -365,9 +368,9 @@ The requirements that fixed the values, in the order they bind:
 
 1. **Every mark at 3:1 on every fill that carries marks.** In the dark theme the lightest such fill is `--color-accent-subtle-hover`, which puts every mark at a lightness of about 0.58 to 0.61 or more, depending on its hue; the series band of the validator ends at 0.67. In the light theme the darkest fills are `--color-surface-pressed` and `--color-accent-subtle-hover`, which puts every mark at about 0.59 to 0.63 or less.
 2. **Hues that mean nothing else.** Red, amber, the green of success, teal within 25 degrees of the accent, and 270 to 350 are taken. Six arcs remain, and the set has one color in each: rose (5), burnt orange (50), olive (110 in dark, 116 in light), jade (165), sky (230), blue (262). Rose and burnt orange keep the hues of the first version, as the owner decided. Gold (88) and green (148) of the first version sat 3.7 and 3.1 from the warning and success marks in the light theme and were replaced by olive and jade.
-3. **At least 10 between every slot and every status mark.** This is the largest minimum the set holds with rose and burnt orange in it at a lightness where burnt orange is still an orange and not a brown. A minimum of 12 was tried, and the search found no set that met it together with the other requirements. The status marks were re-stepped at the same time: in dark they sit above the series band, and in light danger and success are dark and warning is the lightest of the three.
+3. **At least 10 between every slot and every status mark, in normal vision.** This is the largest minimum the set holds with rose and burnt orange in it at a lightness where burnt orange is still an orange and not a brown. It is a small margin, kept by the owner's choice of those two colors. Rose moved closer to danger than it was in the first version (11.4 and 10.4 now, 13.8 and 15.5 then), because every mark now has to clear 3:1 on every fill. Under simulated red-green color blindness the distance is not held: the closest pair is 1.5 in dark (jade, danger) and 2.0 in light (burnt orange, success), so there the icon and label of a status mark do the telling apart. The checker reports that figure on every run and does not enforce it. A minimum of 12 was tried, and the search found no set that met it together with the other requirements. The status marks were re-stepped at the same time: in dark they sit above the series band, and in light danger and success are dark and warning is the lightest of the three.
 4. **Neighbours at least 8 apart under simulated color blindness and 15 in normal vision,** in some order, with the first three slots passing with every pair compared.
 
 Lightness and chroma were searched inside those limits (a throwaway search that scored candidate sets on the four requirements, followed by rounding to steps of 0.005 and a re-check). The search scripts are not in the repository; the result is what the two tools above verify.
 
-Closest pairs after the search, from the checker: series slot against status mark 10.7 in dark (burnt orange, danger) and 10.2 in light (olive, success); neighbouring slots 9.9 and 9.2 under simulated color blindness; status marks 15.9 and 20.5 in normal vision.
+Closest pairs after the search, from the checker: series slot against status mark 10.7 in dark (burnt orange, danger) and 10.2 in light (olive, success), with burnt orange and danger at 10.3, olive and warning at 10.3, and rose and danger and burnt orange and warning at 10.4 close behind in light; neighbouring slots 9.9 and 9.2 under simulated color blindness; status marks 15.9 and 20.5 in normal vision.
