@@ -1,0 +1,30 @@
+[package]
+name = "hx-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.90"
+
+[lib]
+name = "hx_desktop"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+hx-core = { path = "../crates/core", features = ["ts"] }
+hx-store = { path = "../crates/store", features = ["ts"] }
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-single-instance.workspace = true
+tauri-plugin-window-state.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[features]
+# Turned on by `tauri build`; embeds the built interface. Not a default feature, so
+# `cargo clippy --workspace` and `cargo test --workspace` need no `dist/`.
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,16 @@
+dist/
+node_modules/
+target/
+src-tauri/
+ui/src/bindings/
+pnpm-lock.yaml
+Cargo.lock
+docs/
+.superpowers/
+.omc/
+.claude/
+.github/
+tools/
+*.md
+.serena/
+.tokensave/

@@ -17,14 +17,33 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.97.0
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - name: Install interface dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Interface lint
+        run: pnpm lint
+      - name: Interface type check
+        run: pnpm typecheck
+      - name: Interface tests
+        run: pnpm test
+      - name: Bindings
+        run: pnpm bindings
+      - name: Bindings are up to date
+        run: git diff --exit-code ui/src/bindings
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
@@ -33,3 +52,11 @@ jobs:
         run: cargo test --workspace --locked
       - name: Performance budget
         run: cargo test --release -p hx-cli --test perf --locked -- --ignored --nocapture
+      - name: Build the app
+        run: pnpm tauri build --no-bundle
+      - name: Size of the binary
+        shell: bash
+        run: |
+          bin=target/release/hx-desktop
+          if [ "$RUNNER_OS" = "Windows" ]; then bin="$bin.exe"; fi
+          echo "$bin: $(du -m "$bin" | cut -f1) MB"
