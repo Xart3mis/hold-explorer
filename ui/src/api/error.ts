@@ -1,7 +1,8 @@
-import i18next from "../i18n";
+import i18next from "../app/i18n";
 import type { CommandError } from "../bindings/CommandError";
 
-function isCommandError(value: unknown): value is CommandError {
+/** Whether a value has the shape of what a failed command carries. */
+export function isCommandError(value: unknown): value is CommandError {
   return (
     typeof value === "object" &&
     value !== null &&

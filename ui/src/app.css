@@ -1,18 +1,70 @@
+/* What every screen stands on: the page, the text of the body, and the focus ring. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-surface-app);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
 html,
 body,
 #root {
-  height: 100%;
+  block-size: 100%;
   margin: 0;
 }
 
 body {
   background: var(--color-surface-app);
   color: var(--color-text-primary);
-  font-family: system-ui, sans-serif;
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* The focus ring of DESIGN.md, on every focusable element. Components only change its offset. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+::selection {
+  background: var(--color-accent-subtle);
+  color: var(--color-text-primary);
 }
 
 .app {
   display: grid;
+  block-size: 100%;
   place-items: center;
-  height: 100%;
+}
+
+.app h1 {
+  font: var(--text-page-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-tight);
 }

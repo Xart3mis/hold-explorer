@@ -1,0 +1,134 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { keys } from "../api/keys";
+import type { AppStart } from "../bindings/AppStart";
+import type { Theme } from "../bindings/Theme";
+import { useToast } from "../components/ToastRegion/ToastRegion";
+import { applyTheme } from "../design/theme";
+import { commandFailure, mockCommands } from "../test/ipc";
+import { AppProviders } from "./providers";
+import { queryClient } from "./query";
+
+function start(theme: Theme): AppStart {
+  return {
+    version: "0.1.0",
+    settings: { theme, workspace_dir: null, last_workspace: null },
+    list: { workspaces: [], unreadable: [], folder: "workspaces" },
+    list_error: null,
+    open: null,
+  };
+}
+
+function Page() {
+  const toast = useToast();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        toast.show({ message: "Workspace renamed." });
+      }}
+    >
+      Rename
+    </button>
+  );
+}
+
+const root = document.documentElement;
+
+afterEach(() => {
+  applyTheme("Dark");
+  root.removeAttribute("data-theme");
+  vi.unstubAllGlobals();
+});
+
+describe("AppProviders", () => {
+  it("renders its children at once, before the application start has answered", () => {
+    // A command answers on a later turn of the event loop, so right after render it has not yet.
+    mockCommands({ app_start: () => start("Light") });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    expect(screen.getByText("content")).toBeInTheDocument();
+    expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  it("applies the saved theme as soon as the application start is known", async () => {
+    mockCommands({ app_start: () => start("Light") });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    await waitFor(() => {
+      expect(root).toHaveAttribute("data-theme", "light");
+    });
+  });
+
+  it("reads the application start through the query client, under the shared key", async () => {
+    const appStart = vi.fn(() => start("Dark"));
+    mockCommands({ app_start: appStart });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    await waitFor(() => {
+      expect(queryClient.getQueryData(keys.start)).toEqual(start("Dark"));
+    });
+    expect(root).toHaveAttribute("data-theme", "dark");
+    expect(appStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves System before applying it", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      })),
+    );
+    mockCommands({ app_start: () => start("System") });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    await waitFor(() => {
+      expect(root).toHaveAttribute("data-theme", "light");
+    });
+  });
+
+  it("keeps the page when the application start fails", async () => {
+    mockCommands({
+      app_start: () => {
+        throw commandFailure("Settings", "The settings file could not be read.");
+      },
+    });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    await waitFor(() => {
+      expect(queryClient.getQueryState(keys.start)?.status).toBe("error");
+    });
+    expect(screen.getByText("content")).toBeInTheDocument();
+    expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  it("gives its children the toast region", async () => {
+    mockCommands({ app_start: () => start("Dark") });
+    const user = userEvent.setup();
+    render(
+      <AppProviders>
+        <Page />
+      </AppProviders>,
+    );
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Workspace renamed.");
+  });
+});

@@ -24,11 +24,17 @@ Install the interface dependencies once with `pnpm install`. Then:
     pnpm tauri dev                  the app, with the dev server
     pnpm tauri build --no-bundle    release binary with the interface embedded
     pnpm test                       Vitest, once
-    pnpm lint                       ESLint and Prettier check
+    pnpm lint                       ESLint, Stylelint, and Prettier check
     pnpm typecheck                  tsc --noEmit
     pnpm bindings                   regenerate ui/src/bindings (cargo test with the ts feature)
+    pnpm tokens                     regenerate ui/src/design/tokens.css from the tables in DESIGN.md
+    pnpm check:dist                 after a build: fail if dist/ names another host
 
 The types in `ui/src/bindings/` are generated from Rust and committed. CI fails when they are out of date.
+
+The stylesheet of design tokens, `ui/src/design/tokens.css`, is generated from `DESIGN.md` and committed. A test fails when the two differ; change the table in `DESIGN.md`, then run `pnpm tokens`.
+
+While `pnpm dev` runs, `http://localhost:1420/gallery.html` shows every base component in every state, in both themes. The gallery is for development only and is not part of the build.
 
 ## Data policy
 

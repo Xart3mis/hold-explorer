@@ -4,5 +4,29 @@
   },
   "errors": {
     "unreported": "The command failed and gave no reason. Try again; if it keeps happening, restart Hold Explorer."
+  },
+  "common": {
+    "loading": "Loading",
+    "dismiss": "Dismiss",
+    "retry": "Try again",
+    "noValue": "–"
+  },
+  "units": {
+    "days": "{{value}} d"
+  },
+  "select": {
+    "placeholder": "Choose an option"
+  },
+  "table": {
+    "rowCount_one": "{{count, number}} row",
+    "rowCount_other": "{{count, number}} rows",
+    "loading": "Loading rows",
+    "actions": "Actions"
+  },
+  "toast": {
+    "region": "Notifications"
+  },
+  "errorState": {
+    "title": "This could not be loaded"
   }
 }

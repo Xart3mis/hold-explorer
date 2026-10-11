@@ -1,0 +1,126 @@
+/*
+ * The group owns the columns and each row takes them over, so labels, bars, and values line up
+ * across rows. A hovered row fills a little past its text on both sides, and the group is pulled
+ * out by the same amount, so the labels stay on the edge of the content.
+ */
+.group {
+  display: grid;
+  grid-template-columns: var(--size-bar-label-width) minmax(0, 1fr) max-content;
+  column-gap: var(--space-3);
+  align-content: start;
+  margin-inline: calc(-1 * var(--space-2));
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.group:has(.secondary) {
+  grid-template-columns: var(--size-bar-label-width) minmax(0, 1fr) max-content max-content;
+}
+
+.group[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  block-size: var(--density-bar-row-height);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.label {
+  overflow: hidden;
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track {
+  display: block;
+  min-inline-size: 0;
+}
+
+/* Plain data is neutral: length carries the value and the label carries the name. */
+.bar {
+  display: block;
+  block-size: var(--size-bar-height);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-chart-neutral);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.value,
+.secondary {
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.secondary {
+  color: var(--color-text-muted);
+}
+
+.row[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.row[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+.row[data-hovered] .bar,
+.row[data-pressed] .bar {
+  background-color: var(--color-chart-neutral-hover);
+}
+
+/* In the active filter: the teal tint says the row is selected; the bar stays neutral. */
+.row[data-selected] {
+  background-color: var(--color-accent-subtle);
+}
+
+.row[data-selected][data-hovered],
+.row[data-selected][data-pressed] {
+  background-color: var(--color-accent-subtle-hover);
+}
+
+.row[data-selected] .bar {
+  background-color: var(--color-chart-neutral-selected);
+}
+
+.row[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* An age band keeps its step in every state; only the fill of the row changes. */
+.row .bar[data-ordinal="1"] {
+  background-color: var(--color-chart-ord-1);
+}
+
+.row .bar[data-ordinal="2"] {
+  background-color: var(--color-chart-ord-2);
+}
+
+.row .bar[data-ordinal="3"] {
+  background-color: var(--color-chart-ord-3);
+}
+
+.row .bar[data-ordinal="4"] {
+  background-color: var(--color-chart-ord-4);
+}
+
+.row .bar[data-ordinal="5"] {
+  background-color: var(--color-chart-ord-5);
+}

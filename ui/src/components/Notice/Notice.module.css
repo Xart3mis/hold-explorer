@@ -1,0 +1,83 @@
+.notice {
+  /* A quiet button inside a notice is written in the primary ink. */
+  --button-quiet-color: var(--color-text-primary);
+
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border: var(--border-width-thin) solid var(--notice-border);
+  border-radius: var(--radius-md);
+  background-color: var(--notice-fill);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.notice[data-tone="info"] {
+  --notice-fill: var(--color-info-subtle);
+  --notice-border: var(--color-info-border);
+  --notice-ink: var(--color-info-text);
+}
+
+.notice[data-tone="success"] {
+  --notice-fill: var(--color-success-subtle);
+  --notice-border: var(--color-success-border);
+  --notice-ink: var(--color-success-text);
+}
+
+.notice[data-tone="warning"] {
+  --notice-fill: var(--color-warning-subtle);
+  --notice-border: var(--color-warning-border);
+  --notice-ink: var(--color-warning-text);
+}
+
+.notice[data-tone="danger"] {
+  --notice-fill: var(--color-danger-subtle);
+  --notice-border: var(--color-danger-border);
+  --notice-ink: var(--color-danger-text);
+}
+
+/* The icon is centered on the first line of text. */
+.icon {
+  margin-block-start: calc((var(--line-height-body) - var(--size-icon)) / 2);
+  color: var(--notice-ink);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.title {
+  font: var(--text-body-strong);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.message {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Buttons are taller than a line of text. They are pulled into the padding of the notice, so a
+ * notice with an action is as tall as one without.
+ */
+.actions,
+.dismiss {
+  margin-block: calc((var(--line-height-body) - var(--density-control-height)) / 2);
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.dismiss {
+  margin-inline-end: calc(-1 * var(--space-1));
+}

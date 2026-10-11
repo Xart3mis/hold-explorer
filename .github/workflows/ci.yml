@@ -62,6 +62,8 @@ jobs:
         run: cargo test --release -p hx-cli --test perf --locked -- --ignored --nocapture
       - name: Build the app
         run: pnpm tauri build --no-bundle
+      - name: The build names no other host
+        run: pnpm check:dist
       - name: Size of the binary
         shell: bash
         run: |

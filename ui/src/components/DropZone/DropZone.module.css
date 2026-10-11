@@ -1,0 +1,105 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/*
+ * The border is thin at rest and thick with a file over the zone. The padding gives back what
+ * the border takes, so the content does not move when a file arrives.
+ */
+.zone {
+  --zone-border: var(--border-width-thin);
+
+  display: grid;
+  min-block-size: var(--size-dropzone-min-height);
+  padding: calc(var(--space-10) - var(--zone-border));
+  border: var(--zone-border) dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * What the zone shows lies in layers on one cell. The layer at rest stays in place, hidden, under
+ * the others, so the zone never changes its size.
+ */
+.layer {
+  display: flex;
+  flex-direction: column;
+  grid-area: 1 / 1;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 0;
+}
+
+.layer[data-hidden] {
+  visibility: hidden;
+}
+
+.title {
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text {
+  margin-block-end: var(--space-1);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.types {
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The name of the file over the zone: an identifier, written as the source gives it. */
+.file {
+  max-inline-size: 100%;
+  color: var(--color-text-primary);
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  overflow-wrap: anywhere;
+}
+
+.progress {
+  align-items: stretch;
+  justify-self: center;
+  inline-size: 100%;
+  max-inline-size: var(--layout-prose-max-width);
+  text-align: start;
+}
+
+/* Hover changes the border and the sentence, never the fill: the zone holds a primary button. */
+.zone:hover,
+.zone[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.zone:hover .text,
+.zone[data-hovered] .text {
+  color: var(--color-text-primary);
+}
+
+.zone[data-invalid] {
+  border-color: var(--color-danger-text);
+}
+
+/* A file is over the zone. */
+.zone[data-active] {
+  --zone-border: var(--border-width-thick);
+
+  border-color: var(--color-accent-text);
+  background-color: var(--color-accent-subtle);
+}

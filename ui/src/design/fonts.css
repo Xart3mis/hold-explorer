@@ -1,0 +1,7 @@
+/*
+ * The two families of DESIGN.md, from their npm packages. The build copies the font files into
+ * the app, so nothing is loaded from the network. Each package splits its family by script and
+ * the browser reads only the files a page needs.
+ */
+@import "@fontsource-variable/public-sans/wght.css";
+@import "@fontsource-variable/reddit-mono/wght.css";

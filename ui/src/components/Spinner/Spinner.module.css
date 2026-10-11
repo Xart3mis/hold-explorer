@@ -1,0 +1,22 @@
+.spinner {
+  display: inline-block;
+  flex: none;
+  inline-size: var(--size-icon);
+  block-size: var(--size-icon);
+  border: var(--border-width-thick) solid currentcolor;
+  border-inline-end-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin var(--motion-loop-period) var(--ease-linear) infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

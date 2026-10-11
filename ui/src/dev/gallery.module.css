@@ -1,0 +1,213 @@
+/* The gallery's own layout. Its specimens are the real components and bring their own styles. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 100%;
+}
+
+.shellHead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  gap: var(--space-6);
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: var(--space-3) var(--layout-page-padding-x);
+  border-block-end: var(--border-width-thin) solid var(--color-border-default);
+  background-color: var(--color-surface-panel);
+}
+
+.shellTitle {
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.switches {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.switches > * {
+  inline-size: var(--size-bar-label-width);
+}
+
+.frames {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+}
+
+.iframe {
+  flex: 1;
+  min-inline-size: 0;
+  border: 0;
+  border-inline-end: var(--border-width-thin) solid var(--color-border-default);
+}
+
+.frame {
+  padding: var(--layout-page-padding-y) var(--layout-page-padding-x) var(--space-16);
+}
+
+.frameHead {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.frameTitle {
+  font: var(--text-page-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.section {
+  margin-block-start: var(--space-8);
+  padding-block-start: var(--space-6);
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.sectionTitle {
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.subTitle {
+  margin-block: var(--space-6) var(--space-2);
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.note {
+  max-inline-size: var(--layout-form-max-width);
+  margin-block-start: var(--space-1);
+  color: var(--color-text-secondary);
+  text-wrap: pretty;
+}
+
+.sectionBody {
+  margin-block-start: var(--space-4);
+}
+
+.caption {
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.forced {
+  display: contents;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  padding-block: var(--space-2);
+}
+
+.rowLabel {
+  flex: none;
+  inline-size: calc(var(--size-bar-label-width) / 2);
+  padding-block-start: var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.rowBody {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: flex-start;
+  min-inline-size: 0;
+}
+
+.specimen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  margin: 0;
+}
+
+.specimen[data-wide] {
+  flex: 1;
+  align-items: stretch;
+  min-inline-size: var(--size-bar-label-width);
+}
+
+.specimenBody {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--density-control-height);
+}
+
+.specimen[data-wide] .specimenBody {
+  display: block;
+  align-content: center;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(calc(var(--size-toast-min-width) - var(--space-10)), 1fr)
+  );
+  gap: var(--space-5) var(--space-4);
+  align-items: start;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-inline-size: var(--layout-form-max-width);
+}
+
+.twoColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+
+.gap {
+  block-size: var(--space-4);
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-6);
+  border: var(--border-width-thin) dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
+.page {
+  margin-block-end: var(--space-4);
+  padding: var(--layout-page-padding-y) var(--layout-page-padding-x);
+  border: var(--border-width-thin) dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
+.dropGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--size-toast-min-width), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.scrollBox {
+  block-size: var(--size-dropzone-min-height);
+}
