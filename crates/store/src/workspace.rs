@@ -172,6 +172,11 @@ impl Workspace {
         })
     }
 
+    /// The file the workspace was opened or created with.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// What the workspace file says about itself.
     pub fn info(&self) -> Result<WorkspaceInfo, StoreError> {
         let mut stmt = self

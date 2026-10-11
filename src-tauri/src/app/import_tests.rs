@@ -103,6 +103,7 @@ fn opening_a_workbook_gives_headers_a_twenty_row_preview_and_no_missing_fields()
     assert_eq!(draft.file.row_count, 40);
     assert!(draft.missing_required.is_empty());
     assert!(!draft.used_saved_mapping);
+    assert_eq!(draft.proposed, draft.file.auto_map);
 }
 
 #[test]
@@ -158,7 +159,8 @@ fn a_saved_mapping_makes_the_next_draft_complete() {
     let draft = state.import_open(&other).unwrap();
     assert!(draft.missing_required.is_empty());
     assert!(draft.used_saved_mapping);
-    assert_eq!(draft.file.auto_map.fields, kind_line_why());
+    assert_eq!(draft.proposed.fields, kind_line_why());
+    assert!(draft.file.auto_map.missing_required().len() == 3);
     assert_eq!(state.import_review(None).unwrap().row_count, 1);
 }
 
@@ -236,7 +238,10 @@ fn many_skipped_rows_are_counted_in_full_and_listed_up_to_two_hundred() {
     assert_eq!(review.skipped_count, 300);
     assert_eq!(review.skipped.len(), 200);
     let rows: Vec<usize> = review.skipped.iter().map(|s| s.row_number).collect();
-    assert!(rows.windows(2).all(|pair| pair[0] < pair[1]));
+    // Row 1 is the header and row 2 the hold; the skipped rows are 3 to 302 in file order.
+    assert_eq!(rows.first(), Some(&3));
+    assert_eq!(rows.last(), Some(&202));
+    assert!(rows.windows(2).all(|pair| pair[0] + 1 == pair[1]));
 }
 
 #[test]
@@ -403,7 +408,8 @@ fn a_commit_into_a_new_workspace_creates_and_opens_it_with_everything_stored() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let file = fx.synth("one.xlsx", 1, "P-1");
-    state.import_open(&file).unwrap();
+    let headers = state.import_open(&file).unwrap().file.headers;
+    let review = state.import_review(None).unwrap();
     let done = state
         .import_commit(
             commit(new_target("Plant"), "2026-10-07 08:00:00"),
@@ -427,7 +433,11 @@ fn a_commit_into_a_new_workspace_creates_and_opens_it_with_everything_stored() {
             .join(format!("{}.holdx-ws", done.open.workspace.id)),
     )
     .unwrap();
-    assert!(stored.saved_mapping().unwrap().is_some());
+    let review_mapping = review.mapping;
+    assert_eq!(
+        stored.saved_mapping().unwrap(),
+        Some(review_mapping.to_saved(&headers))
+    );
     assert_eq!(stored.snapshots().unwrap().len(), 1);
 
     // The draft is gone.
@@ -460,11 +470,19 @@ fn an_unedited_date_keeps_the_detected_source_and_an_edited_one_is_the_users() {
     let file = fx.synth("one.xlsx", 1, "P-1");
 
     state.import_open(&file).unwrap();
+    // The date the file gives, handed back unchanged.
+    let detected = state.import_review(None).unwrap().detected.unwrap();
     let kept = state
-        .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
+        .import_commit(
+            ImportCommit {
+                taken_at: detected.at,
+                ..commit(existing(&id), "2026-10-07 08:00:00")
+            },
+            &no_progress,
+        )
         .unwrap();
     assert_eq!(kept.snapshot.date_source, SnapshotSource::InfoSheet);
-    assert_eq!(kept.snapshot.taken_at, at("2026-10-07 08:00:00"));
+    assert_eq!(kept.snapshot.taken_at, detected.at);
 
     state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
     let edited = state
@@ -492,9 +510,19 @@ fn a_file_dated_by_its_time_keeps_that_source_when_the_date_is_not_edited() {
     state
         .import_open(&fx.text("kinds.csv", KIND_LINE_WHY))
         .unwrap();
-    state.import_review(Some(kind_line_why())).unwrap();
+    let detected = state
+        .import_review(Some(kind_line_why()))
+        .unwrap()
+        .detected
+        .unwrap();
     let done = state
-        .import_commit(commit(new_target("A"), "2026-10-07 00:00:00"), &no_progress)
+        .import_commit(
+            ImportCommit {
+                taken_at: detected.at,
+                ..commit(new_target("A"), "2026-10-07 00:00:00")
+            },
+            &no_progress,
+        )
         .unwrap();
     // The file's own time was detected, and the date was not edited: that source stays.
     assert_eq!(done.snapshot.date_source, SnapshotSource::FileTime);
@@ -738,4 +766,60 @@ fn a_failed_review_leaves_no_earlier_review_and_commit_reviews_again() {
         list_workspaces(&fx.workspaces()).unwrap().workspaces.len(),
         0
     );
+}
+
+#[test]
+fn an_unedited_flag_with_a_changed_date_is_stored_as_the_users_date() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let file = fx.synth("one.xlsx", 1, "P-1");
+    let detected = load_file(&file).unwrap().snapshot.unwrap();
+    state.import_open(&file).unwrap();
+    let done = state
+        .import_commit(commit(existing(&id), "2026-01-02 03:04:05"), &no_progress)
+        .unwrap();
+    assert_ne!(detected.at, at("2026-01-02 03:04:05"));
+    assert_eq!(done.snapshot.date_source, SnapshotSource::User);
+    let workspace = Workspace::open(&fx.workspaces().join(format!("{id}.holdx-ws"))).unwrap();
+    let stored = workspace.snapshot_detail(done.snapshot.id).unwrap();
+    assert_eq!(stored.detected, Some(detected));
+}
+
+#[test]
+fn a_workspace_that_cannot_be_removed_is_named_in_the_import_error() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let remover = |_: &Path| -> Result<(), hx_store::StoreError> {
+        Err(hx_store::StoreError::Io {
+            path: "x".into(),
+            detail: "Permission denied".into(),
+        })
+    };
+    let error = state
+        .import_commit_with(
+            ImportCommit {
+                replace: Some(999),
+                ..commit(new_target("Doomed"), "2026-10-07 08:00:00")
+            },
+            &no_progress,
+            &remover,
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, "SnapshotNotFound");
+    assert!(error.message.contains("\"Doomed\""), "{}", error.message);
+    assert!(
+        error.message.contains("could not be removed"),
+        "{}",
+        error.message
+    );
+    assert!(
+        error.message.contains("delete it by hand"),
+        "{}",
+        error.message
+    );
+    assert!(error.message.contains(".holdx-ws"), "{}", error.message);
+    // The file is really still there, as the remover claimed.
+    assert_eq!(fx.workspace_files(), 1);
 }

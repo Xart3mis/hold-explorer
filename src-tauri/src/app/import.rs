@@ -4,6 +4,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use hx_store::StoreError;
+
 use chrono::{Datelike, NaiveDateTime};
 use hx_core::import::SkippedRow;
 use hx_core::load::{open_file, open_sheet, parse_opened, Loaded, Opened, OpenedView};
@@ -41,9 +43,11 @@ pub(super) struct Draft {
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct ImportDraft {
-    /// The file as read; `auto_map` holds the mapping the draft proposes, which is the open
-    /// workspace's saved mapping applied to the file when there is one.
+    /// The file as the engine read it; `auto_map` is the automatic mapping.
     pub file: OpenedView,
+    /// The mapping the app proposes: the automatic one, or the one with the open workspace's
+    /// saved mapping applied.
+    pub proposed: ColumnMap,
     /// Required fields the proposed mapping does not cover; empty when the file can be read as it is.
     pub missing_required: Vec<Field>,
     /// True when the workspace's saved mapping changed the automatic one.
@@ -235,8 +239,8 @@ enum Origin {
     Open,
     /// It was opened for this import only.
     Other,
-    /// It was created for this import; the file is at this path.
-    Created(PathBuf),
+    /// It was created for this import under this name; the file is at this path.
+    Created { name: String, path: PathBuf },
 }
 
 impl AppState {
@@ -269,10 +273,9 @@ impl AppState {
             }
             None => (opened.auto_map.clone(), false),
         };
-        let mut file = opened.view(PREVIEW_ROWS);
-        file.auto_map = proposed.clone();
         let draft = ImportDraft {
-            file,
+            file: opened.view(PREVIEW_ROWS),
+            proposed: proposed.clone(),
             missing_required: proposed.missing_required(),
             used_saved_mapping,
         };
@@ -406,6 +409,17 @@ impl AppState {
         request: ImportCommit,
         progress: &dyn Fn(ImportPhase),
     ) -> Result<ImportDone, CommandError> {
+        self.import_commit_with(request, progress, &delete_workspace)
+    }
+
+    /// [`AppState::import_commit`] with the function that removes a workspace file that was
+    /// created for a failed import.
+    pub(super) fn import_commit_with(
+        &mut self,
+        request: ImportCommit,
+        progress: &dyn Fn(ImportPhase),
+        remove: &dyn Fn(&Path) -> Result<(), StoreError>,
+    ) -> Result<ImportDone, CommandError> {
         if self.draft.is_none() {
             return Err(no_draft());
         }
@@ -430,8 +444,8 @@ impl AppState {
             ),
             (TargetChoice::New { name }, _) => {
                 let workspace = Workspace::create(&self.folder(), &name)?;
-                let info = workspace.info()?;
-                (workspace, Origin::Created(info.path))
+                let path = workspace.path().to_path_buf();
+                (workspace, Origin::Created { name, path })
             }
         };
 
@@ -447,8 +461,10 @@ impl AppState {
                 progress(ImportPhase::Done);
                 Ok(ImportDone { open, snapshot })
             }
-            Err(error) => {
-                self.abandon(workspace, origin);
+            Err(mut error) => {
+                if let Some(note) = self.abandon(workspace, origin, remove) {
+                    error.message = format!("{} {note}", error.message);
+                }
                 Err(error)
             }
         }
@@ -474,8 +490,9 @@ impl AppState {
             .as_ref()
             .and_then(|d| d.parsed.as_ref())
             .ok_or_else(no_draft)?;
+        // A date that differs from the detected one is the user's, whatever the flag says.
         let source = match loaded.snapshot {
-            Some(detected) if !date_edited => detected.source,
+            Some(detected) if !date_edited && detected.at == *taken_at => detected.source,
             _ => SnapshotSource::User,
         };
         let options = ImportOptions {
@@ -494,16 +511,30 @@ impl AppState {
         Ok((snapshot, describe(workspace)?))
     }
 
-    /// Undoes what a failed commit did to the workspaces.
-    fn abandon(&mut self, workspace: Workspace, origin: Origin) {
+    /// Undoes what a failed commit did to the workspaces. Returns a sentence for the user when a
+    /// workspace created for the import could not be removed again.
+    fn abandon(
+        &mut self,
+        workspace: Workspace,
+        origin: Origin,
+        remove: &dyn Fn(&Path) -> Result<(), StoreError>,
+    ) -> Option<String> {
         match origin {
-            Origin::Open => self.open = Some(workspace),
-            Origin::Other => {}
-            Origin::Created(path) => {
-                // Close the file first: Windows refuses to delete an open file. A file that
-                // cannot be removed is a stray empty workspace, which the user can delete.
+            Origin::Open => {
+                self.open = Some(workspace);
+                None
+            }
+            Origin::Other => None,
+            Origin::Created { name, path } => {
+                // Close the file first: Windows refuses to delete an open file.
                 drop(workspace);
-                let _ = delete_workspace(&path);
+                remove(&path).err().map(|error| {
+                    format!(
+                        "A workspace named \"{name}\" was created for this import but could not be removed again ({}). It is the file {}; delete it by hand.",
+                        error.to_string().trim_end_matches('.'),
+                        path.display()
+                    )
+                })
             }
         }
     }
