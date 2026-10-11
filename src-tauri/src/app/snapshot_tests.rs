@@ -6,10 +6,11 @@ use hx_core::filter::{Dim, FieldFilter, FilterSpec, Status};
 use hx_core::load::load_file;
 use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
-use hx_store::{list_workspaces, StoreError, Workspace};
+use hx_store::{delete_workspace, list_workspaces, StoreError, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 use tempfile::TempDir;
 
+use super::error::CommandError;
 use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::AppState;
 
@@ -224,7 +225,7 @@ fn a_filter_with_a_discipline_returns_only_that_disciplines_holds() {
 
 #[test]
 fn the_complete_default_filter_the_interface_sends_means_open_holds() {
-    let json = r#"{"status":"Open","fields":[],"text":"","age_bands":[],"created":{"from":null,"to":null},"released":{"from":null,"to":null},"size_mismatch":null}"#;
+    let json = include_str!("../../../ui/src/api/open-holds-filter.json");
     let spec: FilterSpec = serde_json::from_str(json).unwrap();
     assert_eq!(spec, FilterSpec::default());
     assert_eq!(spec.status, Status::Open);
@@ -234,13 +235,24 @@ fn demo_snapshots(fx: &Fixture, id: &str) -> Workspace {
     Workspace::open(&fx.workspaces().join(format!("{id}.holdx-ws"))).unwrap()
 }
 
+fn no_hook(_: u64) -> Result<(), CommandError> {
+    Ok(())
+}
+
+fn is_empty(dir: &Path) -> bool {
+    std::fs::read_dir(dir).unwrap().next().is_none()
+}
+
 #[test]
 fn the_demo_workspace_has_four_snapshots_seven_days_apart_and_the_newest_selected() {
     let fx = Fixture::new();
+    let scratch = fx.dir.path().join("scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
     let mut state = fx.state();
-    let started = std::time::Instant::now();
-    let opened = state.create_demo().unwrap();
-    eprintln!("demo took {:?}", started.elapsed());
+    let opened = state
+        .create_demo_with(&scratch, &delete_workspace, &no_hook)
+        .unwrap();
+    assert!(is_empty(&scratch), "the temporary files are removed");
 
     assert_eq!(opened.workspace.name, "Demo");
     assert_eq!(opened.snapshots.len(), 4);
@@ -266,8 +278,11 @@ fn the_demo_workspace_has_four_snapshots_seven_days_apart_and_the_newest_selecte
     assert!(view.summary.holds > 0);
 
     // A second demo is a second workspace; the first is not touched.
-    let second = state.create_demo().unwrap();
+    let second = state
+        .create_demo_with(&scratch, &delete_workspace, &no_hook)
+        .unwrap();
     assert_ne!(second.workspace.id, opened.workspace.id);
+    assert!(is_empty(&scratch));
     let list = list_workspaces(&fx.workspaces()).unwrap();
     assert_eq!(list.workspaces.len(), 2);
     assert!(list
@@ -276,17 +291,47 @@ fn the_demo_workspace_has_four_snapshots_seven_days_apart_and_the_newest_selecte
         .all(|w| w.name == "Demo" && w.snapshot_count == 4));
 }
 
+fn late_failure(step: u64) -> Result<(), CommandError> {
+    if step == 0 {
+        Err(CommandError::internal("stopped after the first file"))
+    } else {
+        Ok(())
+    }
+}
+
 #[test]
-fn a_demo_that_fails_part_way_removes_its_file_and_keeps_the_open_workspace() {
+fn a_demo_that_fails_after_writing_a_file_removes_its_file_and_its_temporary_files() {
+    let fx = Fixture::new();
+    let scratch = fx.dir.path().join("scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let mut state = fx.state();
+    let kept = state.create_workspace("Keep").unwrap();
+
+    let error = state
+        .create_demo_with(&scratch, &delete_workspace, &late_failure)
+        .unwrap_err();
+    assert_eq!(error.message, "stopped after the first file");
+    assert!(is_empty(&scratch), "the temporary files are removed");
+    let list = list_workspaces(&fx.workspaces()).unwrap();
+    assert_eq!(list.workspaces.len(), 1);
+    assert_eq!(list.workspaces[0].id, kept.workspace.id);
+    assert_eq!(state.open_id(), kept.workspace.id);
+}
+
+#[test]
+fn a_demo_that_fails_before_any_file_removes_its_workspace_and_keeps_the_open_one() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let kept = state.create_workspace("Keep").unwrap();
     let missing = fx.dir.path().join("no-such-folder");
 
     let error = state
-        .create_demo_with(&missing, &hx_store::delete_workspace)
+        .create_demo_with(&missing, &delete_workspace, &no_hook)
         .unwrap_err();
     assert_eq!(error.kind, "Internal");
+    assert!(error
+        .message
+        .starts_with("The demo workspace could not be built"));
     assert!(
         !error.message.contains("could not be removed"),
         "{}",
@@ -294,7 +339,6 @@ fn a_demo_that_fails_part_way_removes_its_file_and_keeps_the_open_workspace() {
     );
     let list = list_workspaces(&fx.workspaces()).unwrap();
     assert_eq!(list.workspaces.len(), 1);
-    assert_eq!(list.workspaces[0].id, kept.workspace.id);
     assert_eq!(state.open_id(), kept.workspace.id);
 }
 
@@ -309,10 +353,16 @@ fn a_demo_workspace_that_cannot_be_removed_is_named_in_the_error() {
             detail: "Permission denied".into(),
         })
     };
-    let error = state.create_demo_with(&missing, &remover).unwrap_err();
-    assert!(error.message.contains("\"Demo\""), "{}", error.message);
+    let error = state
+        .create_demo_with(&missing, &remover, &no_hook)
+        .unwrap_err();
+    assert!(error
+        .message
+        .starts_with("The demo workspace could not be built"));
     assert!(
-        error.message.contains("could not be removed"),
+        error
+            .message
+            .contains("A workspace named \"Demo\" was created for the demo workspace but could not be removed"),
         "{}",
         error.message
     );

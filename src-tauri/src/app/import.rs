@@ -243,16 +243,18 @@ enum Origin {
     Created { name: String, path: PathBuf },
 }
 
-/// Removes the file of a workspace created for an operation that failed. Returns a sentence for
-/// the user when it could not be removed.
+/// Removes the file of a workspace created for an operation that failed. `purpose` completes
+/// "was created ..." (for example "for this import"). Returns a sentence for the user when the
+/// file could not be removed.
 pub(super) fn remove_created(
     name: &str,
     path: &Path,
+    purpose: &str,
     remove: &dyn Fn(&Path) -> Result<(), StoreError>,
 ) -> Option<String> {
     remove(path).err().map(|error| {
         format!(
-            "A workspace named \"{name}\" was created for this import but could not be removed again ({}). It is the file {}; delete it by hand.",
+            "A workspace named \"{name}\" was created {purpose} but could not be removed again ({}). It is the file {}; delete it by hand.",
             error.to_string().trim_end_matches('.'),
             path.display()
         )
@@ -549,7 +551,7 @@ impl AppState {
             Origin::Created { name, path } => {
                 // Close the file first: Windows refuses to delete an open file.
                 drop(workspace);
-                remove_created(&name, &path, remove)
+                remove_created(&name, &path, "for this import", remove)
             }
         }
     }

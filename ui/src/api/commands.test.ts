@@ -7,6 +7,7 @@ import type { WorkspaceView } from "../bindings/WorkspaceView";
 import { mockCommands } from "../test/ipc";
 import { api } from "./commands";
 import { openHoldsFilter } from "./filter";
+import openHolds from "./open-holds-filter.json";
 
 const workspace: WorkspaceView = {
   id: "0123456789abcdef",
@@ -122,17 +123,8 @@ describe("the snapshot commands", () => {
       },
     });
     expect(await api.overview(openHoldsFilter())).toEqual(overview);
-    expect(sent).toEqual({
-      spec: {
-        status: "Open",
-        fields: [],
-        text: "",
-        age_bands: [],
-        created: { from: null, to: null },
-        released: { from: null, to: null },
-        size_mismatch: null,
-      },
-    });
+    expect(sent).toEqual({ spec: openHolds });
+    expect(openHoldsFilter()).toEqual(openHolds);
   });
 
   it("passes the snapshot id and answers the workspace", async () => {
