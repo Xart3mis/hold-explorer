@@ -1,5 +1,6 @@
 //! The user's settings: one JSON file in the app's configuration directory.
 
+use std::io::Write;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -37,26 +38,28 @@ pub struct Settings {
     pub last_workspace: Option<String>,
 }
 
-/// Reads the settings. A missing file gives the defaults. A file that cannot be parsed is kept as
-/// `settings.json.unreadable` (replacing an older one) before the defaults are returned, so
-/// nothing is lost silently.
+/// Reads the settings. A missing file gives the defaults. A file that cannot be read or parsed
+/// is kept as `settings.json.unreadable` (replacing an older one) before the defaults are
+/// returned, so nothing is lost silently. When it cannot be set aside either, the defaults are
+/// used in memory and the file is left as it is: saving then fails rather than overwrite it.
 pub fn load_settings(config_dir: &Path) -> Settings {
     let path = config_dir.join(FILE_NAME);
-    let Ok(text) = std::fs::read(&path) else {
-        return Settings::default();
-    };
-    match serde_json::from_slice(&text) {
-        Ok(settings) => settings,
-        Err(_) => {
-            // When the file cannot be moved either, the defaults still apply and the next save
-            // replaces it.
-            let _ = std::fs::rename(&path, config_dir.join(SET_ASIDE_NAME));
-            Settings::default()
+    let parsed = match std::fs::read(&path) {
+        Ok(text) => serde_json::from_slice(&text).ok(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Settings::default();
         }
-    }
+        Err(_) => None,
+    };
+    parsed.unwrap_or_else(|| {
+        // A failure here is reported when the next save is refused.
+        let _ = std::fs::rename(&path, config_dir.join(SET_ASIDE_NAME));
+        Settings::default()
+    })
 }
 
-/// Writes the settings to a temporary file beside the target and renames it over the target.
+/// Writes the settings to a temporary file beside the target, flushes it to disk, and renames it
+/// over the target.
 pub fn save_settings(config_dir: &Path, settings: &Settings) -> Result<(), CommandError> {
     let path = config_dir.join(FILE_NAME);
     let failed = |error: &dyn std::fmt::Display| {
@@ -71,7 +74,11 @@ pub fn save_settings(config_dir: &Path, settings: &Settings) -> Result<(), Comma
     let text = serde_json::to_string_pretty(settings).map_err(|e| failed(&e))?;
     std::fs::create_dir_all(config_dir).map_err(|e| failed(&e))?;
     let temp = config_dir.join(TEMP_NAME);
-    std::fs::write(&temp, text).map_err(|e| failed(&e))?;
+    let written = std::fs::File::create(&temp).and_then(|mut file| {
+        file.write_all(text.as_bytes())?;
+        file.sync_all()
+    });
+    written.map_err(|e| failed(&e))?;
     std::fs::rename(&temp, &path).map_err(|e| {
         // The temporary file is ours, so removing it loses nothing.
         let _ = std::fs::remove_file(&temp);

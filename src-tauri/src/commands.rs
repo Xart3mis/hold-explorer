@@ -1,9 +1,13 @@
 //! The commands the interface calls. Each locks the state, calls one method of
 //! [`AppState`](crate::app::AppState), and maps the error; the work is in `app`.
+//!
+//! Rule: every command that takes the state lock does so inside the blocking pool (see
+//! `blocking`). A synchronous command runs on the main thread, and waiting there for a lock that
+//! a workspace operation holds across file work would freeze the window.
 
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager};
 
 use crate::app::{
     AppStart, AppState, CommandError, Settings, Theme, WorkspaceListView, WorkspaceOpen,
@@ -48,11 +52,8 @@ pub async fn app_start(app: AppHandle) -> Result<AppStart, CommandError> {
 
 /// Sets and saves the theme.
 #[tauri::command]
-pub fn settings_set_theme(
-    state: State<'_, Mutex<AppState>>,
-    theme: Theme,
-) -> Result<Settings, CommandError> {
-    state.lock().map_err(|_| poisoned())?.set_theme(theme)
+pub async fn settings_set_theme(app: AppHandle, theme: Theme) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_theme(theme)).await
 }
 
 /// The workspaces in the workspace folder.
@@ -77,4 +78,66 @@ pub async fn workspace_open(app: AppHandle, id: String) -> Result<WorkspaceOpen,
 #[tauri::command]
 pub async fn workspace_rename(app: AppHandle, name: String) -> Result<WorkspaceView, CommandError> {
     blocking(app, move |state| state.rename_workspace(&name)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
+    const LIB: &str = include_str!("lib.rs");
+
+    /// The keys of `interface CommandMap { ... }`: lines indented by two spaces.
+    fn typescript_commands() -> BTreeSet<String> {
+        let start = COMMAND_MAP
+            .find("interface CommandMap {")
+            .expect("commands.ts declares interface CommandMap");
+        let body = &COMMAND_MAP[start..];
+        let end = body.find("\n}").expect("the interface ends");
+        body[..end]
+            .lines()
+            .skip(1)
+            .filter(|line| line.starts_with("  ") && !line.starts_with("   "))
+            .filter_map(|line| line.trim().split(':').next())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The names inside `generate_handler![ ... ]`, without their module path.
+    fn registered_commands() -> BTreeSet<String> {
+        let start = LIB
+            .find("generate_handler![")
+            .expect("lib.rs registers the commands with generate_handler!");
+        let body = &LIB[start + "generate_handler![".len()..];
+        let end = body.find(']').expect("the list ends");
+        body[..end]
+            .split(',')
+            .map(|name| {
+                name.trim()
+                    .rsplit("::")
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
+            .filter(|name| !name.is_empty())
+            .collect()
+    }
+
+    #[test]
+    fn the_command_names_match_on_both_sides() {
+        let typescript = typescript_commands();
+        let registered = registered_commands();
+        assert!(
+            !typescript.is_empty(),
+            "no command names found in commands.ts"
+        );
+        assert!(!registered.is_empty(), "no command names found in lib.rs");
+        let missing_in_rust: Vec<_> = typescript.difference(&registered).collect();
+        let missing_in_typescript: Vec<_> = registered.difference(&typescript).collect();
+        assert!(
+            missing_in_rust.is_empty() && missing_in_typescript.is_empty(),
+            "in commands.ts but not registered in lib.rs: {missing_in_rust:?}; \
+             registered in lib.rs but missing from commands.ts: {missing_in_typescript:?}"
+        );
+    }
 }

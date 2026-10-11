@@ -8,7 +8,7 @@ mod workspaces;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use hx_store::{list_workspaces, Workspace};
+use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use error::CommandError;
 pub use settings::{load_settings, save_settings, Settings, Theme};
@@ -55,22 +55,24 @@ impl AppState {
     }
 
     /// Everything the interface needs at start; reopens the last workspace when it can. A last
-    /// workspace that is gone or unreadable leaves `open` empty and raises no error.
+    /// workspace that is gone or unreadable leaves `open` empty and raises no error. A folder
+    /// that cannot be listed gives an empty list and `list_error`; one that does not exist yet
+    /// is not an error.
     pub fn start(&mut self) -> AppStart {
         let folder = self.folder();
-        // A folder that cannot be read lists nothing; creating a workspace reports the cause.
-        let list = self.list_workspaces().unwrap_or_else(|_| {
-            workspaces::list_view(
-                hx_store::WorkspaceList {
+        let (raw, list_error) = match list_workspaces(&folder) {
+            Ok(raw) => (raw, None),
+            Err(error) => (
+                WorkspaceList {
                     workspaces: Vec::new(),
                     unreadable: Vec::new(),
                 },
-                &folder,
-            )
-        });
+                Some(CommandError::from(error)),
+            ),
+        };
         let last = self.settings.last_workspace.clone();
         let open = last
-            .and_then(|id| self.load(&id).ok())
+            .and_then(|id| self.load_from(raw.clone(), &id).ok())
             .map(|(workspace, open)| {
                 self.install(workspace, &open);
                 open
@@ -78,7 +80,8 @@ impl AppState {
         AppStart {
             version: env!("CARGO_PKG_VERSION").to_string(),
             settings: self.settings.clone(),
-            list,
+            list: workspaces::list_view(raw, &folder),
+            list_error,
             open,
         }
     }
@@ -101,18 +104,20 @@ impl AppState {
         Ok(workspaces::list_view(list, &folder))
     }
 
-    /// Creates a workspace in the folder in use (made when missing) and opens it.
+    /// Creates a workspace in the folder in use (made when missing) and opens it. When the
+    /// settings cannot be saved the workspace is still open and the result carries a warning.
     pub fn create_workspace(&mut self, name: &str) -> Result<WorkspaceOpen, CommandError> {
         let workspace = Workspace::create(&self.folder(), name)?;
         let open = describe(&workspace)?;
-        self.record_and_install(workspace, open)
+        Ok(self.install_and_remember(workspace, open))
     }
 
     /// Opens the workspace with this id, closing the one that was open. The selected snapshot is
-    /// the newest.
+    /// the newest. When the settings cannot be saved the workspace is still open and the result
+    /// carries a warning.
     pub fn open_workspace(&mut self, id: &str) -> Result<WorkspaceOpen, CommandError> {
         let (workspace, open) = self.load(id)?;
-        self.record_and_install(workspace, open)
+        Ok(self.install_and_remember(workspace, open))
     }
 
     /// Renames the open workspace; a blank name becomes the store's default name.
@@ -125,6 +130,15 @@ impl AppState {
     /// Opens the workspace file of this id from the folder in use, without changing the state.
     fn load(&self, id: &str) -> Result<(Workspace, WorkspaceOpen), CommandError> {
         let list = list_workspaces(&self.folder())?;
+        self.load_from(list, id)
+    }
+
+    /// Opens the workspace of this id from a listing of the folder in use.
+    fn load_from(
+        &self,
+        list: WorkspaceList,
+        id: &str,
+    ) -> Result<(Workspace, WorkspaceOpen), CommandError> {
         let path = match list.workspaces.into_iter().find(|w| w.id == id) {
             Some(info) => info.path,
             None => {
@@ -143,21 +157,28 @@ impl AppState {
         Ok((workspace, open))
     }
 
-    /// Saves the id as the last workspace, then makes the workspace the open one. When saving
-    /// fails the state is left as it was.
-    fn record_and_install(
+    /// Makes the workspace the open one, then saves its id as the last workspace. A failed save
+    /// never fails the open: it is returned as the warning.
+    fn install_and_remember(
         &mut self,
         workspace: Workspace,
-        open: WorkspaceOpen,
-    ) -> Result<WorkspaceOpen, CommandError> {
-        let next = Settings {
-            last_workspace: Some(open.workspace.id.clone()),
-            ..self.settings.clone()
-        };
-        save_settings(&self.config_dir, &next)?;
-        self.settings = next;
+        mut open: WorkspaceOpen,
+    ) -> WorkspaceOpen {
         self.install(workspace, &open);
-        Ok(open)
+        // Kept in memory even when it cannot be saved, so the next successful save writes it.
+        self.settings.last_workspace = Some(open.workspace.id.clone());
+        open.warning = save_settings(&self.config_dir, &self.settings)
+            .err()
+            .map(|error| {
+                CommandError::new(
+                    "Settings",
+                    format!(
+                        "The workspace is open, but Hold Explorer could not remember it for the next start. {}",
+                        error.message
+                    ),
+                )
+            });
+        open
     }
 
     /// Closes the open workspace and keeps this one, with its newest snapshot selected.
@@ -175,6 +196,7 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
         workspace: workspace.info()?.into(),
         snapshots,
         selected,
+        warning: None,
     })
 }
 

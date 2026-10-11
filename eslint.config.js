@@ -4,6 +4,9 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+const message =
+  "Call commands through api in ui/src/api/commands.ts, the only module that imports invoke.";
+
 export default tseslint.config(
   {
     ignores: [
@@ -42,9 +45,14 @@ export default tseslint.config(
         {
           paths: [
             {
-              name: "@tauri-apps/api/core",
-              message:
-                "Call commands through api in ui/src/api/commands.ts, the only module that imports invoke.",
+              name: "@tauri-apps/api",
+              message,
+            },
+          ],
+          patterns: [
+            {
+              group: ["@tauri-apps/api/core", "@tauri-apps/api/core.*", "@tauri-apps/api/core/**"],
+              message,
             },
           ],
         },

@@ -328,11 +328,13 @@ fn rename_without_an_open_workspace_is_no_workspace() {
     assert_eq!(error.kind, "NoWorkspace");
 }
 
-fn store_errors() -> Vec<StoreError> {
+/// One example of every `StoreError` variant with the kind it must report. The `match` has no
+/// wildcard arm, so a new variant does not compile until it is named here.
+fn store_errors() -> Vec<(StoreError, &'static str)> {
     let at = chrono::NaiveDate::from_ymd_opt(2026, 3, 1)
         .and_then(|d| d.and_hms_opt(0, 0, 0))
         .unwrap();
-    vec![
+    let examples = vec![
         StoreError::NotAWorkspace { path: "a".into() },
         StoreError::NewerSchema {
             path: "a".into(),
@@ -356,11 +358,28 @@ fn store_errors() -> Vec<StoreError> {
         StoreError::Corrupt {
             detail: "bad".into(),
         },
-    ]
+    ];
+    examples
+        .into_iter()
+        .map(|error| {
+            let kind = match &error {
+                StoreError::NotAWorkspace { .. } => "NotAWorkspace",
+                StoreError::NewerSchema { .. } => "NewerSchema",
+                StoreError::AlreadyImported { .. } => "AlreadyImported",
+                StoreError::SnapshotNotFound { .. } => "SnapshotNotFound",
+                StoreError::SnapshotDateOutOfRange { .. } => "SnapshotDateOutOfRange",
+                StoreError::Io { .. } => "Io",
+                StoreError::Database { .. } => "Database",
+                StoreError::Corrupt { .. } => "Corrupt",
+            };
+            (error, kind)
+        })
+        .collect()
 }
 
-fn import_errors() -> Vec<ImportError> {
-    vec![
+/// One example of every `ImportError` variant with the kind it must report; see `store_errors`.
+fn import_errors() -> Vec<(ImportError, &'static str)> {
+    let examples = vec![
         ImportError::NotFound { path: "a".into() },
         ImportError::Unreadable {
             path: "a".into(),
@@ -382,24 +401,28 @@ fn import_errors() -> Vec<ImportError> {
             skipped_rows: 2,
             example: "row 3".into(),
         },
-    ]
+    ];
+    examples
+        .into_iter()
+        .map(|error| {
+            let kind = match &error {
+                ImportError::NotFound { .. } => "NotFound",
+                ImportError::Unreadable { .. } => "Unreadable",
+                ImportError::EmptyFile { .. } => "EmptyFile",
+                ImportError::NoDataSheet { .. } => "NoDataSheet",
+                ImportError::SheetNotFound { .. } => "SheetNotFound",
+                ImportError::MissingColumns { .. } => "MissingColumns",
+                ImportError::Empty => "Empty",
+                ImportError::NoHolds { .. } => "NoHolds",
+            };
+            (error, kind)
+        })
+        .collect()
 }
 
 #[test]
 fn every_store_error_keeps_its_variant_name_and_text() {
-    let expected = [
-        "NotAWorkspace",
-        "NewerSchema",
-        "AlreadyImported",
-        "SnapshotNotFound",
-        "SnapshotDateOutOfRange",
-        "Io",
-        "Database",
-        "Corrupt",
-    ];
-    let errors = store_errors();
-    assert_eq!(errors.len(), expected.len());
-    for (error, kind) in errors.into_iter().zip(expected) {
+    for (error, kind) in store_errors() {
         let message = error.to_string();
         let converted = CommandError::from(error);
         assert_eq!(converted.kind, kind);
@@ -409,19 +432,7 @@ fn every_store_error_keeps_its_variant_name_and_text() {
 
 #[test]
 fn every_import_error_keeps_its_variant_name_and_text() {
-    let expected = [
-        "NotFound",
-        "Unreadable",
-        "EmptyFile",
-        "NoDataSheet",
-        "SheetNotFound",
-        "MissingColumns",
-        "Empty",
-        "NoHolds",
-    ];
-    let errors = import_errors();
-    assert_eq!(errors.len(), expected.len());
-    for (error, kind) in errors.into_iter().zip(expected) {
+    for (error, kind) in import_errors() {
         let message = error.to_string();
         let converted = CommandError::from(error);
         assert_eq!(converted.kind, kind);
@@ -436,4 +447,147 @@ fn a_command_error_serializes_as_kind_and_message() {
         serde_json::to_value(&error).unwrap(),
         serde_json::json!({"kind": "Empty", "message": ImportError::Empty.to_string()})
     );
+}
+
+/// A state whose configuration directory is a file, so no setting can be saved.
+fn unsavable(fx: &Fixture) -> AppState {
+    std::fs::create_dir_all(fx.dir.path()).unwrap();
+    std::fs::write(fx.config(), "not a folder").unwrap();
+    fx.state()
+}
+
+fn workspace_files(folder: &Path) -> usize {
+    std::fs::read_dir(folder).unwrap().count()
+}
+
+#[test]
+fn a_create_succeeds_and_warns_when_the_settings_cannot_be_saved() {
+    let fx = Fixture::new();
+    let mut state = unsavable(&fx);
+    let opened = state.create_workspace("A").unwrap();
+    let warning = opened.warning.expect("the failed save is reported");
+    assert_eq!(warning.kind, "Settings");
+    assert!(warning.message.contains("is open"), "{}", warning.message);
+    assert!(
+        warning.message.contains("next start"),
+        "{}",
+        warning.message
+    );
+    assert_eq!(workspace_files(&fx.workspaces()), 1);
+    assert_eq!(state.rename_workspace("B").unwrap().id, opened.workspace.id);
+    assert_eq!(state.list_workspaces().unwrap().workspaces.len(), 1);
+}
+
+#[test]
+fn an_open_succeeds_and_warns_when_the_settings_cannot_be_saved() {
+    let fx = Fixture::new();
+    let id = {
+        let mut state = fx.state();
+        state.create_workspace("A").unwrap().workspace.id
+    };
+    std::fs::remove_dir_all(fx.config()).unwrap();
+    let mut state = unsavable(&fx);
+    let opened = state.open_workspace(&id).unwrap();
+    assert_eq!(opened.warning.map(|w| w.kind), Some("Settings".to_string()));
+    assert_eq!(state.rename_workspace("B").unwrap().id, id);
+}
+
+#[test]
+fn a_save_that_works_gives_no_warning() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    assert!(state.create_workspace("A").unwrap().warning.is_none());
+    let id = state.list_workspaces().unwrap().workspaces[0].id.clone();
+    assert!(state.open_workspace(&id).unwrap().warning.is_none());
+    assert!(fx.state().start().open.unwrap().warning.is_none());
+}
+
+#[test]
+fn set_theme_fails_with_settings_and_keeps_the_theme_when_it_cannot_be_saved() {
+    let fx = Fixture::new();
+    let mut state = unsavable(&fx);
+    let error = state.set_theme(Theme::Light).unwrap_err();
+    assert_eq!(error.kind, "Settings");
+    assert_eq!(state.settings().theme, Theme::Dark);
+}
+
+#[test]
+fn start_reports_a_workspace_folder_that_cannot_be_listed() {
+    let fx = Fixture::new();
+    let file = fx.dir.path().join("a-file");
+    std::fs::write(&file, "x").unwrap();
+    save_settings(
+        &fx.config(),
+        &Settings {
+            workspace_dir: Some(file.to_string_lossy().into_owned()),
+            ..Settings::default()
+        },
+    )
+    .unwrap();
+    let started = fx.state().start();
+    assert!(started.list.workspaces.is_empty());
+    assert_eq!(started.list.folder, file.to_string_lossy());
+    assert_eq!(started.list_error.map(|e| e.kind), Some("Io".to_string()));
+}
+
+#[test]
+fn a_folder_that_does_not_exist_yet_is_not_an_error() {
+    let fx = Fixture::new();
+    let started = fx.state().start();
+    assert!(started.list_error.is_none());
+    assert!(started.list.workspaces.is_empty());
+}
+
+#[test]
+fn start_with_an_unreadable_last_workspace_opens_none_and_lists_the_others() {
+    let fx = Fixture::new();
+    let (good, bad) = {
+        let mut state = fx.state();
+        let good = state.create_workspace("Good").unwrap().workspace.id;
+        let bad = state.create_workspace("Bad").unwrap().workspace.id;
+        (good, bad)
+    };
+    set_version_99(&fx.workspaces(), &bad);
+    let started = fx.state().start();
+    assert!(started.open.is_none());
+    let ids: Vec<&str> = started
+        .list
+        .workspaces
+        .iter()
+        .map(|w| w.id.as_str())
+        .collect();
+    assert_eq!(ids, [good.as_str()]);
+    assert_eq!(started.list.unreadable.len(), 1);
+    assert_eq!(started.list.unreadable[0].kind, "NewerSchema");
+    assert!(started.list_error.is_none());
+}
+
+#[test]
+fn a_settings_path_that_is_a_directory_is_set_aside() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config().join("settings.json")).unwrap();
+    assert_eq!(load_settings(&fx.config()), Settings::default());
+    assert!(fx.config().join("settings.json.unreadable").is_dir());
+    save_settings(&fx.config(), &Settings::default()).unwrap();
+    assert!(fx.config().join("settings.json").is_file());
+}
+
+#[test]
+fn a_settings_path_that_cannot_be_set_aside_is_never_overwritten() {
+    let fx = Fixture::new();
+    let path = fx.config().join("settings.json");
+    // Neither the path nor the set-aside name can be replaced: both are folders with content.
+    for name in ["settings.json", "settings.json.unreadable"] {
+        let dir = fx.config().join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("keep"), "x").unwrap();
+    }
+    assert_eq!(load_settings(&fx.config()), Settings::default());
+    let error = save_settings(&fx.config(), &Settings::default()).unwrap_err();
+    assert_eq!(error.kind, "Settings");
+    assert!(error.message.contains("settings.json"), "{}", error.message);
+    assert!(path.join("keep").is_file());
+    let mut state = fx.state();
+    assert_eq!(state.set_theme(Theme::Light).unwrap_err().kind, "Settings");
+    assert!(path.join("keep").is_file());
 }

@@ -24,7 +24,7 @@ describe("asCommandError", () => {
     for (const value of [undefined, null, 7, { kind: 3 }, { kind: "X" }]) {
       const error = asCommandError(value);
       expect(error.kind).toBe("Internal");
-      expect(error.message.length).toBeGreaterThan(0);
+      expect(error.message).toMatch(/\. .+\./);
     }
   });
 });

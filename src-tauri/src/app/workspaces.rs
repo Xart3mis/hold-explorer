@@ -64,6 +64,8 @@ pub struct WorkspaceOpen {
     pub snapshots: Vec<SnapshotInfo>,
     /// The selected snapshot: the newest, or `None` when there is none.
     pub selected: Option<i64>,
+    /// Set when the workspace is open but the app could not remember it for the next start.
+    pub warning: Option<CommandError>,
 }
 
 /// Everything the interface needs at start.
@@ -76,6 +78,8 @@ pub struct AppStart {
     pub settings: Settings,
     /// The workspaces in the folder in use.
     pub list: WorkspaceListView,
+    /// Why the workspace folder could not be listed; the list is then empty.
+    pub list_error: Option<CommandError>,
     /// The workspace that was reopened, when there was one to reopen.
     pub open: Option<WorkspaceOpen>,
 }

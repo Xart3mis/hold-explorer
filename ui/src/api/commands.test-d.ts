@@ -1,4 +1,5 @@
 // Typecheck only (never run): each api function returns the generated type.
+import type { CommandError } from "../bindings/CommandError";
 import type { AppStart } from "../bindings/AppStart";
 import type { Settings } from "../bindings/Settings";
 import type { WorkspaceListView } from "../bindings/WorkspaceListView";
@@ -16,6 +17,8 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.workspaceCreate>, Promise<WorkspaceOpen>>>,
   Check<Equal<ReturnType<typeof api.workspaceOpen>, Promise<WorkspaceOpen>>>,
   Check<Equal<ReturnType<typeof api.workspaceRename>, Promise<WorkspaceView>>>,
+  Check<Equal<AppStart["list_error"], CommandError | null>>,
+  Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];
 
 // A wrong argument is a type error.

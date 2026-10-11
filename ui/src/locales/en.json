@@ -1,5 +1,8 @@
 {
   "app": {
     "name": "Hold Explorer"
+  },
+  "errors": {
+    "unreported": "The command failed and gave no reason. Try again; if it keeps happening, restart Hold Explorer."
   }
 }
