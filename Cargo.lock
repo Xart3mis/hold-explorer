@@ -1794,8 +1794,12 @@ dependencies = [
 name = "hx-desktop"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "hx-core",
  "hx-store",
+ "hx-synth",
+ "rusqlite",
+ "serde",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -1803,6 +1807,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
+ "tempfile",
  "ts-rs",
 ]
 

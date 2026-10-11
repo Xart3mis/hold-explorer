@@ -2,7 +2,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod app;
+mod commands;
+
+use std::sync::Mutex;
+
 use tauri::Manager;
+
+use app::AppState;
 
 /// Builds and runs the application. Returns when the last window is closed.
 pub fn run() {
@@ -18,6 +25,20 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let config_dir = app.path().app_config_dir()?;
+            let data_dir = app.path().app_data_dir()?;
+            app.manage(Mutex::new(AppState::new(config_dir, data_dir)));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::app_start,
+            commands::settings_set_theme,
+            commands::workspace_list,
+            commands::workspace_create,
+            commands::workspace_open,
+            commands::workspace_rename,
+        ])
         .run(tauri::generate_context!());
     if let Err(error) = result {
         eprintln!("Hold Explorer could not start: {error}");
