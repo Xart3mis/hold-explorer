@@ -59,5 +59,18 @@ mod tests {
         .into();
         assert_eq!(permissions, expected);
         assert_eq!(capability["permissions"].as_array().map(Vec::len), Some(4));
+
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities");
+        let files: Vec<String> = std::fs::read_dir(dir)
+            .expect("capabilities directory is readable")
+            .map(|entry| {
+                entry
+                    .expect("directory entry is readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(files, ["default.json"]);
     }
 }

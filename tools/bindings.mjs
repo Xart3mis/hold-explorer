@@ -11,7 +11,18 @@ for (const name of readdirSync(dir)) {
 
 const result = spawnSync(
   "cargo",
-  ["test", "-p", "hx-core", "-p", "hx-store", "-p", "hx-desktop", "--features", "hx-store/ts", "--locked"],
+  [
+    "test",
+    "-p",
+    "hx-core",
+    "-p",
+    "hx-store",
+    "-p",
+    "hx-desktop",
+    "--features",
+    "hx-store/ts",
+    "--locked",
+  ],
   { stdio: "inherit", cwd: join(import.meta.dirname, "..") },
 );
 process.exit(result.status ?? 1);
