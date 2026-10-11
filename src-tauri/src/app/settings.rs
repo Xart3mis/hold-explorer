@@ -38,24 +38,60 @@ pub struct Settings {
     pub last_workspace: Option<String>,
 }
 
-/// Reads the settings. A missing file gives the defaults. A file that cannot be read or parsed
-/// is kept as `settings.json.unreadable` (replacing an older one) before the defaults are
-/// returned, so nothing is lost silently. When it cannot be set aside either, the defaults are
-/// used in memory and the file is left as it is: saving then fails rather than overwrite it.
+/// The settings, and the reason saving must be refused when the settings file could not be read
+/// or moved aside.
+pub struct LoadedSettings {
+    /// The settings in use: the file's, or the defaults.
+    pub settings: Settings,
+    /// Set when the file could be neither read nor set aside; it was left untouched and every
+    /// save must fail with this error rather than overwrite it.
+    pub blocked: Option<CommandError>,
+}
+
+/// Reads the settings. Returns the defaults when the file is missing. A file that cannot be read
+/// or parsed is moved to `settings.json.unreadable` (replacing an older one) and the defaults
+/// are returned. When it cannot be moved either, the defaults are returned and the file stays
+/// where it is; this function does not tell the caller, so use [`load_settings_checked`] when
+/// the settings will be saved again.
 pub fn load_settings(config_dir: &Path) -> Settings {
+    load_settings_checked(config_dir).settings
+}
+
+/// Like [`load_settings`], and reports when saving is blocked because the file could be neither
+/// read nor moved aside.
+pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
     let path = config_dir.join(FILE_NAME);
     let parsed = match std::fs::read(&path) {
         Ok(text) => serde_json::from_slice(&text).ok(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Settings::default();
+            return LoadedSettings {
+                settings: Settings::default(),
+                blocked: None,
+            };
         }
         Err(_) => None,
     };
-    parsed.unwrap_or_else(|| {
-        // A failure here is reported when the next save is refused.
-        let _ = std::fs::rename(&path, config_dir.join(SET_ASIDE_NAME));
-        Settings::default()
-    })
+    if let Some(settings) = parsed {
+        return LoadedSettings {
+            settings,
+            blocked: None,
+        };
+    }
+    let blocked = std::fs::rename(&path, config_dir.join(SET_ASIDE_NAME))
+        .err()
+        .map(|error| {
+            CommandError::new(
+                "Settings",
+                format!(
+                    "The settings file {} could not be read or moved aside ({error}), so it was left untouched and your settings cannot be saved. Move or delete the file by hand, then restart Hold Explorer.",
+                    path.display()
+                ),
+            )
+        });
+    LoadedSettings {
+        settings: Settings::default(),
+        blocked,
+    }
 }
 
 /// Writes the settings to a temporary file beside the target, flushes it to disk, and renames it

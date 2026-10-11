@@ -11,7 +11,9 @@ use std::path::{Path, PathBuf};
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use error::CommandError;
-pub use settings::{load_settings, save_settings, Settings, Theme};
+pub use settings::{
+    load_settings, load_settings_checked, save_settings, LoadedSettings, Settings, Theme,
+};
 pub use workspaces::{AppStart, UnreadableView, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
 /// What the application holds between commands.
@@ -19,6 +21,8 @@ pub struct AppState {
     config_dir: PathBuf,
     data_dir: PathBuf,
     settings: Settings,
+    /// Why saving the settings is refused, when the settings file could not be read or moved aside.
+    settings_blocked: Option<CommandError>,
     open: Option<Workspace>,
     selected: Option<i64>,
 }
@@ -27,11 +31,12 @@ impl AppState {
     /// Reads the settings from `config_dir` at once. Workspaces are kept in `workspaces/` under
     /// `data_dir` unless the settings name another folder.
     pub fn new(config_dir: PathBuf, data_dir: PathBuf) -> AppState {
-        let settings = load_settings(&config_dir);
+        let LoadedSettings { settings, blocked } = load_settings_checked(&config_dir);
         AppState {
             config_dir,
             data_dir,
             settings,
+            settings_blocked: blocked,
             open: None,
             selected: None,
         }
@@ -45,6 +50,15 @@ impl AppState {
     /// The id of the selected snapshot of the open workspace.
     pub fn selected_snapshot(&self) -> Option<i64> {
         self.selected
+    }
+
+    /// Saves the settings, unless the settings file was left untouched because it could not be
+    /// read or moved aside.
+    fn save(&self, settings: &Settings) -> Result<(), CommandError> {
+        match &self.settings_blocked {
+            Some(blocked) => Err(blocked.clone()),
+            None => save_settings(&self.config_dir, settings),
+        }
     }
 
     fn folder(&self) -> PathBuf {
@@ -92,7 +106,7 @@ impl AppState {
             theme,
             ..self.settings.clone()
         };
-        save_settings(&self.config_dir, &next)?;
+        self.save(&next)?;
         self.settings = next;
         Ok(self.settings.clone())
     }
@@ -167,7 +181,7 @@ impl AppState {
         self.install(workspace, &open);
         // Kept in memory even when it cannot be saved, so the next successful save writes it.
         self.settings.last_workspace = Some(open.workspace.id.clone());
-        open.warning = save_settings(&self.config_dir, &self.settings)
+        open.warning = self.save(&self.settings)
             .err()
             .map(|error| {
                 CommandError::new(

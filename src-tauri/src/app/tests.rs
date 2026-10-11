@@ -591,3 +591,33 @@ fn a_settings_path_that_cannot_be_set_aside_is_never_overwritten() {
     assert_eq!(state.set_theme(Theme::Light).unwrap_err().kind, "Settings");
     assert!(path.join("keep").is_file());
 }
+
+#[test]
+fn an_unparseable_settings_file_that_cannot_be_set_aside_blocks_every_save() {
+    let fx = Fixture::new();
+    let path = fx.config().join("settings.json");
+    std::fs::create_dir_all(fx.config().join("settings.json.unreadable")).unwrap();
+    std::fs::write(
+        fx.config().join("settings.json.unreadable").join("keep"),
+        "x",
+    )
+    .unwrap();
+    std::fs::write(&path, "{ not json").unwrap();
+
+    let mut state = fx.state();
+    assert_eq!(state.settings(), &Settings::default());
+
+    let error = state.set_theme(Theme::Light).unwrap_err();
+    assert_eq!(error.kind, "Settings");
+    assert!(error.message.contains("settings.json"), "{}", error.message);
+    assert!(
+        error.message.contains("left untouched"),
+        "{}",
+        error.message
+    );
+    assert_eq!(state.settings().theme, Theme::Dark);
+
+    let opened = state.create_workspace("A").unwrap();
+    assert_eq!(opened.warning.map(|w| w.kind), Some("Settings".to_string()));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ not json");
+}
