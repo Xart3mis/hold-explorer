@@ -10,14 +10,15 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::NaiveDateTime;
+use hx_core::filter::FilterSpec;
 use hx_core::mapping::Field;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
 
 use crate::app::{
     AppStart, AppState, CommandError, ImportCommit, ImportDone, ImportDraft, ImportPhase,
-    ImportReview, Settings, TargetCheck, TargetChoice, Theme, WorkspaceListView, WorkspaceOpen,
-    WorkspaceView,
+    ImportReview, OverviewView, Settings, TargetCheck, TargetChoice, Theme, WorkspaceListView,
+    WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -147,6 +148,27 @@ pub async fn import_cancel(app: AppHandle) -> Result<(), CommandError> {
         Ok(())
     })
     .await
+}
+
+/// Selects a snapshot of the open workspace.
+#[tauri::command]
+pub async fn snapshot_select(app: AppHandle, id: i64) -> Result<WorkspaceOpen, CommandError> {
+    blocking(app, move |state| state.select_snapshot(id)).await
+}
+
+/// The Overview of the selected snapshot for this filter.
+#[tauri::command]
+pub async fn overview(
+    app: AppHandle,
+    spec: FilterSpec,
+) -> Result<Option<OverviewView>, CommandError> {
+    blocking(app, move |state| state.overview(&spec)).await
+}
+
+/// Makes the demo workspace and opens it.
+#[tauri::command]
+pub async fn demo_create(app: AppHandle) -> Result<WorkspaceOpen, CommandError> {
+    blocking(app, |state| state.create_demo()).await
 }
 
 #[cfg(test)]

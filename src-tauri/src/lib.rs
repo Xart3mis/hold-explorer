@@ -44,6 +44,9 @@ pub fn run() {
             commands::import_check_target,
             commands::import_commit,
             commands::import_cancel,
+            commands::snapshot_select,
+            commands::overview,
+            commands::demo_create,
         ])
         .run(tauri::generate_context!());
     if let Err(error) = result {

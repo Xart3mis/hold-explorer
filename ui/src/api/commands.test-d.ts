@@ -8,6 +8,7 @@ import type { WorkspaceView } from "../bindings/WorkspaceView";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { OverviewView } from "../bindings/OverviewView";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { api } from "./commands";
 
@@ -27,6 +28,9 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.importCheckTarget>, Promise<TargetCheck>>>,
   Check<Equal<ReturnType<typeof api.importCommit>, Promise<ImportDone>>>,
   Check<Equal<ReturnType<typeof api.importCancel>, Promise<null>>>,
+  Check<Equal<ReturnType<typeof api.snapshotSelect>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof api.overview>, Promise<OverviewView | null>>>,
+  Check<Equal<ReturnType<typeof api.demoCreate>, Promise<WorkspaceOpen>>>,
   Check<Equal<AppStart["list_error"], CommandError | null>>,
   Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];

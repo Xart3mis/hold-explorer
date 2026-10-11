@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { OverviewView } from "../bindings/OverviewView";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
 import { mockCommands } from "../test/ipc";
 import { api } from "./commands";
+import { openHoldsFilter } from "./filter";
 
 const workspace: WorkspaceView = {
   id: "0123456789abcdef",
@@ -93,5 +95,57 @@ describe("the import commands", () => {
     );
     expect(heard).toEqual(["Reading", "Done"]);
     expect(result).toEqual(done);
+  });
+});
+
+describe("the snapshot commands", () => {
+  const overview: OverviewView = {
+    snapshot: done.snapshot,
+    is_latest: true,
+    summary: {
+      holds: 0,
+      lines: 0,
+      single_hold_lines: 0,
+      median_age_days: null,
+      median_duration_days: null,
+    },
+    by_discipline: [],
+    by_hold_type: [],
+  };
+
+  it("sends the complete open-holds filter to the overview", async () => {
+    let sent: unknown;
+    mockCommands({
+      overview: (args) => {
+        sent = args;
+        return overview;
+      },
+    });
+    expect(await api.overview(openHoldsFilter())).toEqual(overview);
+    expect(sent).toEqual({
+      spec: {
+        status: "Open",
+        fields: [],
+        text: "",
+        age_bands: [],
+        created: { from: null, to: null },
+        released: { from: null, to: null },
+        size_mismatch: null,
+      },
+    });
+  });
+
+  it("passes the snapshot id and answers the workspace", async () => {
+    let sent: unknown;
+    mockCommands({
+      snapshot_select: (args) => {
+        sent = args;
+        return done.open;
+      },
+      demo_create: () => done.open,
+    });
+    expect(await api.snapshotSelect(3)).toEqual(done.open);
+    expect(sent).toEqual({ id: 3 });
+    expect(await api.demoCreate()).toEqual(done.open);
   });
 });

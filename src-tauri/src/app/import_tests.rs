@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, SubsecRound};
 use hx_core::error::ImportError;
 use hx_core::load::load_file;
 use hx_core::mapping::Field;
@@ -160,7 +160,7 @@ fn a_saved_mapping_makes_the_next_draft_complete() {
     assert!(draft.missing_required.is_empty());
     assert!(draft.used_saved_mapping);
     assert_eq!(draft.proposed.fields, kind_line_why());
-    assert!(draft.file.auto_map.missing_required().len() == 3);
+    assert_eq!(draft.file.auto_map.missing_required().len(), 3);
     assert_eq!(state.import_review(None).unwrap().row_count, 1);
 }
 
@@ -526,6 +526,43 @@ fn a_file_dated_by_its_time_keeps_that_source_when_the_date_is_not_edited() {
         .unwrap();
     // The file's own time was detected, and the date was not edited: that source stays.
     assert_eq!(done.snapshot.date_source, SnapshotSource::FileTime);
+}
+
+#[test]
+fn a_date_known_from_the_file_time_keeps_its_source_when_sent_back_without_its_fraction() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let path = fx.text("kinds.csv", KIND_LINE_WHY);
+    let modified = std::time::UNIX_EPOCH + std::time::Duration::new(1_790_000_000, 500_000_000);
+    std::fs::File::options()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_modified(modified)
+        .unwrap();
+    state.import_open(&path).unwrap();
+    let detected = state
+        .import_review(Some(kind_line_why()))
+        .unwrap()
+        .detected
+        .unwrap();
+    assert_eq!(detected.source, SnapshotSource::FileTime);
+    assert_ne!(
+        detected.at,
+        detected.at.trunc_subsecs(0),
+        "the file time has a fraction"
+    );
+    let done = state
+        .import_commit(
+            ImportCommit {
+                taken_at: detected.at.trunc_subsecs(0),
+                ..commit(new_target("A"), "2026-10-07 00:00:00")
+            },
+            &no_progress,
+        )
+        .unwrap();
+    assert_eq!(done.snapshot.date_source, SnapshotSource::FileTime);
+    assert_eq!(done.snapshot.taken_at, detected.at.trunc_subsecs(0));
 }
 
 #[test]

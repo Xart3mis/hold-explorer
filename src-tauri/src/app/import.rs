@@ -4,15 +4,15 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use hx_store::StoreError;
-
-use chrono::{Datelike, NaiveDateTime};
+use chrono::{Datelike, NaiveDateTime, SubsecRound};
 use hx_core::import::SkippedRow;
 use hx_core::load::{open_file, open_sheet, parse_opened, Loaded, Opened, OpenedView};
 use hx_core::mapping::{ColumnMap, Field};
 use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
 use hx_core::warning::{ImportWarning, WarningKind};
-use hx_store::{delete_workspace, list_workspaces, ImportOptions, SnapshotInfo, Workspace};
+use hx_store::{
+    delete_workspace, list_workspaces, ImportOptions, SnapshotInfo, StoreError, Workspace,
+};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -241,6 +241,22 @@ enum Origin {
     Other,
     /// It was created for this import under this name; the file is at this path.
     Created { name: String, path: PathBuf },
+}
+
+/// Removes the file of a workspace created for an operation that failed. Returns a sentence for
+/// the user when it could not be removed.
+pub(super) fn remove_created(
+    name: &str,
+    path: &Path,
+    remove: &dyn Fn(&Path) -> Result<(), StoreError>,
+) -> Option<String> {
+    remove(path).err().map(|error| {
+        format!(
+            "A workspace named \"{name}\" was created for this import but could not be removed again ({}). It is the file {}; delete it by hand.",
+            error.to_string().trim_end_matches('.'),
+            path.display()
+        )
+    })
 }
 
 impl AppState {
@@ -491,8 +507,13 @@ impl AppState {
             .and_then(|d| d.parsed.as_ref())
             .ok_or_else(no_draft)?;
         // A date that differs from the detected one is the user's, whatever the flag says.
+        // The comparison is to the second: the interface may drop the fraction of a file time.
         let source = match loaded.snapshot {
-            Some(detected) if !date_edited && detected.at == *taken_at => detected.source,
+            Some(detected)
+                if !date_edited && detected.at.trunc_subsecs(0) == taken_at.trunc_subsecs(0) =>
+            {
+                detected.source
+            }
             _ => SnapshotSource::User,
         };
         let options = ImportOptions {
@@ -528,13 +549,7 @@ impl AppState {
             Origin::Created { name, path } => {
                 // Close the file first: Windows refuses to delete an open file.
                 drop(workspace);
-                remove(&path).err().map(|error| {
-                    format!(
-                        "A workspace named \"{name}\" was created for this import but could not be removed again ({}). It is the file {}; delete it by hand.",
-                        error.to_string().trim_end_matches('.'),
-                        path.display()
-                    )
-                })
+                remove_created(&name, &path, remove)
             }
         }
     }

@@ -2,11 +2,13 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
 import type { Field } from "../bindings/Field";
+import type { FilterSpec } from "../bindings/FilterSpec";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { OverviewView } from "../bindings/OverviewView";
 import type { Settings } from "../bindings/Settings";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { TargetChoice } from "../bindings/TargetChoice";
@@ -35,6 +37,9 @@ interface CommandMap {
   import_check_target: { args: { target: TargetChoice; takenAt: string }; result: TargetCheck };
   import_commit: { args: { request: ImportCommit; onProgress: Progress }; result: ImportDone };
   import_cancel: { args: Record<string, never>; result: null };
+  snapshot_select: { args: { id: number }; result: WorkspaceOpen };
+  overview: { args: { spec: FilterSpec }; result: OverviewView | null };
+  demo_create: { args: Record<string, never>; result: WorkspaceOpen };
 }
 
 export type CommandName = keyof CommandMap;
@@ -66,4 +71,8 @@ export const api = {
     return call("import_commit", { request, onProgress: channel });
   },
   importCancel: () => call("import_cancel", {}),
+  snapshotSelect: (id: number) => call("snapshot_select", { id }),
+  /** The Overview of the selected snapshot; `null` when the workspace has no snapshot. */
+  overview: (spec: FilterSpec) => call("overview", { spec }),
+  demoCreate: () => call("demo_create", {}),
 };

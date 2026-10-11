@@ -1,14 +1,17 @@
 //! The state of the application and the operations on it, in plain functions that take plain
 //! arguments, so tests need no window.
 
+mod demo;
 mod error;
 mod import;
 mod settings;
+mod snapshots;
 mod workspaces;
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use hx_core::dataset::Dataset;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use error::CommandError;
@@ -19,6 +22,7 @@ pub use import::{
 pub use settings::{
     load_settings, load_settings_checked, save_settings, LoadedSettings, Settings, Theme,
 };
+pub use snapshots::OverviewView;
 pub use workspaces::{AppStart, UnreadableView, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
 /// What the application holds between commands.
@@ -32,6 +36,10 @@ pub struct AppState {
     selected: Option<i64>,
     /// The file being imported, when there is one.
     draft: Option<import::Draft>,
+    /// The dataset of the selected snapshot, built when first asked for.
+    dataset: Option<Dataset>,
+    /// How many datasets were built since the application started.
+    dataset_builds: usize,
 }
 
 impl AppState {
@@ -47,6 +55,8 @@ impl AppState {
             open: None,
             selected: None,
             draft: None,
+            dataset: None,
+            dataset_builds: 0,
         }
     }
 
@@ -213,6 +223,7 @@ impl AppState {
     /// A file open for import is dropped.
     fn install(&mut self, workspace: Workspace, open: &WorkspaceOpen) {
         self.draft = None;
+        self.dataset = None;
         self.open = Some(workspace);
         self.selected = open.selected;
     }
@@ -232,5 +243,7 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
 
 #[cfg(test)]
 mod import_tests;
+#[cfg(test)]
+mod snapshot_tests;
 #[cfg(test)]
 mod tests;
