@@ -7,6 +7,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 /// One cell of a sheet, typed as the file format stored it.
 pub enum Cell {
     /// A blank cell.
@@ -23,6 +24,7 @@ pub enum Cell {
 
 /// A sheet as a header row and the rows beneath it.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RawTable {
     /// Header texts in column order, as written in the file.
     pub headers: Vec<String>,
@@ -52,6 +54,7 @@ pub fn format_number(n: f64) -> String {
 
 /// How `a/b/yyyy` is read when both parts are 12 or less.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum DateOrder {
     /// `03/04/2026` is 3 April.
     DayFirst,

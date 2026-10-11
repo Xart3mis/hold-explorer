@@ -9,6 +9,7 @@ use crate::filter::FilterSpec;
 
 /// One blocker among the selected holds, with the lines it is on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BlockerNode {
     /// `<discipline>|<item>`.
     pub key: String,
@@ -26,6 +27,7 @@ pub struct BlockerNode {
 
 /// One blocker to solve, in plan order.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Step {
     /// The `key` of the blocker solved in this step.
     pub key: String,
@@ -39,6 +41,7 @@ pub struct Step {
 
 /// The order in which to solve blockers, and every blocker it is drawn from.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SolvePlan {
     /// Every blocker, in order of first appearance.
     pub nodes: Vec<BlockerNode>,

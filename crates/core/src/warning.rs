@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// The kind of thing an [`ImportWarning`] reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum WarningKind {
     /// A release date could not be read as a date; the hold is kept with no release date.
     UnreadableReleaseDate,
@@ -27,6 +28,7 @@ pub enum WarningKind {
 
 /// One thing the import changed or assumed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ImportWarning {
     /// What sort of warning this is.
     pub kind: WarningKind,

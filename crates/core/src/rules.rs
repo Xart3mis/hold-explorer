@@ -9,6 +9,7 @@ use crate::normalize::clean_text;
 
 /// What a hold waits for, derived from its remark by [`RuleSet::classify`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Blocker {
     /// Blocker type: a tag code such as `PR`, `TIE-IN`, a keyword label, or `Other`.
     pub kind: String,

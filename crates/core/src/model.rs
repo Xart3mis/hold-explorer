@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// One row of the export after normalization.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Hold {
     /// The `id` column. Absent in limited files.
     pub source_id: Option<i64>,

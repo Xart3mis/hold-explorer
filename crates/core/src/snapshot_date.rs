@@ -28,6 +28,7 @@ const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
 
 /// Where the snapshot date came from, in order of trust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum SnapshotSource {
     /// The `Report Date` entry of the workbook's information sheet.
     InfoSheet,
@@ -42,6 +43,7 @@ pub enum SnapshotSource {
 
 /// The moment a report was taken and how that was found out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SnapshotDate {
     /// When the snapshot was taken.
     pub at: NaiveDateTime,

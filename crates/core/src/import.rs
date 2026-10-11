@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// Why a data row was left out of the import.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum SkipKind {
     /// The row's line ID is blank, so it belongs to no line.
     BlankLineId,
@@ -19,6 +20,7 @@ pub enum SkipKind {
 
 /// A data row that was left out of the import.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SkippedRow {
     /// One-based row of the sheet, or line of a delimited text file, as the file shows it.
     pub row_number: usize,
@@ -32,6 +34,7 @@ pub struct SkippedRow {
 
 /// The result of parsing a table into holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Parsed {
     /// The holds read, in row order. Never empty.
     pub holds: Vec<Hold>,

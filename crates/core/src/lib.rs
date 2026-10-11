@@ -47,3 +47,6 @@ pub mod warning;
 
 #[cfg(test)]
 pub(crate) mod testkit;
+
+#[cfg(all(test, feature = "ts"))]
+mod ts_tests;

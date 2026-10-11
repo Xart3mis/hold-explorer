@@ -8,6 +8,7 @@ use thiserror::Error;
 
 /// Every message says what went wrong and what the user can do about it.
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "kind")]
 pub enum StoreError {
     #[error("The file {path} is not a Hold Explorer workspace. Choose a workspace file, or create a new workspace in another folder.")]

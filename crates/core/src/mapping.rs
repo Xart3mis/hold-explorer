@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// A hold property that a column of the file can supply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Field {
     /// The export's own hold id.
     SourceId,
@@ -107,6 +108,7 @@ pub fn header_key(header: &str) -> String {
 
 /// A column the mapping does not assign to a field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ExtraColumn {
     /// Zero-based column index.
     pub column: usize,
@@ -117,6 +119,7 @@ pub struct ExtraColumn {
 
 /// One remembered column of a saved mapping.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SavedColumn {
     /// The normalized header ([`header_key`]).
     pub key: String,
@@ -129,6 +132,7 @@ pub struct SavedColumn {
 
 /// A mapping independent of column order, to be saved and applied to another file.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SavedMapping {
     /// The remembered columns. Columns with a blank header are never recorded.
     pub columns: Vec<SavedColumn>,
@@ -154,6 +158,7 @@ fn column_keys(headers: &[String]) -> Vec<Option<(String, usize)>> {
 
 /// Which column of a table supplies which field.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ColumnMap {
     /// Field to zero-based column index.
     pub fields: BTreeMap<Field, usize>,

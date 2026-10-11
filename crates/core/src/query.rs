@@ -14,6 +14,7 @@ fn filtered<'a>(ds: &'a Dataset, spec: &'a FilterSpec) -> impl Iterator<Item = &
 
 /// Headline numbers for a selection of holds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Summary {
     /// Number of selected holds.
     pub holds: usize,
@@ -65,6 +66,7 @@ pub fn summary(ds: &Dataset, spec: &FilterSpec) -> Summary {
 
 /// One value of a dimension and how many holds and lines have it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Group {
     /// The dimension value, compared exactly (case-sensitive); empty when the hold has none.
     pub key: String,
@@ -116,6 +118,7 @@ pub fn group_by(ds: &Dataset, spec: &FilterSpec, dim: &Dim) -> Vec<Group> {
 
 /// Hold counts for every pair of values of two dimensions.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Matrix {
     /// Row dimension values, ordered as `group_by` orders groups.
     pub rows: Vec<String>,
@@ -166,6 +169,7 @@ pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> 
 /// One line of a view. Sizes, stress calc, and the mismatch flag come from the line's first
 /// hold in the selection, because they are line-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LineRow {
     /// The line.
     pub line_id: String,
@@ -191,6 +195,7 @@ pub struct LineRow {
 
 /// How `lines` orders its result; ties end in line id order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum LineSort {
     /// Most holds first.
     #[default]
@@ -204,6 +209,7 @@ pub enum LineSort {
 
 /// Options for `lines`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct LineQuery {
     /// Order of the result.
@@ -214,6 +220,7 @@ pub struct LineQuery {
 
 /// How `holds` orders its result; ties stay in file order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum HoldSort {
     /// The order of the file.
     #[default]
@@ -226,6 +233,7 @@ pub enum HoldSort {
 
 /// Options for `holds`: the order and the page to return.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct HoldQuery {
     /// Order of the selected holds before the page is cut.
@@ -238,6 +246,7 @@ pub struct HoldQuery {
 
 /// One page of the selected holds.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct HoldPage {
     /// Selected holds before paging.
     pub total: usize,
