@@ -101,9 +101,10 @@ Banned patterns, by name:
 
 ## Accessibility & Inclusion
 
-- Contrast meets WCAG 2.1 AA in both themes: 4.5:1 for text, 3:1 for large text, for the boundary of every control, and for the focus ring. `tools/design/check-tokens.mjs` enforces this from the tables in `DESIGN.md`.
+- Contrast meets WCAG 2.1 AA in both themes: 4.5:1 for text, 3:1 for large text, for the boundary of every control, for the focus ring, and for every chart mark on every fill it can sit on. `tools/design/check-tokens.mjs` enforces this from the tables in `DESIGN.md`.
 - Color never carries meaning alone. Every state has an icon and a label; every chart series has a text label and a table view.
-- Chart colors are validated for protanopia and deuteranopia in both themes.
+- Teal always means the same thing: something that can be acted on, or the current selection. Data is never drawn in it.
+- Chart series are validated for protanopia and deuteranopia in both themes, and a series color is never close to a status color. The results are recorded in `tools/design/palette-validation.md`.
 - All motion marks a state change, lasts 150 to 250 ms, and is removed when the system asks for reduced motion.
 - Every action is reachable by keyboard, in a logical order, with a visible focus ring.
 - No text is smaller than 13 px. Type sizes are in `rem`, so text follows the root size.

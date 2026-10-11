@@ -9,13 +9,13 @@ This file is the visual specification of Hold Explorer. `PRODUCT.md` says who us
 
 **The token tables are the source of truth.** Every color, size, and duration a component uses is a token in a table below. Interface code uses no literal color, size, or duration. The front matter above carries only the name and description on purpose: the tables hold two themes and two densities, which the front matter format cannot, and one source is better than two.
 
-**How the tables are read by tools.** A token table is a Markdown table whose first header cell is `Token`. The first cell of each row is a CSS custom property name. Columns named `Dark` and `Light` hold themed values, `Comfortable` and `Compact` hold density values, `Value` holds the rest, and `Use` is prose. A value may refer to another token with `var()`. `node tools/design/check-tokens.mjs` checks the tables; `node tools/design/check-tokens.mjs --css` prints them as CSS custom properties.
+**How the tables are read by tools.** A token table is a Markdown table whose first header cell is `Token`. The first cell of each row is a CSS custom property name. Columns named `Dark` and `Light` hold themed values, `Comfortable` and `Compact` hold density values, `Value` holds the rest, and `Use` is prose. A value may refer to another token with `var()`. Three more tables are read by their first header cell: `Foreground` (the contrast pairs), `Fill` (the fills a chart mark can sit on), and `Role` (the letter spacing and figure style of each text role). `node tools/design/check-tokens.mjs` checks the tables; `node tools/design/check-tokens.mjs --css` prints the tokens as CSS custom properties.
 
 ## 1. Overview
 
 **Creative North Star: "The Ruled Register"**
 
-Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, and focus. Everything else is tinted neutral.
+Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, and focus. Everything else is tinted neutral, the bars that draw the data included.
 
 The register is **product**, the color strategy is **Restrained**, and density is **hybrid**: Overview and History are roomy enough to read from across a meeting room; Lines, Breakdown, and Blockers are tables first, as dense as the user chooses.
 
@@ -31,6 +31,7 @@ This system rejects what `PRODUCT.md` lists as anti-references: the startup anal
 **Key Characteristics:**
 
 - One accent, teal, on at most a tenth of any screen. Its rarity is what makes a selection visible.
+- Teal means interactive: the primary action, the selection, focus, a link. Plain data is neutral gray, and a ramp is blue.
 - Neutrals tinted toward the accent hue. No pure black, no pure white, no untinted gray.
 - Four type sizes, each at least 1.25 times the one below. Hierarchy inside a size comes from weight and ink.
 - Hairlines and surface steps before boxes. Flat at rest; shadows only on what floats.
@@ -46,20 +47,28 @@ All colors are OKLCH: `oklch(lightness chroma hue)`, lightness from 0 to 1. Ever
 
 ### Hue anchors
 
-The accent hue and the neutral tint are each set in one place. Every accent step and every neutral refers to its anchor. After changing an anchor, run `node tools/design/check-tokens.mjs`: the maximum chroma inside sRGB differs by hue, and the checker reports any value that leaves the gamut or drops below its contrast minimum.
+The accent hue, the neutral tint, and the hue of the chart ramps are each set in one place. Every accent step, every neutral, and every ramp step refers to its anchor. After changing an anchor, run `node tools/design/check-tokens.mjs`: the maximum chroma inside sRGB differs by hue, and the checker reports any value that leaves the gamut or drops below its contrast minimum.
 
 | Token | Value | Use |
 |---|---|---|
 | `--hue-accent` | `200` | Hue of every accent step and of the focus ring. |
-| `--hue-neutral` | `200` | Hue toward which every neutral is tinted: surfaces, borders, text. |
+| `--hue-neutral` | `200` | Hue toward which every neutral is tinted: surfaces, borders, text, and the neutral data marks. |
+| `--hue-ramp` | `250` | Hue of the two chart ramps: the heatmap steps and the age bands. |
+
+Two rules bind the hues, and the checker enforces both.
+
+- **The excluded range.** No hue anchor and no color in this file has a hue from 270 to 350 degrees, both ends included. That range holds violet, indigo, purple, and magenta. Blue (250 for the ramps, 258 for info, 262 for the first series slot) lies below it and rose (5) above it.
+- **The teal reserve.** Only the accent tokens (`--color-accent` and its steps, `--color-focus-ring`, `--color-text-on-accent`) may have a hue within 25 degrees of `--hue-accent`. A color with a chroma under 0.04 is a tinted neutral and is exempt. So no state color, no chart mark, and no ramp step can be taken for the accent.
 
 ### The accent: direction chosen by the owner, steps chosen by design
 
 **The direction is the owner's decision: teal, a blue-green.** A purple, violet, indigo, or magenta accent was ruled out by the owner and must not return, in the accent or in the neutral tint.
 
+**The owner's choice overrides the design skill's reflex test.** That test rejects an accent that anyone could guess from the category, and teal is one of the guessable answers for an engineering tool. The test was run and it rejected teal. The owner chose teal knowing this, and the decision stands: do not reopen it on the strength of the test. What the test protects, an interface that does not look like every other tool in its category, is carried by the rest of this file: the ruled layout, the neutral data, the two typefaces, and the rule that teal is spent only on interaction.
+
 **The steps are design decisions, for these reasons:**
 
-- **Hue 200.** The state colors sit at hue 27 (danger), 70 to 85 (warning), 140 (success), and 258 (info). Hue 200 is 60 degrees from success and 58 degrees from info, the midpoint of the gap between them, so a selection cannot be read as "released" or as "information". Success was moved from the usual green (about 150) to a yellower green at 140 to open that gap, and info was set at a clear blue (258) and not a cyan-blue.
+- **Hue 200.** The state colors sit at hue 27 (danger), 70 to 85 (warning), 140 (success), and 258 (info). Hue 200 is 60 degrees from success and 58 degrees from info, the midpoint of the gap between them, so a selection cannot be read as "released" or as "information". Success was moved from the usual green (about 150) to a yellower green at 140 to open that gap, and info was set at a clear blue (258) and not a cyan-blue. The chart colors nearest to the accent, jade at 165 and sky at 230, stay 30 degrees or more away.
 - **Calm chroma.** The chroma of the fills and inks stays between 0.06 and 0.11, and the selection tints are lower still. Teal at these lightness levels cannot be more saturated inside sRGB anyway, and a petrol teal beside tables of numbers all day should read as ink, not as a highlight pen.
 - **Dark theme: a deep fill, not a bright one.** The primary button is a deep petrol (lightness 0.50) with near-white text, not a bright aqua with dark text. A bright fill would be the lightest object on a dark screen and pull the eye from the table. At 0.50 the fill clears 3:1 against the app and panel surfaces and its label clears 4.5:1. Hover goes lighter (0.545), the direction that reads as "lit" on a dark surface; it stops there because that is the last step at which the label still clears 4.5:1.
 - **Light theme: one step does both jobs.** At lightness 0.47 the accent is dark enough to carry near-white text as a fill (6.3:1) and to be read as ink on every light surface, so `--color-accent` and `--color-accent-text` have the same value. Hover and active go darker.
@@ -77,7 +86,7 @@ The accent hue and the neutral tint are each set in one place. Every accent step
 | `--color-surface-overlay` | `oklch(0.262 0.012 var(--hue-neutral))` | `oklch(0.996 0.002 var(--hue-neutral))` | Anything that floats: menus, popovers, toasts, command palette. |
 | `--color-surface-field` | `oklch(0.148 0.007 var(--hue-neutral))` | `oklch(0.996 0.002 var(--hue-neutral))` | Inside of text fields, selects, and unchecked checkboxes. Sunken in dark, paper-bright in light. |
 | `--color-surface-hover` | `oklch(0.245 0.013 var(--hue-neutral))` | `oklch(0.940 0.008 var(--hue-neutral))` | Hover fill for rows, sidebar items, quiet and secondary buttons on app, panel, and raised surfaces. |
-| `--color-surface-pressed` | `oklch(0.275 0.014 var(--hue-neutral))` | `oklch(0.915 0.010 var(--hue-neutral))` | Pressed fill for the same elements. |
+| `--color-surface-pressed` | `oklch(0.275 0.014 var(--hue-neutral))` | `oklch(0.915 0.010 var(--hue-neutral))` | Pressed fill for the same elements. Also the value of `--color-chart-band`. |
 | `--color-surface-overlay-hover` | `oklch(0.305 0.014 var(--hue-neutral))` | `oklch(0.950 0.007 var(--hue-neutral))` | Hover and keyboard-highlight fill for items inside an overlay. |
 | `--color-surface-disabled` | `oklch(0.215 0.006 var(--hue-neutral))` | `oklch(0.950 0.004 var(--hue-neutral))` | Fill of a disabled control. |
 | `--color-skeleton` | `oklch(0.300 0.012 var(--hue-neutral))` | `oklch(0.915 0.009 var(--hue-neutral))` | Skeleton blocks during a first load. Visible on the app, panel, and raised surfaces. |
@@ -135,54 +144,77 @@ Each state has a text step (text, icon, and control border; at least 4.5:1 on ev
 
 ### Chart palette
 
-Charts are the only place a fuller palette appears. The palette follows the data visualization method: every color does one job, and each set is validated in both themes with the palette validator (`validate_palette.js` of the data visualization skill) against both chart surfaces, `--color-surface-app` and `--color-surface-panel`.
+Charts are the only place a fuller palette appears, and every color in a chart does one job. Who wears what:
 
-**Categorical: identity.** Six hues in a fixed order, then Other. Slots are assigned in order and never cycled. A seventh category does not get a seventh color: it folds into Other. The set leaves out red, which is reserved for danger, and violet: the owner ruled the purple range out of the accent, and it stays out of the charts as well.
+- **Teal is interaction, never data.** Teal belongs to the accent tokens: the primary action, the current selection, focus, and links. No chart mark, ramp step, or status mark is teal. A bar row that is in the active filter gets the teal selection tint because it is selected; its bar stays neutral.
+- **Neutral gray is plain data.** A chart with one series has nothing to tell apart, so it uses no hue. Bars by discipline, by hold type, by role, the top blockers, and the open-holds trend are drawn in `--color-chart-neutral`. Length carries the value and the label carries the name.
+- **Blue is magnitude and order.** The heatmap (sequential) and the age bands (ordinal) are ramps of one blue, `--hue-ramp`. A lighter or darker blue means more or older, never a name.
+- **The categorical set is identity.** Six hues, used only when one chart shows several named series at once and the reader has to tell them apart: a stacked trend by discipline, the nodes and legend of the blocker graph. It never decorates a single series.
+- **Status marks are state.** Three colors for marks that mean overdue, stale, or released, always with an icon and a label.
 
-| Token | Dark | Light | Use |
-|---|---|---|---|
-| `--color-chart-1` | `oklch(0.620 0.106 195)` | `oklch(0.600 0.102 195)` | Teal. Slot 1, and the color of every single-series chart (discipline bars, bar rows, the open-holds trend). |
-| `--color-chart-2` | `oklch(0.600 0.140 50)` | `oklch(0.560 0.148 50)` | Orange. Slot 2. |
-| `--color-chart-3` | `oklch(0.520 0.140 262)` | `oklch(0.440 0.150 262)` | Blue. Slot 3. |
-| `--color-chart-4` | `oklch(0.665 0.136 88)` | `oklch(0.630 0.129 88)` | Gold. Slot 4. |
-| `--color-chart-5` | `oklch(0.520 0.140 5)` | `oklch(0.450 0.150 5)` | Rose. Slot 5. |
-| `--color-chart-6` | `oklch(0.660 0.140 148)` | `oklch(0.600 0.150 148)` | Green. Slot 6. |
-| `--color-chart-other` | `oklch(0.560 0.012 var(--hue-neutral))` | `oklch(0.600 0.012 var(--hue-neutral))` | Other: everything past the sixth category, always last. A neutral, so it never reads as a seventh identity. |
+Each set is validated in both themes with the palette validator of the data visualization method (`validate_palette.js`). The commands, the result for every set, and what each result does and does not show are recorded in `tools/design/palette-validation.md`. Every claim this section makes is also enforced by `node tools/design/check-tokens.mjs`, so the claims hold without the validator at hand.
 
-Validator results for the six slots, adjacent pairs (stacked bars, stacked trends, lines), on both surfaces of each theme: lightness band, chroma floor, and contrast pass; worst adjacent pair under simulated protanopia and deuteranopia is 13.9 dark and 15.1 light (target 8 or more); worst adjacent pair in normal vision is 23.2 dark and 24.2 light (floor 15). Every slot clears 3:1 on both chart surfaces.
-
-The first three slots also pass with every pair compared (14.9 dark, 15.4 light). All six do not, and no order of six hues can. A chart in which any two marks can touch (the blocker graph, a scatter) therefore never relies on color alone: every node carries its label, as the spec requires.
-
-**Sequential: magnitude.** One hue, teal, seven steps. Low values recede toward the surface, so the ramp runs dark to light in the dark theme and light to dark in the light theme. Used for the heatmap. A cell label uses `--color-text-primary` on steps 1 to 4 and `--color-chart-text-inverse` on steps 5 to 7; both clear 4.5:1 in both themes.
+**Neutral: plain data.** A slate, tinted like the other neutrals, in three steps that move away from the surface: lighter in dark, darker in light.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `--color-chart-seq-1` | `oklch(0.270 0.040 195)` | `oklch(0.930 0.035 195)` | Lowest value. Recedes toward the surface. |
-| `--color-chart-seq-2` | `oklch(0.350 0.052 195)` | `oklch(0.830 0.065 195)` | Also the forecast range band. |
-| `--color-chart-seq-3` | `oklch(0.430 0.066 195)` | `oklch(0.730 0.088 195)` | Lower middle. |
-| `--color-chart-seq-4` | `oklch(0.510 0.078 195)` | `oklch(0.630 0.100 195)` | Last step that takes primary text. |
-| `--color-chart-seq-5` | `oklch(0.590 0.090 195)` | `oklch(0.540 0.090 195)` | First step that takes inverse text. |
-| `--color-chart-seq-6` | `oklch(0.670 0.100 195)` | `oklch(0.455 0.077 195)` | Upper middle. |
-| `--color-chart-seq-7` | `oklch(0.750 0.108 195)` | `oklch(0.370 0.062 195)` | Highest value. |
-| `--color-chart-text-inverse` | `oklch(0.150 0.020 195)` | `oklch(0.985 0.008 195)` | Cell label on sequential steps 5 to 7. |
+| `--color-chart-neutral` | `oklch(0.620 0.016 var(--hue-neutral))` | `oklch(0.570 0.018 var(--hue-neutral))` | The mark of every single-series chart: the bar of a bar row, a single trend line. |
+| `--color-chart-neutral-hover` | `oklch(0.700 0.016 var(--hue-neutral))` | `oklch(0.500 0.020 var(--hue-neutral))` | The bar of a bar row while the row is hovered or pressed, and a single mark under the pointer. |
+| `--color-chart-neutral-selected` | `oklch(0.780 0.014 var(--hue-neutral))` | `oklch(0.420 0.022 var(--hue-neutral))` | The bar of a bar row whose category is in the active filter. |
 
-**Ordinal: ordered bands.** The same hue in five steps for age bands, where each band is a discrete mark that must stay visible. The step nearest the surface still clears 2:1, and neighboring steps differ by at least 0.06 in lightness (validated in the validator's ordinal mode). A workspace with more than five age bands reuses step 5 for the last bands and relies on the labels.
+Hover and the filter change the bar's step and the row's fill together, so no state rests on one faint difference. All three steps clear 3:1 on every fill a bar row can have.
+
+**Categorical: identity.** Six hues in a fixed order, then Other. Slots are assigned in order and never cycled. A seventh category does not get a seventh color: it folds into Other. The set leaves out every hue that already means something: red (danger), amber and gold (warning), the green of success, teal (the accent), and the excluded range from 270 to 350. Rose and burnt orange are in the set by the owner's decision.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `--color-chart-ord-1` | `oklch(0.460 0.070 195)` | `oklch(0.720 0.090 195)` | First band (youngest, 0 to 13 days by default). |
-| `--color-chart-ord-2` | `oklch(0.550 0.084 195)` | `oklch(0.630 0.100 195)` | Second band. |
-| `--color-chart-ord-3` | `oklch(0.640 0.098 195)` | `oklch(0.540 0.090 195)` | Third band. |
-| `--color-chart-ord-4` | `oklch(0.730 0.108 195)` | `oklch(0.450 0.076 195)` | Fourth band. |
-| `--color-chart-ord-5` | `oklch(0.820 0.112 195)` | `oklch(0.360 0.060 195)` | Last band (oldest, 90 days and over by default). |
+| `--color-chart-1` | `oklch(0.660 0.160 262)` | `oklch(0.500 0.140 262)` | Blue. Slot 1. |
+| `--color-chart-2` | `oklch(0.605 0.125 165)` | `oklch(0.585 0.115 165)` | Jade, a blue-leaning green. Slot 2. |
+| `--color-chart-3` | `oklch(0.625 0.150 50)` | `oklch(0.535 0.130 50)` | Burnt orange. Slot 3. |
+| `--color-chart-4` | `oklch(0.605 0.115 230)` | `oklch(0.590 0.115 230)` | Sky, a steel blue. Slot 4. |
+| `--color-chart-5` | `oklch(0.620 0.135 5)` | `oklch(0.435 0.125 5)` | Rose. Slot 5. |
+| `--color-chart-6` | `oklch(0.665 0.120 110)` | `oklch(0.520 0.110 116)` | Olive. Slot 6. |
+| `--color-chart-other` | `var(--color-chart-neutral)` | `var(--color-chart-neutral)` | Other: everything past the sixth category, always last. The neutral of plain data, so it never reads as a seventh identity. |
 
-**Status: real states only.** Reserved for marks that mean a state: overdue, stale, released. They are not in the categorical set, never stand for "series 4", and always come with an icon and a label. A chart colors a given set of marks by category or by status, never both.
+What the set guarantees, and what it does not:
+
+- **Neighbouring slots are told apart.** Slots k and k+1 are at least 8 apart under simulated protanopia and deuteranopia (closest pair 9.9 in dark, 9.2 in light) and at least 15 apart in normal vision (20.9 in dark, 21.1 in light). Distances are Euclidean in OKLab, times 100.
+- **The first three slots are told apart in any arrangement.** With every pair of slots 1 to 3 compared, the closest pair is still 10.3 in dark and 9.2 in light under simulated color blindness, and 22.1 and 21.1 in normal vision.
+- **All six are not told apart in any arrangement, and no order of six hues can be.** With every pair compared, the closest pair in normal vision is blue and sky at 10.3 in dark, and jade and olive at 11.4 in light; under simulated color blindness some pairs fall near 2.
+- **So the order of the marks is fixed, not left to the data.** Stacked segments, stacked areas, and lines are drawn in slot order, so that only neighbouring slots touch. They are never re-sorted by value. Where sorting by value is wanted, the chart is a bar row group in the neutral color and the labels carry identity. Where any two marks can touch (the blocker graph, a scatter), color is a second cue at most: every mark carries its label, as the spec requires, and at most the first three slots are used without one.
+- **A series is never taken for a state.** Every slot is at least 10 from every status mark in the same theme (closest pair: burnt orange and danger at 10.7 in dark, olive and success at 10.2 in light). Before this rule the green and gold of the set sat 3.1 and 3.7 from success and warning. 10 is the largest minimum the set holds with rose and burnt orange in it: burnt orange lies between danger red and warning amber on the hue circle, and rose lies beside danger. In the dark theme every status mark is also brighter than every series slot, and in both themes a status mark never appears without an icon and a label.
+- **Every slot is a visible mark everywhere.** Each slot clears 3:1 on every fill that carries marks (see the fills table below). In dark that puts all six between lightness 0.605 and 0.665, so no series outweighs another. Every slot also stays inside the lightness band of a series (0.48 to 0.67 in dark, 0.43 to 0.77 in light) and above a chroma of 0.10, below which a hue reads as gray.
+
+**Sequential: magnitude.** One hue, blue, seven steps. Low values recede toward the surface, so the ramp runs dark to light in the dark theme and light to dark in the light theme. Used for the heatmap. Every cell prints its value: the label uses `--color-text-primary` on steps 1 to 4 and `--color-chart-text-inverse` on steps 5 to 7, and both clear 4.5:1 in both themes. A cell with no holds is left unfilled. Because the printed value carries the number and a gap separates the cells, the lowest steps are allowed to sit close to the surface: the sequential steps are cell fills, not marks, and are exempt from the 3:1 rule for marks. The checker instead requires each step to be the background of a text pair.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| `--color-chart-status-danger` | `oklch(0.660 0.170 27)` | `oklch(0.560 0.200 27)` | Mark for a real danger state: an overdue follow-up. |
-| `--color-chart-status-warning` | `oklch(0.800 0.140 80)` | `oklch(0.640 0.130 72)` | Mark for a real warning state: a stale hold. |
-| `--color-chart-status-success` | `oklch(0.740 0.170 140)` | `oklch(0.580 0.160 140)` | Mark for a real success state: released, target met. |
+| `--color-chart-seq-1` | `oklch(0.270 0.050 var(--hue-ramp))` | `oklch(0.930 0.030 var(--hue-ramp))` | Lowest value. Recedes toward the surface. |
+| `--color-chart-seq-2` | `oklch(0.350 0.068 var(--hue-ramp))` | `oklch(0.830 0.065 var(--hue-ramp))` | Low. |
+| `--color-chart-seq-3` | `oklch(0.430 0.086 var(--hue-ramp))` | `oklch(0.730 0.095 var(--hue-ramp))` | Lower middle. |
+| `--color-chart-seq-4` | `oklch(0.510 0.100 var(--hue-ramp))` | `oklch(0.635 0.115 var(--hue-ramp))` | Last step that takes primary text. |
+| `--color-chart-seq-5` | `oklch(0.590 0.110 var(--hue-ramp))` | `oklch(0.540 0.120 var(--hue-ramp))` | First step that takes inverse text. |
+| `--color-chart-seq-6` | `oklch(0.670 0.118 var(--hue-ramp))` | `oklch(0.455 0.115 var(--hue-ramp))` | Upper middle. |
+| `--color-chart-seq-7` | `oklch(0.750 0.120 var(--hue-ramp))` | `oklch(0.370 0.098 var(--hue-ramp))` | Highest value. |
+| `--color-chart-text-inverse` | `oklch(0.150 0.020 var(--hue-ramp))` | `oklch(0.985 0.005 var(--hue-ramp))` | Cell label on sequential steps 5 to 7. |
+
+**Ordinal: ordered bands.** The same blue in five steps for age bands, where each band is a discrete mark. Neighbouring steps differ by 0.07 in lightness (the minimum is 0.06). The step nearest the surface clears 3:1 on every fill that carries marks, not only the 2:1 the validator asks of an ordinal ramp. A first step under 3:1 could have been kept as a recorded exception with a lower minimum of its own. It was raised instead, because age band bars sit in bar rows that are hovered, pressed, and filtered, and a rule without exceptions cannot be worked around. A workspace with more than five age bands reuses step 5 for the last bands and relies on the labels.
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--color-chart-ord-1` | `oklch(0.610 0.115 var(--hue-ramp))` | `oklch(0.590 0.115 var(--hue-ramp))` | First band (youngest, 0 to 13 days by default). |
+| `--color-chart-ord-2` | `oklch(0.680 0.125 var(--hue-ramp))` | `oklch(0.520 0.125 var(--hue-ramp))` | Second band. |
+| `--color-chart-ord-3` | `oklch(0.750 0.120 var(--hue-ramp))` | `oklch(0.450 0.120 var(--hue-ramp))` | Third band. |
+| `--color-chart-ord-4` | `oklch(0.820 0.085 var(--hue-ramp))` | `oklch(0.380 0.100 var(--hue-ramp))` | Fourth band. |
+| `--color-chart-ord-5` | `oklch(0.890 0.050 var(--hue-ramp))` | `oklch(0.310 0.080 var(--hue-ramp))` | Last band (oldest, 90 days and over by default). |
+
+**Status: real states only.** Reserved for marks that mean a state: overdue, stale, released. They are not in the categorical set, never stand for "series 4", and always come with an icon and a label. A chart colors a given set of marks by category or by status, never both. The three are at least 15 apart from each other in normal vision (closest pair 15.9 in dark, 20.5 in light). Under simulated color blindness the closest pair is 6.5 in dark and 6.9 in light: above the floor of 6 that the method allows only with a second cue, and the icon and label are that cue. Red, amber, and green are the hues that the common forms of color blindness confuse. Pushing them further apart would cost their contrast on the fills or their distance from the series slots, which is why a state is never shown by color alone.
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--color-chart-status-danger` | `oklch(0.710 0.170 27)` | `oklch(0.485 0.195 27)` | Mark for a real danger state: an overdue follow-up. |
+| `--color-chart-status-warning` | `oklch(0.805 0.150 80)` | `oklch(0.605 0.120 86)` | Mark for a real warning state: a stale hold. |
+| `--color-chart-status-success` | `oklch(0.830 0.155 142)` | `oklch(0.435 0.130 142)` | Mark for a real success state: released, target met. |
 
 **Chart chrome.**
 
@@ -190,19 +222,38 @@ The first three slots also pass with every pair compared (14.9 dark, 15.4 light)
 |---|---|---|
 | `--color-chart-grid` | `var(--color-border-subtle)` | Gridlines. |
 | `--color-chart-axis` | `var(--color-border-default)` | Baseline and axis line. |
+| `--color-chart-band` | `var(--color-surface-pressed)` | The forecast range behind a trend line. A neutral fill, so every mark is already checked against it. |
 
-Axis labels use `--color-text-muted`, value labels `--color-text-secondary`, and titles `--color-text-primary`.
+Axis labels use `--color-text-muted`, value labels `--color-text-secondary`, and titles `--color-text-primary`. Text in a chart never wears a series color.
+
+**Where a mark can sit.** A chart mark is any `--color-chart-` token except the sequential steps, `--color-chart-text-inverse`, and the chart chrome: the three neutral steps, the six slots, Other, the five ordinal steps, and the three status marks. Marks are not listed in the contrast pairs table. The checker runs every mark against every fill below that carries marks, in both themes, with a minimum of 3:1, so no combination of a mark and a fill can go unchecked. Every `--color-surface-` token must appear in this table; a new surface fails the check until it is classified.
+
+| Fill | Carries marks | Why |
+|---|---|---|
+| `--color-surface-app` | yes | Charts and bar rows in the content area. |
+| `--color-surface-panel` | yes | Charts and bar rows in the detail panel; a legend in the filter bar. |
+| `--color-surface-raised` | yes | A mark in a table header or in the stat tile group. |
+| `--color-surface-overlay` | yes | Legend swatches in a chart tooltip. |
+| `--color-surface-hover` | yes | A bar row or a table row under the pointer. |
+| `--color-surface-pressed` | yes | The same row while pressed. |
+| `--color-surface-overlay-hover` | yes | A swatch in a highlighted item of a filter picker. |
+| `--color-accent-subtle` | yes | A bar row in the active filter; a selected table row. |
+| `--color-accent-subtle-hover` | yes | The same row under the pointer. |
+| `--color-chart-band` | yes | The forecast range behind a trend line. |
+| `--color-surface-field` | no | The inside of a field holds text and icons only. |
+| `--color-surface-disabled` | no | A disabled control holds no mark. |
 
 **Chart rules.**
 
-- Thirteen disciplines exceed the six-color set. Discipline bars use one color, `--color-chart-1`. The graph and stacked trends color the six largest disciplines and fold the rest into `--color-chart-other`. Labels always carry identity.
+- Thirteen disciplines exceed the six-color set. Discipline bars use one color, `--color-chart-neutral`. The graph and stacked trends color the six largest disciplines and fold the rest into `--color-chart-other`. Labels always carry identity.
+- Stacked segments, stacked areas, and lines are drawn in slot order, never in value order. A chart that is sorted by value is a bar row group in the neutral color.
 - Color follows the entity, never its rank. Filtering never repaints the survivors.
-- The forecast range is a band in `--color-chart-seq-2` behind a line in `--color-chart-1`; the projected part of the line is dashed.
+- The open-holds trend is a line in `--color-chart-neutral`. Its forecast range is a band in `--color-chart-band` behind the line, and the projected part of the line is dashed.
 - No chart has two value axes.
 - Every chart has a tooltip, keyboard focus that shows what hover shows, and a table view.
 - Neighboring marks are separated by a `--space-0-5` gap that shows the chart surface, never by an outline in a third color.
 
-**To re-validate after any change** (the first command prints the hex list the validator takes):
+**To re-validate after any change**, run the checker, then the commands in `tools/design/palette-validation.md`. The first command below prints the hex list the validator takes:
 
 ```
 node tools/design/check-tokens.mjs --hex dark --color-chart-1 --color-chart-2 --color-chart-3 --color-chart-4 --color-chart-5 --color-chart-6
@@ -212,7 +263,13 @@ node <dataviz skill>/scripts/validate_palette.js "<hex list of --color-chart-ord
 
 ### Contrast pairs
 
-Every pair a component uses is listed here and checked in both themes by `node tools/design/check-tokens.mjs`. Kinds and their floors: `text` 4.5, `large-text` 3, `control-border` 3, `focus-ring` 3, `graphic` 3. No role in this system relies on the large-text allowance: headings and stat values use `--color-text-primary`, which clears 4.5:1 everywhere. A component may only combine a foreground and a background that appear together in this table.
+Every pair of a text, border, or ring color and a fill that a component uses is listed here and checked in both themes by `node tools/design/check-tokens.mjs`. Kinds and their floors: `text` 4.5, `large-text` 3, `control-border` 3, `focus-ring` 3, and `graphic` 3 for a meaningful graphic that is not a chart mark (none is listed today). No role in this system relies on the large-text allowance: headings and stat values use `--color-text-primary`, which clears 4.5:1 everywhere. A component may only combine a foreground and a background that appear together in this table.
+
+Three things are deliberately not in the table:
+
+- **Chart marks.** They are covered by a wider rule: every mark on every fill that carries marks, as set out under "Where a mark can sit" in the chart palette.
+- **Decorative colors.** `--color-border-subtle`, `--color-border-default`, the hairlines `--color-accent-border`, `--color-danger-border`, `--color-warning-border`, `--color-success-border`, and `--color-info-border`, and `--color-skeleton` separate or stand in for content and carry no information of their own, so they have no minimum.
+- **Disabled controls.** `--color-text-disabled` on `--color-surface-disabled` is exempt, as WCAG exempts inactive controls.
 
 | Foreground | Background | Minimum | Kind | Used by |
 |---|---|---|---|---|
@@ -259,9 +316,14 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-accent-text` | `--color-surface-raised` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-surface-overlay` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-surface-hover` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
+| `--color-accent-text` | `--color-surface-pressed` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-surface-overlay-hover` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-accent-subtle` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-accent-subtle-hover` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
+| `--color-accent-text` | `--color-danger-subtle` | 4.5 | text | A link inside a danger notice. |
+| `--color-accent-text` | `--color-warning-subtle` | 4.5 | text | A link inside a warning notice. |
+| `--color-accent-text` | `--color-success-subtle` | 4.5 | text | A link inside a success notice. |
+| `--color-accent-text` | `--color-info-subtle` | 4.5 | text | A link inside a info notice. |
 | `--color-text-on-accent` | `--color-accent` | 4.5 | text | Primary button label, check mark. |
 | `--color-text-on-accent` | `--color-accent-hover` | 4.5 | text | Primary button label, hover. |
 | `--color-text-on-accent` | `--color-accent-active` | 4.5 | text | Primary button label, pressed. |
@@ -272,7 +334,9 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-danger-text` | `--color-surface-overlay` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-surface-field` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-surface-hover` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
+| `--color-danger-text` | `--color-surface-pressed` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-accent-subtle` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
+| `--color-danger-text` | `--color-accent-subtle-hover` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-warning-text` | `--color-warning-subtle` | 4.5 | text | Warning icon and state tag text on its own tint. |
 | `--color-warning-text` | `--color-surface-app` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-surface-panel` | 4.5 | text | Warning text and icon outside a notice. |
@@ -280,7 +344,9 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-warning-text` | `--color-surface-overlay` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-surface-field` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-surface-hover` | 4.5 | text | Warning text and icon outside a notice. |
+| `--color-warning-text` | `--color-surface-pressed` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-accent-subtle` | 4.5 | text | Warning text and icon outside a notice. |
+| `--color-warning-text` | `--color-accent-subtle-hover` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-success-text` | `--color-success-subtle` | 4.5 | text | Success icon and state tag text on its own tint. |
 | `--color-success-text` | `--color-surface-app` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-surface-panel` | 4.5 | text | Success text and icon outside a notice. |
@@ -288,7 +354,9 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-success-text` | `--color-surface-overlay` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-surface-field` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-surface-hover` | 4.5 | text | Success text and icon outside a notice. |
+| `--color-success-text` | `--color-surface-pressed` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-accent-subtle` | 4.5 | text | Success text and icon outside a notice. |
+| `--color-success-text` | `--color-accent-subtle-hover` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-info-text` | `--color-info-subtle` | 4.5 | text | Info icon and state tag text on its own tint. |
 | `--color-info-text` | `--color-surface-app` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-surface-panel` | 4.5 | text | Info text and icon outside a notice. |
@@ -296,7 +364,9 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-info-text` | `--color-surface-overlay` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-surface-field` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-surface-hover` | 4.5 | text | Info text and icon outside a notice. |
+| `--color-info-text` | `--color-surface-pressed` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-accent-subtle` | 4.5 | text | Info text and icon outside a notice. |
+| `--color-info-text` | `--color-accent-subtle-hover` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-text-primary` | `--color-chart-seq-1` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
 | `--color-text-primary` | `--color-chart-seq-2` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
 | `--color-text-primary` | `--color-chart-seq-3` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
@@ -310,6 +380,7 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-border-strong` | `--color-surface-overlay` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-field` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-hover` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-pressed` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
 | `--color-accent` | `--color-surface-app` | 3 | control-border | Edge of the primary button and of the progress fill. |
 | `--color-accent` | `--color-surface-panel` | 3 | control-border | Edge of the primary button and of the progress fill. |
 | `--color-accent` | `--color-surface-field` | 3 | control-border | Edge of the primary button and of the progress fill. |
@@ -319,6 +390,7 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
 | `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
 | `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
+| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone. |
 | `--color-danger-text` | `--color-surface-app` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-panel` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-field` | 3 | control-border | Border of a field in error and of a danger button. |
@@ -328,6 +400,7 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-focus-ring` | `--color-surface-overlay` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-field` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-hover` | 3 | focus-ring | Focus ring. |
+| `--color-focus-ring` | `--color-surface-pressed` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-overlay-hover` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-accent-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-accent-subtle-hover` | 3 | focus-ring | Focus ring. |
@@ -335,34 +408,18 @@ Every pair a component uses is listed here and checked in both themes by `node t
 | `--color-focus-ring` | `--color-warning-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-success-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-info-subtle` | 3 | focus-ring | Focus ring. |
-| `--color-chart-1` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-1` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-2` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-2` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-3` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-3` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-4` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-4` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-5` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-5` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-6` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-6` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-other` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-other` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-danger` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-danger` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-warning` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-warning` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-success` | `--color-surface-app` | 3 | graphic | Chart mark on a chart surface. |
-| `--color-chart-status-success` | `--color-surface-panel` | 3 | graphic | Chart mark on a chart surface. |
 
 ### Named Rules
 
-**The One Ink Rule.** Teal is used for the primary action, the current selection, and focus, on at most a tenth of a screen. It is never used for decoration, for headings, or for icons that are not interactive. Single-series chart marks use the chart teal, `--color-chart-1`, which is a data color and not the accent.
+**The One Ink Rule.** Teal is used for the primary action, the current selection, focus, and links, on at most a tenth of a screen. Anything teal can be acted on or is selected. It is never used for decoration, for headings, for icons that are not interactive, or for data: plain data is neutral gray (`--color-chart-neutral`), ramps are blue, and no chart color lies within 25 degrees of the accent hue.
+
+**The Every Mark Rule.** A chart mark clears 3:1 on every fill that carries marks, in both themes. There is no list of approved combinations to keep up to date and no exception to remember: the checker runs all of them.
 
 **The Icon and Label Rule.** A state color never appears alone. Danger, warning, success, and info always come with an icon and a text label, so the teal accent, the green of success, and the blue of info can never be confused, including by a reader who cannot tell the hues apart.
 
 **The Tinted Neutral Rule.** No value is pure black, pure white, or an untinted gray. The checker fails any token that paints as `#000000` or `#ffffff`.
+
+**The No Purple Rule.** No hue from 270 to 350 degrees appears anywhere: not in the accent, not in the neutral tint, not in a chart. The checker fails any hue anchor or color in that range.
 
 **The One Translucent Rule.** `--color-scrim` and the shadow colors are the only translucent values. Hover, selection, and disabled states are opaque tokens, so their contrast can be checked.
 
@@ -402,30 +459,48 @@ These properties were checked in the font files themselves, not taken from descr
 | `--font-weight-semibold` | `600` | Titles, stat values, emphasis inside body text. |
 | `--letter-spacing-normal` | `0` | Everything at 13 and 17 px. |
 | `--letter-spacing-tight` | `-0.01em` | Page titles and stat values. |
+| `--font-numeric-tabular` | `tabular-nums` | Value of `font-variant-numeric` for numbers that sit in a column. |
+| `--font-numeric-proportional` | `proportional-nums` | Value of `font-variant-numeric` for numbers that stand alone. |
 
 The root font size is 16 px. The ratios between sizes are 1.31, 1.29, and 1.27.
 
 ### Hierarchy
 
-Each role is one token, written as a CSS `font` shorthand: `font: var(--text-body)`. Letter spacing and figure style are set beside it as the table says.
+Each role is one token, written as a CSS `font` shorthand: `font: var(--text-body)`. The shorthand cannot carry letter spacing or figure style, so the roles table after this one gives each role its `letter-spacing` and its `font-variant-numeric` as tokens. A stylesheet sets all three properties for a role and never writes either value as a literal.
 
 | Token | Value | Use |
 |---|---|---|
-| `--text-page-title` | `var(--font-weight-semibold) var(--font-size-lg)/var(--line-height-lg) var(--font-family-sans)` | Page title, 22/28, semibold. One per page, in the page header. Letter spacing `--letter-spacing-tight`. |
+| `--text-page-title` | `var(--font-weight-semibold) var(--font-size-lg)/var(--line-height-lg) var(--font-family-sans)` | Page title, 22/28, semibold. One per page, in the page header. |
 | `--text-section-title` | `var(--font-weight-semibold) var(--font-size-md)/var(--line-height-md) var(--font-family-sans)` | Section title, 17/24, semibold. Sections of Overview, panel titles, the title of an empty state. |
 | `--text-body` | `var(--font-weight-regular) var(--font-size-sm)/var(--line-height-body) var(--font-family-sans)` | Body, 13/20, regular. Running text, notices, descriptions. Pages of text are at most `--layout-prose-max-width` wide. |
 | `--text-body-strong` | `var(--font-weight-semibold) var(--font-size-sm)/var(--line-height-body) var(--font-family-sans)` | Body, 13/20, semibold. The title of a notice, the app name, emphasis in running text. |
-| `--text-table` | `var(--font-weight-regular) var(--font-size-sm)/var(--line-height-tight) var(--font-family-sans)` | Table cell, 13/16, regular, `font-variant-numeric: tabular-nums`. |
+| `--text-table` | `var(--font-weight-regular) var(--font-size-sm)/var(--line-height-tight) var(--font-family-sans)` | Table cell, 13/16, regular. Numbers in columns. |
 | `--text-label` | `var(--font-weight-medium) var(--font-size-sm)/var(--line-height-tight) var(--font-family-sans)` | Label, 13/16, medium. Buttons, field labels, column headers, sidebar items, tabs, chips, stat tile labels. |
 | `--text-caption` | `var(--font-weight-regular) var(--font-size-sm)/var(--line-height-tight) var(--font-family-sans)` | Caption, 13/16, regular, in `--color-text-muted` or `--color-text-secondary`. Helper text, units, timestamps, axis labels, tags. |
-| `--text-stat` | `var(--font-weight-semibold) var(--font-size-xl)/var(--line-height-xl) var(--font-family-sans)` | Stat value, 28/32, semibold, proportional figures. Letter spacing `--letter-spacing-tight`. |
+| `--text-stat` | `var(--font-weight-semibold) var(--font-size-xl)/var(--line-height-xl) var(--font-family-sans)` | Stat value, 28/32, semibold. A number that stands alone. |
 | `--text-mono` | `var(--font-weight-regular) var(--font-size-sm)/var(--line-height-tight) var(--font-family-mono)` | Identifier, 13/16, regular, monospace. Line IDs, tags such as `577-PR-400`, keyboard keys. |
+
+Letter spacing and figure style per role. Every `font` token above has exactly one row, and the checker fails a role without one.
+
+| Role | Letter spacing | Figures |
+|---|---|---|
+| `--text-page-title` | `--letter-spacing-tight` | `--font-numeric-proportional` |
+| `--text-section-title` | `--letter-spacing-normal` | `--font-numeric-proportional` |
+| `--text-body` | `--letter-spacing-normal` | `--font-numeric-proportional` |
+| `--text-body-strong` | `--letter-spacing-normal` | `--font-numeric-proportional` |
+| `--text-table` | `--letter-spacing-normal` | `--font-numeric-tabular` |
+| `--text-label` | `--letter-spacing-normal` | `--font-numeric-proportional` |
+| `--text-caption` | `--letter-spacing-normal` | `--font-numeric-tabular` |
+| `--text-stat` | `--letter-spacing-tight` | `--font-numeric-proportional` |
+| `--text-mono` | `--letter-spacing-normal` | `--font-numeric-tabular` |
+
+The table gives the default of each role. The Figures Rule below overrides it in one direction only: a number in any role that sits in a column takes `--font-numeric-tabular`.
 
 ### Named Rules
 
 **The Four Sizes Rule.** There are four sizes: 13, 17, 22, and 28 px, each at least 1.25 times the one below. A size between two steps is forbidden. Body, table, label, and caption share 13 px and are told apart by weight (regular or medium), ink (primary, secondary, or muted), and figure style. Nothing is smaller than 13 px, because the same screen is read at a desk and from across a meeting room.
 
-**The Figures Rule.** Any number that sits in a column (table cells, bar row values, axis ticks, counts in a filter picker) uses tabular figures and is right-aligned. A number that stands alone (a stat value, a count in a sentence) uses the default proportional figures.
+**The Figures Rule.** Any number that sits in a column (table cells, bar row values, axis ticks, counts in a filter picker) uses tabular figures, `--font-numeric-tabular`, and is right-aligned. A number that stands alone (a stat value, a count in a sentence) uses proportional figures, `--font-numeric-proportional`.
 
 **The Identifier Rule.** A line ID, a tag, or a blocker item is always in `--text-mono`, is never truncated in the middle, never wrapped, and never translated. Text copied from it is the exact source text.
 
@@ -515,11 +590,13 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | Token | Value | Use |
 |---|---|---|
 | `--size-icon` | `16px` | Every icon, and the spinner. |
+| `--size-icon-stroke` | `1.5px` | Stroke width of every icon. |
 | `--size-checkbox` | `16px` | The checkbox box. |
 | `--size-tag-height` | `20px` | Height of a tag. |
 | `--size-chip-height` | `24px` | Height of a filter chip. |
 | `--size-bar-height` | `8px` | Thickness of the bar in a bar row. |
 | `--size-progress-height` | `4px` | Thickness of the progress track. |
+| `--size-progress-segment` | `33.333%` | Width of the travelling segment of an indeterminate progress bar, as a share of the track. |
 | `--size-bar-label-width` | `180px` | Width of the label column of a bar row group. |
 | `--size-stat-tile-min-width` | `160px` | Narrowest stat tile before the row wraps. |
 | `--size-dropzone-min-height` | `200px` | Least height of a drop zone. |
@@ -527,20 +604,21 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | `--size-toast-max-width` | `480px` | Widest toast. |
 | `--opacity-stale` | `0.6` | Opacity of the previous render while a refetch is in flight. |
 
-Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a 1.5 px stroke in `currentColor`. An icon never appears without a text label or an accessible name.
+Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name.
 
 **Motion.** Motion marks a state change and nothing else. There are no entrance sequences and nothing animates on page load.
 
 | Token | Value | Use |
 |---|---|---|
 | `--duration-fast` | `150ms` | Color and background changes: hover, press, focus, selection. Fades out. |
-| `--duration-base` | `200ms` | Things that move a short way: the tab indicator, a toast entering, a menu opening, a row expanding. |
+| `--duration-base` | `200ms` | Things that move a short way: the tab indicator, a toast entering, a menu opening. |
 | `--duration-slow` | `250ms` | The largest moves: the detail panel sliding in, the command palette opening. |
-| `--ease-out` | `cubic-bezier(0.25, 1, 0.5, 1)` | The one curve. Everything decelerates into place; nothing bounces or overshoots. |
-| `--motion-loop-period` | `1200ms` | The one loop: the spinner and the indeterminate progress bar, at linear timing. |
+| `--ease-out` | `cubic-bezier(0.25, 1, 0.5, 1)` | The one curve for a state change. Everything decelerates into place; nothing bounces or overshoots. |
+| `--ease-linear` | `linear` | Timing of the one loop, and of nothing else. |
+| `--motion-loop-period` | `1200ms` | The one loop: the spinner and the indeterminate progress bar, with `--ease-linear`. |
 | `--timeout-toast` | `8000ms` | How long a toast stays. The timer pauses while the toast is hovered or focused. |
 
-Only `opacity`, `transform`, `color`, `background-color`, `border-color`, and `outline-color` are animated. Layout properties are not.
+Only `opacity`, `transform`, `color`, `background-color`, `border-color`, and `outline-color` are animated. Layout properties (width, height, padding, margin, position offsets) are never animated. Something that appears to grow or travel does so by `transform`: the progress fill and the tab indicator are moved and scaled, not resized. Content that expands in place, such as a group of rows, appears at once and may fade in over `--duration-fast`.
 
 **Reduced motion.** Under `prefers-reduced-motion: reduce`: every transform transition is removed, so panels, toasts, and menus appear in place; color and opacity changes keep `--duration-fast`; the spinner and the indeterminate progress bar stop moving and show a static state beside a text label that says what is happening. No information is carried by motion alone, so nothing is lost.
 
@@ -581,7 +659,7 @@ Regions and their surfaces: top bar, sidebar, filter bar, and detail panel are `
 Plain and rectangular. A button names its action with a verb.
 
 - **Shape:** height `--density-control-height`, horizontal padding `--space-3`, corner `--radius-sm`, text `--text-label`, optional leading icon at `--size-icon` with a `--space-1-5` gap. An icon-only button is square, has an accessible name, and has a tooltip.
-- **Primary:** fill `--color-accent`, text `--color-text-on-accent`, no border. Hover `--color-accent-hover`. Active `--color-accent-active`. One primary button per region: Import in the top bar, and at most one on a page (for example "Import" on the import review).
+- **Primary:** fill `--color-accent`, text `--color-text-on-accent`, no border. Hover `--color-accent-hover`. Active `--color-accent-active`. One primary button per region: Import in the top bar, and at most one on a page (for example "Import" on the import review). A primary button sits on `--color-surface-app` or `--color-surface-panel` only, the two surfaces on which its fill clears 3:1 in both themes.
 - **Secondary:** transparent fill, `--border-width-thin` border in `--color-border-strong`, text `--color-text-primary`. Hover fill `--color-surface-hover`. Active fill `--color-surface-pressed`.
 - **Quiet:** no border, transparent fill, text `--color-text-secondary`. Hover fill `--color-surface-hover` and text `--color-text-primary`. Active fill `--color-surface-pressed`. Inside an overlay the hover fill is `--color-surface-overlay-hover`.
 - **Danger:** as secondary, with text and border in `--color-danger-text`. Hover and active fill `--color-danger-subtle`. Used only where the action destroys something and cannot be placed behind an undo.
@@ -604,6 +682,7 @@ Plain and rectangular. A button names its action with a verb.
 ### Select
 
 - **Trigger:** the same box as a text field, with the chosen value in `--color-text-primary` and a chevron icon in `--color-text-secondary` at the trailing edge. Hover, focus, disabled, and error are those of the text field. Loading shows the spinner in place of the chevron.
+- **Open:** while the list is open the trigger keeps the focused look, border `--color-accent-text` and the focus ring, whether it was opened by key or by pointer. The chevron points up and the trigger has `aria-expanded="true"`. Its fill does not change.
 - **List:** a menu on `--color-surface-overlay` with a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens over `--duration-base`.
 - **Option:** height `--density-row-height`, horizontal padding `--space-2`, corner `--radius-sm`, text `--text-body`. Highlighted by pointer or arrow keys: fill `--color-surface-overlay-hover`. Chosen: text in `--font-weight-medium` with a check icon in `--color-accent-text` at the trailing edge. Disabled: `--color-text-disabled`.
 - **Behavior:** a listbox, not the system control, so it looks the same on Windows and Linux. Arrow keys move, Enter chooses, Esc closes, typing jumps to a match.
@@ -611,7 +690,7 @@ Plain and rectangular. A button names its action with a verb.
 ### Checkbox
 
 - **Anatomy:** a box of `--size-checkbox` with corner `--radius-xs`, a `--space-2` gap, and a label in `--text-body`. The whole row is the target and is at least `--density-control-height` tall.
-- **Unchecked:** fill `--color-surface-field`, `--border-width-thin` border in `--color-border-strong`. Hover: border `--color-text-secondary`.
+- **Unchecked:** fill `--color-surface-field`, `--border-width-thin` border in `--color-border-strong`. Hover: border `--color-text-secondary`. Active (pressed): fill `--color-surface-pressed`, border `--color-text-secondary`.
 - **Checked:** fill `--color-accent`, border `--color-accent-text`, a check mark in `--color-text-on-accent` with a `--border-width-thick` stroke. Hover: fill `--color-accent-hover`. Active: fill `--color-accent-active`.
 - **Mixed:** as checked, with a dash in place of the check mark.
 - **Focus:** the focus ring around the box.
@@ -640,7 +719,7 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
 - **Tab list:** a row with a bottom hairline in `--color-border-default`.
 - **Tab:** height `--density-control-height`, horizontal padding `--space-3`, text `--text-label` in `--color-text-secondary`.
 - **Hover:** text `--color-text-primary`, fill `--color-surface-hover`.
-- **Selected:** text `--color-text-primary` and a `--border-width-thick` indicator in `--color-accent-text` on the bottom edge. The indicator slides to the new tab over `--duration-base`.
+- **Selected:** text `--color-text-primary` and a `--border-width-thick` indicator in `--color-accent-text` on the bottom edge. The indicator is moved and scaled to the new tab with `transform` over `--duration-base`; its size is never animated.
 - **Focus:** the inset focus ring. Left and right arrows move between tabs.
 - **Active:** fill `--color-surface-pressed`.
 - **Disabled:** text `--color-text-disabled`; the tab says why in a tooltip.
@@ -664,9 +743,14 @@ A row of figures, not a row of cards.
 A horizontal bar per category: bars by discipline, hold type, role; top blockers.
 
 - **Row:** height `--density-bar-row-height`, three columns: the label (`--text-body`, `--color-text-primary`, `--size-bar-label-width` wide, cut at the end with an ellipsis), the bar, and the value (`--text-table`, right-aligned, tabular figures) with an optional second value in `--color-text-muted`.
-- **Bar:** thickness `--size-bar-height`, fill `--color-chart-1`, corner `--radius-xs`, growing from the left edge of its column. No track behind it. Every bar in a group has the same color; length carries the value.
+- **Bar:** thickness `--size-bar-height`, fill `--color-chart-neutral`, corner `--radius-xs`, growing from the left edge of its column. No track behind it. Every bar in a group has the same neutral color; length carries the value. The bar is never teal and never a categorical color.
+- **Age bands:** the one group with a color. Its categories have an order, so each bar takes the ordinal step of its band (`--color-chart-ord-1` to `--color-chart-ord-5`) and the rows stay in band order. An ordinal bar keeps its step in every state; only the row fill changes.
 - **Group:** rows are separated by space, not hairlines, and sorted by value unless the dimension has an order of its own.
-- **Interaction:** the whole row is a button that filters by its category. Hover fill `--color-surface-hover`. Active fill `--color-surface-pressed`. Focus: the inset focus ring. A row whose category is in the active filter has fill `--color-accent-subtle`.
+- **Interaction:** the whole row is a button that filters by its category, with `aria-pressed`.
+- **Hover:** row fill `--color-surface-hover`, bar `--color-chart-neutral-hover`.
+- **Active (pressed):** row fill `--color-surface-pressed`, bar `--color-chart-neutral-hover`.
+- **In the active filter:** row fill `--color-accent-subtle`, bar `--color-chart-neutral-selected`. The teal tint says the row is selected; the bar stays neutral and takes its strongest step. Hover on such a row: fill `--color-accent-subtle-hover`, bar unchanged.
+- **Focus:** the inset focus ring.
 - **Disabled:** not applicable.
 - **Loading:** skeleton rows with bars of varied length. A refetch keeps the previous rows at `--opacity-stale`.
 - **Error:** one inline danger notice in place of the group.
@@ -713,11 +797,13 @@ An empty state teaches the next action. It is never "Nothing here".
 
 ### Coming soon screen
 
-A destination that is not built yet opens a screen made of the page header and the empty state, inside the normal shell. It is a complete page, not a placeholder.
+A destination that is not built yet opens a screen made of the page header and the empty state, both unchanged, inside the normal shell. It is a complete page, not a placeholder.
 
-- **Heading:** the destination's name as the page title (`--text-page-title`), for example "Blockers".
-- **Body:** one or two sentences on what the destination will show (`--text-body`, `--color-text-primary`), then one line saying it is not available in this version (`--text-body`, `--color-text-secondary`). Both are at most `--layout-prose-max-width` wide.
+- **Page header:** the destination's name as the page title (`--text-page-title`), for example "Blockers". No description line and no page actions.
+- **Empty state title:** shown, as in every empty state (`--text-section-title`, `--color-text-primary`). It says what is absent: "Not available in this version". The page title names the destination and this title states its status. They are two different statements, so the screen has both.
+- **Empty state body:** one or two sentences on what the destination will show, in the empty state's own style (`--text-body`, `--color-text-secondary`, at most `--layout-prose-max-width` wide). The body is secondary ink here as in every empty state. The one statement the user must not miss, that the destination is not available, is therefore the title and not a line of body text.
 - **Action:** one secondary button, "Go to Overview".
+- **Placement:** that of an empty state on an otherwise empty page, `--space-12` below the page header.
 - **Forbidden:** an illustration, a progress bar, a date, a version number, an apology, a sign-up, and the accent color.
 
 ### Page header
@@ -753,26 +839,28 @@ A small, non-interactive label on a row or an item.
 - **Shape:** height `--size-chip-height`, horizontal padding `--space-2`, corner `--radius-full`, text `--text-label`. Chips are the only pills in the interface: round means a filter that can be removed.
 - **Active filter:** fill `--color-accent-subtle`, `--border-width-thin` border in `--color-accent-border`, the field name in `--color-text-secondary` and the value in `--color-text-primary`, and a remove button at the trailing edge. Hover `--color-accent-subtle-hover`.
 - **Add filter:** a quiet button in the same pill shape with a `--border-width-thin` border in `--color-border-strong`.
+- **Disabled:** while the filters cannot be changed (an import is running, or the snapshot is being switched), every chip has fill `--color-surface-disabled`, a border in `--color-border-default`, text in `--color-text-disabled`, and no remove button. Disabled chips are not focusable, and a line of `--text-caption` in `--color-text-muted` after the chips says why.
+- **Loading:** a chip has no loading state of its own. A filter applies at once: the chip appears in its final look, and the content it filters keeps its previous render at `--opacity-stale` until the new rows arrive. While the add-filter picker reads its values, the picker shows the spinner (`--size-icon`) beside a label in `--text-caption`.
 - **Focus:** the focus ring on the chip and on its remove button separately. Backspace on a focused chip removes it.
 - **Clear all:** a quiet button at the end of the row, always visible while any filter is active.
 
 ### Drop zone
 
 - **Shape:** at least `--size-dropzone-min-height` tall, padding `--space-10`, corner `--radius-md`, a `--border-width-thin` dashed border in `--color-border-strong`, no fill.
-- **Content:** a title (`--text-section-title`), one sentence (`--text-body`, `--color-text-secondary`), a button to choose a file (so the drop zone is never the only way in), and the accepted file types (`--text-caption`, `--color-text-muted`).
+- **Content:** a title (`--text-section-title`), one sentence (`--text-body`, `--color-text-secondary`), a primary button to choose a file (so the drop zone is never the only way in), and the accepted file types (`--text-caption`, `--color-text-muted`).
 - **Hover:** fill `--color-surface-hover`.
 - **Focus:** the focus ring on the button inside it.
-- **Active (a file is dragged over it):** a `--border-width-thick` dashed border in `--color-accent-text`, fill `--color-accent-subtle`, and the title changes to say what dropping will do.
+- **Active (a file is dragged over it):** a `--border-width-thick` dashed border in `--color-accent-text`, fill `--color-accent-subtle`, the title changes to say what dropping will do, and the sentence names the file. The button and the file types are hidden while the file is over the zone: nothing can be pressed during a drag, and a primary button does not sit on the selection tint.
 - **Disabled and loading:** while an import runs, the content is replaced by the progress component.
 - **Error:** a file that cannot be imported gives a `--border-width-thin` dashed border in `--color-danger-text` and an inline danger notice under the zone that says why and what to do.
-- **Window-wide drop:** while a file is dragged anywhere over the window, a frame appears at `--z-drop-target`: `--color-scrim` over the window, and inside it, `--space-2` from the edges, a `--border-width-thick` dashed border in `--color-accent-text` with a label on `--color-surface-overlay`.
+- **Window-wide drop:** while a file is dragged anywhere over the window, the window is covered at `--z-drop-target` by one large drop zone in its active state: `--space-2` from the window edges, fill `--color-accent-subtle`, a `--border-width-thick` dashed border in `--color-accent-text`, corner `--radius-md`, and a centered title (`--text-section-title`, `--color-text-primary`) that says what dropping will do. It is opaque and uses no scrim, so its border and its title are checked pairs. A dashed accent border over `--color-scrim` would fall under 3:1 in the light theme.
 
 ### Progress
 
-- **Bar:** a track `--size-progress-height` thick in `--color-border-default` with corner `--radius-full`, and a fill in `--color-accent`.
+- **Bar:** a track `--size-progress-height` thick in `--color-border-default` with corner `--radius-full`, which clips a fill in `--color-accent` with the same corner. A progress bar sits on `--color-surface-app`, `--color-surface-panel`, or `--color-surface-field`.
 - **Label:** above the bar, what is happening and how far (`--text-body`, `--color-text-primary`), with the count in tabular figures: "Reading rows, 4,200 of 9,300". A bar never appears without a label.
-- **Determinate:** the fill's width follows the reported progress, changing over `--duration-fast`.
-- **Indeterminate:** when no total is known, a segment a third of the track wide travels along it once per `--motion-loop-period`. Under reduced motion the segment rests at the start of the track and the label carries the state.
+- **Determinate:** the fill is as wide as the track and is moved along it with `transform: translateX()` so that its leading edge marks the reported progress. The transform changes over `--duration-fast` with `--ease-out`. The width of the fill is never animated.
+- **Indeterminate:** when no total is known, a segment `--size-progress-segment` wide travels along the track by `transform`, once per `--motion-loop-period` with `--ease-linear`. Under reduced motion the segment rests at the start of the track and the label carries the state.
 - **Complete:** the bar is replaced by a success notice or by the next screen. It does not sit at 100 percent.
 - **Error:** the bar is removed and an inline danger notice says what happened, why, and how to fix it.
 
@@ -781,9 +869,10 @@ A small, non-interactive label on a row or an item.
 ### Do:
 
 - **Do** take every color, size, radius, and duration from a token in this file. If a value is missing, add a token here first, then use it.
-- **Do** keep teal to the primary action, the current selection, and focus. Use `--color-accent-subtle` for selection and `--color-accent` for the one primary button of a region.
+- **Do** keep teal to the primary action, the current selection, focus, and links. Use `--color-accent-subtle` for selection and `--color-accent` for the one primary button of a region.
+- **Do** draw plain data in `--color-chart-neutral`, ramps in the blue of `--hue-ramp`, and several named series in the categorical slots, in slot order.
 - **Do** pair every state color with an icon and a label, and every chart series with a text label and a table view.
-- **Do** combine only foreground and background tokens that appear together in the contrast pairs table, and run `node tools/design/check-tokens.mjs` after any change to a token.
+- **Do** combine only foreground and background tokens that appear together in the contrast pairs table, put a chart mark only on a fill that the fills table says carries marks, and run `node tools/design/check-tokens.mjs` after any change to a token.
 - **Do** set line IDs, tags, and blocker items in `--text-mono`, and numbers in columns in tabular figures, right-aligned.
 - **Do** show a skeleton on a first load, keep the previous render at `--opacity-stale` on a refetch, and give every empty state a sentence and one action.
 - **Do** make every action reachable by keyboard and show the focus ring on `:focus-visible`, inset where an outer ring would be clipped.
@@ -795,7 +884,7 @@ A small, non-interactive label on a row or an item.
 ### Don't:
 
 - **Don't** build "a startup analytics dashboard": no big-number hero tiles with gradient accents, no grid of identical cards each with an icon, a heading, and a paragraph, no sparkline decorating every number.
-- **Don't** build "a dark AI tool skin": no purple or violet anywhere in the interface chrome, no glowing gradients, no neon on black, no blurred glass panels. The accent stays teal; `--hue-accent` and `--hue-neutral` never move into the violet, indigo, purple, or magenta range.
+- **Don't** build "a dark AI tool skin": no purple or violet anywhere in the interface chrome, no glowing gradients, no neon on black, no blurred glass panels. The accent stays teal, and no hue anchor or color moves into the violet, indigo, purple, or magenta range, 270 to 350 degrees.
 - **Don't** build "a CAD or control-room console": no safety orange, no hazard stripes, no all-caps monospace labels, no fake instrument panels.
 - **Don't** repeat "the old single-file tool": no everything-on-one-page layout, no color that means "this cell is high" without a label, no state that exists only on hover.
 - **Don't** build "an enterprise form from 2010": no modal dialog for every step, no confirmation prompt before every action, no toolbar of unlabeled icons.
@@ -806,8 +895,9 @@ A small, non-interactive label on a row or an item.
 - **Don't** add a type size between the four steps, shrink text below 13 px, or change type size with density.
 - **Don't** use all-caps labels, letter-spaced small caps, or a display face anywhere.
 - **Don't** color a number red or green because it went up or down. Direction is an arrow and a sign.
-- **Don't** give a seventh category a seventh color, recolor a category when a filter changes, or use a status color for a series.
-- **Don't** animate layout, animate on page load, loop anything except the spinner and the indeterminate progress bar, or use a bounce or an elastic curve.
+- **Don't** draw data in teal. A bar, a line, a heatmap cell, or a legend swatch is never an accent color, and no chart color comes within 25 degrees of the accent hue.
+- **Don't** give a seventh category a seventh color, recolor a category when a filter changes, re-sort stacked segments or lines by value, or use a status color for a series.
+- **Don't** animate layout (a width, a height, a row that expands), animate on page load, loop anything except the spinner and the indeterminate progress bar, or use a bounce or an elastic curve.
 - **Don't** make anything available by hover alone, and don't remove the focus ring.
 - **Don't** use an em dash in interface text, or the words "OK", "Yes", "Submit", "Oops", or "Welcome back".
 - **Don't** put an illustration, a progress bar, a date, a version number, or an apology on a coming soon screen.
