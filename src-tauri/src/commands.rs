@@ -5,12 +5,18 @@
 //! `blocking`). A synchronous command runs on the main thread, and waiting there for a lock that
 //! a workspace operation holds across file work would freeze the window.
 
+use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
+use chrono::NaiveDateTime;
+use hx_core::mapping::Field;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager};
 
 use crate::app::{
-    AppStart, AppState, CommandError, Settings, Theme, WorkspaceListView, WorkspaceOpen,
+    AppStart, AppState, CommandError, ImportCommit, ImportDone, ImportDraft, ImportPhase,
+    ImportReview, Settings, TargetCheck, TargetChoice, Theme, WorkspaceListView, WorkspaceOpen,
     WorkspaceView,
 };
 
@@ -78,6 +84,69 @@ pub async fn workspace_open(app: AppHandle, id: String) -> Result<WorkspaceOpen,
 #[tauri::command]
 pub async fn workspace_rename(app: AppHandle, name: String) -> Result<WorkspaceView, CommandError> {
     blocking(app, move |state| state.rename_workspace(&name)).await
+}
+
+/// Opens a file as the import draft.
+#[tauri::command]
+pub async fn import_open(app: AppHandle, path: PathBuf) -> Result<ImportDraft, CommandError> {
+    blocking(app, move |state| state.import_open(&path)).await
+}
+
+/// Reads the draft's file again with this sheet as the data sheet.
+#[tauri::command]
+pub async fn import_choose_sheet(
+    app: AppHandle,
+    sheet: String,
+) -> Result<ImportDraft, CommandError> {
+    blocking(app, move |state| state.import_choose_sheet(&sheet)).await
+}
+
+/// Parses the draft with the mapping given, or the proposed one.
+#[tauri::command]
+pub async fn import_review(
+    app: AppHandle,
+    fields: Option<BTreeMap<Field, usize>>,
+) -> Result<ImportReview, CommandError> {
+    blocking(app, move |state| state.import_review(fields)).await
+}
+
+/// What importing the draft into this target would meet.
+#[tauri::command]
+pub async fn import_check_target(
+    app: AppHandle,
+    target: TargetChoice,
+    taken_at: NaiveDateTime,
+) -> Result<TargetCheck, CommandError> {
+    blocking(app, move |state| {
+        state.import_check_target(&target, taken_at)
+    })
+    .await
+}
+
+/// Stores the draft as a snapshot, telling the channel how far it has come.
+#[tauri::command]
+pub async fn import_commit(
+    app: AppHandle,
+    request: ImportCommit,
+    on_progress: Channel<ImportPhase>,
+) -> Result<ImportDone, CommandError> {
+    blocking(app, move |state| {
+        // A phase that cannot be sent only costs the interface a progress step.
+        state.import_commit(request, &|phase| {
+            let _ = on_progress.send(phase);
+        })
+    })
+    .await
+}
+
+/// Drops the draft.
+#[tauri::command]
+pub async fn import_cancel(app: AppHandle) -> Result<(), CommandError> {
+    blocking(app, |state| {
+        state.import_cancel();
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

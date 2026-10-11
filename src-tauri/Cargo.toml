@@ -27,6 +27,7 @@ ts-rs.workspace = true
 [dev-dependencies]
 hx-synth = { path = "../crates/synth" }
 rusqlite.workspace = true
+rust_xlsxwriter.workspace = true
 tempfile.workspace = true
 
 [features]

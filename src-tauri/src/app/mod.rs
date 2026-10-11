@@ -2,6 +2,7 @@
 //! arguments, so tests need no window.
 
 mod error;
+mod import;
 mod settings;
 mod workspaces;
 
@@ -11,6 +12,10 @@ use std::path::{Path, PathBuf};
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use error::CommandError;
+pub use import::{
+    ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, ImportTarget, TargetCheck,
+    TargetChoice, WarningGroup,
+};
 pub use settings::{
     load_settings, load_settings_checked, save_settings, LoadedSettings, Settings, Theme,
 };
@@ -25,6 +30,8 @@ pub struct AppState {
     settings_blocked: Option<CommandError>,
     open: Option<Workspace>,
     selected: Option<i64>,
+    /// The file being imported, when there is one.
+    draft: Option<import::Draft>,
 }
 
 impl AppState {
@@ -39,12 +46,19 @@ impl AppState {
             settings_blocked: blocked,
             open: None,
             selected: None,
+            draft: None,
         }
     }
 
     /// The settings in use.
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// The id of the open workspace; panics when none is open.
+    #[cfg(test)]
+    fn open_id(&self) -> String {
+        self.open.as_ref().unwrap().info().unwrap().id
     }
 
     /// The id of the selected snapshot of the open workspace.
@@ -195,8 +209,10 @@ impl AppState {
         open
     }
 
-    /// Closes the open workspace and keeps this one, with its newest snapshot selected.
+    /// Closes the open workspace and keeps this one, with the snapshot `open` names selected.
+    /// A file open for import is dropped.
     fn install(&mut self, workspace: Workspace, open: &WorkspaceOpen) {
+        self.draft = None;
         self.open = Some(workspace);
         self.selected = open.selected;
     }
@@ -214,5 +230,7 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     })
 }
 
+#[cfg(test)]
+mod import_tests;
 #[cfg(test)]
 mod tests;

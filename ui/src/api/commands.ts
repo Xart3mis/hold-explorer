@@ -1,11 +1,25 @@
 // The only module that imports `invoke`: command names and argument keys are written here once.
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
+import type { Field } from "../bindings/Field";
+import type { ImportCommit } from "../bindings/ImportCommit";
+import type { ImportDone } from "../bindings/ImportDone";
+import type { ImportDraft } from "../bindings/ImportDraft";
+import type { ImportPhase } from "../bindings/ImportPhase";
+import type { ImportReview } from "../bindings/ImportReview";
 import type { Settings } from "../bindings/Settings";
+import type { TargetCheck } from "../bindings/TargetCheck";
+import type { TargetChoice } from "../bindings/TargetChoice";
 import type { Theme } from "../bindings/Theme";
 import type { WorkspaceListView } from "../bindings/WorkspaceListView";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
+
+/** A mapping: each field to the zero-based column that supplies it. */
+type Fields = Partial<Record<Field, number>>;
+
+/** The channel that carries the progress of `import_commit`. */
+type Progress = Channel<ImportPhase>;
 
 /** Every command: its argument object (keys as the command names them) and what it returns. */
 interface CommandMap {
@@ -15,6 +29,12 @@ interface CommandMap {
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
   workspace_open: { args: { id: string }; result: WorkspaceOpen };
   workspace_rename: { args: { name: string }; result: WorkspaceView };
+  import_open: { args: { path: string }; result: ImportDraft };
+  import_choose_sheet: { args: { sheet: string }; result: ImportDraft };
+  import_review: { args: { fields: Fields | null }; result: ImportReview };
+  import_check_target: { args: { target: TargetChoice; takenAt: string }; result: TargetCheck };
+  import_commit: { args: { request: ImportCommit; onProgress: Progress }; result: ImportDone };
+  import_cancel: { args: Record<string, never>; result: null };
 }
 
 export type CommandName = keyof CommandMap;
@@ -33,4 +53,17 @@ export const api = {
   workspaceCreate: (name: string) => call("workspace_create", { name }),
   workspaceOpen: (id: string) => call("workspace_open", { id }),
   workspaceRename: (name: string) => call("workspace_rename", { name }),
+  importOpen: (path: string) => call("import_open", { path }),
+  importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),
+  /** Reviews the draft with the given field-to-column mapping, or with the proposed one. */
+  importReview: (fields: Fields | null) => call("import_review", { fields }),
+  importCheckTarget: (target: TargetChoice, takenAt: string) =>
+    call("import_check_target", { target, takenAt }),
+  /** Commits the draft; `onProgress` hears each phase as it starts. */
+  importCommit: (request: ImportCommit, onProgress: (phase: ImportPhase) => void) => {
+    const channel = new Channel<ImportPhase>();
+    channel.onmessage = onProgress;
+    return call("import_commit", { request, onProgress: channel });
+  },
+  importCancel: () => call("import_cancel", {}),
 };

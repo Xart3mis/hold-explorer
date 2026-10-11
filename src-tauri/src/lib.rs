@@ -38,6 +38,12 @@ pub fn run() {
             commands::workspace_create,
             commands::workspace_open,
             commands::workspace_rename,
+            commands::import_open,
+            commands::import_choose_sheet,
+            commands::import_review,
+            commands::import_check_target,
+            commands::import_commit,
+            commands::import_cancel,
         ])
         .run(tauri::generate_context!());
     if let Err(error) = result {
