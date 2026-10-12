@@ -67,9 +67,19 @@ jobs:
         run: pnpm tauri build --no-bundle
       - name: The build names no other host
         run: pnpm check:dist
-      - name: Size of the binary
+      - name: Size of the binary, and its manifest on Windows
         shell: bash
         run: |
           bin=target/release/hx-desktop
           if [ "$RUNNER_OS" = "Windows" ]; then bin="$bin.exe"; fi
           echo "$bin: $(du -m "$bin" | cut -f1) MB"
+          # The build script hands the application manifest to the linker. A test executable
+          # without it does not start, so the tests check themselves; nothing starts this binary,
+          # and without the manifest it would fail on a user's machine only.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if ! grep -a -q "Microsoft.Windows.Common-Controls" "$bin"; then
+              echo "$bin holds no application manifest that asks for version 6 of the common controls (Microsoft.Windows.Common-Controls), so it would not start. See the linker arguments in src-tauri/build.rs and src-tauri/windows-app-manifest.xml."
+              exit 1
+            fi
+            echo "$bin holds the application manifest."
+          fi

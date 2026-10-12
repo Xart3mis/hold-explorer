@@ -342,6 +342,39 @@ mod tests {
     }
 
     #[test]
+    fn every_key_the_interface_sends_is_an_argument_the_command_reads() {
+        // Tauri reads a key that is absent as `None` when the argument is optional, and passes
+        // over a key no argument has. So were `fields` of `import_review` named otherwise on one
+        // side, the command would still answer, with the user's mapping dropped, and the test
+        // above would not see it. Here every key of the fixture in turn carries a value that no
+        // argument type accepts: only a command that reads the key can object to it, and Tauri
+        // then names the key.
+        let harness = Harness::new();
+        let unreadable = serde_json::json!([[]]);
+        let mut tried = 0;
+        for (command, args) in command_args() {
+            let entry = args
+                .as_object()
+                .unwrap_or_else(|| panic!("the arguments of {command} are an object"));
+            for key in entry.keys() {
+                let mut spoiled = entry.clone();
+                spoiled.insert(key.clone(), unreadable.clone());
+                let answer = harness.invoke(&command, &Value::Object(spoiled));
+                let expected = format!("invalid args `{key}` for command `{command}`");
+                match &answer {
+                    Err(Value::String(text)) if text.starts_with(&expected) => tried += 1,
+                    _ => panic!(
+                        "{command} does not read the key `{key}` the interface sends: with a \
+                         value no argument accepts under it, the answer was {answer:?}"
+                    ),
+                }
+            }
+        }
+        // A fixture without a key would prove nothing.
+        assert!(tried > 0, "the fixture holds no argument");
+    }
+
+    #[test]
     fn a_command_with_arguments_tauri_cannot_read_fails_with_a_plain_text() {
         // What the test above must never meet: this is how a wrong key or shape shows.
         let harness = Harness::new();
@@ -377,7 +410,13 @@ mod tests {
                 .invoke(&command, &args)
                 .expect_err("no command answers from a state that cannot be trusted");
             assert_eq!(error["kind"], "Internal", "{command}: {error}");
+            // The words only the handling of a poisoned lock uses: the answer for a state that
+            // is missing, and the one for a task that died, say to restart as well.
             let message = error["message"].as_str().unwrap_or_default();
+            assert!(
+                message.starts_with("An earlier operation failed part-way"),
+                "{command}: {message}"
+            );
             assert!(
                 message.contains("Restart Hold Explorer"),
                 "{command}: {message}"

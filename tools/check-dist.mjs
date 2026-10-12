@@ -113,7 +113,7 @@ function isAllowed(url) {
 }
 
 /** Every problem in the directory, as `{ file, problem }`. An empty list means the build is clean. */
-export function scan(dir) {
+function scan(dir) {
   const problems = [];
   for (const path of filesUnder(dir)) {
     const file = relative(dir, path).split("\\").join("/");
