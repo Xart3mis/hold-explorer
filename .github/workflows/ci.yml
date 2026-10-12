@@ -15,7 +15,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # A cold job compiles Tauri several times over (tests, lint, a release build with link-time
+    # optimization), and a job that is cancelled saves no build cache, so a limit that a cold job
+    # cannot meet is never met. Lower it once warm runs have been measured.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Install Linux packages

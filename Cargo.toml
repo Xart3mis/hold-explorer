@@ -36,3 +36,15 @@ codegen-units = 1
 lto = true
 opt-level = "s"
 strip = true
+
+# The release build is optimized for size, except where the time of an import and of a query is
+# spent: the engine, the store, and SQLite are optimized for speed. The limits these protect are
+# in crates/cli/tests/perf.rs.
+[profile.release.package.hx-core]
+opt-level = 3
+
+[profile.release.package.hx-store]
+opt-level = 3
+
+[profile.release.package.libsqlite3-sys]
+opt-level = 3
