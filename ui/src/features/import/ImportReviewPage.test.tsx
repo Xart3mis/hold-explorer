@@ -1,10 +1,9 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ArgsOf } from "../../api/commands";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportDone } from "../../bindings/ImportDone";
-import type { ImportPhase } from "../../bindings/ImportPhase";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
@@ -22,53 +21,26 @@ import {
   reviewWithFindings,
   sameDaySnapshot,
   sameFileSnapshot,
-  savedMappingDraft,
   unit573,
   unmappedDraft,
 } from "../../test/import";
-import { commandFailure, type Handlers } from "../../test/ipc";
+import { commandFailure } from "../../test/ipc";
+import {
+  filled,
+  heldCommit,
+  importButton,
+  ready,
+  REVIEW_TARGET,
+  reviewing,
+  reviewPage as page,
+} from "../../test/review";
 import { SLOW } from "../../test/slow";
 
 const text = en.import.review;
-const target = / Import into$/;
+const target = REVIEW_TARGET;
 
 type CheckArgs = ArgsOf<"import_check_target">;
 type CommitArgs = ArgsOf<"import_commit">;
-
-/** The review page on a file, with the commands a review needs answered. */
-function reviewing(found: ImportReview = review(), handlers: Handlers = {}, from = "/lines") {
-  const check = vi.fn<(args: CheckArgs) => TargetCheck>(() => freeTarget);
-  const app = openFlow("/import/review", {
-    draft: found.file_name === "open-holds.csv" ? savedMappingDraft() : exportDraft(),
-    from,
-    handlers: { import_review: () => found, import_check_target: check, ...handlers },
-  });
-  return { ...app, check };
-}
-
-async function page() {
-  return pageTitled(text.title);
-}
-
-function importButton(main: HTMLElement) {
-  return within(main).getByRole("button", { name: text.import });
-}
-
-/** The page once the workspace has been checked and Import can be pressed. */
-async function ready() {
-  const main = await page();
-  await waitFor(() => {
-    expect(importButton(main)).toBeEnabled();
-  });
-  return main;
-}
-
-function filled(template: string, values: Record<string, string>): string {
-  return Object.entries(values).reduce(
-    (result, [name, value]) => result.replaceAll(`{{${name}}}`, value),
-    template,
-  );
-}
 
 describe("the review page while the file is read", () => {
   it("asks for the review with the proposed mapping and shows the shape of the page meanwhile", async () => {
@@ -329,6 +301,23 @@ describe("what the review page shows", () => {
     await user.click(within(main).getByRole("button", { name: text.changeMapping }));
     expect(router.state.location.pathname).toBe("/import/mapping");
     expect(router.state.location.state).toMatchObject({ from: "/lines" });
+  });
+
+  it("lists the mapping in use with the fields the draft calls required first", SLOW, async () => {
+    const { user } = openFlow("/import/review", {
+      draft: exportDraft({ required: ["Created", "LineId"] }),
+      handlers: { import_review: () => review(), import_check_target: () => freeTarget },
+    });
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: text.columnsShow }));
+    const items = within(within(main).getByRole("list", { name: text.columnsList }))
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    expect(items).toHaveLength(14);
+    expect(items.slice(0, 2)).toEqual([
+      `${en.import.field.Created}date`,
+      `${en.import.field.LineId}line_id`,
+    ]);
   });
 
   it("names the sheet that was read and leads to the choice of another", async () => {
@@ -778,37 +767,6 @@ describe("the target on the review page", () => {
 });
 
 describe("importing from the review page", () => {
-  /** A commit the test lets through phase by phase. */
-  function heldCommit() {
-    let say: (phase: ImportPhase) => void = () => undefined;
-    let finish: (result: ImportDone) => void = () => undefined;
-    let fail: (reason: unknown) => void = () => undefined;
-    const handler = vi.fn(
-      (args: CommitArgs) =>
-        new Promise<ImportDone>((resolve, reject) => {
-          say = (phase) => {
-            args.onProgress.onmessage(phase);
-          };
-          finish = resolve;
-          fail = reject;
-        }),
-    );
-    return {
-      handler,
-      say: (phase: ImportPhase) => {
-        act(() => {
-          say(phase);
-        });
-      },
-      finish: (result: ImportDone) => {
-        finish(result);
-      },
-      fail: (reason: unknown) => {
-        fail(reason);
-      },
-    };
-  }
-
   it(
     "sends the request, shows each phase as progress, and lands on Overview with a toast",
     SLOW,
@@ -990,6 +948,10 @@ describe("importing from the review page", () => {
       expect(within(main).getByRole("textbox", { name: text.date.date })).toBeEnabled();
       expect(within(main).getByRole("button", { name: en.common.cancel })).toBeInTheDocument();
 
+      // The workspace is checked again after a failure, and Import waits for the answer.
+      await waitFor(() => {
+        expect(importButton(main)).toBeEnabled();
+      });
       await user.click(importButton(main));
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/overview");

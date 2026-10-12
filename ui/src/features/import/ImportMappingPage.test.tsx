@@ -224,6 +224,62 @@ describe("the mapping page", () => {
     },
   );
 
+  it("takes the required fields from the draft and keeps no list of its own", SLOW, async () => {
+    const { user } = openFlow("/import/mapping", {
+      draft: unmappedDraft({
+        required: ["LineId", "Created"],
+        missing_required: ["LineId", "Created"],
+      }),
+    });
+    const main = await mapping();
+    const order = [...main.querySelectorAll("[data-field]")].map((row) =>
+      row.getAttribute("data-field"),
+    );
+    expect(order.slice(0, 2)).toEqual(["LineId", "Created"]);
+    expect(order).toHaveLength(14);
+    expect(new Set(order).size).toBe(14);
+    expect(within(main).getByRole("button", { name: lineId })).toBeVisible();
+    expect(within(main).getByRole("button", { name: field(names.Created, true) })).toBeVisible();
+    expect(within(main).getAllByText(text.missing)).toHaveLength(2);
+    expect(
+      within(main).getByText(
+        text.blocked.replace("{{fields}}", `${names.LineId}, ${names.Created}`),
+      ),
+    ).toBeVisible();
+
+    // A field the draft does not call required is optional here, whatever it is elsewhere.
+    const type = field(names.HoldType);
+    expect(within(main).getByRole("button", { name: type })).toHaveTextContent(text.none);
+    await choose(user, lineId, /^Line/);
+    await choose(user, field(names.Created, true), /^Raised on/);
+    expect(within(main).getByRole("button", { name: text.continue })).toBeEnabled();
+  });
+
+  it(
+    "says why Continue is disabled in a region that is announced, and as the description of the button",
+    SLOW,
+    async () => {
+      const { user } = openFlow("/import/mapping", { draft: unmappedDraft() });
+      const main = await mapping();
+      const reason = text.blocked.replace(
+        "{{fields}}",
+        `${names.LineId}, ${names.Remark}, ${names.HoldType}`,
+      );
+      const region = main.querySelector('[data-part="continue-status"]');
+      expect(region).toHaveAttribute("role", "status");
+      expect(region).toHaveTextContent(reason);
+      const next = within(main).getByRole("button", { name: text.continue });
+      expect(next).toHaveAccessibleDescription(reason);
+
+      await choose(user, lineId, /^Line/);
+      await choose(user, remark, /^Why/);
+      await choose(user, holdType, /^Kind/);
+      expect(main.querySelector('[data-part="continue-status"]')).toBe(region);
+      expect(region).toBeEmptyDOMElement();
+      expect(next).toHaveAccessibleDescription("");
+    },
+  );
+
   it("offers another sheet only for a workbook that has several", async () => {
     const first = openFlow("/import/mapping", { draft: exportDraft() });
     const main = await mapping();
@@ -261,6 +317,44 @@ describe("the mapping page", () => {
     expect(within(main).getByText(en.import.reopen.title)).toBeVisible();
     expect(within(main).getByText(en.import.reopen.text)).toBeVisible();
     expect(within(main).getByRole("button", { name: en.welcome.openFile })).toBeInTheDocument();
+  });
+
+  it(
+    "says why the review sent the user back, marks the fields, and stops saying it once they have columns",
+    SLOW,
+    async () => {
+      const message =
+        "Missing required columns: line_id, hold_remark, hold_type. Map them to columns of the file.";
+      const { user, router } = openFlow("/import/review", {
+        draft: unmappedDraft(),
+        handlers: {
+          import_review: () => {
+            throw commandFailure("MissingColumns", message);
+          },
+        },
+      });
+      const main = await mapping();
+      expect(router.state.location.pathname).toBe("/import/mapping");
+      const title = within(main).getByText(text.sentBackTitle);
+      const notice = title.closest("[data-kind]");
+      expect(notice).toHaveAttribute("data-kind", "MissingColumns");
+      expect(notice).toHaveTextContent(message);
+      expect(within(main).getAllByText(text.missing)).toHaveLength(3);
+      // Where the import was started is still known.
+      expect(router.state.location.state).toMatchObject({ from: "/lines" });
+
+      await choose(user, lineId, /^Line/);
+      await choose(user, remark, /^Why/);
+      expect(within(main).getByText(text.sentBackTitle)).toBeVisible();
+      await choose(user, holdType, /^Kind/);
+      expect(within(main).queryByText(text.sentBackTitle)).not.toBeInTheDocument();
+    },
+  );
+
+  it("says nothing of the kind on a mapping page the user came to by choice", async () => {
+    openFlow("/import/mapping", { draft: unmappedDraft() });
+    const main = await mapping();
+    expect(within(main).queryByText(text.sentBackTitle)).not.toBeInTheDocument();
   });
 
   it("has no accessibility violation, with fields missing and with a list open", SLOW, async () => {

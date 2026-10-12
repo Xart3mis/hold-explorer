@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import { t, type MessageKey } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import { Notice } from "../../components";
+import styles from "./Import.module.css";
 
 /** What failed, in the words of the import flow, by the kind of the error. */
 const titles: Record<string, MessageKey> = {
@@ -28,15 +29,26 @@ export interface ImportProblemProps {
   general: MessageKey;
   /** Quiet buttons that act on the error. */
   actions?: ReactNode;
+  /**
+   * Makes the error something the page can move the focus to, and gives the page its element.
+   * A page does that when the control that had the focus went away with what failed: the user
+   * is then at the error, which says what happened and how to fix it, and Tab goes on from it.
+   */
+  focusRef?: Ref<HTMLDivElement>;
 }
 
 /**
  * An error of the import flow, on the page where it occurred: a title by the kind of the error,
  * then the command's own message, unchanged, which says why and how to fix it.
  */
-export function ImportProblem({ error, general, actions }: ImportProblemProps) {
+export function ImportProblem({ error, general, actions, focusRef }: ImportProblemProps) {
   return (
-    <div data-kind={error.kind}>
+    <div
+      data-kind={error.kind}
+      {...(focusRef === undefined
+        ? {}
+        : { ref: focusRef, tabIndex: -1, className: styles.focusTarget })}
+    >
       <Notice
         tone="danger"
         title={t(titles[error.kind] ?? general)}

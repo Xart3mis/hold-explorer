@@ -17,6 +17,11 @@ file: OpenedView,
  */
 proposed: ColumnMap, 
 /**
+ * The fields no import can do without, as the engine lists them (`Field::REQUIRED`). The
+ * interface marks them as required from this list and keeps none of its own.
+ */
+required: Array<Field>, 
+/**
  * Required fields the proposed mapping does not cover; empty when the file can be read as it is.
  */
 missing_required: Array<Field>, 

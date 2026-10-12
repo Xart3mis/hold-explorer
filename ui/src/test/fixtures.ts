@@ -115,6 +115,7 @@ export function draft(overrides: Partial<ImportDraft> = {}): ImportDraft {
       row_count: 9300,
     },
     proposed: map,
+    required: ["LineId", "Remark", "HoldType"],
     missing_required: [],
     used_saved_mapping: false,
     ...overrides,

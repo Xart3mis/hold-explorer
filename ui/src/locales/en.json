@@ -232,6 +232,7 @@
       "moved": "The column {{column}} now supplies {{field}}. {{previous}} has no column now.",
       "savedTitle": "The saved mapping of this workspace was applied",
       "savedText": "The last import into this workspace saved which header supplies which field, and this file was mapped the same way. Reset to automatic to map it by its headers alone.",
+      "sentBackTitle": "The file cannot be reviewed until every required field has a column",
       "reset": "Reset to automatic",
       "resetDone": "The automatic mapping is back: each field has the column whose header names it.",
       "continue": "Continue",
@@ -398,6 +399,7 @@
         "Done": "Opening {{workspace}}."
       },
       "running": "An import that has started runs to its end. If it fails, nothing is changed.",
+      "progress": "Import in progress",
       "done": "Imported into {{workspace}}: {{holds}}, {{open}} open.",
       "doneReplaced": "Imported into {{workspace}}: {{holds}}, {{open}} open. The snapshot of {{replaced}} was replaced."
     }

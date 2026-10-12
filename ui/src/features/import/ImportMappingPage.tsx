@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -18,14 +18,7 @@ import {
 } from "../../components";
 import { Page } from "../shell/Page";
 import { useImportDraft } from "./draft";
-import {
-  ALL_FIELDS,
-  columnLabel,
-  fieldLabel,
-  OPTIONAL_FIELDS,
-  REQUIRED_FIELDS,
-  type Fields,
-} from "./fields";
+import { columnLabel, fieldLabel, FIELDS, orderFields, type Fields } from "./fields";
 import styles from "./Import.module.css";
 import { ImportProblem } from "./ImportProblem";
 import { ReopenFile, useLeaveImport } from "./leave";
@@ -49,7 +42,7 @@ function sampleOf(preview: readonly (readonly string[])[], column: number): stri
 
 /** The field a column supplies, when it supplies one. */
 function fieldOf(fields: Fields, column: number): Field | undefined {
-  return ALL_FIELDS.find((field) => fields[field] === column);
+  return FIELDS.find((field) => fields[field] === column);
 }
 
 interface PreviewRow {
@@ -64,13 +57,14 @@ interface PreviewRow {
  * review; until every required field has a column it waits, and the page says for which.
  */
 export function ImportMappingPage() {
-  const { draft, choices, choose, from, others } = useImportDraft();
+  const { draft, choices, choose, from, others, sentWith } = useImportDraft();
   const client = useQueryClient();
   const navigate = useNavigate();
   const cancel = useLeaveImport();
   const [arrivedWithFile] = useState(draft !== undefined);
   // What the page has to say about the last change: a column that moved, a mapping that was reset.
   const [said, setSaid] = useState<string | null>(null);
+  const blockedId = useId();
 
   const fields: Fields = choices.fields ?? draft?.proposed.fields ?? {};
 
@@ -98,7 +92,7 @@ export function ImportMappingPage() {
     const column = id === NONE ? undefined : Number(id);
     const previous = column === undefined ? undefined : fieldOf(fields, column);
     const next: Fields = {};
-    for (const other of ALL_FIELDS) {
+    for (const other of FIELDS) {
       const held = fields[other];
       if (other !== field && other !== previous && held !== undefined) next[other] = held;
     }
@@ -156,7 +150,10 @@ export function ImportMappingPage() {
     );
   };
 
-  const missing = REQUIRED_FIELDS.filter((field) => fields[field] === undefined);
+  const ordered = orderFields(draft.required);
+  const missing = ordered.required.filter((field) => fields[field] === undefined);
+  // The review could not read the file for want of required columns, and led back here.
+  const sentBack = sentWith?.kind === "MissingColumns" && missing.length > 0 ? sentWith : null;
 
   const columns = headers.map((_, column): DataTableColumn<PreviewRow> => {
     const owner = fieldOf(fields, column);
@@ -208,6 +205,14 @@ export function ImportMappingPage() {
           <Notice tone="info">{t("import.severalDropped", { count: others + 1 })}</Notice>
         ) : null}
 
+        {sentBack === null ? null : (
+          <div data-kind={sentBack.kind}>
+            <Notice tone="warning" title={t("import.mapping.sentBackTitle")}>
+              {sentBack.message}
+            </Notice>
+          </div>
+        )}
+
         {draft.used_saved_mapping ? (
           <Notice tone="info" title={t("import.mapping.savedTitle")}>
             {t("import.mapping.savedText")}
@@ -233,14 +238,16 @@ export function ImportMappingPage() {
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t("import.mapping.required")}</h2>
-          <div className={styles.fields}>{REQUIRED_FIELDS.map((field) => select(field, true))}</div>
+          <div className={styles.fields}>
+            {ordered.required.map((field) => select(field, true))}
+          </div>
         </section>
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>{t("import.mapping.optional")}</h2>
           <p className={styles.text}>{t("import.mapping.optionalHelp")}</p>
           <div className={styles.fields}>
-            {OPTIONAL_FIELDS.map((field) => select(field, false))}
+            {ordered.optional.map((field) => select(field, false))}
           </div>
         </section>
 
@@ -261,6 +268,7 @@ export function ImportMappingPage() {
               variant="primary"
               isDisabled={missing.length > 0}
               isPending={review.isPending}
+              {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
               onPress={() => {
                 setSaid(null);
                 review.mutate();
@@ -288,11 +296,15 @@ export function ImportMappingPage() {
               {t("common.cancel")}
             </Button>
           </div>
-          {missing.length === 0 ? null : (
-            <p className={styles.text}>
-              {t("import.mapping.blocked", { fields: formatList(missing.map(fieldLabel)) })}
-            </p>
-          )}
+          {/* Why Continue waits. A disabled button cannot be reached by Tab, so the reason is
+              announced when it changes: the region is always there, and what it holds changes. */}
+          <div id={blockedId} role="status" data-part="continue-status">
+            {missing.length === 0 ? null : (
+              <p className={styles.text}>
+                {t("import.mapping.blocked", { fields: formatList(missing.map(fieldLabel)) })}
+              </p>
+            )}
+          </div>
         </div>
 
         <section className={styles.section}>

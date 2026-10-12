@@ -107,6 +107,31 @@ fn opening_a_workbook_gives_headers_a_twenty_row_preview_and_no_missing_fields()
 }
 
 #[test]
+fn every_draft_names_the_required_fields_as_the_engine_lists_them() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    // A file that covers them all, and one that covers none: the list is the same for both.
+    let complete = state
+        .import_open(&fx.synth("holds.xlsx", 1, "P-1"))
+        .unwrap();
+    assert_eq!(complete.required, Field::REQUIRED);
+    assert!(complete.missing_required.is_empty());
+    let bare = state
+        .import_open(&fx.text("kinds.csv", KIND_LINE_WHY))
+        .unwrap();
+    assert_eq!(bare.required, Field::REQUIRED);
+    assert_eq!(bare.missing_required, bare.required);
+    // Another sheet of the same file is another draft, with the same list.
+    let path = fx.input("two.xlsx");
+    two_sheet_workbook(&path);
+    state.import_open(&path).unwrap();
+    assert_eq!(
+        state.import_choose_sheet("Beta").unwrap().required,
+        Field::REQUIRED
+    );
+}
+
+#[test]
 fn a_file_with_other_headers_lists_the_missing_fields_and_cannot_be_reviewed_as_it_is() {
     let fx = Fixture::new();
     let path = fx.text("kinds.csv", KIND_LINE_WHY);

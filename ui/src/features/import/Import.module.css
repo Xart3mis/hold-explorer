@@ -72,6 +72,20 @@
 }
 
 /*
+ * Something that is not a control and still takes the focus: the progress of an import, and the
+ * error of one that failed. The page moves the focus there when the button that had it goes
+ * away. The ring shows where the keyboard is, as on every focusable element.
+ */
+.focusTarget {
+  border-radius: var(--radius-md);
+}
+
+.focusTarget:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/*
  * A ruled list: rows of one height with a hairline under each, like the rows of a table. The
  * facts of a file, the sheets of a workbook, and the mapping in use are such lists.
  */

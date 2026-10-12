@@ -48,6 +48,9 @@ pub struct ImportDraft {
     /// The mapping the app proposes: the automatic one, or the one with the open workspace's
     /// saved mapping applied.
     pub proposed: ColumnMap,
+    /// The fields no import can do without, as the engine lists them (`Field::REQUIRED`). The
+    /// interface marks them as required from this list and keeps none of its own.
+    pub required: Vec<Field>,
     /// Required fields the proposed mapping does not cover; empty when the file can be read as it is.
     pub missing_required: Vec<Field>,
     /// True when the workspace's saved mapping changed the automatic one.
@@ -294,6 +297,7 @@ impl AppState {
         let draft = ImportDraft {
             file: opened.view(PREVIEW_ROWS),
             proposed: proposed.clone(),
+            required: Field::REQUIRED.to_vec(),
             missing_required: proposed.missing_required(),
             used_saved_mapping,
         };

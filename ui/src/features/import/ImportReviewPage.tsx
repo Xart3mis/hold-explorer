@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -12,13 +12,21 @@ import type { ImportCommit } from "../../bindings/ImportCommit";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportPhase } from "../../bindings/ImportPhase";
 import type { ImportReview } from "../../bindings/ImportReview";
-import { Button, Notice, Progress, StatTile, StatTileGroup, useToast } from "../../components";
+import {
+  Button,
+  Notice,
+  Progress,
+  StatTile,
+  StatTileGroup,
+  useToast,
+  VisuallyHidden,
+} from "../../components";
 import { cx } from "../../components/cx";
 import { useShell } from "../shell/context";
 import { Page } from "../shell/Page";
 import { Details } from "./Details";
 import { clearImport, useImportDraft, type ImportChoices } from "./draft";
-import { ALL_FIELDS, columnLabel, fieldLabel } from "./fields";
+import { columnLabel, fieldLabel, orderFields } from "./fields";
 import styles from "./Import.module.css";
 import { ImportProblem } from "./ImportProblem";
 import { ReopenFile, useLeaveImport } from "./leave";
@@ -47,6 +55,17 @@ interface ReviewedProps {
   choose: (chosen: Partial<ImportChoices>) => void;
 }
 
+/**
+ * Moves the focus to an element of the page when the focus is on nothing, as it is when the
+ * control that had it was taken off the page, or when it is still inside `leaving`, a part of the
+ * page that is about to be of no use. A control the user focused elsewhere keeps the focus.
+ */
+function takeFocus(element: HTMLElement | null, leaving: HTMLElement | null = null): void {
+  const active = document.activeElement;
+  const lost = active === null || active === document.body;
+  if (element !== null && (lost || leaving?.contains(active) === true)) element.focus();
+}
+
 /** The review once the file has been read: what was found, the date, the target, and Import. */
 function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const client = useQueryClient();
@@ -70,6 +89,24 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const target = readTarget(review, choices);
   const { workspace } = target;
   const committing = importCommit.isPending;
+  const commitFailed = importCommit.isError;
+  const statusId = useId();
+
+  // Pressing Import takes the button off the page, and a failure takes the progress off it.
+  // Each time the focus would be left on nothing, so it is moved to what took the place: the
+  // progress while the import runs, the error when it has failed.
+  const running = useRef<HTMLDivElement>(null);
+  const problem = useRef<HTMLDivElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
+  const was = useRef({ committing: false, failed: false });
+  useEffect(() => {
+    if (committing && !was.current.committing) takeFocus(running.current);
+    // An import that fails at once never shows its progress, and Import still has the focus.
+    // The workspace is checked again after a failure, which disables Import, so the focus
+    // leaves the button for the error then as well.
+    if (commitFailed && !was.current.failed) takeFocus(problem.current, actions.current);
+    was.current = { committing, failed: commitFailed };
+  }, [committing, commitFailed]);
 
   // The workspace is asked what it has against the file whenever the target or the date that
   // was last left changes. A new workspace has nothing to meet.
@@ -101,19 +138,29 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   else if (target.isNew) {
     if (workspaceName === "") reasons.push(t("import.review.blocked.name"));
   } else if (date.moment !== null) {
-    if (checkError !== null) reasons.push(t("import.review.blocked.check"));
+    // A check that is on its way decides, whether or not an earlier answer is held: the
+    // workspace is asked again because the earlier answer may no longer be true.
+    if (checking.isFetching) reasons.push(t("import.review.blocked.checking"));
+    else if (checkError !== null) reasons.push(t("import.review.blocked.check"));
     else if (check === undefined) reasons.push(t("import.review.blocked.checking"));
     else if (already !== null) reasons.push(t("import.review.blocked.already"));
   }
 
-  // A choice that is made after a failed import answers it: its error no longer applies.
   const decide = (chosen: Partial<ImportChoices>) => {
+    // A choice that is made after a failed import answers it: its error no longer applies.
     if (importCommit.isError) importCommit.reset();
-    choose(chosen);
+    // A snapshot to replace was chosen among those of one workspace on one day. Once the date
+    // or the target is another, that choice is gone for good: it does not return when the date
+    // comes back to the day.
+    const next = { ...choices, ...chosen };
+    const moved =
+      readDate(review.detected, next).moment !== date.moment ||
+      readTarget(review, next).id !== target.id;
+    choose(moved ? { ...chosen, replace: null } : chosen);
   };
 
   const commit = () => {
-    if (date.moment === null || target.id === null) return;
+    if (reasons.length > 0 || date.moment === null || target.id === null) return;
     const request: ImportCommit = {
       target: target.isNew
         ? { kind: "New", name: workspaceName }
@@ -127,6 +174,9 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
     // finishes after the user has gone elsewhere still says what it did.
     importCommit.mutateAsync({ request, onProgress: setPhase }).then(
       (done) => {
+        // Whether the review is still on the screen is settled first. Forgetting the file takes
+        // the review off the screen, and how soon is not for this code to rely on.
+        const here = shown.current;
         clearImport(client);
         const said = {
           workspace: done.open.workspace.name,
@@ -143,7 +193,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
                   replaced: formatDateTime(replaced.taken_at),
                 }),
         });
-        if (shown.current) void navigate(OVERVIEW_PATH, { replace: true });
+        if (here) void navigate(OVERVIEW_PATH, { replace: true });
       },
       () => {
         // The failure is the mutation's error, shown below. What the workspace holds may be
@@ -239,7 +289,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
           }
         >
           <ul aria-label={t("import.review.columnsList")} className={styles.ruled}>
-            {ALL_FIELDS.map((field) => {
+            {orderFields(draft.required).all.map((field) => {
               const column = review.mapping.fields[field];
               return (
                 <li key={field} className={styles.ruledRow}>
@@ -297,7 +347,11 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
       </ReviewTarget>
 
       {importCommit.isError ? (
-        <ImportProblem error={asCommandError(importCommit.error)} general="import.error.commit" />
+        <ImportProblem
+          error={asCommandError(importCommit.error)}
+          general="import.error.commit"
+          focusRef={problem}
+        />
       ) : null}
       {cancel.isError ? (
         <Notice tone="danger" title={t("import.cancelError")}>
@@ -305,15 +359,28 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
         </Notice>
       ) : null}
 
-      {committing ? (
-        <div className={styles.section}>
-          <Progress label={progress} className={styles.progress} />
-          <p className={styles.text}>{t("import.review.running")}</p>
-        </div>
-      ) : (
-        <div className={styles.section}>
-          <div className={styles.actions}>
-            <Button variant="primary" isDisabled={reasons.length > 0} onPress={commit}>
+      <div className={styles.section}>
+        {/* Each of the two is an element of its own: the one that had the focus really goes. */}
+        {committing ? (
+          <div
+            key="running"
+            ref={running}
+            role="group"
+            aria-label={t("import.review.progress")}
+            tabIndex={-1}
+            className={cx(styles.section, styles.focusTarget)}
+          >
+            <Progress label={progress} className={styles.progress} />
+            <p className={styles.text}>{t("import.review.running")}</p>
+          </div>
+        ) : (
+          <div key="actions" ref={actions} className={styles.actions}>
+            <Button
+              variant="primary"
+              isDisabled={reasons.length > 0}
+              onPress={commit}
+              {...(reasons.length > 0 ? { "aria-describedby": statusId } : {})}
+            >
               {t("import.review.import")}
             </Button>
             <Button
@@ -326,7 +393,17 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
               {t("common.cancel")}
             </Button>
           </div>
-          {reasons.length === 0 ? null : (
+        )}
+        {/*
+          What Import waits for, and how far a running import has come. A disabled button cannot
+          be reached by Tab, and a progress bar does not say when its label changes, so both are
+          said here: the region is always on the page, and a change of what it holds is
+          announced. The reasons are also shown; the phase is already shown by the bar.
+        */}
+        <div id={statusId} role="status" data-part="import-status">
+          {committing ? (
+            <VisuallyHidden>{progress}</VisuallyHidden>
+          ) : reasons.length === 0 ? null : (
             <ul className={styles.reasons}>
               {reasons.map((reason) => (
                 <li key={reason} className={styles.text}>
@@ -336,7 +413,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </ul>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -367,11 +444,14 @@ export function ImportReviewPage() {
       // The Rust side has no file open any more: it has to be opened again.
       clearImport(client);
       void navigate(IMPORT_PATH, { replace: true, state: { from, reopen: true } });
-    } else if (failed === "MissingColumns") {
-      // The mapping page marks the fields that have no column.
-      void navigate(IMPORT_MAPPING_PATH, { replace: true, state: { from } });
+    } else if (failure?.kind === "MissingColumns") {
+      // The mapping page marks the fields that have no column, and says why the user is there.
+      void navigate(IMPORT_MAPPING_PATH, {
+        replace: true,
+        state: { from, others, error: { kind: failure.kind, message: failure.message } },
+      });
     }
-  }, [failed, client, navigate, from]);
+  }, [failed, failure?.kind, failure?.message, client, navigate, from, others]);
 
   if (draft === undefined) return arrivedWithFile ? null : <ReopenFile from={from} />;
 

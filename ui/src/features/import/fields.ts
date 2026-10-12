@@ -1,7 +1,10 @@
 import { t, type MessageKey } from "../../app/i18n";
 import type { Field } from "../../bindings/Field";
 
-/** The name of each field, in the text catalog. A field without a name does not compile. */
+/**
+ * The name of each field, in the text catalog, in the order the export writes its columns. A
+ * field without a name does not compile.
+ */
 const labels: Record<Field, MessageKey> = {
   SourceId: "import.field.SourceId",
   LineId: "import.field.LineId",
@@ -24,29 +27,26 @@ export function fieldLabel(field: Field): string {
   return t(labels[field]);
 }
 
+function isField(name: string): name is Field {
+  return Object.hasOwn(labels, name);
+}
+
+/** Every field, in the order the export writes its columns. */
+export const FIELDS: readonly Field[] = Object.keys(labels).filter(isField);
+
 /**
- * The fields an import cannot do without. The engine decides this (`ColumnMap::missing_required` of hx-core)
- * and reports the ones a file lacks, but no command lists them, so the list is repeated here.
+ * The fields in the order a page lists them: the ones the draft calls required first, as the
+ * engine orders them, then the others. Which fields are required is the engine's to say
+ * (`ImportDraft.required`); nothing here repeats it.
  */
-export const REQUIRED_FIELDS: readonly Field[] = ["LineId", "Remark", "HoldType"];
-
-/** The other fields, in the order the export writes its columns. */
-export const OPTIONAL_FIELDS: readonly Field[] = [
-  "SourceId",
-  "Name",
-  "Role",
-  "Discipline",
-  "Created",
-  "Released",
-  "ReleaseRemark",
-  "ReleaseDate",
-  "ModelSize",
-  "LdtSize",
-  "StressCalc",
-];
-
-/** Every field: the required ones first. */
-export const ALL_FIELDS: readonly Field[] = [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS];
+export function orderFields(required: readonly Field[]): {
+  required: readonly Field[];
+  optional: readonly Field[];
+  all: readonly Field[];
+} {
+  const optional = FIELDS.filter((field) => !required.includes(field));
+  return { required, optional, all: [...required, ...optional] };
+}
 
 /** A mapping: each field that has a column, with the zero-based index of that column. */
 export type Fields = Partial<Record<Field, number>>;

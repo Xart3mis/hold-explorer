@@ -98,7 +98,7 @@ export function useImportDraft() {
   );
 
   const home = start.open === null ? WELCOME_PATH : OVERVIEW_PATH;
-  const { from, others } = readImportLocation(location.state, home);
+  const { from, others, error } = readImportLocation(location.state, home);
   return {
     /** The file that is open for import; absent when none is. */
     draft,
@@ -111,5 +111,7 @@ export function useImportDraft() {
     from,
     /** How many more files were dropped with this one; the page the file opens on says so. */
     others,
+    /** The error another page of the flow sent the user here with, when one did. */
+    sentWith: error ?? null,
   };
 }
