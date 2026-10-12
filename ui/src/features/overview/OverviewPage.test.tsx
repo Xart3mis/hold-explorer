@@ -1,5 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
 import { formatDateTime } from "../../app/format";
@@ -8,9 +8,9 @@ import type { AppStart } from "../../bindings/AppStart";
 import type { OverviewView } from "../../bindings/OverviewView";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
-import { must, renderApp } from "../../test/app";
+import { must, renderApp, type RenderAppOptions } from "../../test/app";
 import { opened, openStart, otherWorkspace, snapshot, workspace } from "../../test/fixtures";
-import { commandFailure } from "../../test/ipc";
+import { commandFailure, type Handlers } from "../../test/ipc";
 import { group, overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
@@ -19,11 +19,38 @@ const text = en.overview;
 const OLDER = "2026-09-30T14:05:00";
 const NEWEST = "2026-10-07T08:00:00";
 
-/** What the description of the page says for a snapshot of more than one hold. */
-function description(takenAt: string, holds: string): string {
+type Answer = NonNullable<Handlers["overview"]>;
+
+/**
+ * Renders the app on the Overview with the test's own answer to the `overview` command. The
+ * answer is a spy, so a test sees that the page asked, and what it asked with: the default
+ * answer of `renderApp` is never what a test of this page reads.
+ */
+function renderOverview(
+  answer: Answer = () => overviewView(),
+  options: Omit<RenderAppOptions, "path"> = {},
+) {
+  const overview = vi.fn(answer);
+  const app = renderApp({
+    start: openStart(),
+    ...options,
+    path: "/overview",
+    handlers: { ...options.handlers, overview },
+  });
+  return { ...app, overview };
+}
+
+/** What the page says under its title once the numbers of a snapshot of several holds are there. */
+function description(takenAt: string, holds: string, open: string): string {
   return text.description_other
     .replace("{{date}}", formatDateTime(takenAt))
-    .replace("{{count, number}}", holds);
+    .replace("{{count, number}}", holds)
+    .replace("{{open, number}}", open);
+}
+
+/** What it says before they are: the snapshot, and no number. */
+function snapshotOnly(takenAt: string): string {
+  return text.descriptionSnapshot.replace("{{date}}", formatDateTime(takenAt));
 }
 
 /** The page, once its title is there. */
@@ -35,14 +62,27 @@ async function page(): Promise<HTMLElement> {
   return must(title.closest<HTMLElement>("[data-part='page']"), "the page around its title");
 }
 
-/** The page, once the overview has been read: its numbers are there and nothing is loading. */
-async function loaded(): Promise<HTMLElement> {
+/** The figures and the groups of the page. */
+function content(main: HTMLElement): HTMLElement {
+  return must(main.querySelector<HTMLElement>("[data-part='overview']"), "the content of the page");
+}
+
+/** The line the page keeps for assistive technology: what it is doing, or nothing. */
+function status(main: HTMLElement): HTMLElement {
+  return must(main.querySelector<HTMLElement>(":scope > [role='status']"), "the status line");
+}
+
+/**
+ * The page, once the overview has been read: its numbers are there and nothing is being read.
+ * Every reading so far was asked for with the complete default filter.
+ */
+async function loaded(overview: Mock<Answer>): Promise<HTMLElement> {
   const main = await page();
   await waitFor(() => {
-    expect(
-      must(main.querySelector("[data-part='overview']"), "the content of the page"),
-    ).not.toHaveAttribute("aria-busy");
+    expect(content(main)).not.toHaveAttribute("aria-busy");
   });
+  expect(overview).toHaveBeenCalled();
+  for (const [args] of overview.mock.calls) expect(args).toEqual({ spec: openHoldsFilter() });
   return main;
 }
 
@@ -81,10 +121,9 @@ function tableRows(name: string): string[][] {
     );
 }
 
-/** The switch of a group: it is described by the title of its group. */
-function tableSwitch(title: string): HTMLElement {
-  return screen.getByRole("checkbox", { name: text.showAsTable, description: title });
-}
+/** The switches of the two groups: each is named with its group. */
+const disciplineSwitch = () => screen.getByRole("checkbox", { name: text.showDisciplineAsTable });
+const holdTypeSwitch = () => screen.getByRole("checkbox", { name: text.showHoldTypeAsTable });
 
 const DISCIPLINE_ROWS = [
   "Civil 1,515 612 lines",
@@ -96,20 +135,36 @@ const DISCIPLINE_ROWS = [
   "Unspecified 241 166 lines",
 ];
 
+/** Groups the command could send in any order, two of them with the same count. */
+const TIED = [
+  group("Process", 846, 398),
+  group("Structural", 377, 190),
+  group("Civil", 1515, 612),
+  group("Electrical", 377, 1),
+  group("Unspecified", 241, 166, ""),
+];
+
 describe("the Overview with a snapshot", () => {
-  it("asks for the open holds with the complete default filter", async () => {
-    const overview = vi.fn(() => overviewView());
-    renderApp({ start: openStart(), path: "/overview", handlers: { overview } });
-    await loaded();
+  it("asks once for the open holds, with the complete default filter", async () => {
+    const { overview } = renderOverview();
+    await loaded(overview);
     expect(overview).toHaveBeenCalledTimes(1);
     expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
   });
 
-  it("names the snapshot in view under its title, and has no breadcrumb and no page action", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    const main = await page();
-    await loaded();
-    expect(within(main).getByText(description(NEWEST, "9,300"))).toBeInTheDocument();
+  it("says under its title how many holds the snapshot has and how many of them are open", async () => {
+    const { overview } = renderOverview();
+    const main = await loaded(overview);
+    // The total and the open holds are the two counts of the snapshot, so the line and the first
+    // figure agree.
+    expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
+      "The snapshot of 7 Oct 2026, 08:00 has 9,300 holds, 5,042 of them open.",
+    );
+    expect(description(NEWEST, "9,300", "5,042")).toBe(
+      "The snapshot of 7 Oct 2026, 08:00 has 9,300 holds, 5,042 of them open.",
+    );
+    expect(tile(text.openHolds)).toHaveTextContent("5,042");
+    // A destination has no breadcrumb, and this page has no action yet.
     expect(screen.queryByRole("navigation", { name: en.breadcrumb.label })).not.toBeInTheDocument();
     const header = must(main.querySelector("header"), "the page header");
     expect(within(header).queryByRole("button")).not.toBeInTheDocument();
@@ -118,9 +173,24 @@ describe("the Overview with a snapshot", () => {
     );
   });
 
+  it.each([
+    { holds: 1, open: 1, says: "has 1 hold, 1 of them open." },
+    { holds: 1, open: 0, says: "has 1 hold, 0 of them open." },
+    { holds: 9300, open: 0, says: "has 9,300 holds, 0 of them open." },
+    { holds: 9300, open: 1, says: "has 9,300 holds, 1 of them open." },
+  ])("writes the line for $holds holds of which $open are open", async ({ holds, open, says }) => {
+    const { overview } = renderOverview(() =>
+      overviewView({ snapshot: snapshot(2, NEWEST, { row_count: holds, open_count: open }) }),
+    );
+    const main = await loaded(overview);
+    expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
+      `The snapshot of ${formatDateTime(NEWEST)} ${says}`,
+    );
+  });
+
   it("shows the four figures as formatted numbers", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
+    const { overview } = renderOverview();
+    await loaded(overview);
     expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 5,042`);
     expect(tile(text.linesOnHold)).toHaveTextContent(`${text.linesOnHold} 2,208`);
     expect(tile(text.singleHoldLines)).toHaveTextContent(`${text.singleHoldLines} 714`);
@@ -135,14 +205,11 @@ describe("the Overview with a snapshot", () => {
 
   it("shows a dash and the reason when the snapshot gives no median age", async () => {
     const view = overviewView();
-    renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: {
-        overview: () => ({ ...view, summary: { ...view.summary, median_age_days: null } }),
-      },
-    });
-    await loaded();
+    const { overview } = renderOverview(() => ({
+      ...view,
+      summary: { ...view.summary, median_age_days: null },
+    }));
+    await loaded(overview);
     const age = tile(text.medianAge);
     expect(age).toHaveTextContent(
       `${text.medianAge} ${en.common.noValue} ${text.medianAgeMissing}`,
@@ -153,8 +220,8 @@ describe("the Overview with a snapshot", () => {
   });
 
   it("shows the bar rows of both groups in the order given, each with its label and both counts", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
+    const { overview } = renderOverview();
+    await loaded(overview);
     expect(barRows(text.byDiscipline)).toEqual(DISCIPLINE_ROWS);
     expect(barRows(text.byHoldType)).toEqual([
       "Vendor data 2,118 1,507 lines",
@@ -168,23 +235,8 @@ describe("the Overview with a snapshot", () => {
   });
 
   it("puts the rows in the order of their holds, and keeps the given order where two are equal", async () => {
-    renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: {
-        overview: () =>
-          overviewView({
-            by_discipline: [
-              group("Process", 846, 398),
-              group("Structural", 377, 190),
-              group("Civil", 1515, 612),
-              group("Electrical", 377, 1),
-              group("Unspecified", 241, 166, ""),
-            ],
-          }),
-      },
-    });
-    await loaded();
+    const { overview } = renderOverview(() => overviewView({ by_discipline: TIED }));
+    await loaded(overview);
     expect(barRows(text.byDiscipline)).toEqual([
       "Civil 1,515 612 lines",
       "Process 846 398 lines",
@@ -195,8 +247,8 @@ describe("the Overview with a snapshot", () => {
   });
 
   it("draws each bar as long as its holds are of the largest count of its group", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
+    const { overview } = renderOverview();
+    await loaded(overview);
     // 1,515 is the largest: 1,285 of it is 84.8 percent, 241 of it is 15.9 percent.
     expect(barLengths(text.byDiscipline)).toEqual([
       "100%",
@@ -211,9 +263,56 @@ describe("the Overview with a snapshot", () => {
     expect(barLengths(text.byHoldType)).toEqual(["100%", "66.4%", "43%", "28.7%"]);
   });
 
+  it("draws no bar, and still shows the counts, in a group whose largest count is 0", async () => {
+    const { overview } = renderOverview(() =>
+      overviewView({ by_discipline: [group("Civil", 0, 0), group("Piping", 0, 0)] }),
+    );
+    await loaded(overview);
+    // Nothing is divided by the largest count when it is 0: the bars have no length.
+    expect(barLengths(text.byDiscipline)).toEqual(["0%", "0%"]);
+    expect(barRows(text.byDiscipline)).toEqual(["Civil 0 0 lines", "Piping 0 0 lines"]);
+    // The other group is drawn as always.
+    expect(barLengths(text.byHoldType)).toEqual(["100%", "66.4%", "43%", "28.7%"]);
+  });
+
+  it(
+    "writes a very large count with its separators, in the figures, the bars, and the table",
+    SLOW,
+    async () => {
+      const view = overviewView();
+      const { user, overview } = renderOverview(() => ({
+        ...view,
+        summary: { ...view.summary, holds: 12345678, lines: 9876543 },
+        by_discipline: [group("Piping", 12345678, 9876543), group("Civil", 1234567, 987654)],
+      }));
+      await loaded(overview);
+      expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 12,345,678`);
+      expect(tile(text.linesOnHold)).toHaveTextContent(`${text.linesOnHold} 9,876,543`);
+      expect(barRows(text.byDiscipline)).toEqual([
+        "Piping 12,345,678 9,876,543 lines",
+        "Civil 1,234,567 987,654 lines",
+      ]);
+      expect(barLengths(text.byDiscipline)).toEqual(["100%", "10%"]);
+      // A count is one piece of text in its own cell of the row, whatever its length.
+      const bars = screen.getByRole("group", { name: text.byDiscipline });
+      const [first] = bars.querySelectorAll("[data-part='bar-row']");
+      expect([...must(first, "the first row").children].map((part) => part.textContent)).toEqual([
+        "Piping",
+        "",
+        "12,345,678",
+        "9,876,543 lines",
+      ]);
+      await user.click(disciplineSwitch());
+      expect(tableRows(text.byDiscipline)).toEqual([
+        ["Piping", "12,345,678", "9,876,543"],
+        ["Civil", "1,234,567", "987,654"],
+      ]);
+    },
+  );
+
   it("draws the bars as plain data: one neutral bar a row, and nothing to press", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
+    const { overview } = renderOverview();
+    await loaded(overview);
     const bars = screen.getByRole("group", { name: text.byDiscipline });
     expect(bars.querySelectorAll("[data-part='bar']")).toHaveLength(7);
     expect(bars.querySelector("[data-ordinal]")).toBeNull();
@@ -222,11 +321,29 @@ describe("the Overview with a snapshot", () => {
     expect(bars.querySelector("[tabindex]")).toBeNull();
   });
 
+  it("names each switch with its group, and shows the same words on both", async () => {
+    const { overview } = renderOverview();
+    await loaded(overview);
+    // Two controls on one page do not share a name; what is seen is part of each name.
+    expect(text.showDisciplineAsTable).not.toBe(text.showHoldTypeAsTable);
+    for (const [control, name] of [
+      [disciplineSwitch(), text.showDisciplineAsTable],
+      [holdTypeSwitch(), text.showHoldTypeAsTable],
+    ] as const) {
+      expect(control).toHaveAccessibleName(name);
+      expect(name).toContain(text.showAsTable);
+      expect(must(control.closest("label"), "the label of the switch")).toHaveTextContent(
+        text.showAsTable,
+      );
+      expect(control).not.toBeChecked();
+    }
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  });
+
   it("shows a group as a table with the same rows in the same order", SLOW, async () => {
-    const { user } = renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
-    const toTable = tableSwitch(text.byDiscipline);
-    expect(toTable).not.toBeChecked();
+    const { user, overview } = renderOverview();
+    await loaded(overview);
+    const toTable = disciplineSwitch();
 
     await user.click(toTable);
     expect(toTable).toBeChecked();
@@ -249,7 +366,7 @@ describe("the Overview with a snapshot", () => {
     // The table stands in for the bars of its group; the other group keeps its bars.
     expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: text.byHoldType })).toBeInTheDocument();
-    expect(tableSwitch(text.byHoldType)).not.toBeChecked();
+    expect(holdTypeSwitch()).not.toBeChecked();
 
     // The switch is worked by the keyboard as well, and brings the bars back.
     toTable.focus();
@@ -259,10 +376,30 @@ describe("the Overview with a snapshot", () => {
     expect(screen.queryByRole("grid")).not.toBeInTheDocument();
   });
 
+  it(
+    "keeps in the table the order the bars have, also where two counts are equal",
+    SLOW,
+    async () => {
+      const { user, overview } = renderOverview(() => overviewView({ by_discipline: TIED }));
+      await loaded(overview);
+      const bars = barRows(text.byDiscipline).map((row) => row.split(" ")[0]);
+      await user.click(disciplineSwitch());
+      const table = tableRows(text.byDiscipline);
+      expect(table.map(([label]) => label)).toEqual(bars);
+      expect(table).toEqual([
+        ["Civil", "1,515", "612"],
+        ["Process", "846", "398"],
+        ["Structural", "377", "190"],
+        ["Electrical", "377", "1"],
+        ["Unspecified", "241", "166"],
+      ]);
+    },
+  );
+
   it("names the first column of each table after what its group is by", SLOW, async () => {
-    const { user } = renderApp({ start: openStart(), path: "/overview" });
-    await loaded();
-    await user.click(tableSwitch(text.byHoldType));
+    const { user, overview } = renderOverview();
+    await loaded(overview);
+    await user.click(holdTypeSwitch());
     const grid = screen.getByRole("grid", { name: text.byHoldType });
     expect(
       within(grid)
@@ -274,35 +411,36 @@ describe("the Overview with a snapshot", () => {
 
   it("says so in place of the bars when the snapshot has no open hold", async () => {
     const view = overviewView();
-    renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: {
-        overview: () => ({
-          ...view,
-          summary: {
-            holds: 0,
-            lines: 0,
-            single_hold_lines: 0,
-            median_age_days: null,
-            median_duration_days: 18,
-          },
-          by_discipline: [],
-          by_hold_type: [],
-        }),
+    const { overview } = renderOverview(() => ({
+      ...view,
+      snapshot: snapshot(2, NEWEST, { open_count: 0 }),
+      summary: {
+        holds: 0,
+        lines: 0,
+        single_hold_lines: 0,
+        median_age_days: null,
+        median_duration_days: 18,
       },
-    });
-    await loaded();
+      by_discipline: [],
+      by_hold_type: [],
+    }));
+    await loaded(overview);
     expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 0`);
     expect(screen.getAllByText(text.noOpenHolds)).toHaveLength(2);
     // There are no rows to show as a table.
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 
+  it("says nothing to assistive technology once it is read, and is not busy", async () => {
+    const { overview } = renderOverview();
+    const main = await loaded(overview);
+    expect(status(main)).toBeEmptyDOMElement();
+    expect(content(main)).not.toHaveAttribute("data-stale");
+  });
+
   it("refers to nothing the page does not show yet", async () => {
-    renderApp({ start: openStart(), path: "/overview" });
-    const main = await page();
-    await loaded();
+    const { overview } = renderOverview();
+    const main = await loaded(overview);
     expect(main.textContent).not.toMatch(
       /previous|trend|blocker|attention|top lines|soon|not available/i,
     );
@@ -314,17 +452,15 @@ describe("the Overview with a snapshot", () => {
 
 describe("the Overview while it changes", () => {
   it("on a first load shows blocks in the shape of the figures and of the bars", async () => {
-    renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: { overview: () => new Promise<OverviewView>(() => undefined) },
-    });
+    const { overview } = renderOverview(() => new Promise<OverviewView>(() => undefined));
     const main = await page();
-    expect(await within(main).findByText(text.loading)).toHaveAttribute("role", "status");
-    expect(must(main.querySelector("[data-part='overview']"), "the content")).toHaveAttribute(
-      "aria-busy",
-      "true",
-    );
+    await waitFor(() => {
+      expect(status(main)).toHaveTextContent(text.loading);
+    });
+    expect(content(main)).toHaveAttribute("aria-busy", "true");
+    expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
+    // The line that is announced is not inside what is busy, so it is not held back.
+    expect(content(main)).not.toContainElement(status(main));
     // The labels of the figures are known; a block stands for each value.
     const figures = screen.getByRole("group", { name: text.figures });
     for (const label of [text.openHolds, text.linesOnHold, text.singleHoldLines, text.medianAge]) {
@@ -348,20 +484,23 @@ describe("the Overview while it changes", () => {
     expect(within(main).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(within(main).queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    // The snapshot is known before its numbers are.
-    expect(within(main).getByText(description(NEWEST, "9,300"))).toBeInTheDocument();
+    // The snapshot is known before its numbers are: the line names it and gives no number.
+    expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
+      snapshotOnly(NEWEST),
+    );
+    expect(main.querySelector("header")?.textContent).not.toMatch(/9,300|5,042/);
   });
 
   it("shows why the overview could not be loaded, and loads it on a retry", async () => {
     const message =
       "The workspace file could not be read (it is locked by another program). Close the other program, then try again.";
-    const overview = vi
-      .fn<() => OverviewView>()
+    const answer = vi
+      .fn<Answer>()
       .mockImplementationOnce(() => {
         throw commandFailure("Io", message);
       })
       .mockImplementation(() => overviewView());
-    const { user } = renderApp({ start: openStart(), path: "/overview", handlers: { overview } });
+    const { user, overview } = renderOverview(answer);
     const main = await page();
     const alert = await within(main).findByRole("alert");
     expect(alert).toHaveTextContent(text.error);
@@ -370,38 +509,42 @@ describe("the Overview while it changes", () => {
       "data-kind",
       "Io",
     );
-    // The error stands in place of the figures and the bars.
+    // The error stands in place of the figures and the bars, and is the one thing that is said.
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(status(main)).toBeEmptyDOMElement();
+    expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
+      snapshotOnly(NEWEST),
+    );
     // A command's own answer is not asked for again by itself.
     expect(overview).toHaveBeenCalledTimes(1);
 
     await user.click(within(alert).getByRole("button", { name: en.common.retry }));
-    expect(await screen.findByRole("group", { name: text.figures })).toBeInTheDocument();
+    await loaded(overview);
     expect(overview).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(tile(text.openHolds)).toHaveTextContent("5,042");
   });
 
   it(
-    "reads the overview again for another snapshot, and keeps the numbers of before, dimmed, meanwhile",
+    "reads the overview again for another snapshot, keeps the numbers of before, dimmed and marked as being updated, and says when the new ones are there",
     SLOW,
     async () => {
       const older: OverviewView = overviewView({
-        snapshot: snapshot(1, OLDER, { row_count: 9120 }),
+        snapshot: snapshot(1, OLDER, { row_count: 9120, open_count: 5127 }),
         is_latest: false,
         summary: {
           holds: 5127,
-          lines: 3650,
-          single_hold_lines: 1301,
+          lines: 2251,
+          single_hold_lines: 730,
           median_age_days: 36,
           median_duration_days: 17,
         },
         by_discipline: [group("Piping", 1420, 577), group("Civil", 1398, 590)],
       });
       let finish: (view: OverviewView) => void = () => undefined;
-      const overview = vi
-        .fn<() => OverviewView | Promise<OverviewView>>()
+      const answer = vi
+        .fn<Answer>()
         .mockImplementationOnce(() => overviewView())
         .mockImplementationOnce(
           () =>
@@ -409,17 +552,14 @@ describe("the Overview while it changes", () => {
               finish = resolve;
             }),
         );
-      const { user } = renderApp({
-        start: openStart(),
-        path: "/overview",
-        handlers: { overview, snapshot_select: ({ id }) => opened({ selected: id }) },
+      const { user, overview, container } = renderOverview(answer, {
+        handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
       });
-      const main = await page();
-      await loaded();
-      const content = must(main.querySelector("[data-part='overview']"), "the content");
-      expect(content).not.toHaveAttribute("data-stale");
+      const main = await loaded(overview);
+      const shown = content(main);
+      expect(shown).not.toHaveAttribute("data-stale");
       // The table of one group is open: it stays open through the change.
-      await user.click(tableSwitch(text.byHoldType));
+      await user.click(holdTypeSwitch());
 
       await user.click(
         screen.getByRole("button", {
@@ -429,43 +569,47 @@ describe("the Overview while it changes", () => {
       const menu = await screen.findByRole("menu", { name: en.snapshots.menu });
       await user.click(must(within(menu).getAllByRole("menuitemradio")[1], "the older snapshot"));
 
-      // The command is asked again, and what was there stays, marked as stale: no skeleton.
+      // The command is asked again, and what was there stays: no skeleton.
       await waitFor(() => {
         expect(overview).toHaveBeenCalledTimes(2);
       });
       await waitFor(() => {
-        expect(content).toHaveAttribute("data-stale");
+        expect(shown).toHaveAttribute("data-stale");
       });
-      expect(content).not.toHaveAttribute("aria-busy");
+      // The numbers on screen belong to the snapshot of before. That is said, not only shown: the
+      // content is busy, and a line that is announced says that the overview is being updated.
+      expect(shown).toHaveAttribute("aria-busy", "true");
+      expect(status(main)).toHaveTextContent(text.updating);
       expect(tile(text.openHolds)).toHaveTextContent("5,042");
       expect(barRows(text.byDiscipline)).toEqual(DISCIPLINE_ROWS);
       expect(main.querySelector("[data-part='skeleton']")).toBeNull();
-      expect(within(main).getByText(description(NEWEST, "9,300"))).toBeInTheDocument();
+      // The line under the title still names the snapshot those numbers are of.
+      expect(within(main).getByText(description(NEWEST, "9,300", "5,042"))).toBeInTheDocument();
+      await expectAccessible(container, { page: true });
 
       await act(async () => {
         finish(older);
         await Promise.resolve();
       });
-      await waitFor(() => {
-        expect(content).not.toHaveAttribute("data-stale");
-      });
+      await loaded(overview);
+      expect(shown).not.toHaveAttribute("data-stale");
+      expect(status(main)).toHaveTextContent(text.updated);
       expect(tile(text.openHolds)).toHaveTextContent("5,127");
       expect(tile(text.medianAge)).toHaveTextContent("36 d");
       expect(barRows(text.byDiscipline)).toEqual([
         "Piping 1,420 577 lines",
         "Civil 1,398 590 lines",
       ]);
-      expect(within(main).getByText(description(OLDER, "9,120"))).toBeInTheDocument();
-      expect(tableSwitch(text.byHoldType)).toBeChecked();
+      expect(within(main).getByText(description(OLDER, "9,120", "5,127"))).toBeInTheDocument();
+      expect(holdTypeSwitch()).toBeChecked();
       expect(screen.getByRole("grid", { name: text.byHoldType })).toBeInTheDocument();
     },
   );
 
   it("reads the overview again when another workspace is the open one", async () => {
-    const overview = vi.fn(() => overviewView());
     const start = openStart();
-    renderApp({ start, path: "/overview", handlers: { overview } });
-    await loaded();
+    const { overview } = renderOverview(() => overviewView(), { start });
+    await loaded(overview);
     expect(overview).toHaveBeenCalledTimes(1);
 
     // The same snapshot id in another workspace is another snapshot.
@@ -478,6 +622,44 @@ describe("the Overview while it changes", () => {
     await waitFor(() => {
       expect(overview).toHaveBeenCalledTimes(2);
     });
+    await loaded(overview);
+  });
+
+  it("does not say that a workspace has no snapshots while its overview is still being read", async () => {
+    const none = openStart({
+      open: opened({
+        workspace: workspace({ snapshot_count: 0, latest_taken_at: null }),
+        snapshots: [],
+        selected: null,
+      }),
+    });
+    const answer = vi
+      .fn<Answer>()
+      .mockImplementationOnce(() => null)
+      .mockImplementationOnce(() => new Promise<OverviewView>(() => undefined));
+    const { overview } = renderOverview(answer, { start: none });
+    const main = await page();
+    await within(main).findByRole("heading", { level: 2, name: text.emptyTitle });
+
+    // Another workspace is opened, one with snapshots. What was read for the workspace of before
+    // is that it has none, and that is not shown for this one.
+    act(() => {
+      queryClient.setQueryData<AppStart>(keys.start, {
+        ...none,
+        open: opened({ workspace: otherWorkspace }),
+      });
+    });
+    await waitFor(() => {
+      expect(overview).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(status(main)).toHaveTextContent(text.loading);
+    });
+    expect(
+      within(main).queryByRole("heading", { level: 2, name: text.emptyTitle }),
+    ).not.toBeInTheDocument();
+    expect(content(main)).toHaveAttribute("aria-busy", "true");
+    expect(main.querySelectorAll("[data-part='skeleton-row']").length).toBeGreaterThan(2);
   });
 
   it("keys what it read by the workspace, the snapshot, and the filter", () => {
@@ -503,25 +685,26 @@ describe("the Overview of a workspace without snapshots", () => {
     });
 
   it("says what is absent and what to do, and shows no figure", async () => {
-    renderApp({ start: empty(), path: "/overview", handlers: { overview: () => null } });
+    const { overview } = renderOverview(() => null, { start: empty() });
     const main = await page();
     expect(
       await within(main).findByRole("heading", { level: 2, name: text.emptyTitle }),
     ).toBeInTheDocument();
+    expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
-    // One action, and no snapshot to name under the title.
+    // One action, no snapshot to name under the title, and nothing being read.
     expect(within(main).getAllByRole("button")).toHaveLength(1);
     expect(must(main.querySelector("header"), "the page header").querySelector("p")).toBeNull();
+    expect(status(main)).toBeEmptyDOMElement();
   });
 
   it("starts an import from its action", async () => {
     windowApi.chooseImportFile.mockResolvedValue("/exports/Holds.xlsx");
-    const { user, router } = renderApp({
+    const { user, router } = renderOverview(() => null, {
       start: empty(),
-      path: "/overview",
-      handlers: { overview: () => null, import_open: () => new Promise(() => undefined) },
+      handlers: { import_open: () => new Promise(() => undefined) },
     });
     const main = await page();
     await user.click(await within(main).findByRole("button", { name: text.emptyAction }));
@@ -542,48 +725,35 @@ describe("the Overview and the accessibility checker", () => {
     SLOW,
     async () => {
       const view = overviewView();
-      const { user, container } = renderApp({
-        start: openStart({ open: opened({ selected: 1 }) }),
-        path: "/overview",
-        handlers: {
-          overview: () => ({ ...view, summary: { ...view.summary, median_age_days: null } }),
-        },
-      });
-      await loaded();
+      const { user, container, overview } = renderOverview(
+        () => ({ ...view, summary: { ...view.summary, median_age_days: null } }),
+        { start: openStart({ open: opened({ selected: 1 }) }) },
+      );
+      await loaded(overview);
       await expectAccessible(container, { page: true });
-      await user.click(tableSwitch(text.byDiscipline));
+      await user.click(disciplineSwitch());
       await screen.findByRole("grid", { name: text.byDiscipline });
       await expectAccessible(container, { page: true });
     },
   );
 
   it("has no violation while it loads, when it failed, and without a snapshot", SLOW, async () => {
-    const loading = renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: { overview: () => new Promise<OverviewView>(() => undefined) },
+    const loading = renderOverview(() => new Promise<OverviewView>(() => undefined));
+    await waitFor(async () => {
+      expect(status(await page())).toHaveTextContent(text.loading);
     });
-    await screen.findByText(text.loading);
     await expectAccessible(loading.container, { page: true });
     loading.unmount();
 
-    const failed = renderApp({
-      start: openStart(),
-      path: "/overview",
-      handlers: {
-        overview: () => {
-          throw commandFailure("Io", "The workspace file could not be read. Try again.");
-        },
-      },
+    const failed = renderOverview(() => {
+      throw commandFailure("Io", "The workspace file could not be read. Try again.");
     });
     await screen.findByRole("alert");
     await expectAccessible(failed.container, { page: true });
     failed.unmount();
 
-    const none = renderApp({
+    const none = renderOverview(() => null, {
       start: openStart({ open: opened({ snapshots: [], selected: null }) }),
-      path: "/overview",
-      handlers: { overview: () => null },
     });
     await screen.findByRole("heading", { level: 2, name: text.emptyTitle });
     await expectAccessible(none.container, { page: true });

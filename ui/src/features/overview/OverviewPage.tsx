@@ -33,8 +33,18 @@ const OPEN_HOLDS = openHoldsFilter();
 
 /** The two groups of the page: what each is by, in the words of its title and of its table. */
 const DIMENSIONS = [
-  { id: "discipline", title: "overview.byDiscipline", column: "overview.columnDiscipline" },
-  { id: "holdType", title: "overview.byHoldType", column: "overview.columnHoldType" },
+  {
+    id: "discipline",
+    title: "overview.byDiscipline",
+    column: "overview.columnDiscipline",
+    toTable: "overview.showDisciplineAsTable",
+  },
+  {
+    id: "holdType",
+    title: "overview.byHoldType",
+    column: "overview.columnHoldType",
+    toTable: "overview.showHoldTypeAsTable",
+  },
 ] as const;
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
@@ -82,6 +92,12 @@ interface GroupSectionProps {
   title: string;
   /** What a row of it is: "Discipline". The header of the first column of its table. */
   column: string;
+  /**
+   * The name of its switch for assistive technology. Both switches show "Show as table"; the
+   * name adds the group, so that two controls of one page do not share a name. It starts with
+   * the words that are shown, so that the switch can also be asked for by them.
+   */
+  toTable: string;
   /** The groups as the command sent them. Absent on a first load. */
   groups?: readonly Group[];
   skeletonRows: number;
@@ -100,6 +116,7 @@ interface GroupSectionProps {
 function GroupSection({
   title,
   column,
+  toTable,
   groups,
   skeletonRows,
   asTable,
@@ -132,7 +149,7 @@ function GroupSection({
           {title}
         </h2>
         {rows.length === 0 ? null : (
-          <Checkbox isSelected={asTable} onChange={onAsTableChange} aria-describedby={titleId}>
+          <Checkbox isSelected={asTable} onChange={onAsTableChange} aria-label={toTable}>
             {t("overview.showAsTable")}
           </Checkbox>
         )}
@@ -173,6 +190,11 @@ function GroupSection({
  * selected snapshot, and reads it again when either changes; the numbers of before stay on
  * screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
  * state that starts an import.
+ *
+ * What the eye is told by the skeletons and by the dimming, assistive technology is told by one
+ * status line that the page keeps for as long as it is open: that the overview is loading, that
+ * it is being updated, that it is updated. The line sits beside the content, not inside it,
+ * because the content is marked as busy meanwhile and what is busy may hold its changes back.
  */
 export function OverviewPage() {
   const { start } = useShell();
@@ -186,21 +208,47 @@ export function OverviewPage() {
     queryFn: () => api.overview(OPEN_HOLDS),
     enabled: open !== null,
   });
-  const view: OverviewView | null | undefined = query.isError ? undefined : query.data;
+  // What was read for the snapshot or the workspace of before is shown until the new reading is
+  // there, with one exception: that the workspace of before had no snapshot says nothing about
+  // this one, so the page waits as on a first load.
+  const view: OverviewView | null | undefined =
+    query.isError || (query.isPlaceholderData && query.data === null) ? undefined : query.data;
+  const isLoading = view === undefined && !query.isError;
+  // The numbers on screen belong to another snapshot or workspace, and the new ones are on their way.
+  const isUpdating = view !== undefined && view !== null && query.isPlaceholderData;
+  // Whether the numbers on screen took the place of such numbers: said once they are there.
+  const [change, setChange] = useState({ isUpdating: false, isUpdated: false });
+  if (change.isUpdating !== isUpdating) {
+    setChange({
+      isUpdating,
+      isUpdated: change.isUpdating && view !== undefined && view !== null,
+    });
+  }
+  const status = isLoading
+    ? t("overview.loading")
+    : isUpdating
+      ? t("overview.updating")
+      : change.isUpdated && view !== undefined && view !== null
+        ? t("overview.updated")
+        : "";
 
-  // The snapshot the numbers on screen belong to. Before they are there, and when they could not
-  // be read, it is the one the shell has selected.
-  const inView =
+  // The line under the title names the snapshot the numbers on screen belong to, with its two
+  // counts as the command gives them: all its holds, and those of them that are open. So the
+  // line and the first figure agree. Before the numbers are there, and when they could not be
+  // read, it names the snapshot the shell has selected and gives no number.
+  const selected = open?.snapshots.find((snapshot) => snapshot.id === open.selected);
+  const description =
     view === null
       ? undefined
-      : (view?.snapshot ?? open?.snapshots.find((snapshot) => snapshot.id === open.selected));
-  const description =
-    inView === undefined
-      ? undefined
-      : t("overview.description", {
-          date: formatDateTime(inView.taken_at),
-          count: inView.row_count,
-        });
+      : view !== undefined
+        ? t("overview.description", {
+            date: formatDateTime(view.snapshot.taken_at),
+            count: view.snapshot.row_count,
+            open: view.snapshot.open_count,
+          })
+        : selected === undefined
+          ? undefined
+          : t("overview.descriptionSnapshot", { date: formatDateTime(selected.taken_at) });
 
   const groupsOf = (id: DimensionId, from: OverviewView) =>
     id === "discipline" ? from.by_discipline : from.by_hold_type;
@@ -211,6 +259,7 @@ export function OverviewPage() {
       width="content"
       {...(description === undefined ? {} : { description })}
     >
+      <VisuallyHidden role="status">{status}</VisuallyHidden>
       {query.isError ? (
         <ErrorState
           error={asCommandError(query.error)}
@@ -238,20 +287,18 @@ export function OverviewPage() {
       ) : (
         <div
           data-part="overview"
-          aria-busy={view === undefined ? "true" : undefined}
-          data-stale={view !== undefined && query.isPlaceholderData ? "" : undefined}
+          aria-busy={isLoading || isUpdating ? "true" : undefined}
+          data-stale={isUpdating ? "" : undefined}
           className={styles.overview}
         >
-          {view === undefined ? (
-            <VisuallyHidden role="status">{t("overview.loading")}</VisuallyHidden>
-          ) : null}
           <Figures {...(view === undefined ? {} : { summary: view.summary })} />
           <div className={styles.groups}>
-            {DIMENSIONS.map(({ id, title, column }) => (
+            {DIMENSIONS.map(({ id, title, column, toTable }) => (
               <GroupSection
                 key={id}
                 title={t(title)}
                 column={t(column)}
+                toTable={t(toTable)}
                 skeletonRows={SKELETON_ROWS[id]}
                 {...(view === undefined ? {} : { groups: groupsOf(id, view) })}
                 asTable={asTable[id]}

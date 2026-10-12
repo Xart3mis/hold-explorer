@@ -36,10 +36,12 @@ export const DEV_STATES = [
   "list-error",
   "warning",
   // The Overview: a workspace without snapshots, a snapshot whose file has no creation dates, a
-  // first load that never ends, a failure, and groups of three and of twenty-five values.
+  // first load that never ends, an update that never ends (select another snapshot to see it), a
+  // failure, and groups of three and of twenty-five values.
   "empty",
   "no-dates",
   "overview-loading",
+  "overview-updating",
   "overview-error",
   "overview-few",
   "overview-many",
@@ -254,6 +256,7 @@ function world(state: DevState, theme: Theme): World {
     case "open":
     case "no-dates":
     case "overview-loading":
+    case "overview-updating":
     case "overview-error":
     case "overview-few":
     case "overview-many":
@@ -308,6 +311,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
   const { start, snapshots, folderReadable } = world(state, theme);
   let nextId = 1;
   let nextSnapshot = 5;
+  let overviewReadings = 0;
   const draft = devDraft(state) ?? exportDraft();
   // The same day as the file, earlier, and the very same file: what a target can already hold.
   const earlier: SnapshotInfo = {
@@ -504,7 +508,12 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     },
     import_cancel: () => null,
     overview: () => {
+      overviewReadings += 1;
       if (state === "overview-loading") return new Promise(() => undefined);
+      // The first reading answers; every reading after it stays on its way.
+      if (state === "overview-updating" && overviewReadings > 1) {
+        return new Promise(() => undefined);
+      }
       if (state === "overview-error") {
         throw failure(
           "Io",

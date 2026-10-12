@@ -751,3 +751,27 @@ describe("accessibility of the pages in the shell", () => {
     await expectAccessible(document.body, { page: true });
   });
 });
+
+describe("the area the page scrolls in", () => {
+  /** The declarations of one rule of the shell's stylesheet. */
+  function rule(selector: string): string {
+    const css = readFileSync(join(import.meta.dirname, "Shell.module.css"), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+    const start = css.indexOf(`\n${selector} {`);
+    if (start < 0) throw new Error(`The shell's stylesheet has no rule ${selector}.`);
+    return css.slice(start, css.indexOf("}", start));
+  }
+
+  it("keeps the room of its scrollbar, so a page that starts to scroll does not shift sideways", () => {
+    expect(rule(".scroll")).toMatch(/overflow:\s*auto;/);
+    expect(rule(".scroll")).toMatch(/scrollbar-gutter:\s*stable;/);
+  });
+
+  it("gives the notices above it the same room, so a notice ends where the page ends", () => {
+    expect(rule(".notices")).toMatch(/scrollbar-gutter:\s*stable;/);
+    // The room is only kept by a box that could scroll; this one never does.
+    expect(rule(".notices")).toMatch(/overflow:\s*hidden;/);
+  });
+});
