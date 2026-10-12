@@ -16,14 +16,13 @@ use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use error::CommandError;
 pub use import::{
-    ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, ImportTarget, TargetCheck,
-    TargetChoice, WarningGroup,
+    ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
 };
-pub use settings::{
-    load_settings, load_settings_checked, save_settings, LoadedSettings, Settings, Theme,
-};
+pub use settings::{Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
-pub use workspaces::{AppStart, UnreadableView, WorkspaceListView, WorkspaceOpen, WorkspaceView};
+pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
+
+use settings::{load_settings_checked, save_settings, LoadedSettings};
 
 /// What the application holds between commands.
 pub struct AppState {
@@ -75,7 +74,8 @@ impl AppState {
     }
 
     /// The id of the selected snapshot of the open workspace.
-    pub fn selected_snapshot(&self) -> Option<i64> {
+    #[cfg(test)]
+    fn selected_snapshot(&self) -> Option<i64> {
         self.selected
     }
 
@@ -99,7 +99,16 @@ impl AppState {
     /// workspace that is gone or unreadable leaves `open` empty and raises no error. A folder
     /// that cannot be listed gives an empty list and `list_error`; one that does not exist yet
     /// is not an error.
+    ///
+    /// The interface calls this each time its page loads, and a page that loads again holds
+    /// nothing of before. So the state starts over too: the open workspace, its selection, its
+    /// dataset, and a file open for import are dropped before the last workspace is reopened,
+    /// and what the result says is open is exactly what the state holds.
     pub fn start(&mut self) -> AppStart {
+        self.open = None;
+        self.selected = None;
+        self.dataset = None;
+        self.draft = None;
         let folder = self.folder();
         let (raw, list_error) = match list_workspaces(&folder) {
             Ok(raw) => (raw, None),
@@ -174,16 +183,23 @@ impl AppState {
         self.load_from(list, id)
     }
 
-    /// Opens the workspace of this id from a listing of the folder in use.
+    /// Opens the workspace of this id from a listing of the folder in use. A file the user
+    /// copied inside the folder keeps its id; of several files with one id, the file named by
+    /// the id is opened, which is the one the app created.
     fn load_from(
         &self,
         list: WorkspaceList,
         id: &str,
     ) -> Result<(Workspace, WorkspaceOpen), CommandError> {
-        let path = match list.workspaces.into_iter().find(|w| w.id == id) {
+        let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
+        let (own, copies): (Vec<_>, Vec<_>) = list
+            .workspaces
+            .into_iter()
+            .filter(|w| w.id == id)
+            .partition(|w| named(&w.path));
+        let path = match own.into_iter().chain(copies).next() {
             Some(info) => info.path,
             None => {
-                let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
                 return Err(match list.unreadable.into_iter().find(|u| named(&u.path)) {
                     Some(unreadable) => unreadable.error.into(),
                     None => CommandError::new(

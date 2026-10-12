@@ -9,6 +9,7 @@ use tempfile::TempDir;
 
 use super::error::CommandError;
 use super::settings::{load_settings, save_settings, Settings, Theme};
+use super::snapshots::ViewRef;
 use super::AppState;
 
 struct Fixture {
@@ -253,6 +254,125 @@ fn start_with_a_deleted_last_workspace_opens_none_and_lists_the_others() {
         .map(|w| w.id.as_str())
         .collect();
     assert_eq!(ids, [kept.as_str()]);
+}
+
+/// Writes a synthetic file to import and returns its path.
+fn synthetic_file(fx: &Fixture) -> PathBuf {
+    let cfg = SynthConfig::new(3, 10, 40);
+    let path = fx.dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    path
+}
+
+#[test]
+fn a_second_start_reopens_the_last_workspace_with_the_newest_snapshot_selected() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let ids = import_two(&fx.workspaces(), &id);
+    state.open_workspace(&id).unwrap();
+    state.select_snapshot(ids[0]).unwrap();
+
+    // The page was loaded again: it holds nothing of before, so the state starts over as well.
+    let started = state.start();
+    let open = started.open.expect("the last workspace is reopened");
+    assert_eq!(open.workspace.id, id);
+    assert_eq!(open.selected, ids.last().copied());
+    assert_eq!(state.selected_snapshot(), open.selected);
+}
+
+#[test]
+fn a_second_start_that_cannot_reopen_the_workspace_leaves_nothing_of_it_in_the_state() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let ids = import_two(&fx.workspaces(), &id);
+    assert!(state.start().open.is_some());
+    let view = ViewRef {
+        workspace_id: id.clone(),
+        snapshot_id: ids.last().copied(),
+    };
+    // A dataset is kept, and a file is open for import.
+    let spec = hx_core::filter::FilterSpec::default();
+    assert!(state.overview(&spec, &view).unwrap().is_some());
+    state.import_open(&synthetic_file(&fx)).unwrap();
+
+    // The workspace file stops being one this version reads. (Windows does not let an open file
+    // be deleted, so the test does not delete it; a file that is gone takes the same path.)
+    set_version_99(&fx.workspaces(), &id);
+    let started = state.start();
+    assert!(started.open.is_none());
+    assert_eq!(started.list.unreadable.len(), 1);
+
+    // The state agrees with what the interface was told: nothing is open.
+    assert_eq!(
+        state.overview(&spec, &view).unwrap_err().kind,
+        "NoWorkspace"
+    );
+    assert_eq!(state.selected_snapshot(), None);
+    assert_eq!(state.rename_workspace("B").unwrap_err().kind, "NoWorkspace");
+    assert_eq!(
+        state.select_snapshot(ids[0]).unwrap_err().kind,
+        "NoWorkspace"
+    );
+    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_second_start_after_the_workspace_file_was_deleted_answers_no_workspace() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let ids = import_two(&fx.workspaces(), &id);
+    assert!(state.start().open.is_some());
+    let view = ViewRef {
+        workspace_id: id.clone(),
+        snapshot_id: ids.last().copied(),
+    };
+    std::fs::remove_file(fx.workspaces().join(format!("{id}.holdx-ws"))).unwrap();
+    assert!(state.start().open.is_none());
+    let spec = hx_core::filter::FilterSpec::default();
+    assert_eq!(
+        state.overview(&spec, &view).unwrap_err().kind,
+        "NoWorkspace"
+    );
+}
+
+#[test]
+fn of_two_files_with_one_id_the_file_named_by_the_id_is_opened() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("Plant").unwrap().workspace.id;
+    let folder = fx.workspaces();
+    let original = folder.join(format!("{id}.holdx-ws"));
+    // The user copied the file inside the folder, twice: both copies keep the id. Their names
+    // sort before and after the original in the listing.
+    for (file, name) in [("copy-1.holdx-ws", "A copy"), ("copy-2.holdx-ws", "Z copy")] {
+        let copy = folder.join(file);
+        std::fs::copy(&original, &copy).unwrap();
+        Workspace::open(&copy).unwrap().rename(name).unwrap();
+    }
+    let listed: Vec<String> = state
+        .list_workspaces()
+        .unwrap()
+        .workspaces
+        .into_iter()
+        .map(|w| w.name)
+        .collect();
+    assert_eq!(listed, ["A copy", "Plant", "Z copy"]);
+
+    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "Plant");
+    assert_eq!(
+        state.start().open.map(|open| open.workspace.name),
+        Some("Plant".to_string())
+    );
+
+    // Without a file named by the id, one of the copies is opened as before.
+    drop(state);
+    std::fs::remove_file(&original).unwrap();
+    let mut state = fx.state();
+    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "A copy");
 }
 
 #[test]

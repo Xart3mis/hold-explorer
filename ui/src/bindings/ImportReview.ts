@@ -64,4 +64,12 @@ mapping: ColumnMap,
 /**
  * Where the file may go.
  */
-target: ImportTarget, };
+target: ImportTarget, 
+/**
+ * The first year a snapshot date may have; a commit with an earlier one is refused.
+ */
+min_year: number, 
+/**
+ * The last year a snapshot date may have; a commit with a later one is refused.
+ */
+max_year: number, };

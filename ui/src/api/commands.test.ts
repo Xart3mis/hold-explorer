@@ -33,6 +33,8 @@ const review: ImportReview = {
   warnings: [],
   mapping: { fields: {}, extras: [] },
   target: { suggested: null, matching: [], all: [] },
+  min_year: 2000,
+  max_year: 2100,
 };
 
 const done: ImportDone = {

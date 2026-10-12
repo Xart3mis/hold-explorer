@@ -24,7 +24,12 @@ pub fn parse_report_date(text: &str) -> Option<NaiveDateTime> {
         .ok()
 }
 
-const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
+/// The first year a snapshot date may have. A written year before it is a typing mistake.
+pub const MIN_SNAPSHOT_YEAR: i32 = 2000;
+/// The last year a snapshot date may have. A written year after it is a typing mistake.
+pub const MAX_SNAPSHOT_YEAR: i32 = 2100;
+
+const YEARS: std::ops::RangeInclusive<i32> = MIN_SNAPSHOT_YEAR..=MAX_SNAPSHOT_YEAR;
 
 /// Where the snapshot date came from, in order of trust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

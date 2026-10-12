@@ -591,6 +591,41 @@ fn a_date_known_from_the_file_time_keeps_its_source_when_sent_back_without_its_f
 }
 
 #[test]
+fn the_review_carries_the_range_of_years_the_engine_accepts() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let review = state.import_review(None).unwrap();
+    assert_eq!(review.min_year, hx_core::snapshot_date::MIN_SNAPSHOT_YEAR);
+    assert_eq!(review.max_year, hx_core::snapshot_date::MAX_SNAPSHOT_YEAR);
+    assert_eq!((review.min_year, review.max_year), (2000, 2100));
+
+    // The two years themselves are accepted; the ones beside them are not.
+    for (taken, accepted) in [
+        ("2000-01-01 00:00:00", true),
+        ("2100-12-31 23:59:59", true),
+        ("1999-12-31 23:59:59", false),
+        ("2101-01-01 00:00:00", false),
+    ] {
+        state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+        let result = state.import_commit(
+            ImportCommit {
+                date_edited: true,
+                ..commit(new_target("A"), taken)
+            },
+            &no_progress,
+        );
+        match result {
+            Ok(_) => assert!(accepted, "{taken} was accepted"),
+            Err(error) => {
+                assert!(!accepted, "{taken} was refused: {}", error.message);
+                assert_eq!(error.kind, "SnapshotDateOutOfRange");
+            }
+        }
+    }
+}
+
+#[test]
 fn years_outside_2000_to_2100_are_refused_before_anything_is_written() {
     let fx = Fixture::new();
     let mut state = fx.state();

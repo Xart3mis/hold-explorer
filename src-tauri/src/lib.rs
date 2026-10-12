@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-pub mod app;
+mod app;
 mod commands;
 
 use std::sync::Mutex;
@@ -129,6 +129,26 @@ mod tests {
             .trim()
             .parse()
             .expect("the tool prints one hex color")
+    }
+
+    #[test]
+    fn the_window_is_never_smaller_than_the_design_allows() {
+        // DESIGN.md: the layout is designed down to 1024 by 640.
+        let window = &config()["app"]["windows"][0];
+        assert_eq!(window["minWidth"], 1024);
+        assert_eq!(window["minHeight"], 640);
+        let design = std::fs::read_to_string(format!("{ROOT}/DESIGN.md"))
+            .expect("DESIGN.md is readable")
+            .replace("\r\n", "\n");
+        assert!(design.contains("| `--layout-window-min-width` | `1024px` |"));
+        assert!(design.contains("| `--layout-window-min-height` | `640px` |"));
+    }
+
+    #[test]
+    fn the_version_is_written_once_in_the_cargo_manifest() {
+        // Without a version of its own, the configuration takes the one of the package, which
+        // `AppStart.version` reports as well.
+        assert_eq!(config().get("version"), None);
     }
 
     #[test]

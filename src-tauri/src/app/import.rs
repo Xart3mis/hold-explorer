@@ -8,7 +8,7 @@ use chrono::{Datelike, NaiveDateTime, SubsecRound};
 use hx_core::import::SkippedRow;
 use hx_core::load::{open_file, open_sheet, parse_opened, Loaded, Opened, OpenedView};
 use hx_core::mapping::{ColumnMap, Field};
-use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
+use hx_core::snapshot_date::{SnapshotDate, SnapshotSource, MAX_SNAPSHOT_YEAR, MIN_SNAPSHOT_YEAR};
 use hx_core::warning::{ImportWarning, WarningKind};
 use hx_store::{
     delete_workspace, list_workspaces, ImportOptions, SnapshotInfo, StoreError, Workspace,
@@ -26,8 +26,6 @@ const PREVIEW_ROWS: usize = 20;
 const MAX_SKIPPED: usize = 200;
 /// How many example warnings a review lists per kind.
 const MAX_EXAMPLES: usize = 5;
-/// The years a snapshot date may have.
-const YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
 
 /// A file that is open for import but not yet imported.
 pub(super) struct Draft {
@@ -113,6 +111,10 @@ pub struct ImportReview {
     pub mapping: ColumnMap,
     /// Where the file may go.
     pub target: ImportTarget,
+    /// The first year a snapshot date may have; a commit with an earlier one is refused.
+    pub min_year: i32,
+    /// The last year a snapshot date may have; a commit with a later one is refused.
+    pub max_year: i32,
 }
 
 /// What importing into a workspace would meet.
@@ -266,13 +268,13 @@ impl TargetCheck {
 }
 
 fn check_year(at: NaiveDateTime) -> Result<(), CommandError> {
-    if YEARS.contains(&at.year()) {
+    if (MIN_SNAPSHOT_YEAR..=MAX_SNAPSHOT_YEAR).contains(&at.year()) {
         return Ok(());
     }
     Err(CommandError::new(
         "SnapshotDateOutOfRange",
         format!(
-            "The snapshot date {at} is outside the years 2000 to 2100. Dates outside that range are almost always a typing mistake. Enter a date between the years 2000 and 2100, for example 2026-10-07."
+            "The snapshot date {at} is outside the years {MIN_SNAPSHOT_YEAR} to {MAX_SNAPSHOT_YEAR}. Dates outside that range are almost always a typing mistake. Enter a date between the years {MIN_SNAPSHOT_YEAR} and {MAX_SNAPSHOT_YEAR}, for example 2026-10-07."
         ),
     ))
 }
@@ -385,6 +387,8 @@ impl AppState {
             warnings: group_warnings(&loaded.parsed.warnings),
             mapping: loaded.map.clone(),
             target: self.import_target(loaded.project_no())?,
+            min_year: MIN_SNAPSHOT_YEAR,
+            max_year: MAX_SNAPSHOT_YEAR,
         })
     }
 

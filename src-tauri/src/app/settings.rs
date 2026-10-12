@@ -48,17 +48,16 @@ pub struct LoadedSettings {
     pub blocked: Option<CommandError>,
 }
 
-/// Reads the settings. Returns the defaults when the file is missing. A file that cannot be read
-/// or parsed is moved to `settings.json.unreadable` (replacing an older one) and the defaults
-/// are returned. When it cannot be moved either, the defaults are returned and the file stays
-/// where it is; this function does not tell the caller, so use [`load_settings_checked`] when
-/// the settings will be saved again.
-pub fn load_settings(config_dir: &Path) -> Settings {
+/// The settings alone, as [`load_settings_checked`] reads them, for tests that save nothing.
+#[cfg(test)]
+pub(super) fn load_settings(config_dir: &Path) -> Settings {
     load_settings_checked(config_dir).settings
 }
 
-/// Like [`load_settings`], and reports when saving is blocked because the file could be neither
-/// read nor moved aside.
+/// Reads the settings. Returns the defaults when the file is missing. A file that cannot be read
+/// or parsed is moved to `settings.json.unreadable` (replacing an older one) and the defaults
+/// are returned. When it cannot be moved either, the defaults are returned, the file stays
+/// where it is, and `blocked` says why saving must be refused.
 pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
     let path = config_dir.join(FILE_NAME);
     let parsed = match std::fs::read(&path) {
@@ -95,8 +94,9 @@ pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
 }
 
 /// Writes the settings to a temporary file beside the target, flushes it to disk, and renames it
-/// over the target.
-pub fn save_settings(config_dir: &Path, settings: &Settings) -> Result<(), CommandError> {
+/// over the target. Only [`AppState`](super::AppState) calls it, after its check that the file
+/// in place was not left untouched because it could be neither read nor moved aside.
+pub(super) fn save_settings(config_dir: &Path, settings: &Settings) -> Result<(), CommandError> {
     let path = config_dir.join(FILE_NAME);
     let failed = |error: &dyn std::fmt::Display| {
         CommandError::new(

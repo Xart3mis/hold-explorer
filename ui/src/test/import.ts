@@ -209,6 +209,8 @@ export function review(overrides: Partial<ImportReview> = {}): ImportReview {
       matching: [unit573],
       all: [otherWorkspace, unit573],
     },
+    min_year: 2000,
+    max_year: 2100,
     ...overrides,
   };
 }
