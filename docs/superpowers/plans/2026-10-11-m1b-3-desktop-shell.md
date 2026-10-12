@@ -569,3 +569,37 @@ export function ComingSoon(props: { destination: DestinationId }): JSX.Element;
 | 16 portable executable, AppImage (built, not published) | 3, 11 |
 
 Left for later plans: 6.6 bulk import, global search, filters and chips, the right detail panel, the other destinations, saved views, the command palette and the shortcut sheet (M1c); export, the update check, the WebView2 check at startup, release builds with checksums, and end-to-end tests of the built app (M1d); "Open history bundle", snapshot manager with undoable deletion, compare and trends (M2); density, language, and author name in Settings (with the features that use them).
+
+## Post-review corrections (2026-10-12)
+
+The plan was executed task by task, each task reviewed on its own, the branch reviewed as a whole in two halves (the Rust side with the configuration, and the interface), and corrected in one fix wave. Where this plan's interfaces and the repository differ, the repository is right. The spec was updated to match (sections 5.2, 6.1, 9.1, 9.4, 13, 13.1, 14).
+
+Decisions the owner made during execution:
+
+| Decision | Effect |
+|---|---|
+| Coming-soon screens | The sidebar shows all nine destinations; the seven not built open a screen that says what the destination will show (Decision 6 above, as amended). |
+| No purple; the accent is teal | `DESIGN.md` and its checker hold it: no hue between 270 and 350 degrees anywhere. |
+| Plain data is neutral gray; ramps are blue | Teal is reserved for the primary action, selection, and focus. Rose and burnt orange stay in the six-color set. |
+| A breadcrumb | `PageHeader` shows a breadcrumb in place of the back link on pages below a destination. |
+
+| Area | Plan said | Now |
+|---|---|---|
+| Design context (Task 1) | A token checker for contrast pairs. | The checker also runs every chart mark against every fill it can sit on, keeps series colors apart from status colors, guards the hue rules, and has committed tests of its own failing cases. `DESIGN.md` gained a tooltip, a menu-like list, the breadcrumb, and the rule for pending controls. |
+| Boundary types (Task 2) | `OpenedView.preview` shows dates as ISO text. | Dates are shown as the cell's own text (`yyyy-mm-dd hh:mm:ss`). `ImportDraft` also carries `proposed` (the mapping the app proposes, beside the engine's automatic one) and `required` (the engine's list of required fields). `ImportReview` carries the year range. |
+| Scaffold (Task 3) | Capability `core:default`, `dialog:default`, `opener:default`, `window-state:default`; minimum window 960 by 600; the release profile for every crate. | Capability `core:default`, `dialog:allow-open`, `opener:allow-reveal-item-in-dir`. Minimum window 1024 by 640, as `DESIGN.md` says. The engine crates and SQLite are built for speed, the shell for size. The page carries no inline style; the window's first-frame color is set natively. CI allows 90 minutes for a cold build and checks that the Windows binary carries its manifest. |
+| Package versions (Task 3) | Tauri CLI 2.12, newest. | The newest version the package manager's release-age policy accepts; no exclusion is ever added to get a newer one. TypeScript stays on 6 until the lint tooling accepts 7. |
+| State (Task 4) | A failed save of the last workspace fails the command. | Opening or creating a workspace never fails because settings cannot be saved: `WorkspaceOpen.warning` reports it. `AppStart.list_error` reports a workspaces folder that cannot be read. A settings file that cannot be read is set aside, and when that fails too, saving is refused and the file is never overwritten. Every command takes the state lock inside the blocking pool, the theme command included. A second start of the interface resets the state. |
+| Command arguments (Tasks 4 to 6) | Not tied by any test. | One fixture of every command's arguments is read by both sides: the interface must send it, and a test on Tauri's mock runtime invokes every command with it and proves each key is read. |
+| Import commands (Task 5) | Example headers `Kind,Line,Why` give three missing fields; `replace` is passed to the store. | `Line` is an alias of the line id, so the example gives two. A `replace` is honored only for a snapshot the review offered (same day, or the same file); anything else is refused before any write. A date counts as edited whenever it differs from the detected one at whole-second precision. A file that is not a regular file, or is larger than 256 MiB, is refused by the engine. A workspace created for an import that then fails is removed, and the message says so when it cannot be. |
+| Overview query (Task 6) | `overview(spec)`. | `overview(spec, view)`: the interface says which workspace and snapshot it is showing, and the command refuses another view with `ViewChanged`. The interface reads such data only through `useSnapshotQuery`, and changes the workspace or the selection only through `workspaceAction()`, which orders those actions and cancels reads in flight. |
+| Components (Task 7) | `PageHeader` with a back link; a global 20 s test limit appeared during the task. | A breadcrumb. A selected table row stays selected until the parent clears it; a table without a selection handler is read-only. Tests have 5 s each locally and 15 s on CI, with a named allowance for the slow ones. |
+| Shell (Task 8) | A sidebar on every page; undo of a rename by name. | No sidebar while no workspace is open. Undo of a rename acts only on the workspace it renamed. The control that started an action shows a spinner; its siblings are inert. |
+| Import pages (Task 9) | For "no data sheet", each sheet is offered as a choice; Cancel at any step. | The engine reports that error only when no sheet has rows, so the page offers another file. No Cancel while a commit runs. The page's button is "Import snapshot". A commit that fails after the page was left is reported by the shell. |
+| Overview (Task 10) | Bars as the base component drew them. | Bars are static rows (no hover, no tab stop) until filtering by a bar exists. The header gives the snapshot's total and its open count. A limited snapshot is marked. |
+
+Measured on the final commit (release build, 10,000 rows, idle machine): load and build about 120 ms, filtered views 7 ms, a page of 200 holds 0.5 ms, full solve order 21 ms, import into a workspace about 30 ms, read back as a dataset about 45 ms. Application binary 11.6 MiB on Linux; AppImage 106 MB.
+
+Not verified by this plan, and why: the app in a real window (the machine that ran the work has no virtual display; every screen was checked in a headless browser against mocked commands), and anything on Windows (CI is the first run). Both are gates for merging.
+
+Carried into later plans (kept in the working notes): virtualise the table and decide its column model before the first M1c screen; move the import flow's local layout pieces into the components and into `DESIGN.md`; split `useApp`; a typed union of error kinds with structured data; recovery after a panic without a restart; merging the saved mapping; the cache of datasets keyed by workspace and snapshot; a crash log, a native message on startup failure, and the WebView2 check (M1d); stripping unused locales from the bundle (M1d); a toast and undo registry before snapshot deletion (M2).
