@@ -12,8 +12,8 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router";
 import type { Destination, DestinationId } from "../../app/destinations";
-import { t } from "../../text/i18n";
 import { cx } from "../../components/cx";
+import { t } from "../../text/i18n";
 import { NavItem } from "./NavItem";
 import styles from "./Shell.module.css";
 

@@ -1,13 +1,13 @@
 import { useId, useState } from "react";
 import { asCommandError } from "../../api/error";
 import { showInFolder } from "../../api/window";
-import { t } from "../../text/i18n";
-import { useApp } from "../../app/useApp";
+import { useThemeSetting } from "../../app/actions/theme";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import type { CommandError } from "../../bindings/CommandError";
 import type { Theme } from "../../bindings/Theme";
 import { Button, Notice, Select, type SelectOption } from "../../components";
-import { useShell } from "../../app/shell/context";
-import { Page } from "../../app/shell/Page";
+import { t } from "../../text/i18n";
 import styles from "./SettingsPage.module.css";
 
 const THEMES: readonly Theme[] = ["Dark", "Light", "System"];
@@ -22,7 +22,7 @@ function isTheme(value: string): value is Theme {
  */
 export function SettingsPage() {
   const { start } = useShell();
-  const { setTheme } = useApp();
+  const { setTheme } = useThemeSetting();
   const [folderError, setFolderError] = useState<CommandError | null>(null);
   const folderLabelId = useId();
 

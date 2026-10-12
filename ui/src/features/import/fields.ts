@@ -1,5 +1,5 @@
-import { t, type MessageKey } from "../../text/i18n";
 import type { Field } from "../../bindings/Field";
+import { t, type MessageKey } from "../../text/i18n";
 
 /**
  * The name of each field, in the text catalog, in the order the export writes its columns. A

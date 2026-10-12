@@ -9,7 +9,6 @@ import { StrictMode, useEffect, useRef, useState, type CSSProperties, type React
 import { createRoot } from "react-dom/client";
 import { I18nProvider } from "react-aria-components";
 import "../text/i18n";
-import { locale } from "../text/i18n";
 import "../design/fonts.css";
 import "../design/tokens.css";
 import "../app.css";
@@ -47,6 +46,7 @@ import selectStyles from "../components/Select/Select.module.css";
 import { Toast } from "../components/ToastRegion/ToastRegion";
 import tooltipStyles from "../components/Tooltip/Tooltip.module.css";
 import { applyTheme } from "../design/theme";
+import { locale } from "../text/i18n";
 import styles from "./gallery.module.css";
 
 type ThemeName = "dark" | "light";

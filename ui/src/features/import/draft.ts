@@ -6,9 +6,9 @@ import { useCallback, useSyncExternalStore } from "react";
 import { useLocation } from "react-router";
 import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
+import { useShell } from "../../app/shell/context";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportReview } from "../../bindings/ImportReview";
-import { useShell } from "../../app/shell/context";
 import type { Fields } from "./fields";
 import { readImportLocation } from "./start";
 

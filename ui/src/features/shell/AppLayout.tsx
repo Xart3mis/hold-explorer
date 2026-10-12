@@ -6,14 +6,15 @@ import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
 import { inApp, onFileDrag } from "../../api/window";
+import { useSnapshotActions } from "../../app/actions/snapshots";
+import { useStart } from "../../app/actions/start";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
-import { formatDateTime } from "../../text/format";
-import { t } from "../../text/i18n";
-import { useApp } from "../../app/useApp";
+import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
 import type { AppStart } from "../../bindings/AppStart";
 import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../components";
+import { formatDateTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
-import { ShellContext, type ShellReport } from "../../app/shell/context";
 import type { ShellProblem } from "./problem";
 import { shortcutBindings, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
@@ -99,7 +100,8 @@ interface ShellProps {
 
 /** The shell once the application start is known. */
 function LoadedShell({ start, destinations }: ShellProps) {
-  const { selectSnapshot, isBusy } = useApp();
+  const { selectSnapshot } = useSnapshotActions();
+  const { isBusy } = useStart();
   const navigate = useNavigate();
   const location = useLocation();
   const problemId = useId();
@@ -107,6 +109,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const isSwitching = useIsMutating({ mutationKey: keys.switching }) > 0;
   const [dragged, setDragged] = useState<readonly string[] | null>(null);
   const [problem, setProblem] = useState<ShellProblem | null>(null);
+  // What the shell was asked to say with `notify`: nothing failed, and the user should know.
+  const [notice, setNotice] = useState<ShellNotice | null>(null);
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   // Why files cannot be dropped on this window, when the window refused to say when one is.
   const [dropProblem, setDropProblem] = useState<string | null>(null);
@@ -214,7 +218,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
     setProblem({ kind: "action", title, message: error.message });
   }, []);
   const shell = useMemo(
-    () => ({ start, dragged, arrivedAt, report }),
+    () => ({ start, dragged, arrivedAt, report, notify: setNotice }),
     [start, dragged, arrivedAt, report],
   );
 
@@ -229,7 +233,11 @@ function LoadedShell({ start, destinations }: ShellProps) {
         />
         {hasSidebar ? <Sidebar destinations={destinations} /> : null}
         <main className={styles.content}>
-          {problem !== null || dropProblem !== null || warning !== null || older !== null ? (
+          {problem !== null ||
+          notice !== null ||
+          dropProblem !== null ||
+          warning !== null ||
+          older !== null ? (
             <div className={styles.notices}>
               {problem === null ? null : (
                 <div id={problemId}>
@@ -243,6 +251,17 @@ function LoadedShell({ start, destinations }: ShellProps) {
                     {problem.message}
                   </Notice>
                 </div>
+              )}
+              {notice === null ? null : (
+                <Notice
+                  tone="info"
+                  title={notice.title}
+                  onDismiss={() => {
+                    setNotice(null);
+                  }}
+                >
+                  {notice.text}
+                </Notice>
               )}
               {dropProblem === null ? null : (
                 <Notice
@@ -316,7 +335,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
  * rendered once the start is known.
  */
 export function AppLayout({ destinations }: { destinations: readonly Destination[] }) {
-  const { start, error, reload, isReloading } = useApp();
+  const { start, error, reload, isReloading } = useStart();
   const navigate = useNavigate();
 
   if (start === undefined) {

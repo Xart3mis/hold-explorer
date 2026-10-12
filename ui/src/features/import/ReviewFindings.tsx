@@ -1,11 +1,11 @@
 import { memo, useMemo } from "react";
-import { formatCount } from "../../text/format";
-import { t, type MessageKey } from "../../text/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SkipKind } from "../../bindings/SkipKind";
 import type { SkippedRow } from "../../bindings/SkippedRow";
 import type { WarningKind } from "../../bindings/WarningKind";
 import { DataTable, type DataTableColumn } from "../../components";
+import { formatCount } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import { Details } from "./Details";
 import styles from "./Import.module.css";
 

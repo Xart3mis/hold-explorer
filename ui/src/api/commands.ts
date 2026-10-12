@@ -1,5 +1,6 @@
-// The only module that imports `invoke`: command names and argument keys are written here once.
-import { Channel, invoke } from "@tauri-apps/api/core";
+// Command names and argument keys are written here once. This module and workspace-commands.ts,
+// which holds the commands that change the view, are the only ones that import `invoke`.
+import { invoke, type Channel } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
 import type { Dim } from "../bindings/Dim";
 import type { Field } from "../bindings/Field";
@@ -69,39 +70,46 @@ export type CommandName = keyof CommandMap;
 export type ArgsOf<K extends CommandName> = CommandMap[K]["args"];
 export type ResultOf<K extends CommandName> = CommandMap[K]["result"];
 
-function call<K extends CommandName>(name: K, args: ArgsOf<K>): Promise<ResultOf<K>> {
+/**
+ * The commands that change the view: which workspace is open and which snapshot is selected. They
+ * are not among the functions of `api`; ui/src/api/workspace-commands.ts holds them.
+ */
+export type WorkspaceCommandName =
+  | "app_start"
+  | "workspace_create"
+  | "workspace_open"
+  | "workspace_rename"
+  | "snapshot_select"
+  | "demo_create"
+  | "import_commit";
+
+function call<K extends Exclude<CommandName, WorkspaceCommandName>>(
+  name: K,
+  args: ArgsOf<K>,
+): Promise<ResultOf<K>> {
   return invoke<ResultOf<K>>(name, args);
 }
 
-/** One typed function per command. A rejection carries a `CommandError`; see `asCommandError`. */
+/**
+ * One typed function per command that leaves the view as it is. A rejection carries a
+ * `CommandError`; see `asCommandError`.
+ */
 export const api = {
-  appStart: () => call("app_start", {}),
   setTheme: (theme: Theme) => call("settings_set_theme", { theme }),
   workspaceList: () => call("workspace_list", {}),
-  workspaceCreate: (name: string) => call("workspace_create", { name }),
-  workspaceOpen: (id: string) => call("workspace_open", { id }),
-  workspaceRename: (name: string) => call("workspace_rename", { name }),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),
   /** Reviews the draft with the given field-to-column mapping, or with the proposed one. */
   importReview: (fields: Fields | null) => call("import_review", { fields }),
   importCheckTarget: (target: TargetChoice, takenAt: string) =>
     call("import_check_target", { target, takenAt }),
-  /** Commits the draft; `onProgress` hears each phase as it starts. */
-  importCommit: (request: ImportCommit, onProgress: (phase: ImportPhase) => void) => {
-    const channel = new Channel<ImportPhase>();
-    channel.onmessage = onProgress;
-    return call("import_commit", { request, onProgress: channel });
-  },
   importCancel: () => call("import_cancel", {}),
-  snapshotSelect: (id: number) => call("snapshot_select", { id }),
   /**
    * The Overview of the snapshot in view; `null` when the workspace has no snapshot. `view` names
    * the workspace and the snapshot the interface shows; when the state holds another, the command
    * rejects with the kind `ViewChanged` and answers nothing.
    */
   overview: (spec: FilterSpec, view: ViewRef) => call("overview", { spec, view }),
-  demoCreate: () => call("demo_create", {}),
   /**
    * The data commands below answer for the snapshot in view, like `overview`, and reject with the
    * kind `ViewChanged` when `view` is not what the state holds. The options of the filter bar:

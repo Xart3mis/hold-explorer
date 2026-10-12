@@ -39,6 +39,9 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The Rust side has moved on to the snapshot before the newest and the interface was not told:
+  // the Overview is refused, asks what is open, and the shell says that it was brought in step.
+  "view-resynced",
   // The Overview: a workspace without snapshots, a snapshot whose file has no creation dates, a
   // first load that never ends, an update that never ends (select another snapshot to see it), a
   // failure, groups of three and of twenty-five values, and a workspace whose newest snapshot is
@@ -274,6 +277,7 @@ function world(state: DevState, theme: Theme): World {
       ];
       break;
     case "open":
+    case "view-resynced":
     case "no-dates":
     case "overview-loading":
     case "overview-updating":
@@ -380,7 +384,13 @@ export function installDevCommands(state: DevState, theme: Theme): string {
   };
 
   const answers: Record<string, (payload: unknown) => unknown> = {
-    app_start: () => start,
+    app_start: () => {
+      const answer = structuredClone(start);
+      // From here on the Rust side holds another snapshot than the one it has just named.
+      if (state === "view-resynced" && start.open) start.open = { ...start.open, selected: 3 };
+      return answer;
+    },
+    workspace_current: () => start.open,
     settings_set_theme: (payload) => {
       const chosen = text(payload, "theme");
       if (chosen === "Dark" || chosen === "Light" || chosen === "System") {

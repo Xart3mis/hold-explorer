@@ -10,8 +10,8 @@ import {
   SelectValue,
   Text,
 } from "react-aria-components";
-import { t } from "../../text/i18n";
 import { lengthToken } from "../../design/token-values";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Spinner } from "../Spinner/Spinner";

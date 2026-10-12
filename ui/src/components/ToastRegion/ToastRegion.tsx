@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { t } from "../../text/i18n";
 import { durationToken } from "../../design/token-values";
+import { t } from "../../text/i18n";
 import { Button, IconButton } from "../Button/Button";
 import { Icon } from "../Icon/Icon";
 import styles from "./ToastRegion.module.css";

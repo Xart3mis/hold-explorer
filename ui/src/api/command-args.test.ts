@@ -2,6 +2,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { describe, expect, it } from "vitest";
 import commandArgs from "./command-args.json";
 import { api, type ArgsOf, type CommandName } from "./commands";
+import { workspaceApi } from "./workspace-commands";
 
 /**
  * The arguments of a command as they cross to Rust: JSON, in which the progress channel is the
@@ -26,24 +27,27 @@ function onTheWire(payload: unknown): unknown {
   );
 }
 
-/** Every command, called through its function of `api` with the values of the fixture. */
+/**
+ * Every command, called through its function with the values of the fixture: of `workspaceApi`
+ * for a command that changes the view, of `api` for every other.
+ */
 const calls: Record<CommandName, () => Promise<unknown>> = {
-  app_start: () => api.appStart(),
+  app_start: () => workspaceApi.appStart(),
   settings_set_theme: () => api.setTheme(fixture.settings_set_theme.theme),
   workspace_list: () => api.workspaceList(),
-  workspace_create: () => api.workspaceCreate(fixture.workspace_create.name),
-  workspace_open: () => api.workspaceOpen(fixture.workspace_open.id),
-  workspace_rename: () => api.workspaceRename(fixture.workspace_rename.name),
+  workspace_create: () => workspaceApi.workspaceCreate(fixture.workspace_create.name),
+  workspace_open: () => workspaceApi.workspaceOpen(fixture.workspace_open.id),
+  workspace_rename: () => workspaceApi.workspaceRename(fixture.workspace_rename.name),
   import_open: () => api.importOpen(fixture.import_open.path),
   import_choose_sheet: () => api.importChooseSheet(fixture.import_choose_sheet.sheet),
   import_review: () => api.importReview(fixture.import_review.fields),
   import_check_target: () =>
     api.importCheckTarget(fixture.import_check_target.target, fixture.import_check_target.takenAt),
-  import_commit: () => api.importCommit(fixture.import_commit.request, () => undefined),
+  import_commit: () => workspaceApi.importCommit(fixture.import_commit.request, () => undefined),
   import_cancel: () => api.importCancel(),
-  snapshot_select: () => api.snapshotSelect(fixture.snapshot_select.id),
+  snapshot_select: () => workspaceApi.snapshotSelect(fixture.snapshot_select.id),
   overview: () => api.overview(fixture.overview.spec, fixture.overview.view),
-  demo_create: () => api.demoCreate(),
+  demo_create: () => workspaceApi.demoCreate(),
   filter_options: () => api.filterOptions(fixture.filter_options.spec, fixture.filter_options.view),
   filter_values: () =>
     api.filterValues(

@@ -3,8 +3,8 @@ import { useId, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { openHoldsFilter } from "../../api/filter";
-import { formatCount, formatDateTime, formatDays } from "../../text/format";
-import { t } from "../../text/i18n";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
@@ -23,9 +23,9 @@ import {
   VisuallyHidden,
   type DataTableColumn,
 } from "../../components";
+import { formatCount, formatDateTime, formatDays } from "../../text/format";
+import { t } from "../../text/i18n";
 import { startImport } from "../import/start";
-import { useShell } from "../../app/shell/context";
-import { Page } from "../../app/shell/Page";
 import styles from "./OverviewPage.module.css";
 
 /** The page shows the open holds, and sends the whole filter that says so. */
@@ -207,7 +207,7 @@ export function OverviewPage() {
   const query = useSnapshotQuery({
     name: "overview",
     params: [OPEN_HOLDS],
-    read: (view) => api.overview(OPEN_HOLDS, view),
+    read: (view, spec) => api.overview(spec, view),
   });
   // What was read for the snapshot or the workspace of before is shown until the new reading is
   // there, with one exception: that the workspace of before had no snapshot says nothing about

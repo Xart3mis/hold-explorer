@@ -36,8 +36,8 @@ export const keys = {
    * is selected, so both are part of the key: another workspace or another snapshot is another
    * reading. `null` stands for a workspace without snapshots, and for no workspace at all.
    *
-   * Only `useSnapshotQuery` (ui/src/app/view.ts) builds such a key: it sends the same view to the
-   * command, so the two cannot differ.
+   * Only `useSnapshotQuery` and `useSnapshotPages` (ui/src/app/view.ts) build such a key: they
+   * send the same view to the command, so the two cannot differ.
    */
   snapshot: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
     ["snapshot", view?.workspace_id ?? null, view?.snapshot_id ?? null, name, ...params] as const,

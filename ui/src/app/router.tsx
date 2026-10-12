@@ -14,7 +14,6 @@ import {
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { AppLayout } from "../features/shell/AppLayout";
-import { useShell } from "./shell/context";
 import { NotFoundPage } from "../features/shell/NotFoundPage";
 import { WelcomePage } from "../features/welcome/WelcomePage";
 import {
@@ -26,6 +25,7 @@ import {
   type Destination,
   type DestinationId,
 } from "./destinations";
+import { useShell } from "./shell/context";
 
 /** The page of each destination that is built. One that is not built needs no entry. */
 export type DestinationPages = Partial<Record<DestinationId, ReactElement>>;

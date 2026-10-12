@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { formatPercent } from "../../text/format";
 import { expectAccessible } from "../../test/axe";
+import { formatPercent } from "../../text/format";
 import { Progress } from "./Progress";
 
 function fill(): HTMLElement {

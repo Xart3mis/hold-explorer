@@ -5,8 +5,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
 import { IMPORT_PATH } from "../../app/destinations";
-import { formatCount, formatList } from "../../text/format";
-import { t } from "../../text/i18n";
+import { Page } from "../../app/shell/Page";
 import type { Field } from "../../bindings/Field";
 import {
   Button,
@@ -16,7 +15,8 @@ import {
   type DataTableColumn,
   type SelectOption,
 } from "../../components";
-import { Page } from "../../app/shell/Page";
+import { formatCount, formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { useImportDraft } from "./draft";
 import { columnLabel, fieldLabel, FIELDS, orderFields, type Fields } from "./fields";
 import styles from "./Import.module.css";

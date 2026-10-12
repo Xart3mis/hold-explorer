@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../api/commands";
 import { asCommandError } from "../api/error";
+import { workspaceApi } from "../api/workspace-commands";
 import type { Settings } from "../bindings/Settings";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { checkUnhandledCommands, commandFailure, expectUnhandled, mockCommands } from "./ipc";
@@ -26,7 +27,7 @@ describe("mockCommands", () => {
         throw commandFailure("NoWorkspace", "No workspace is open.");
       },
     });
-    const error = asCommandError(await api.workspaceRename("X").catch((e: unknown) => e));
+    const error = asCommandError(await workspaceApi.workspaceRename("X").catch((e: unknown) => e));
     expect(error).toEqual({ kind: "NoWorkspace", message: "No workspace is open." });
   });
 
@@ -63,8 +64,8 @@ describe("mockCommands", () => {
         open: null,
       }),
     });
-    await expect(api.workspaceOpen("0123456789abcdef")).resolves.toEqual(opened);
-    const start = await api.appStart();
+    await expect(workspaceApi.workspaceOpen("0123456789abcdef")).resolves.toEqual(opened);
+    const start = await workspaceApi.appStart();
     expect(start.list_error?.kind).toBe("Io");
   });
 });

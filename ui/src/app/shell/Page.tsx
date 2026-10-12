@@ -1,8 +1,8 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router";
-import { t } from "../../text/i18n";
 import { durationToken } from "../../design/token-values";
 import { PageHeader, type PageHeaderProps } from "../../components";
+import { t } from "../../text/i18n";
 import { useShell } from "./context";
 import styles from "./Page.module.css";
 

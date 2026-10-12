@@ -12,8 +12,16 @@ export interface ShellReport {
   error: CommandError;
 }
 
+/** Something the shell says without anything having failed: what happened, and what to do. */
+export interface ShellNotice {
+  /** What happened, in a sentence that stands on any page. */
+  title: string;
+  /** What it means for the user, and what to do about it. */
+  text: string;
+}
+
 export interface Shell {
-  /** The application start, as the actions of `useApp()` have changed it since. */
+  /** The application start, as the actions of ui/src/app/actions/ have changed it since. */
   start: AppStart;
   /** The paths of the files that are being dragged over the window; `null` while none is. */
   dragged: readonly string[] | null;
@@ -30,6 +38,12 @@ export interface Shell {
    * belongs on the page, beside what failed.
    */
   report: (problem: ShellReport) => void;
+  /**
+   * Shows something the user should know, with nothing having failed, as an information notice
+   * of the shell: in the same place as a failure, on every page, until it is dismissed. Its title
+   * and its text are from the text catalog.
+   */
+  notify: (notice: ShellNotice) => void;
 }
 
 export const ShellContext = createContext<Shell | null>(null);

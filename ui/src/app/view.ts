@@ -2,36 +2,51 @@
  * The view on screen: the workspace that is open and the snapshot that is selected. The Rust side
  * holds one view and the interface shows one, and for a moment they differ whenever a command
  * that changes the view is on its way. This module keeps what a screen reads in step with what
- * the top bar names, with two functions. A screen that follows the rule below cannot show one
+ * the top bar names, with three functions. A screen that follows the rule below cannot show one
  * snapshot's numbers under another snapshot's name, and cannot keep them under the wrong key.
  *
  * The rule for a new screen:
  *
- * 1. Read the data of the snapshot in view with `useSnapshotQuery`, and with nothing else. Give
- *    it a name, the parameters the answer depends on (a filter, a sort), and a function that
- *    calls the command with the view it is handed:
+ * 1. Read the data of the snapshot in view with `useSnapshotQuery`, or with `useSnapshotPages`
+ *    when the command answers a page at a time, and with nothing else. Give it a name (one of
+ *    `ReadingName`; a new reading adds its name there), the parameters the answer depends on (a
+ *    filter, a sort), and a function that calls the command with the view and the parameters it
+ *    is handed:
  *
- *        const lines = useSnapshotQuery({
- *          name: "lines",
- *          params: [filter, sort],
- *          read: (view) => api.lines(filter, sort, view),
+ *        const options = useSnapshotQuery({
+ *          name: "filterOptions",
+ *          params: [spec],
+ *          read: (view, spec) => api.filterOptions(spec, view),
  *        });
  *
- *    Do not build a `ViewRef` from the application start, do not write a key under
- *    `keys.snapshots`, and do not pass a command that takes a view to `useQuery`. The hook takes
- *    the key and the view from the same place, so the answer of a command is always kept under
- *    the view it was asked for.
- * 2. Show what the hook returns as every screen does: `data` is the answer for the view on
- *    screen; while `isPlaceholderData` is true it is the answer for the view of before, to be
- *    shown dimmed and marked as busy until the new one is there; without `data` the screen shows
- *    its skeletons. The answer is read again whenever the view changes and whenever an action on
- *    the workspace has ended.
- * 3. Send a command that changes the open workspace or the selected snapshot, or that may, only
- *    as an action made with `workspaceAction()`. The actions that exist are the ones of
- *    `useApp()`; a new one is added there. A feature never passes such a command to
- *    `useMutation` itself, and the lint rules refuse it.
+ *        const lines = useSnapshotPages<LineRow, LinePage, [FilterSpec, LineQuery]>({
+ *          name: "lines",
+ *          params: [spec, query],
+ *          read: (view, offset, spec, query) => api.lines(spec, query, offset, view),
+ *        });
  *
- * What the two functions do with that:
+ *    The function takes the parameters as arguments and closes over nothing the answer depends
+ *    on, so the command is always sent what the key names. Do not build a `ViewRef` from the
+ *    application start, do not write a key under `keys.snapshots`, and do not pass a command that
+ *    takes a view to `useQuery`. The hooks take the key and the view from the same place, so the
+ *    answer of a command is always kept under the view it was asked for.
+ * 2. Show what the hook returns as every screen does. Of `useSnapshotQuery`: `data` is the answer
+ *    for the view on screen; while `isPlaceholderData` is true it is the answer for the view or
+ *    the parameters of before, to be shown dimmed and marked as busy until the new one is there;
+ *    without `data` the screen shows its skeletons. Of `useSnapshotPages`: `rows` are the rows
+ *    loaded so far, `loadMore` asks for the next page when the table nears their end, and
+ *    `isPlaceholderData` and `isPending` mean the same. The answer is read again whenever the
+ *    view changes and whenever an action on the workspace has ended.
+ * 3. Send a command that changes the open workspace or the selected snapshot, or that may, only
+ *    as an action made with `workspaceAction()`. The actions that exist are the hooks of
+ *    ui/src/app/actions/; a new one is added there. Those commands are in
+ *    ui/src/api/workspace-commands.ts, which only the modules of ui/src/app/ may import: a
+ *    feature cannot send one, and the lint rules refuse the import.
+ * 4. A command that changes the data of a snapshot without changing the view (there is none yet;
+ *    the first is the edit of a snapshot's date) invalidates `keys.snapshots` once it has
+ *    answered, so every reading of every screen is read again.
+ *
+ * What the three functions do with that:
  *
  * - While an action is running or waiting its turn, no snapshot query is enabled, and the
  *   readings that were in flight when the action was asked for are dropped: their answers are
@@ -42,40 +57,48 @@
  *   the hook reads for the view that is shown. When the interface still shows the view it asked
  *   for, the hook reads again, a little later each time, and the screen stays busy meanwhile.
  * - That does not go on for ever. After five such answers in a row the two sides disagree for
- *   good, and the interface takes the Rust side's word: it asks for the application start again,
- *   once. The start then usually names another view, and the hook reads for that one. If it
- *   names the same view and the command refuses it once more, the screen gets an error of the
- *   kind `ViewUnsettled`, whose message says what to do; it shows it as any error, with its
- *   retry. Asking for the start again makes the Rust side start over: it reopens the workspace
- *   that was open last, selects its newest snapshot, and drops a file that is open for import.
+ *   good, and the interface takes the Rust side's word: it asks which workspace and snapshot are
+ *   open (`workspace_current`), once, and puts the answer into the cached start as its open
+ *   workspace. Asking changes nothing on the Rust side: a file that is open for import and the
+ *   selection stay as they are. The answer usually names another view than the one on screen;
+ *   the hook then reads for that one, and the shell says in a notice that the workspace or
+ *   snapshot on screen was brought back in step, and that an action that seems to be missing
+ *   should be done again. If the answer names the same view and the command refuses it once
+ *   more, the screen gets an error of the kind `ViewUnsettled`, whose message says what to do;
+ *   it shows it as any error, with its retry.
+ * - The application start (`app_start`) is asked for once, when the page loads, by the start
+ *   query, and by nothing in this module: asking for it makes the Rust side start over.
  * - A reading is dropped when the screen that asked for it goes. It then reads nothing more and
- *   never asks for the application start: only a page that is shown may make the Rust side
- *   start over. A screen that comes back reads again.
+ *   asks the Rust side nothing. A screen that comes back reads again.
  */
 import {
   skipToken,
+  useInfiniteQuery,
   useIsMutating,
   useQuery,
   useQueryClient,
   type QueryClient,
+  type QueryKey,
   type UseMutationOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { CommandError } from "../bindings/CommandError";
 import type { ViewRef } from "../bindings/ViewRef";
+import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
-import { startQuery } from "./query";
+import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
 export const VIEW_CHANGED = "ViewChanged";
 
 /**
- * The kind of the error a screen is given when a view was refused again after the interface had
- * taken the application start from the Rust side anew. Its message is from the text catalog.
+ * The kind of the error a screen is given when a view was refused again after the Rust side had
+ * said that it holds that view. Its message is from the text catalog.
  */
 export const VIEW_UNSETTLED = "ViewUnsettled";
 
@@ -86,23 +109,30 @@ export const VIEW_UNSETTLED = "ViewUnsettled";
  */
 const WORKSPACE_SCOPE = { id: "workspace" };
 
-/** How many answers of `ViewChanged` in a row a reading takes before it asks for the application start. */
+/** How many answers of `ViewChanged` in a row a reading takes before it asks the Rust side what it holds. */
 const REFUSALS = 5;
 /** How long the first reading after `ViewChanged` waits; each one after it waits twice as long. */
 const REREAD_FIRST_MS = 50;
 
-/** The view the interface shows, as the cached application start has it; `null` without a workspace. */
-function viewOf(start: AppStart | undefined): ViewRef | null {
-  const open = start?.open;
+/** The view an open workspace is shown as; `null` without a workspace. */
+function viewOf(open: WorkspaceOpen | null | undefined): ViewRef | null {
   if (open === undefined || open === null) return null;
   return { workspace_id: open.workspace.id, snapshot_id: open.selected };
+}
+
+function isSameView(one: ViewRef | null, other: ViewRef | null): boolean {
+  return one?.workspace_id === other?.workspace_id && one?.snapshot_id === other?.snapshot_id;
+}
+
+/** The view the interface shows, as the cached application start has it. */
+function shownView(client: QueryClient): ViewRef | null {
+  return viewOf(client.getQueryData<AppStart>(keys.start)?.open);
 }
 
 /** Whether the interface still shows this view, with no action on its way that may change it. */
 function isShown(client: QueryClient, view: ViewRef): boolean {
   if (client.isMutating({ mutationKey: keys.workspaceAction }) > 0) return false;
-  const shown = viewOf(client.getQueryData<AppStart>(keys.start));
-  return shown?.workspace_id === view.workspace_id && shown.snapshot_id === view.snapshot_id;
+  return isSameView(shownView(client), view);
 }
 
 function isViewChanged(error: unknown): boolean {
@@ -114,90 +144,235 @@ function unsettled(): Error & CommandError {
   return Object.assign(new Error(t("errors.viewUnsettled")), { kind: VIEW_UNSETTLED });
 }
 
-export interface SnapshotQueryOptions<Data> {
-  /** What is read, in one word that no other reading uses: "overview", "lines". Part of the key. */
-  name: string;
-  /** What else the answer depends on: the filter, a sort, a page. Part of the key. */
-  params?: readonly unknown[];
-  /** Calls the command. `view` is the view the key names; pass it to the command as it is. */
-  read: (view: ViewRef) => Promise<Data>;
+/** One reading for one view: where it is kept, who waits for it, and whom it tells. */
+interface Reading {
+  client: QueryClient;
+  /** The key the answer is kept under. It names `view`. */
+  queryKey: QueryKey;
+  view: ViewRef;
+  /** Aborted when the reading is dropped: the screen is gone, or an action on the workspace starts. */
+  signal: AbortSignal;
+  /** Shows a notice of the shell. */
+  notify: (notice: ShellNotice) => void;
+}
+
+/**
+ * Performs one reading for a view: calls `read` with the view, and deals with the answer
+ * `ViewChanged` as the top of this file says. Both hooks read through it, each page of
+ * `useSnapshotPages` as one reading.
+ */
+async function readForView<Data>(
+  { client, queryKey, view, signal, notify }: Reading,
+  read: (view: ViewRef) => Promise<Data>,
+): Promise<Data> {
+  // The signal says that this reading may be dropped: it is when the screen that asked is gone,
+  // and when an action on the workspace starts. From then on nobody waits for it, so it stops at
+  // once, after whatever it was waiting for: it reads nothing more, and it asks the Rust side
+  // nothing for a page that is not there.
+  //
+  // `drop` is for a reading the interface has moved on from: it shows another view by now, or is
+  // about to. The reading is dropped as if it had never been asked for. The key the hook has
+  // then is read by itself, so nobody hears the error thrown after it.
+  const drop = () => client.cancelQueries({ queryKey, exact: true });
+  // Asked each time anew: it becomes true while this function waits.
+  const isDropped = () => signal.aborted;
+  for (let refusals = 1; ; refusals += 1) {
+    try {
+      return await read(view);
+    } catch (error) {
+      if (isDropped()) throw error;
+      if (!isViewChanged(error)) throw error;
+      if (!isShown(client, view)) {
+        await drop();
+        throw error;
+      }
+      // Refused again after the Rust side said that it holds this view: it is an error now.
+      if (refusals > REFUSALS) throw unsettled();
+      if (refusals < REFUSALS) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, REREAD_FIRST_MS * 2 ** (refusals - 1));
+        });
+        if (isDropped()) throw error;
+        continue;
+      }
+      // The two sides disagree for good. The interface takes the Rust side's word, once: it asks
+      // which workspace and snapshot are open, which changes nothing there. When that cannot be
+      // had, the cached start stays as it is, untouched and not failed.
+      let held: WorkspaceOpen | null;
+      try {
+        held = await api.workspaceCurrent();
+      } catch {
+        throw unsettled();
+      }
+      // An action that started meanwhile will write what it opened; this answer may be older.
+      if (isDropped()) throw error;
+      // Another reading of the same screen may have brought the start in step a moment ago. The
+      // user is told once, by the reading that changes what is on screen.
+      const moved = !isSameView(shownView(client), viewOf(held));
+      client.setQueryData<AppStart>(keys.start, (start) =>
+        start === undefined ? start : { ...start, open: held },
+      );
+      if (moved) {
+        notify({ title: t("shell.viewResyncedTitle"), text: t("shell.viewResyncedText") });
+      }
+      if (!isShown(client, view)) {
+        await drop();
+        throw error;
+      }
+    }
+  }
+}
+
+/** What is read for the snapshot in view, in one word that no other reading uses. Part of the key. */
+export type ReadingName =
+  "overview" | "filterOptions" | "filterValues" | "lines" | "holds" | "lineDetail" | "holdDetail";
+
+/**
+ * What both hooks start from: the key of a reading for the view on screen, whether it may be read
+ * now, and the function that performs it for that view; `null` while no workspace is open.
+ */
+function useReading(name: ReadingName, params: readonly unknown[]) {
+  const client = useQueryClient();
+  const { start, notify } = useShell();
+  const isChanging = useIsMutating({ mutationKey: keys.workspaceAction }) > 0;
+  const view = viewOf(start.open);
+  const queryKey = keys.snapshot(view, name, params);
+  return {
+    queryKey,
+    isReadable: view !== null && !isChanging,
+    perform:
+      view === null
+        ? null
+        : <Data>(signal: AbortSignal, read: (view: ViewRef) => Promise<Data>) =>
+            readForView({ client, queryKey, view, signal, notify }, read),
+  };
+}
+
+export interface SnapshotQueryOptions<Data, Params extends readonly unknown[]> {
+  name: ReadingName;
+  /** What else the answer depends on: the filter, a sort. Part of the key. */
+  params: Params;
+  /** Calls the command with the view and the params the key names. */
+  read: (view: ViewRef, ...params: Params) => Promise<Data>;
+  /** False while the reading has nothing to ask for; default true. */
+  enabled?: boolean;
 }
 
 /**
  * Reads data of the snapshot in view; see the rule at the top of this file.
  *
- * The result is the one of `useQuery`. `error` is never the kind `ViewChanged`; it is the kind
+ * `params` is taken as the list it is written as, each entry with its own type, so `read` is
+ * handed them typed without naming their types. The result is the one of `useQuery`. `error` is never the kind `ViewChanged`; it is the kind
  * `ViewUnsettled` when the view stayed refused. Without an open workspace nothing is read.
  */
-export function useSnapshotQuery<Data>({
+export function useSnapshotQuery<Data, const Params extends readonly unknown[]>({
   name,
-  params = [],
+  params,
   read,
-}: SnapshotQueryOptions<Data>): UseQueryResult<Data> {
-  const client = useQueryClient();
-  const { data: start } = useQuery(startQuery);
-  const isChanging = useIsMutating({ mutationKey: keys.workspaceAction }) > 0;
-  const view = viewOf(start);
-  const queryKey = keys.snapshot(view, name, params);
+  enabled = true,
+}: SnapshotQueryOptions<Data, Params>): UseQueryResult<Data> {
+  const { queryKey, isReadable, perform } = useReading(name, params);
 
   return useQuery({
     queryKey,
     queryFn:
-      view === null
+      perform === null
         ? skipToken
-        : async ({ signal }) => {
-            // Taking the signal at the start says that this reading may be dropped: it is when
-            // the screen that asked is gone, and when an action on the workspace starts. From
-            // then on nobody waits for it, so it stops at once, after whatever it was waiting
-            // for: it reads nothing more, and above all it does not ask for the application
-            // start, which would make the Rust side start over for a page that is not there.
-            //
-            // `drop` is for a reading the interface has moved on from: it shows another view by
-            // now, or is about to. The reading is dropped as if it had never been asked for. The
-            // key the hook has then is read by itself, so nobody hears the error thrown after it.
-            const drop = () => client.cancelQueries({ queryKey, exact: true });
-            // Asked each time anew: it becomes true while this function waits.
-            const isDropped = () => signal.aborted;
-            for (let refusals = 1; ; refusals += 1) {
-              try {
-                return await read(view);
-              } catch (error) {
-                if (isDropped()) throw error;
-                if (!isViewChanged(error)) throw error;
-                if (!isShown(client, view)) {
-                  await drop();
-                  throw error;
-                }
-                // Refused again after the application start was taken anew: it is an error now.
-                if (refusals > REFUSALS) throw unsettled();
-                if (refusals < REFUSALS) {
-                  await new Promise((resolve) => {
-                    setTimeout(resolve, REREAD_FIRST_MS * 2 ** (refusals - 1));
-                  });
-                  if (isDropped()) throw error;
-                  continue;
-                }
-                // The two sides disagree for good. The interface takes the Rust side's word,
-                // once: the application start is asked for again and replaces the cached one.
-                // When it cannot be had, the cached one stays as it is, untouched and not failed.
-                let fresh: AppStart;
-                try {
-                  fresh = await api.appStart();
-                } catch {
-                  throw unsettled();
-                }
-                // The Rust side has started over, whoever still waits: the interface takes it.
-                client.setQueryData(keys.start, fresh);
-                if (isDropped()) throw error;
-                if (!isShown(client, view)) {
-                  await drop();
-                  throw error;
-                }
-              }
-            }
-          },
-    enabled: view !== null && !isChanging,
+        : ({ signal }) => perform(signal, (view) => read(view, ...params)),
+    enabled: enabled && isReadable,
   });
+}
+
+/** A page as a paged command answers one: its rows, and how many rows there are in all. */
+export interface Paged<Row> {
+  total: number;
+  rows: readonly Row[];
+}
+
+export interface SnapshotPages<Row, Page extends Paged<Row>> {
+  /** Every row loaded so far, in order. */
+  rows: readonly Row[];
+  /** The first page as answered: its total, and whatever else the command says once. */
+  first: Page | undefined;
+  total: number | undefined;
+  hasMore: boolean;
+  loadMore: () => void;
+  isLoadingMore: boolean;
+  /** True on a first load: nothing to show yet. */
+  isPending: boolean;
+  /** True while the rows shown are those of the filter, sort, or view of before. */
+  isPlaceholderData: boolean;
+  error: Error | null;
+  refetch: () => void;
+}
+
+const NO_ROWS: readonly never[] = [];
+
+/**
+ * Reads data of the snapshot in view a page at a time; see the rule at the top of this file.
+ *
+ * The first page is read at offset 0, and each one after it at the number of rows loaded, when
+ * `loadMore` is called. Other params start again at the first page: the rows of before stand in
+ * until it is there and are then replaced whole, so rows of two readings are never shown
+ * together. `error` is never the kind `ViewChanged`. Without an open workspace nothing is read.
+ *
+ * Name the three types when calling it: the type of a row cannot be told from the page alone.
+ */
+export function useSnapshotPages<
+  Row,
+  Page extends Paged<Row>,
+  const Params extends readonly unknown[],
+>(options: {
+  name: ReadingName;
+  params: Params;
+  read: (view: ViewRef, offset: number, ...params: Params) => Promise<Page>;
+}): SnapshotPages<Row, Page> {
+  const { name, params, read } = options;
+  const { queryKey, isReadable, perform } = useReading(name, params);
+
+  const query = useInfiniteQuery({
+    queryKey,
+    queryFn:
+      perform === null
+        ? skipToken
+        : ({ signal, pageParam }) => perform(signal, (view) => read(view, pageParam, ...params)),
+    initialPageParam: 0,
+    // The next offset is the number of rows loaded; there is none once they are all there.
+    getNextPageParam: (_last: Page, pages: Page[]) => {
+      const loaded = pages.reduce((count, page) => count + page.rows.length, 0);
+      return loaded < (pages[0]?.total ?? 0) ? loaded : undefined;
+    },
+    enabled: isReadable,
+  });
+
+  const pages = query.data?.pages;
+  const rows = useMemo<readonly Row[]>(
+    () => pages?.flatMap((page) => page.rows) ?? NO_ROWS,
+    [pages],
+  );
+  const first = pages?.[0];
+  const total = first?.total;
+  const hasMore = total !== undefined && rows.length < total;
+  // Nothing is added to rows that stand in for others, and nothing is read while an action on
+  // the workspace runs or while a reading of this key is on its way.
+  const canLoadMore = isReadable && hasMore && !query.isPlaceholderData && !query.isFetching;
+  const { fetchNextPage, refetch } = query;
+
+  return {
+    rows,
+    first,
+    total,
+    hasMore,
+    loadMore: () => {
+      // A call that comes before the screen knows a page is on its way is ignored by the query.
+      if (canLoadMore) void fetchNextPage({ cancelRefetch: false });
+    },
+    isLoadingMore: query.isFetchingNextPage,
+    isPending: query.isPending,
+    isPlaceholderData: query.isPlaceholderData,
+    error: query.error,
+    refetch: () => void refetch(),
+  };
 }
 
 export interface WorkspaceAction<Variables, Data> {
@@ -218,7 +393,7 @@ export interface WorkspaceAction<Variables, Data> {
  * `useMutation`. See the rule at the top of this file.
  *
  * It fixes what such an action must not be without: the scope, so the actions run one after
- * another; the key, so every reader of `useApp().isBusy` sees it and no snapshot query is
+ * another; the key, so every reader of `useStart().isBusy` sees it and no snapshot query is
  * enabled meanwhile; and the dropping of the snapshot queries that are in flight when the action
  * is asked for, whose answers the Rust side may give for either view.
  */

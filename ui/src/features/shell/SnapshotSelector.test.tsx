@@ -1,12 +1,12 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { formatDate, formatDateTime } from "../../text/format";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { opened, openStart, snapshot } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
+import { formatDate, formatDateTime } from "../../text/format";
 
 const OLDER = "2026-09-30T14:05:00";
 const NEWEST = "2026-10-07T08:00:00";

@@ -1,12 +1,12 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import { formatDate, formatDateTime, formatTime } from "../../text/format";
-import { t } from "../../text/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotInfo } from "../../bindings/SnapshotInfo";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import { Button, Notice, Select, TextField, type SelectOption } from "../../components";
 import { cx } from "../../components/cx";
+import { formatDate, formatDateTime, formatTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import { NEW_WORKSPACE, type ImportChoices } from "./draft";
 import styles from "./Import.module.css";
 import { ImportProblem } from "./ImportProblem";

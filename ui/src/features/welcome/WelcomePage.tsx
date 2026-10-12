@@ -3,10 +3,12 @@ import { useNavigate, useSearchParams } from "react-router";
 import { asCommandError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { showInFolder } from "../../api/window";
+import { useDemo } from "../../app/actions/demo";
+import { useStart } from "../../app/actions/start";
+import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDate, formatList } from "../../text/format";
-import { t } from "../../text/i18n";
-import { useApp } from "../../app/useApp";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import type { CommandError } from "../../bindings/CommandError";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
@@ -17,9 +19,9 @@ import {
   Progress,
   type DataTableColumn,
 } from "../../components";
+import { formatCount, formatDate, formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { startImport } from "../import/start";
-import { useShell } from "../../app/shell/context";
-import { Page } from "../../app/shell/Page";
 import { NewWorkspaceForm } from "../workspaces/NewWorkspaceForm";
 import styles from "./WelcomePage.module.css";
 
@@ -34,7 +36,9 @@ type FolderError = { at: "folder" | "files"; error: CommandError } | null;
  */
 export function WelcomePage() {
   const { start, dragged } = useShell();
-  const { openWorkspace, openDemo, refreshWorkspaces, isBusy } = useApp();
+  const { openWorkspace, refreshWorkspaces } = useWorkspaceActions();
+  const { openDemo } = useDemo();
+  const { isBusy } = useStart();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const newButtonId = useId();

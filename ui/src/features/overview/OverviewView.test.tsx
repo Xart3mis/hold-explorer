@@ -5,7 +5,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
-import { formatDate } from "../../text/format";
 import type { ImportDone } from "../../bindings/ImportDone";
 import type { OverviewView } from "../../bindings/OverviewView";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
@@ -17,6 +16,7 @@ import { commandFailure, type Handlers } from "../../test/ipc";
 import { overviewView } from "../../test/overview";
 import { importButton, ready, reviewing } from "../../test/review";
 import { SLOW } from "../../test/slow";
+import { formatDate } from "../../text/format";
 
 const text = en.overview;
 const OLDER = "2026-09-30T14:05:00";
@@ -370,17 +370,21 @@ describe("the Overview and a view that changed on the way", () => {
       });
       const start = openStart();
       const appStart = vi.fn(() => start);
+      // The Rust side says that it holds the view on screen, and refuses it all the same.
+      const current = vi.fn(() => start.open);
       const { user } = renderApp({
         start,
         path: "/overview",
-        handlers: { overview, app_start: appStart },
+        handlers: { overview, app_start: appStart, workspace_current: current },
       });
       const alert = await screen.findByRole("alert");
       expect(alert).toHaveTextContent(text.error);
       expect(alert).toHaveTextContent(en.errors.viewUnsettled);
       expect(alert).not.toHaveTextContent(/changed while the request was on its way/);
-      // The application start was asked for when the app opened, and once more before giving up.
-      expect(appStart).toHaveBeenCalledTimes(2);
+      // The application start was asked for when the app opened, and never again. Before giving
+      // up, the Rust side was asked once which workspace and snapshot it holds.
+      expect(appStart).toHaveBeenCalledTimes(1);
+      expect(current).toHaveBeenCalledTimes(1);
       expect(overview).toHaveBeenCalledTimes(6);
 
       settled = true;

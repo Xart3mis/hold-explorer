@@ -4,10 +4,11 @@ import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
+import { useImportCommit } from "../../app/actions/import";
+import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { IMPORT_PATH, OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDateTime } from "../../text/format";
-import { t, type MessageKey } from "../../text/i18n";
-import { useApp } from "../../app/useApp";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import type { ImportCommit } from "../../bindings/ImportCommit";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportPhase } from "../../bindings/ImportPhase";
@@ -22,8 +23,8 @@ import {
   VisuallyHidden,
 } from "../../components";
 import { cx } from "../../components/cx";
-import { useShell } from "../../app/shell/context";
-import { Page } from "../../app/shell/Page";
+import { formatCount, formatDateTime } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import { Details } from "./Details";
 import { clearImport, useImportDraft, type ImportChoices } from "./draft";
 import { columnLabel, fieldLabel, orderFields } from "./fields";
@@ -72,7 +73,8 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const navigate = useNavigate();
   const toast = useToast();
   const { start, report } = useShell();
-  const { importCommit, openWorkspace } = useApp();
+  const { importCommit } = useImportCommit();
+  const { openWorkspace } = useWorkspaceActions();
   const cancel = useLeaveImport();
   const [phase, setPhase] = useState<ImportPhase | null>(null);
   // Whether the page is still shown when a commit that it started comes back.

@@ -2,7 +2,6 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
-import { formatDateTime } from "../../text/format";
 import { queryClient } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FilterSpec } from "../../bindings/FilterSpec";
@@ -15,6 +14,7 @@ import { commandFailure, type Handlers } from "../../test/ipc";
 import { group, overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
+import { formatDateTime } from "../../text/format";
 
 const text = en.overview;
 const OLDER = "2026-09-30T14:05:00";

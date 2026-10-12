@@ -1,4 +1,4 @@
-// Typecheck only (never run): each api function returns the generated type.
+// Typecheck only (never run): each function of a command returns the generated type.
 import type { CommandError } from "../bindings/CommandError";
 import type { AppStart } from "../bindings/AppStart";
 import type { Settings } from "../bindings/Settings";
@@ -17,26 +17,27 @@ import type { OverviewView } from "../bindings/OverviewView";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { ValuePage } from "../bindings/ValuePage";
 import type { api } from "./commands";
+import type { workspaceApi } from "./workspace-commands";
 
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Check<T extends true> = T;
 
 export type Checks = [
-  Check<Equal<ReturnType<typeof api.appStart>, Promise<AppStart>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.appStart>, Promise<AppStart>>>,
   Check<Equal<ReturnType<typeof api.setTheme>, Promise<Settings>>>,
   Check<Equal<ReturnType<typeof api.workspaceList>, Promise<WorkspaceListView>>>,
-  Check<Equal<ReturnType<typeof api.workspaceCreate>, Promise<WorkspaceOpen>>>,
-  Check<Equal<ReturnType<typeof api.workspaceOpen>, Promise<WorkspaceOpen>>>,
-  Check<Equal<ReturnType<typeof api.workspaceRename>, Promise<WorkspaceView>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.workspaceCreate>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.workspaceOpen>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.workspaceRename>, Promise<WorkspaceView>>>,
   Check<Equal<ReturnType<typeof api.importOpen>, Promise<ImportDraft>>>,
   Check<Equal<ReturnType<typeof api.importChooseSheet>, Promise<ImportDraft>>>,
   Check<Equal<ReturnType<typeof api.importReview>, Promise<ImportReview>>>,
   Check<Equal<ReturnType<typeof api.importCheckTarget>, Promise<TargetCheck>>>,
-  Check<Equal<ReturnType<typeof api.importCommit>, Promise<ImportDone>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.importCommit>, Promise<ImportDone>>>,
   Check<Equal<ReturnType<typeof api.importCancel>, Promise<null>>>,
-  Check<Equal<ReturnType<typeof api.snapshotSelect>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.snapshotSelect>, Promise<WorkspaceOpen>>>,
   Check<Equal<ReturnType<typeof api.overview>, Promise<OverviewView | null>>>,
-  Check<Equal<ReturnType<typeof api.demoCreate>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof workspaceApi.demoCreate>, Promise<WorkspaceOpen>>>,
   Check<Equal<ReturnType<typeof api.filterOptions>, Promise<FilterOptions>>>,
   Check<Equal<ReturnType<typeof api.filterValues>, Promise<ValuePage>>>,
   Check<Equal<ReturnType<typeof api.lines>, Promise<LinePage>>>,
@@ -51,3 +52,9 @@ export type Checks = [
 // A wrong argument is a type error.
 // @ts-expect-error a theme is one of the generated names
 void (undefined as unknown as typeof api).setTheme("Blue");
+
+// A command that changes the view is not among the functions of `api`: a feature cannot send one.
+type OnlyInWorkspaceApi<Name extends keyof typeof workspaceApi> = Name extends keyof typeof api
+  ? false
+  : true;
+export type Apart = Check<OnlyInWorkspaceApi<keyof typeof workspaceApi>>;
