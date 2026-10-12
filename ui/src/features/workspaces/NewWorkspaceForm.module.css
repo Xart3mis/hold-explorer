@@ -1,0 +1,24 @@
+/* A form on the page: its title, the field, and the two actions, stacked. No box around it. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+.title {
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.field {
+  inline-size: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}

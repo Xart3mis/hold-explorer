@@ -48,3 +48,8 @@ export const startQuery = queryOptions({
 
 // The same for a reader that names the key with options of its own.
 queryClient.setQueryDefaults(keys.start, { staleTime: Infinity });
+
+// The file that is open for import is written into the cache by the import page and read by the
+// pages after it. It is the Rust side's draft, so nothing asks for it again and it is kept until
+// the import is cancelled or done, however long a page of the flow stays open or closed.
+queryClient.setQueryDefaults(keys.importDraft, { staleTime: Infinity, gcTime: Infinity });

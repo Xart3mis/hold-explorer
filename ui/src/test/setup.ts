@@ -5,8 +5,14 @@ import { cleanup } from "@testing-library/react";
 import { randomFillSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { queryClient } from "../app/query";
+import { resetWindowApi } from "./window";
+
+// No test reaches the file dialog, the file manager, or the window's drag events: the module that
+// talks to them is replaced by the stand-in of ui/src/test/window.ts. The test of that module
+// itself asks for the real one.
+vi.mock("../api/window", async () => (await import("./window")).windowApi);
 
 // The mocked command channel needs window.crypto.getRandomValues, which jsdom may lack. Only the
 // missing method is defined.
@@ -34,6 +40,10 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
 afterEach(() => {
   cleanup();
   clearMocks();
+  resetWindowApi();
+  // The component library announces a button that starts to wait through a live region it keeps
+  // on the page for a few seconds. It refers to the button, which is gone with its test.
+  for (const region of document.querySelectorAll("[data-live-announcer]")) region.remove();
   // The query client is shared by the whole app, so what one test loaded must not reach the next.
   queryClient.clear();
 });

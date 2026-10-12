@@ -20,6 +20,15 @@ export { DropZone, type DropZoneProps } from "./DropZone/DropZone";
 export { EmptyState, type EmptyStateProps } from "./EmptyState/EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState/ErrorState";
 export { Icon, type IconProps } from "./Icon/Icon";
+export {
+  MenuButton,
+  MenuItem,
+  MenuSection,
+  MenuSeparator,
+  type MenuButtonProps,
+  type MenuItemProps,
+  type MenuSectionProps,
+} from "./Menu/Menu";
 export { Notice, type NoticeProps, type NoticeTone } from "./Notice/Notice";
 export {
   PageHeader,

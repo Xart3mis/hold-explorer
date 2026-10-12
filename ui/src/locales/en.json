@@ -1,6 +1,7 @@
 {
   "app": {
-    "name": "Hold Explorer"
+    "name": "Hold Explorer",
+    "documentTitle": "{{page}} · Hold Explorer"
   },
   "errors": {
     "unreported": "The command failed and gave no reason. Try again; if it keeps happening, restart Hold Explorer."
@@ -12,10 +13,16 @@
     "loading": "Loading",
     "dismiss": "Dismiss",
     "retry": "Try again",
-    "noValue": "–"
+    "noValue": "–",
+    "cancel": "Cancel",
+    "undo": "Undo",
+    "showInFolder": "Show in folder"
   },
   "units": {
     "days": "{{value}} d"
+  },
+  "keys": {
+    "ctrl": "Ctrl"
   },
   "select": {
     "placeholder": "Choose an option"
@@ -31,5 +38,137 @@
   },
   "errorState": {
     "title": "This could not be loaded"
+  },
+  "shell": {
+    "loading": "Loading Hold Explorer",
+    "startError": "Hold Explorer could not start",
+    "navigation": "Workspaces and settings",
+    "import": "Import",
+    "dropTitle": "Drop to import",
+    "folderError": "The folder could not be shown"
+  },
+  "destinations": {
+    "label": "Destinations",
+    "soon": "Soon",
+    "name": {
+      "overview": "Overview",
+      "breakdown": "Breakdown",
+      "lines": "Lines",
+      "blockers": "Blockers",
+      "history": "History",
+      "people": "People",
+      "follow-up": "Follow-up",
+      "rules": "Rules",
+      "settings": "Settings"
+    }
+  },
+  "comingSoon": {
+    "title": "Not available in this version",
+    "action": "Go to Overview",
+    "description": {
+      "overview": "Overview will show the open holds, the lines on hold, and how both changed since the previous snapshot. Bars will split the holds by discipline and by hold type.",
+      "breakdown": "Breakdown will group the holds by discipline, hold type, role, blocker, or another field, as bars or as a matrix of two fields. A row or a cell will open its lines.",
+      "lines": "Lines will list every line on hold in one table, with its holds, disciplines, blockers, oldest age, and sizes. Presets will sort it, for example oldest first or easiest to release.",
+      "blockers": "Blockers will show what the holds wait for and how the blockers depend on each other. It will rank them by the number of lines each one frees when it is solved.",
+      "history": "History will compare two snapshots and list the holds that were added, released, changed, or reopened. It will also show the trend of open holds and the list of snapshots.",
+      "people": "People will list, for each name on the export, the holds raised, open, and released, the oldest open hold, and the median age.",
+      "follow-up": "Follow-up will hold the watchlist, the notes, and the follow-ups that are due or overdue.",
+      "rules": "Rules will hold the blocker rules, the manual overrides, the merged remarks, the age bands, and the column mapping of the workspace.",
+      "settings": "Settings will hold the theme, the workspaces folder, and the version of Hold Explorer."
+    }
+  },
+  "notFound": {
+    "title": "Page not found",
+    "heading": "This address does not exist",
+    "text": "Hold Explorer has no page at {{path}}.",
+    "toOverview": "Go to Overview",
+    "toWorkspaces": "Go to Workspaces"
+  },
+  "workspaces": {
+    "title": "Workspaces",
+    "descriptionFirst": "A workspace keeps the snapshots of one project. Import a holds export to start one, or open the demo workspace to see every screen with data.",
+    "descriptionSome": "Open a workspace, or import a holds export.",
+    "new": "New workspace",
+    "all": "All workspaces",
+    "rename": "Rename workspace",
+    "switcher": "Workspace",
+    "switcherName": "Workspace {{name}}",
+    "others": "Open another workspace",
+    "nameLabel": "Workspace name",
+    "nameHelp": "Shown in the workspace switcher.",
+    "namePlaceholder": "Unit 573 piping",
+    "nameMissing": "Enter a name for the workspace.",
+    "create": "Create workspace",
+    "createError": "The workspace was not created",
+    "openError": "The workspace could not be opened",
+    "renameHint": "Press Enter to save the name, or Escape to keep the old one.",
+    "renameError": "The workspace was not renamed",
+    "renamed": "Workspace renamed to {{name}}.",
+    "renamedBack": "Workspace renamed back to {{name}}.",
+    "table": "Workspaces",
+    "columnName": "Name",
+    "columnSnapshots": "Snapshots",
+    "columnLatest": "Latest snapshot",
+    "open": "Open",
+    "openTag": "Open now",
+    "snapshotCount_one": "{{count, number}} snapshot",
+    "snapshotCount_other": "{{count, number}} snapshots",
+    "listError": "The workspaces folder could not be read",
+    "listErrorFolder": "Folder: {{folder}}",
+    "unreadableTitle": "Files that could not be opened",
+    "unreadableText": "These files are in the workspaces folder, but Hold Explorer cannot read them as workspaces. The workspaces above are not affected.",
+    "warningTitle": "This workspace will not be reopened at the next start"
+  },
+  "welcome": {
+    "dropTitle": "Import a holds export",
+    "dropText": "Drop the spreadsheet anywhere on this window, or open it.",
+    "openFile": "Open a file",
+    "fileTypes": "xlsx, xlsm, xlsb, xls, ods, csv, tsv, txt",
+    "demoTitle": "Demo workspace",
+    "demoText": "The demo workspace holds four weekly snapshots of made-up holds, so every screen has data. It contains no real project data.",
+    "demoOpen": "Open demo workspace",
+    "demoBuilding": "Building the demo workspace from made-up holds. This takes a few seconds.",
+    "demoError": "The demo workspace could not be built"
+  },
+  "snapshots": {
+    "trigger": "Snapshot {{date}}",
+    "menu": "Snapshot",
+    "list": "Snapshots, newest first",
+    "holds_one": "{{count, number}} hold",
+    "holds_other": "{{count, number}} holds",
+    "older": "Showing the snapshot of {{date}}. It is not the newest.",
+    "toNewest": "Go to newest",
+    "selectError": "The snapshot could not be selected"
+  },
+  "settings": {
+    "theme": "Theme",
+    "themeHelp": "System follows the theme of the operating system.",
+    "themeDark": "Dark",
+    "themeLight": "Light",
+    "themeSystem": "System",
+    "themeError": "The theme was not saved",
+    "folder": "Workspaces folder",
+    "folderHelp": "Every workspace is one file in this folder.",
+    "version": "Version"
+  },
+  "import": {
+    "title": "Import",
+    "fileFilter": "Holds exports",
+    "reading": "Reading {{file}}.",
+    "chooseAnother": "Choose another file",
+    "severalDropped_one": "{{count, number}} file was dropped.",
+    "severalDropped_other": "{{count, number}} files were dropped. One file is imported at a time, so only the first one is read.",
+    "cancelError": "The import could not be cancelled",
+    "error": {
+      "NotFound": "The file was not found",
+      "Unreadable": "The file could not be read",
+      "EmptyFile": "The file is empty",
+      "NoDataSheet": "No sheet with holds was found",
+      "Dialog": "The file dialog could not be opened",
+      "other": "The file could not be opened"
+    }
+  },
+  "overview": {
+    "loading": "Loading the overview"
   }
 }

@@ -4,7 +4,7 @@ import { VisuallyHidden as RacVisuallyHidden } from "react-aria-components";
 export interface VisuallyHiddenProps {
   children: ReactNode;
   /** The element to render; a `span` unless another is asked for. */
-  elementType?: "span" | "div" | "p" | "h2" | "h3";
+  elementType?: "span" | "div" | "p" | "h1" | "h2" | "h3";
   id?: string;
   role?: "status";
 }

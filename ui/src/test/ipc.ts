@@ -10,7 +10,10 @@ export function commandFailure(kind: string, message: string): Error & CommandEr
   return Object.assign(new Error(message), { kind });
 }
 
-export type Handlers = Partial<{ [K in CommandName]: (args: ArgsOf<K>) => ResultOf<K> }>;
+/** A handler answers at once, or with a promise when the test decides the moment of the answer. */
+export type Handlers = Partial<{
+  [K in CommandName]: (args: ArgsOf<K>) => ResultOf<K> | Promise<ResultOf<K>>;
+}>;
 
 /**
  * Answers the commands with the given handlers. A command without a handler rejects with a

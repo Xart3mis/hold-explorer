@@ -7,6 +7,12 @@ import tseslint from "typescript-eslint";
 const message =
   "Call commands through api in ui/src/api/commands.ts, the only module that imports invoke.";
 
+const invokeModules = ["@tauri-apps/api/core", "@tauri-apps/api/core.*", "@tauri-apps/api/core/**"];
+
+// The file dialog, the file manager, and the window's own events are reached through one module.
+const tauriMessage =
+  "Reach Tauri through the modules of ui/src/api/: commands.ts for commands, window.ts for the file dialog, the file manager, and files dragged over the window.";
+
 // Numbers and dates are formatted in one module, so every screen writes them the same way.
 const formatMessage =
   "Format numbers and dates with the helpers in ui/src/app/format.ts, the only module that calls Intl.";
@@ -72,22 +78,55 @@ export default tseslint.config(
     },
   },
   {
-    files: ["ui/src/**/*.{ts,tsx}"],
-    ignores: ["ui/src/api/commands.ts"],
+    // Commands: `invoke` is imported by one module.
+    files: ["ui/src/api/**/*.{ts,tsx}"],
+    ignores: ["ui/src/api/commands.ts", "ui/src/api/**/*.test.ts", "ui/src/api/**/*.test-d.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [
+          paths: [{ name: "@tauri-apps/api", message }],
+          patterns: [{ group: invokeModules, message }],
+        },
+      ],
+    },
+  },
+  {
+    // Everything else of Tauri (the file dialog, the file manager, the window's events) is
+    // imported by the modules of ui/src/api/ only. A screen imports from there.
+    files: ["ui/src/**/*.{ts,tsx}"],
+    ignores: ["ui/src/api/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "@tauri-apps/api", message }],
+          patterns: [
+            { group: invokeModules, message },
             {
-              name: "@tauri-apps/api",
-              message,
+              group: ["@tauri-apps/*", "@tauri-apps/*/**"],
+              message: tauriMessage,
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // Tests and the development page answer the commands themselves, with the mocks Tauri ships.
+    // Nothing else of Tauri is open to them.
+    files: ["ui/src/test/**/*.{ts,tsx}", "ui/src/dev/**/*.{ts,tsx}", "ui/src/**/*.test.{ts,tsx}"],
+    ignores: ["ui/src/api/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [{ name: "@tauri-apps/api", message }],
           patterns: [
+            { group: invokeModules, message },
             {
-              group: ["@tauri-apps/api/core", "@tauri-apps/api/core.*", "@tauri-apps/api/core/**"],
-              message,
+              regex: "^@tauri-apps/(?!api/mocks$)",
+              message: tauriMessage,
             },
           ],
         },

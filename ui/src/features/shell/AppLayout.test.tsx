@@ -1,0 +1,545 @@
+import { screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { destinations } from "../../app/destinations";
+import en from "../../locales/en.json";
+import { expectAccessible } from "../../test/axe";
+import { must, renderApp, topBar } from "../../test/app";
+import { opened, openStart, startState } from "../../test/fixtures";
+import { commandFailure } from "../../test/ipc";
+import { SLOW } from "../../test/slow";
+import { fileDrag, windowApi } from "../../test/window";
+
+const names = en.destinations.name;
+const soon = en.destinations.soon;
+const switcher = `${en.workspaces.switcher} Unit 573 piping`;
+
+async function sidebar() {
+  return screen.findByRole("navigation", { name: en.destinations.label });
+}
+
+describe("the sidebar", () => {
+  it("lists the nine destinations in order, in two groups", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    const lists = within(await sidebar()).getAllByRole("list");
+    expect(lists).toHaveLength(2);
+    const [data, setup] = lists;
+    if (!data || !setup) throw new Error("The sidebar has no two lists.");
+    expect(
+      within(data)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual([
+      names.overview,
+      `${names.breakdown} ${soon}`,
+      `${names.lines} ${soon}`,
+      `${names.blockers} ${soon}`,
+      `${names.history} ${soon}`,
+      `${names.people} ${soon}`,
+      `${names["follow-up"]} ${soon}`,
+    ]);
+    expect(
+      within(setup)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual([`${names.rules} ${soon}`, names.settings]);
+  });
+
+  it("puts the Soon tag in the accessible name of the seven that are not built, and of no other", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    for (const id of [
+      "breakdown",
+      "lines",
+      "blockers",
+      "history",
+      "people",
+      "follow-up",
+      "rules",
+    ] as const) {
+      expect(within(nav).getByRole("link", { name: `${names[id]} ${soon}` })).toBeInTheDocument();
+    }
+    expect(within(nav).getByRole("link", { name: names.overview })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.settings })).toBeInTheDocument();
+    expect(within(nav).getAllByText(soon)).toHaveLength(7);
+  });
+
+  it("marks the current destination, and only it", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    const overview = within(nav).getByRole("link", { name: names.overview });
+    const lines = within(nav).getByRole("link", { name: `${names.lines} ${soon}` });
+    expect(overview).toHaveAttribute("aria-current", "page");
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .filter((link) => link.hasAttribute("aria-current")),
+    ).toHaveLength(1);
+
+    await user.click(lines);
+    expect(lines).toHaveAttribute("aria-current", "page");
+    expect(overview).not.toHaveAttribute("aria-current");
+  });
+
+  it("never disables a destination and names the shortcut of each for assistive technology", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    const links = within(await sidebar()).getAllByRole("link");
+    expect(links).toHaveLength(9);
+    for (const link of links) {
+      expect(link).not.toHaveAttribute("aria-disabled");
+      expect(link).toHaveAttribute("href");
+    }
+    expect(links.map((link) => link.getAttribute("aria-keyshortcuts"))).toEqual([
+      "Control+1",
+      "Control+2",
+      "Control+3",
+      "Control+4",
+      "Control+5",
+      "Control+6",
+      "Control+7",
+      null,
+      "Control+,",
+    ]);
+  });
+
+  it("shows the shortcut of a destination in its tooltip", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    // From the top of the document: the switcher, the selector, Import, Overview, Breakdown.
+    (document.activeElement as HTMLElement | null)?.blur();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole("link", { name: `${names.breakdown} ${soon}` })).toHaveFocus();
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent(names.breakdown);
+    expect(tooltip).toHaveTextContent("Ctrl+2");
+  });
+
+  it("tells the toast region where the content area starts while it shows, and stops when it goes", async () => {
+    const root = document.documentElement;
+    const { unmount } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    expect(root).toHaveAttribute("data-sidebar");
+    unmount();
+    expect(root).not.toHaveAttribute("data-sidebar");
+
+    renderApp({ start: startState(), path: "/welcome" });
+    await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    expect(root).not.toHaveAttribute("data-sidebar");
+  });
+});
+
+describe("the top bar", () => {
+  it("holds the workspace switcher, the snapshot selector, and Import, in that order", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    const bar = topBar();
+    expect(within(bar).getByText(en.app.name)).toBeInTheDocument();
+    const buttons = within(bar).getAllByRole("button");
+    expect(
+      buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent),
+    ).toEqual([switcher, "Snapshot 7 Oct 2026", en.shell.import]);
+    // The page title is not repeated in the top bar: the page header carries it.
+    expect(within(bar).queryByText(names.overview)).not.toBeInTheDocument();
+  });
+
+  it("without a workspace offers Workspaces, Settings, and Import, and no sidebar", async () => {
+    renderApp({ start: startState(), path: "/welcome" });
+    const nav = await screen.findByRole("navigation", { name: en.shell.navigation });
+    const bar = topBar();
+    expect(bar).toContainElement(nav);
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([en.workspaces.title, names.settings]);
+    expect(links[0]).toHaveAttribute("aria-current", "page");
+    expect(links[1]).not.toHaveAttribute("aria-current");
+    expect(within(bar).getByRole("button", { name: en.shell.import })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: en.destinations.label }),
+    ).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: /Snapshot/ })).not.toBeInTheDocument();
+  });
+
+  it("has no snapshot selector for a workspace without snapshots", async () => {
+    renderApp({
+      start: openStart({ open: opened({ snapshots: [], selected: null }) }),
+      path: "/overview",
+    });
+    await screen.findByRole("button", { name: switcher });
+    expect(within(topBar()).queryByRole("button", { name: /Snapshot/ })).not.toBeInTheDocument();
+  });
+
+  it("shows, without blocking, that the workspace could not be remembered", async () => {
+    const message =
+      "The workspace is open, but Hold Explorer could not remember it for the next start. The settings file could not be written (permission denied). Check that the folder can be written to.";
+    const { user } = renderApp({
+      start: openStart({ open: opened({ warning: { kind: "Settings", message } }) }),
+      path: "/overview",
+    });
+    const notice = must(
+      (await screen.findByText(message)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    // The page is there and works.
+    expect(screen.getByRole("heading", { level: 1, name: names.overview })).toBeInTheDocument();
+    await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
+    expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+});
+
+describe("shortcuts", () => {
+  it("Ctrl+1 to Ctrl+7 open the first seven destinations, built or not", SLOW, async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/settings" });
+    await sidebar();
+    const first = destinations.slice(0, 7);
+    for (const [index, destination] of first.entries()) {
+      await user.keyboard(`{Control>}${String(index + 1)}{/Control}`);
+      expect(router.state.location.pathname).toBe(destination.path);
+      expect(
+        await screen.findByRole("heading", { level: 1, name: names[destination.id] }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("Ctrl+, opens Settings", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await user.keyboard("{Control>},{/Control}");
+    expect(router.state.location.pathname).toBe("/settings");
+  });
+
+  it("Ctrl+I starts an import: the file dialog, then the import page with the chosen file", async () => {
+    windowApi.chooseImportFile.mockResolvedValue("/exports/Holds_2026-10-07.xlsx");
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: "/lines",
+      handlers: { import_open: () => new Promise(() => undefined) },
+    });
+    await sidebar();
+    await user.keyboard("{Control>}i{/Control}");
+    expect(windowApi.chooseImportFile).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/import");
+    });
+    expect(router.state.location.state).toMatchObject({
+      path: "/exports/Holds_2026-10-07.xlsx",
+      from: "/lines",
+    });
+  });
+
+  it("a cancelled file dialog changes nothing", async () => {
+    windowApi.chooseImportFile.mockResolvedValue(null);
+    const { user, router } = renderApp({ start: openStart(), path: "/lines" });
+    await sidebar();
+    await user.click(screen.getByRole("button", { name: en.shell.import }));
+    expect(windowApi.chooseImportFile).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    expect(router.state.location.pathname).toBe("/lines");
+  });
+
+  it("plain keys typed in a field are text, and a shortcut with Ctrl still fires there", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/welcome?new=1" });
+    const field = await screen.findByRole("textbox", { name: en.workspaces.nameLabel });
+    await waitFor(() => {
+      expect(field).toHaveFocus();
+    });
+    await user.keyboard("1,i7");
+    expect(field).toHaveValue("1,i7");
+    expect(router.state.location.pathname).toBe("/welcome");
+
+    await user.keyboard("{Control>}3{/Control}");
+    expect(router.state.location.pathname).toBe("/lines");
+  });
+});
+
+describe("navigation", () => {
+  it("moves focus to the heading of the page and names the page in the document title", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    expect(document.title).toBe(`${names.overview} · ${en.app.name}`);
+    await user.click(within(nav).getByRole("link", { name: `${names.history} ${soon}` }));
+    const heading = await screen.findByRole("heading", { level: 1, name: names.history });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    expect(document.title).toBe(`${names.history} · ${en.app.name}`);
+
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: names.settings })).toHaveFocus();
+    });
+    expect(document.title).toBe(`${names.settings} · ${en.app.name}`);
+  });
+
+  it("leaves the focus at the start of the window on the page the app opens on", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/" });
+    const heading = await screen.findByRole("heading", { level: 1, name: names.overview });
+    // Opening the app is not a navigation: nothing has taken the focus.
+    expect(document.body).toHaveFocus();
+    expect(heading).not.toHaveFocus();
+    // The first Tab therefore reaches the first control of the top bar.
+    await user.tab();
+    expect(screen.getByRole("button", { name: switcher })).toHaveFocus();
+
+    // Coming back to that page later is a navigation like any other.
+    await user.keyboard("{Control>}3{/Control}");
+    await user.keyboard("{Control>}1{/Control}");
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: names.overview })).toHaveFocus();
+    });
+  });
+
+  it("opens Overview at start when a workspace is open, and the welcome page when none is", async () => {
+    const withWorkspace = renderApp({ start: openStart(), path: "/" });
+    await screen.findByRole("heading", { level: 1, name: names.overview });
+    expect(withWorkspace.router.state.location.pathname).toBe("/overview");
+    withWorkspace.unmount();
+
+    const without = renderApp({ start: startState(), path: "/" });
+    await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    expect(without.router.state.location.pathname).toBe("/welcome");
+  });
+
+  it.each([
+    "/overview",
+    "/breakdown",
+    "/lines",
+    "/blockers",
+    "/history",
+    "/people",
+    "/follow-up",
+    "/rules",
+  ])("sends %s to the welcome page while no workspace is open", async (path) => {
+    const { router } = renderApp({ start: startState(), path });
+    await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    expect(router.state.location.pathname).toBe("/welcome");
+  });
+
+  it("keeps Settings and the welcome page reachable in both states", async () => {
+    const none = renderApp({ start: startState(), path: "/settings" });
+    await screen.findByRole("heading", { level: 1, name: names.settings });
+    expect(none.router.state.location.pathname).toBe("/settings");
+    none.unmount();
+
+    const open = renderApp({ start: openStart(), path: "/welcome" });
+    await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    expect(open.router.state.location.pathname).toBe("/welcome");
+    // The sidebar is there, and no destination is marked as current.
+    const nav = await sidebar();
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .filter((link) => link.hasAttribute("aria-current")),
+    ).toHaveLength(0);
+  });
+
+  it("leaves the welcome page through the top bar when no workspace is open", async () => {
+    const { user, router } = renderApp({ start: startState(), path: "/welcome" });
+    const nav = await screen.findByRole("navigation", { name: en.shell.navigation });
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    expect(router.state.location.pathname).toBe("/settings");
+    expect(within(nav).getByRole("link", { name: names.settings })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await user.click(within(nav).getByRole("link", { name: en.workspaces.title }));
+    expect(router.state.location.pathname).toBe("/welcome");
+  });
+});
+
+describe("a page that does not exist", () => {
+  it("says so, names the address, and leads to Overview", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/nowhere" });
+    expect(
+      await screen.findByRole("heading", { level: 1, name: en.notFound.title }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: en.notFound.heading }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(en.notFound.text.replace("{{path}}", "/nowhere"))).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: en.notFound.toOverview }));
+    expect(router.state.location.pathname).toBe("/overview");
+  });
+
+  it("leads to the workspaces while no workspace is open", async () => {
+    const { user, router } = renderApp({ start: startState(), path: "/nowhere" });
+    await screen.findByRole("heading", { level: 1, name: en.notFound.title });
+    expect(screen.queryByRole("button", { name: en.notFound.toOverview })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: en.notFound.toWorkspaces }));
+    expect(router.state.location.pathname).toBe("/welcome");
+  });
+});
+
+describe("loading the application start", () => {
+  it("shows skeletons on a first load, then the app", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    // The command answers on a later turn, so right after the render nothing is known yet.
+    expect(screen.getByText(en.shell.loading)).toHaveAttribute("role", "status");
+    expect(topBar()).toHaveTextContent(en.app.name);
+    expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+    expect(document.querySelectorAll('main [data-part="skeleton"]').length).toBeGreaterThan(3);
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+
+    await sidebar();
+    expect(screen.queryByText(en.shell.loading)).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).not.toHaveAttribute("aria-busy");
+  });
+
+  it("shows the error of a failed load with its fix, and loads again on Try again", async () => {
+    const message =
+      "The settings file could not be read (permission denied). Check that you may read the folder, then start Hold Explorer again.";
+    const appStart = vi
+      .fn<() => ReturnType<typeof openStart>>()
+      .mockImplementationOnce(() => {
+        throw commandFailure("Settings", message);
+      })
+      .mockImplementation(() => openStart());
+    const { user } = renderApp({ path: "/overview", handlers: { app_start: appStart } });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(en.shell.startError);
+    expect(alert).toHaveTextContent(message);
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    await expectAccessible(document.body, { page: true });
+
+    await user.click(within(alert).getByRole("button", { name: en.common.retry }));
+    await sidebar();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(appStart).toHaveBeenCalledTimes(2);
+  });
+
+  it("has no accessibility violation while loading", async () => {
+    renderApp({ handlers: { app_start: () => new Promise(() => undefined) } });
+    expect(screen.getByText(en.shell.loading)).toHaveAttribute("role", "status");
+    await expectAccessible(document.body, { page: true });
+  });
+});
+
+describe("a file dragged over the window", () => {
+  const file = "/home/ada/exports/Holds_2026-10-07.xlsx";
+
+  it("covers the window with the drop target, which names the file, until the file leaves", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    expect(screen.queryByText(en.shell.dropTitle)).not.toBeInTheDocument();
+
+    fileDrag.enter([file]);
+    const frame = (await screen.findByText(en.shell.dropTitle)).closest("[data-part='drop-frame']");
+    expect(frame).toBeInTheDocument();
+    expect(frame).toHaveTextContent("Holds_2026-10-07.xlsx");
+
+    fileDrag.leave();
+    await waitFor(() => {
+      expect(screen.queryByText(en.shell.dropTitle)).not.toBeInTheDocument();
+    });
+  });
+
+  it("starts an import of the dropped file from any page", async () => {
+    const { router } = renderApp({
+      start: openStart(),
+      path: "/lines",
+      handlers: { import_open: () => new Promise(() => undefined) },
+    });
+    await sidebar();
+    fileDrag.enter([file]);
+    fileDrag.drop([file]);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/import");
+    });
+    expect(router.state.location.state).toMatchObject({ path: file, from: "/lines", others: 0 });
+    expect(screen.queryByText(en.shell.dropTitle)).not.toBeInTheDocument();
+  });
+
+  it("takes the first of several dropped files and keeps how many were left", async () => {
+    const { router } = renderApp({
+      start: startState(),
+      path: "/welcome",
+      handlers: { import_open: () => new Promise(() => undefined) },
+    });
+    await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    fileDrag.drop([file, "/home/ada/exports/b.xlsx", "/home/ada/exports/c.xlsx"]);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/import");
+    });
+    expect(router.state.location.state).toMatchObject({ path: file, from: "/welcome", others: 2 });
+  });
+
+  it("stops listening when the app goes", async () => {
+    const { unmount } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(fileDrag.listeners()).toBe(1);
+    });
+    unmount();
+    await waitFor(() => {
+      expect(fileDrag.listeners()).toBe(0);
+    });
+  });
+});
+
+describe("the keyboard", () => {
+  it("walks the shell in reading order: top bar, sidebar, page", SLOW, async () => {
+    const { user } = renderApp({ start: openStart(), path: "/lines" });
+    const nav = await sidebar();
+    // Start from the top of the document, as after a click on the window's background.
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    const expected = [
+      screen.getByRole("button", { name: switcher }),
+      screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
+      screen.getByRole("button", { name: en.shell.import }),
+      ...within(nav).getAllByRole("link"),
+      screen.getByRole("button", { name: en.comingSoon.action }),
+    ];
+    expect(expected).toHaveLength(13);
+    for (const element of expected) {
+      await user.tab();
+      expect(element).toHaveFocus();
+    }
+  });
+
+  it("opens a destination from the sidebar and comes back, without a pointer", SLOW, async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    (document.activeElement as HTMLElement | null)?.blur();
+    const people = within(nav).getByRole("link", { name: `${names.people} ${soon}` });
+    for (let presses = 0; presses < 20 && document.activeElement !== people; presses += 1) {
+      await user.tab();
+    }
+    expect(people).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/people");
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: names.people })).toHaveFocus();
+    });
+    // The next stop after the heading is the page's one action.
+    await user.tab();
+    expect(screen.getByRole("button", { name: en.comingSoon.action })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(router.state.location.pathname).toBe("/overview");
+  });
+});
+
+describe("accessibility of the pages in the shell", () => {
+  it("Overview has no violation", SLOW, async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await expectAccessible(document.body, { page: true });
+  });
+
+  it("the page that does not exist has no violation", SLOW, async () => {
+    renderApp({ start: openStart(), path: "/nowhere" });
+    await screen.findByRole("heading", { level: 1, name: en.notFound.title });
+    await expectAccessible(document.body, { page: true });
+  });
+
+  it("the window-wide drop target has no violation", SLOW, async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    fileDrag.enter(["/exports/Holds.xlsx"]);
+    await screen.findByText(en.shell.dropTitle);
+    await expectAccessible(document.body, { page: true });
+  });
+});

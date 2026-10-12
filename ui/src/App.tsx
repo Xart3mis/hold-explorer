@@ -1,9 +1,11 @@
-import { t } from "./app/i18n";
+import { AppProviders } from "./app/providers";
+import { AppRouter } from "./app/router";
 
+/** The whole interface: the providers every screen relies on, and the pages on their router. */
 export function App() {
   return (
-    <main className="app">
-      <h1>{t("app.name")}</h1>
-    </main>
+    <AppProviders>
+      <AppRouter />
+    </AppProviders>
   );
 }

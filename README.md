@@ -36,6 +36,8 @@ The stylesheet of design tokens, `ui/src/design/tokens.css`, is generated from `
 
 While `pnpm dev` runs, `http://localhost:1420/gallery.html` shows every base component in every state, in both themes. The gallery is for development only and is not part of the build.
 
+The app's own pages open in a browser at `http://localhost:1420/dev.html?state=first-run`, with the commands answered from fixtures (`ui/src/dev/commands.ts`). The states are `first-run`, `workspaces`, `open`, `older`, `list-error`, and `warning`; add `&theme=light` for the light theme. This page is for development only as well, and `pnpm check:dist` fails a build that contains it.
+
 ## Data policy
 
 Real project files never enter this repository. Tests generate synthetic workbooks at run time with `hx-synth`.

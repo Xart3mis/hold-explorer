@@ -1,0 +1,40 @@
+.loading {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The place of the stat tile group: one container, its cells divided by hairlines. */
+.figures {
+  display: flex;
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+}
+
+.figure {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  min-inline-size: var(--size-stat-tile-min-width);
+  padding: var(--space-4);
+}
+
+.figure + .figure {
+  border-inline-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.figureLabel {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-tight);
+}
+
+/* The place of a section title, a section's gap below the figures. */
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-md);
+  margin-block: var(--space-8) var(--space-3);
+}

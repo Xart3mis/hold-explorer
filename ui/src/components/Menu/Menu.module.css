@@ -1,0 +1,210 @@
+/* The button: a quiet button with its label and a chevron. */
+.trigger {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1-5);
+  align-items: center;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: var(--border-width-thin) solid transparent;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+/* A long value is cut at the end; the button never grows past the room it is given. */
+.triggerLabel {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  color: var(--color-text-muted);
+}
+
+.trigger[data-hovered] {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* Pressed, and for as long as its menu is open. */
+.trigger[data-pressed],
+.trigger[aria-expanded="true"] {
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
+.trigger[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The menu: the overlay a select opens, as wide as its longest item and never narrower than its button. */
+.popover {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: max(var(--trigger-width), var(--size-bar-label-width));
+  max-inline-size: var(--size-toast-max-width);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-overlay);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.popover[data-entering],
+.popover[data-exiting] {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--space-1)));
+}
+
+.popover[data-placement="top"][data-entering],
+.popover[data-placement="top"][data-exiting] {
+  transform: translateY(var(--space-1));
+}
+
+.popover[data-exiting] {
+  transition-duration: var(--duration-fast);
+}
+
+.menu {
+  min-block-size: 0;
+  padding: var(--space-1);
+  overflow: auto;
+}
+
+/*
+ * The menu itself holds the focus only while the pointer is in charge: when it was opened by a
+ * click, and whenever the pointer leaves an item. The keyboard always puts the focus on an item,
+ * and the item shows the ring. A ring around the whole menu would therefore only come and go
+ * with the pointer, so the menu, which is not a control, draws none.
+ */
+.menu:focus-visible {
+  outline-color: transparent;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The name of a group: a caption above its items, lined up with their labels. */
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.item {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.itemLabel {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail {
+  flex: none;
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The mark of the chosen item sits at the trailing edge; every item of the group keeps its room. */
+.check {
+  color: var(--color-accent-text);
+}
+
+.section [role="menuitemradio"]:not([data-selected])::after {
+  flex: none;
+  inline-size: var(--size-icon);
+  content: "";
+}
+
+/* Highlighted by the pointer or by the arrow keys. */
+.item[data-hovered],
+.item[data-focused] {
+  background-color: var(--color-surface-overlay-hover);
+}
+
+/*
+ * The ring, inset, on the item the keyboard is on. The pointer moves the focus as well, with
+ * every item it crosses; such an item is highlighted by its fill and draws no ring, or the ring
+ * would follow the pointer down the menu. The component library says which of the two it is.
+ */
+.item:focus-visible:not([data-focus-visible]) {
+  outline-color: transparent;
+}
+
+.item[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.item[data-selected] {
+  font-weight: var(--font-weight-medium);
+}
+
+.item[data-disabled] {
+  color: var(--color-text-disabled);
+}
+
+.item[data-disabled] .detail {
+  color: var(--color-text-disabled);
+}
+
+/* On the overlay surface the subtle hairline has the lightness of the surface itself in dark. */
+.separator {
+  block-size: var(--border-width-thin);
+  margin: var(--space-1) calc(-1 * var(--space-1));
+  border: 0;
+  background-color: var(--color-border-default);
+}
+
+/* The menu appears in place: it fades, and nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .popover[data-entering],
+  .popover[data-exiting],
+  .popover[data-placement="top"][data-entering],
+  .popover[data-placement="top"][data-exiting] {
+    transform: none;
+  }
+}

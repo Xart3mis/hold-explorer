@@ -114,6 +114,34 @@ describe("check-dist", () => {
     expect(run.output).toContain("https://example.org/data");
   });
 
+  it("allows the two links in the messages of the router, and no other address on those hosts", () => {
+    const messages = check({
+      "assets/index.js":
+        "throw new Error(e + ` must be used within a data router.  See https://reactrouter.com/en/main/routers/picking-a-router.`);" +
+        "console.warn(`load a polyfill such as https://github.com/ungap/url-search-params.`);",
+    });
+    expect(messages.status).toBe(0);
+
+    const other = check({ "assets/index.js": 'fetch("https://reactrouter.com/api/routes");' });
+    expect(other.status).toBe(1);
+    expect(other.output).toContain("https://reactrouter.com/api/routes");
+
+    const repository = check({ "assets/index.js": 'fetch("https://github.com/ungap/other");' });
+    expect(repository.status).toBe(1);
+    expect(repository.output).toContain("https://github.com/ungap/other");
+  });
+
+  it("allows the base the router parses addresses against, and no address on that host", () => {
+    const base = check({ "assets/index.js": "var base = new URL(`http://localhost`);" });
+    expect(base.status).toBe(0);
+
+    for (const address of ["http://localhost:3000/api", "http://localhost/data.json"]) {
+      const request = check({ "assets/index.js": `fetch("${address}");` });
+      expect(request.status).toBe(1);
+      expect(request.output).toContain(address);
+    }
+  });
+
   it("fails a build that contains the development gallery", () => {
     const page = check({ "gallery.html": "<div></div>", "index.html": "<div></div>" });
     expect(page.status).toBe(1);
@@ -122,6 +150,21 @@ describe("check-dist", () => {
     const chunk = check({ "assets/index.js": 'root.dataset.page = "hx-dev-gallery";' });
     expect(chunk.status).toBe(1);
     expect(chunk.output).toContain("development gallery");
+  });
+
+  it("fails a build that contains the development commands", () => {
+    const page = check({ "dev.html": "<div></div>", "index.html": "<div></div>" });
+    expect(page.status).toBe(1);
+    expect(page.output).toContain("dev.html");
+    expect(page.output).toContain("development commands");
+
+    const chunk = check({ "assets/index.js": 'window.name = "hx-dev-commands";' });
+    expect(chunk.status).toBe(1);
+    expect(chunk.output).toContain("development commands");
+
+    // A file that only has "dev" in its name is not the development page.
+    const other = check({ "assets/devices-B1x.js": "export const a = 1;" });
+    expect(other.status).toBe(0);
   });
 
   it("asks for a build when there is nothing to scan", () => {

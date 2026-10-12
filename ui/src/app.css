@@ -68,3 +68,11 @@ textarea {
   font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-tight);
 }
+
+/*
+ * Where the content area starts, for the toast region, which is rendered beside the layout: the
+ * shell marks the root element while its sidebar shows.
+ */
+:root[data-sidebar] {
+  --toast-inset-inline-start: calc(var(--layout-sidebar-width) + var(--space-6));
+}

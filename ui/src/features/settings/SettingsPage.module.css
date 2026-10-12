@@ -1,0 +1,71 @@
+/* A form page: rows of a label with its control or its value, a form row's gap apart. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+}
+
+.row + .row {
+  padding-block-start: var(--space-6);
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+/*
+ * The theme has three short options, so its box is no wider than they need. The helper line
+ * under it keeps the width of a line of text.
+ */
+.theme {
+  align-items: flex-start;
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+.theme > button {
+  inline-size: var(--size-bar-label-width);
+}
+
+/* A value that is shown and not edited, in the anatomy of a field: label, value, helper line. */
+.value {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* A path is written as the system gives it, and may be selected to copy. */
+.path {
+  color: var(--color-text-primary);
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.version {
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  user-select: text;
+}
+
+.help {
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}

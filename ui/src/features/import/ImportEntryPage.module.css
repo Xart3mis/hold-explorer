@@ -1,0 +1,61 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.reading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.progress {
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+.shape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* The place of the figures of the review: one container, its cells divided by hairlines. */
+.figures {
+  display: flex;
+  margin-block-end: var(--space-3);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-raised);
+}
+
+.figure {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  padding: var(--space-4);
+}
+
+.figure + .figure {
+  border-inline-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-tight);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-body);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
