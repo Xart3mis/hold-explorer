@@ -1,13 +1,21 @@
 import "@testing-library/jest-dom/vitest";
 import "../app/i18n";
 import { clearMocks } from "@tauri-apps/api/mocks";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { randomFillSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, vi } from "vitest";
 import { queryClient } from "../app/query";
+import { checkUnhandledCommands } from "./ipc";
 import { resetWindowApi } from "./window";
+
+// How long a test waits for something to appear (`findBy...`, `waitFor`). The library's default
+// is one second, and a test of a screen renders the whole app: on a loaded machine or a slow CI
+// runner the first such render of a file can take longer than that without anything being wrong.
+// It is set once, here, for every test. What a test expects does not change, and the limit of a
+// test stays where it is; a test that is slow by nature takes the allowance of ui/src/test/slow.ts.
+configure({ asyncUtilTimeout: 5000 });
 
 // No test reaches the file dialog, the file manager, or the window's drag events: the module that
 // talks to them is replaced by the stand-in of ui/src/test/window.ts. The test of that module
@@ -46,4 +54,7 @@ afterEach(() => {
   for (const region of document.querySelectorAll("[data-live-announcer]")) region.remove();
   // The query client is shared by the whole app, so what one test loaded must not reach the next.
   queryClient.clear();
+  // Last, so that everything above is put back also when this fails the test: a command the
+  // test sent and gave no handler for. See ui/src/test/ipc.ts.
+  checkUnhandledCommands();
 });

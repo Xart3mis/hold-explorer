@@ -1,4 +1,4 @@
-import { configure, render } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import type { Destination } from "../app/destinations";
@@ -9,13 +9,6 @@ import type { AppStart } from "../bindings/AppStart";
 import { startState } from "./fixtures";
 import { mockCommands, type Handlers } from "./ipc";
 import { overviewOf } from "./overview";
-
-// A test of a screen renders the whole app: the router, the query client, the shell, and the page,
-// and then waits for the application start to answer. On a loaded machine the first such render
-// of a file can take longer than the second a query waits by default before it gives up. The
-// wait is lengthened for the files that use this helper; what a test expects does not change,
-// and the limit of a test stays where it is.
-configure({ asyncUtilTimeout: 3000 });
 
 export interface RenderAppOptions {
   /** What `app_start` returns. Nothing open and an empty folder otherwise. */

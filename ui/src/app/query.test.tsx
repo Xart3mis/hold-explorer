@@ -51,12 +51,27 @@ describe("queryClient", () => {
     expect(result.current.error).toMatchObject({ kind: "NoWorkspace" });
   });
 
-  it("decides a retry by what failed", () => {
-    const retry = queryClient.getDefaultOptions().queries?.retry;
-    if (typeof retry !== "function") throw new Error("The query client has no retry rule.");
-    expect(retry(0, { kind: "Internal", message: "It broke." } as unknown as Error)).toBe(false);
-    expect(retry(0, new Error("The page was reloaded."))).toBe(true);
-    expect(retry(3, new Error("The page was reloaded."))).toBe(false);
+  it("does not ask again when a call fails for another reason than the command's own answer", async () => {
+    // A command is a local call: a panic or a bad argument fails the same way every time, and
+    // asking again only keeps the skeleton on screen for longer.
+    const load = vi.fn(() =>
+      Promise.reject(new Error("invalid args `view` for command `overview`")),
+    );
+    const started = Date.now();
+    const { result } = renderHook(() => useQuery({ queryKey: ["test", "broken"], queryFn: load }), {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(result.current.failureCount).toBe(1);
+    // The error is there at once, not after the waits between tries.
+    expect(Date.now() - started).toBeLessThan(900);
+  });
+
+  it("never retries a query, whatever failed", () => {
+    expect(queryClient.getDefaultOptions().queries?.retry).toBe(false);
   });
 
   it("never takes the application start for stale: it is refreshed on purpose, not on a mount", () => {

@@ -231,12 +231,9 @@ describe("useSnapshotQuery", () => {
     const watch = setInterval(() => {
       if (result.current.lines.isError) seen.push(result.current.lines.error);
     }, 5);
-    await waitFor(
-      () => {
-        expect(result.current.lines.data).toBe("lines of 2");
-      },
-      { timeout: 4000 },
-    );
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 2");
+    });
     clearInterval(watch);
     expect(read).toHaveBeenCalledTimes(3);
     for (const [view] of read.mock.calls) expect(view).toEqual(HERE);

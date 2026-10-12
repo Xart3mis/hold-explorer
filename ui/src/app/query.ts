@@ -1,18 +1,17 @@
 import { keepPreviousData, QueryClient, queryOptions } from "@tanstack/react-query";
 import { api } from "../api/commands";
-import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
-
-/** How often a failure that is not a command's own answer is tried again. */
-const RETRIES = 3;
 
 /**
  * The one query client. Every command result is loaded through it.
  *
  * - A refetch keeps the previous data, also when the key changes (another snapshot, another
  *   filter), so a screen dims its previous render and never falls back to skeletons.
- * - A `CommandError` is the command's answer, not a fault of the channel: asking again returns
- *   the same error, so it is never retried. Mutations are never retried.
+ * - Nothing is tried again by itself. A command is a local call, and it fails the same way every
+ *   time: a `CommandError` is the command's answer, and anything else, a panic or an argument
+ *   the command cannot read, is a fault that asking again does not mend. A retry would only keep
+ *   the skeleton on screen for seconds before the error. The one exception is made where it is
+ *   needed, not here: `useSnapshotQuery` reads again after `ViewChanged`.
  * - Commands are local calls. They run whether or not the machine is online, and nothing is
  *   fetched again because the window was shown or the network came back.
  */
@@ -20,7 +19,7 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       placeholderData: keepPreviousData,
-      retry: (failureCount, error) => !isCommandError(error) && failureCount < RETRIES,
+      retry: false,
       networkMode: "always",
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,

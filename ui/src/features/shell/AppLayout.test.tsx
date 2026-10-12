@@ -1,10 +1,11 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import { destinationPages } from "../../app/router";
 import { Button } from "../../components";
+import { durationToken } from "../../design/token-values";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
@@ -443,20 +444,42 @@ describe("navigation", () => {
   });
 
   it("takes it back as well when the focus falls to the body only as the menu finishes closing", async () => {
-    const { user } = renderApp({ start: openStart(), path: "/overview" });
-    const nav = await sidebar();
-    await user.click(within(nav).getByRole("link", { name: names.settings }));
-    const heading = await screen.findByRole("heading", { level: 1, name: names.settings });
-    await waitFor(() => {
-      expect(heading).toHaveFocus();
+    const { router } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    // The page looks again on the next frame, and once more when a menu has had the time to
+    // close. The test decides when each of the two comes, so that no load on the machine can
+    // put its own step after the second look.
+    vi.useFakeTimers({
+      toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"],
     });
-    // Later than the next frame, sooner than the exit of a menu takes.
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    heading.blur();
-    expect(document.body).toHaveFocus();
-    await waitFor(() => {
+    try {
+      await act(async () => {
+        await router.navigate("/settings");
+      });
+      const heading = screen.getByRole("heading", { level: 1, name: names.settings });
       expect(heading).toHaveFocus();
-    });
+      const exit = must(durationToken("--duration-base"), "the time a menu takes to close");
+
+      // Later than the next frame, sooner than the exit of a menu takes.
+      act(() => {
+        vi.advanceTimersByTime(60);
+      });
+      heading.blur();
+      expect(document.body).toHaveFocus();
+      // Nothing takes the focus back before the menu has had its time.
+      act(() => {
+        vi.advanceTimersByTime(exit - 60 - 1);
+      });
+      expect(document.body).toHaveFocus();
+      // Then the page looks once more, on the frame after.
+      act(() => {
+        vi.advanceTimersByTime(1);
+        vi.advanceTimersToNextFrame();
+      });
+      expect(heading).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never takes the focus from a control that was focused after the navigation", async () => {

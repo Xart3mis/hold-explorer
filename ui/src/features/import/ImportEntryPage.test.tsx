@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportDraft } from "../../bindings/ImportDraft";
+import type { ImportReview } from "../../bindings/ImportReview";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
@@ -22,6 +23,12 @@ async function page() {
   await screen.findByRole("heading", { level: 1, name: en.import.title });
   return screen.getByRole("main");
 }
+
+/**
+ * The answer to `import_review` in a test that ends when the review page is reached: the page
+ * asks for the review as soon as it shows, and the review is still on its way when the test ends.
+ */
+const reviewOnItsWay = () => new Promise<ImportReview>(() => undefined);
 
 describe("the import page while the file is read", () => {
   it("opens the file, says which file is being read, and shows the shape of the page to come", async () => {
@@ -60,7 +67,7 @@ describe("the import page once the file is open", () => {
     const { router } = renderApp({
       start: openStart(),
       path: at({ path: FILE, from: "/lines" }),
-      handlers: { import_open: () => opened },
+      handlers: { import_open: () => opened, import_review: reviewOnItsWay },
     });
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/import/review");
@@ -88,7 +95,7 @@ describe("the import page once the file is open", () => {
     const { router } = renderApp({
       start: openStart(),
       path: at({ path: FILE, from: "/lines" }),
-      handlers: { import_open: open },
+      handlers: { import_open: open, import_review: reviewOnItsWay },
     });
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/import/review");
@@ -111,7 +118,7 @@ describe("a second file dropped while the first is still being read", () => {
     const { router } = renderApp({
       start: openStart(),
       path: at({ path: FILE, from: "/lines" }),
-      handlers: { import_open: open },
+      handlers: { import_open: open, import_review: reviewOnItsWay },
     });
     const main = await page();
     await within(main).findByText(reading);
@@ -191,7 +198,7 @@ describe("the import page when the file cannot be opened", () => {
     const { user, router } = renderApp({
       start: openStart(),
       path: at({ path: FILE, from: "/lines" }),
-      handlers: { import_open: open },
+      handlers: { import_open: open, import_review: reviewOnItsWay },
     });
     const main = await page();
     await user.click(await within(main).findByRole("button", { name: en.import.chooseAnother }));
@@ -334,7 +341,7 @@ describe("the import page in its other states", () => {
     const { user, router } = renderApp({
       start: openStart(),
       path: "/import",
-      handlers: { import_open: open },
+      handlers: { import_open: open, import_review: reviewOnItsWay },
     });
     const main = await page();
     expect(open).not.toHaveBeenCalled();
