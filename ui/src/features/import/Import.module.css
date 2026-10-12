@@ -9,6 +9,17 @@
   padding-block-end: var(--space-6);
 }
 
+/*
+ * The part of a page that is a form, on a page that also holds a table: the form keeps the width
+ * of a form, and the table after it takes the content area.
+ */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-inline-size: var(--layout-form-max-width);
+}
+
 /* A notice above the page's sections, a section's gap from the first of them. */
 .above {
   margin-block-end: var(--space-6);

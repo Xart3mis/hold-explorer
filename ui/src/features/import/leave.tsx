@@ -12,9 +12,18 @@ function inFlow(pathname: string): boolean {
 }
 
 /**
+ * Whether the app is on a page of the import flow at this moment. The guard below is there for
+ * as long as the app is, and keeps it; a cancel that is answered after its page has gone asks it.
+ */
+let onFlowPage = false;
+
+/**
  * Cancels the import: the draft is dropped on the Rust side, then forgotten here, and the app
  * goes to the address the mutation is given, which is where the import was started unless the
  * page says otherwise. A cancel that fails changes nothing; its error is the mutation's.
+ *
+ * The answer may come after the user has left the import by another way. The draft is forgotten
+ * all the same, and the user stays where they went: only a page of the flow is left for them.
  */
 export function useLeaveImport() {
   const client = useQueryClient();
@@ -26,7 +35,7 @@ export function useLeaveImport() {
     },
     onSuccess: (to) => {
       clearImport(client);
-      void navigate(to);
+      if (onFlowPage) void navigate(to);
     },
   });
 }
@@ -41,6 +50,13 @@ export function ImportLeaveGuard() {
   const client = useQueryClient();
   const { pathname } = useLocation();
   const wasInFlow = useRef(false);
+
+  useEffect(() => {
+    onFlowPage = inFlow(pathname);
+    return () => {
+      onFlowPage = false;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     if (inFlow(pathname)) {

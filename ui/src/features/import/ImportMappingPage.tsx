@@ -55,6 +55,10 @@ interface PreviewRow {
  * the file with their header and their first value; under them the first rows of the file. A
  * column supplies one field only. "Continue" reads the file with the mapping and opens the
  * review; until every required field has a column it waits, and the page says for which.
+ *
+ * The fields and the actions keep the width of a form. The preview is a table, and a table is
+ * not capped: it takes the width of the content area, so a full export of fifteen columns
+ * scrolls sideways only where the window ends.
  */
 export function ImportMappingPage() {
   const { draft, choices, choose, from, others, sentWith } = useImportDraft();
@@ -64,6 +68,8 @@ export function ImportMappingPage() {
   const [arrivedWithFile] = useState(draft !== undefined);
   // What the page has to say about the last change: a column that moved, a mapping that was reset.
   const [said, setSaid] = useState<string | null>(null);
+  // Whether the mapping was changed since the page was opened.
+  const [isChanged, setChanged] = useState(false);
   const blockedId = useId();
 
   const fields: Fields = choices.fields ?? draft?.proposed.fields ?? {};
@@ -85,6 +91,7 @@ export function ImportMappingPage() {
   const change = (next: Fields) => {
     client.removeQueries({ queryKey: keys.importReview });
     review.reset();
+    setChanged(true);
     choose({ fields: next });
   };
 
@@ -152,8 +159,12 @@ export function ImportMappingPage() {
 
   const ordered = orderFields(draft.required);
   const missing = ordered.required.filter((field) => fields[field] === undefined);
-  // The review could not read the file for want of required columns, and led back here.
-  const sentBack = sentWith?.kind === "MissingColumns" && missing.length > 0 ? sentWith : null;
+  // The review could not read the file for want of required columns, and led back here. It is
+  // said whether or not this page finds a field without a column: the review may have missed
+  // one the page takes for mapped. It was said of the mapping the page opened with, so it goes
+  // once that mapping was changed and every required field has a column.
+  const sentBack =
+    sentWith?.kind === "MissingColumns" && (missing.length > 0 || !isChanged) ? sentWith : null;
 
   const columns = headers.map((_, column): DataTableColumn<PreviewRow> => {
     const owner = fieldOf(fields, column);
@@ -188,7 +199,8 @@ export function ImportMappingPage() {
     <Page
       title={t("import.mapping.title")}
       description={t("import.mapping.description", { file: file.file_name })}
-      width="form"
+      // The fields keep the width of a form; the preview is a table and takes the content area.
+      width="full"
       breadcrumb={{
         ancestors: [
           {
@@ -201,109 +213,111 @@ export function ImportMappingPage() {
       }}
     >
       <div className={styles.page}>
-        {others > 0 ? (
-          <Notice tone="info">{t("import.severalDropped", { count: others + 1 })}</Notice>
-        ) : null}
+        <div data-part="mapping-form" className={styles.form}>
+          {others > 0 ? (
+            <Notice tone="info">{t("import.severalDropped", { count: others + 1 })}</Notice>
+          ) : null}
 
-        {sentBack === null ? null : (
-          <div data-kind={sentBack.kind}>
-            <Notice tone="warning" title={t("import.mapping.sentBackTitle")}>
-              {sentBack.message}
+          {sentBack === null ? null : (
+            <div data-kind={sentBack.kind}>
+              <Notice tone="warning" title={t("import.mapping.sentBackTitle")}>
+                {sentBack.message}
+              </Notice>
+            </div>
+          )}
+
+          {draft.used_saved_mapping ? (
+            <Notice tone="info" title={t("import.mapping.savedTitle")}>
+              {t("import.mapping.savedText")}
             </Notice>
-          </div>
-        )}
+          ) : null}
 
-        {draft.used_saved_mapping ? (
-          <Notice tone="info" title={t("import.mapping.savedTitle")}>
-            {t("import.mapping.savedText")}
-          </Notice>
-        ) : null}
+          {file.sheets.length > 1 ? (
+            <div className={styles.line}>
+              <span className={styles.text}>
+                {t("import.mapping.sheet", { sheet: file.sheet_name })}
+              </span>
+              <Button
+                variant="quiet"
+                isDisabled={review.isPending}
+                onPress={() => {
+                  void navigate(IMPORT_SHEET_PATH, { state: { from } });
+                }}
+              >
+                {t("import.chooseSheet")}
+              </Button>
+            </div>
+          ) : null}
 
-        {file.sheets.length > 1 ? (
-          <div className={styles.line}>
-            <span className={styles.text}>
-              {t("import.mapping.sheet", { sheet: file.sheet_name })}
-            </span>
-            <Button
-              variant="quiet"
-              isDisabled={review.isPending}
-              onPress={() => {
-                void navigate(IMPORT_SHEET_PATH, { state: { from } });
-              }}
-            >
-              {t("import.chooseSheet")}
-            </Button>
-          </div>
-        ) : null}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>{t("import.mapping.required")}</h2>
+            <div className={styles.fields}>
+              {ordered.required.map((field) => select(field, true))}
+            </div>
+          </section>
 
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t("import.mapping.required")}</h2>
-          <div className={styles.fields}>
-            {ordered.required.map((field) => select(field, true))}
-          </div>
-        </section>
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>{t("import.mapping.optional")}</h2>
+            <p className={styles.text}>{t("import.mapping.optionalHelp")}</p>
+            <div className={styles.fields}>
+              {ordered.optional.map((field) => select(field, false))}
+            </div>
+          </section>
 
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t("import.mapping.optional")}</h2>
-          <p className={styles.text}>{t("import.mapping.optionalHelp")}</p>
-          <div className={styles.fields}>
-            {ordered.optional.map((field) => select(field, false))}
-          </div>
-        </section>
+          {said === null ? null : <Notice tone="info">{said}</Notice>}
 
-        {said === null ? null : <Notice tone="info">{said}</Notice>}
+          {review.isError ? (
+            <ImportProblem error={asCommandError(review.error)} general="import.mapping.error" />
+          ) : null}
+          {cancel.isError ? (
+            <Notice tone="danger" title={t("import.cancelError")}>
+              {asCommandError(cancel.error).message}
+            </Notice>
+          ) : null}
 
-        {review.isError ? (
-          <ImportProblem error={asCommandError(review.error)} general="import.mapping.error" />
-        ) : null}
-        {cancel.isError ? (
-          <Notice tone="danger" title={t("import.cancelError")}>
-            {asCommandError(cancel.error).message}
-          </Notice>
-        ) : null}
-
-        <div className={styles.section}>
-          <div className={styles.actions}>
-            <Button
-              variant="primary"
-              isDisabled={missing.length > 0}
-              isPending={review.isPending}
-              {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
-              onPress={() => {
-                setSaid(null);
-                review.mutate();
-              }}
-            >
-              {t("import.mapping.continue")}
-            </Button>
-            <Button
-              isDisabled={review.isPending}
-              onPress={() => {
-                change(file.auto_map.fields);
-                setSaid(t("import.mapping.resetDone"));
-              }}
-            >
-              {t("import.mapping.reset")}
-            </Button>
-            <Button
-              variant="quiet"
-              isPending={cancel.isPending}
-              isDisabled={review.isPending}
-              onPress={() => {
-                cancel.mutate(from);
-              }}
-            >
-              {t("common.cancel")}
-            </Button>
-          </div>
-          {/* Why Continue waits. A disabled button cannot be reached by Tab, so the reason is
+          <div className={styles.section}>
+            <div className={styles.actions}>
+              <Button
+                variant="primary"
+                isDisabled={missing.length > 0}
+                isPending={review.isPending}
+                {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
+                onPress={() => {
+                  setSaid(null);
+                  review.mutate();
+                }}
+              >
+                {t("import.mapping.continue")}
+              </Button>
+              <Button
+                isDisabled={review.isPending}
+                onPress={() => {
+                  change(file.auto_map.fields);
+                  setSaid(t("import.mapping.resetDone"));
+                }}
+              >
+                {t("import.mapping.reset")}
+              </Button>
+              <Button
+                variant="quiet"
+                isPending={cancel.isPending}
+                isDisabled={review.isPending}
+                onPress={() => {
+                  cancel.mutate(from);
+                }}
+              >
+                {t("common.cancel")}
+              </Button>
+            </div>
+            {/* Why Continue waits. A disabled button cannot be reached by Tab, so the reason is
               announced when it changes: the region is always there, and what it holds changes. */}
-          <div id={blockedId} role="status" data-part="continue-status">
-            {missing.length === 0 ? null : (
-              <p className={styles.text}>
-                {t("import.mapping.blocked", { fields: formatList(missing.map(fieldLabel)) })}
-              </p>
-            )}
+            <div id={blockedId} role="status" data-part="continue-status">
+              {missing.length === 0 ? null : (
+                <p className={styles.text}>
+                  {t("import.mapping.blocked", { fields: formatList(missing.map(fieldLabel)) })}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

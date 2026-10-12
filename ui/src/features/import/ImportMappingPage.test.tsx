@@ -1,10 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportReview } from "../../bindings/ImportReview";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import { must } from "../../test/app";
 import { choose, openFlow, pageTitled } from "../../test/flow";
 import { exportDraft, review, savedMappingDraft, unmappedDraft } from "../../test/import";
 import { commandFailure } from "../../test/ipc";
@@ -355,10 +358,67 @@ describe("the mapping page", () => {
     },
   );
 
+  it(
+    "says why the review sent the user back also when the page sees every required field with a column, until the mapping is changed",
+    SLOW,
+    async () => {
+      const message =
+        "Missing required columns: hold_type. The column mapped to it is not in the sheet that was read. Map it to a column of the file.";
+      const { user, router } = openFlow("/import/review", {
+        draft: exportDraft(),
+        handlers: {
+          import_review: () => {
+            throw commandFailure("MissingColumns", message);
+          },
+        },
+      });
+      const main = await mapping();
+      expect(router.state.location.pathname).toBe("/import/mapping");
+      // The page itself finds nothing missing, and Continue is not held back.
+      expect(within(main).queryByText(text.missing)).not.toBeInTheDocument();
+      expect(within(main).getByRole("button", { name: text.continue })).toBeEnabled();
+      // The review said otherwise, and the user is told why they are here.
+      const title = within(main).getByText(text.sentBackTitle);
+      const notice = title.closest("[data-kind]");
+      expect(notice).toHaveAttribute("data-kind", "MissingColumns");
+      expect(notice).toHaveTextContent(message);
+
+      // A changed mapping answers it: what the review said was about the mapping of before.
+      await choose(user, holdType, /^discipline/);
+      expect(within(main).queryByText(text.sentBackTitle)).not.toBeInTheDocument();
+    },
+  );
+
   it("says nothing of the kind on a mapping page the user came to by choice", async () => {
     openFlow("/import/mapping", { draft: unmappedDraft() });
     const main = await mapping();
     expect(within(main).queryByText(text.sentBackTitle)).not.toBeInTheDocument();
+  });
+
+  it("keeps its fields at the width of a form and gives the preview the width of the content area", async () => {
+    openFlow("/import/mapping", { draft: exportDraft() });
+    const main = await mapping();
+    // The page is not capped; the part that is a form is.
+    const page = must(main.querySelector("[data-part='page']"), "the page");
+    expect(page).toHaveAttribute("data-width", "full");
+    const form = must(main.querySelector<HTMLElement>("[data-part='mapping-form']"), "the form");
+    expect(form.querySelectorAll("[data-field]")).toHaveLength(14);
+    expect(form).toContainElement(within(main).getByRole("button", { name: text.continue }));
+    // A real export has fifteen columns: its table is outside the form, so it is as wide as the
+    // content area and scrolls sideways only past that.
+    const table = within(main).getByRole("grid", { name: text.preview });
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(15);
+    expect(form).not.toContainElement(table);
+    expect(page).toContainElement(table);
+    // What caps the form is the token of the form width, and nothing caps the table.
+    const stylesheet = readFileSync(join(import.meta.dirname, "Import.module.css"), "utf8");
+    const rule = /\.form\s*\{[^}]*\}/.exec(stylesheet)?.[0] ?? "";
+    expect(rule).toContain("max-inline-size: var(--layout-form-max-width)");
+    const classes = (element: Element) => [...element.classList].join(" ");
+    expect(classes(form)).toMatch(/form/);
+    for (let box = table.parentElement; box !== null && box !== page; box = box.parentElement) {
+      expect(classes(box)).not.toMatch(/\bform\b|_form_/);
+    }
   });
 
   it("has no accessibility violation, with fields missing and with a list open", SLOW, async () => {

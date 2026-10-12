@@ -55,6 +55,7 @@ export const DEV_STATES = [
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
   //   dev.html?state=import-sheet#/import/sheet
+  //   dev.html?state=import-mapping-wide#/import/mapping (a full export, fifteen columns)
   "import-clean",
   "import-findings",
   "import-confirm",
@@ -62,6 +63,7 @@ export const DEV_STATES = [
   "import-same-day",
   "import-limited",
   "import-mapping",
+  "import-mapping-wide",
   "import-saved",
   "import-sheet",
   "import-committing",
@@ -156,6 +158,7 @@ export function devDraft(state: DevState): ImportDraft | null {
     case "import-imported":
     case "import-same-day":
     case "import-limited":
+    case "import-mapping-wide":
     case "import-committing":
     case "import-failed":
       return exportDraft();
@@ -284,6 +287,7 @@ function world(state: DevState, theme: Theme): World {
     case "import-same-day":
     case "import-limited":
     case "import-mapping":
+    case "import-mapping-wide":
     case "import-saved":
     case "import-sheet":
     case "import-committing":

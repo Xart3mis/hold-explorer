@@ -342,6 +342,39 @@ describe("what the review page shows", () => {
   });
 });
 
+describe("the years a snapshot date may have", () => {
+  it(
+    "are the ones the review gives: a year inside them is taken, one outside is refused by name",
+    SLOW,
+    async () => {
+      const { user } = reviewing(review({ min_year: 1990, max_year: 2030 }));
+      const main = await ready();
+      const date = within(main).getByRole("textbox", { name: text.date.date });
+      // 1995 lies before 2000 and inside what this review allows.
+      await user.clear(date);
+      await user.type(date, "1995-06-01");
+      await user.tab();
+      expect(date).not.toBeInvalid();
+      expect(within(main).queryByText(/Enter a date between the years/)).not.toBeInTheDocument();
+
+      // 2031 lies inside 2000 to 2100 and outside what this review allows.
+      await user.clear(date);
+      await user.type(date, "2031-01-01");
+      await user.tab();
+      expect(date).toBeInvalid();
+      expect(
+        within(main).getByText(filled(text.date.dateRange, { first: "1990", last: "2030" })),
+      ).toBeVisible();
+      expect(within(main).getByText(/between the years 1990 and 2030/)).toBeVisible();
+      expect(importButton(main)).toBeDisabled();
+    },
+  );
+
+  it("are written in no text of the catalog", () => {
+    expect(JSON.stringify(en)).not.toMatch(/\b(2000|2100)\b/);
+  });
+});
+
 describe("the snapshot date on the review page", () => {
   it.each([
     ["1999-12-31", "a year before 2000"],
@@ -354,7 +387,14 @@ describe("the snapshot date on the review page", () => {
     await user.clear(date);
     await user.type(date, typed);
     await user.tab();
-    expect(within(main).getByText(text.date.dateRange)).toBeVisible();
+    expect(
+      within(main).getByText(filled(text.date.dateRange, { first: "2000", last: "2100" })),
+    ).toBeVisible();
+    expect(
+      within(main).getByText(
+        "Enter a date between the years 2000 and 2100. A year outside that range is refused.",
+      ),
+    ).toBeVisible();
     expect(date).toBeInvalid();
     expect(importButton(main)).toBeDisabled();
     expect(within(main).getByText(text.blocked.date)).toBeVisible();
@@ -994,6 +1034,61 @@ describe("importing from the review page", () => {
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
     expect(queryClient.getQueryData(keys.importReview)).toBeUndefined();
+  });
+
+  it("does not pull the user back when Cancel is answered after they have left the import", async () => {
+    let finish: (value: null) => void = () => undefined;
+    const cancel = vi
+      .fn<() => null | Promise<null>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<null>((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockImplementation(() => null);
+    const { user, router } = reviewing(review(), { import_cancel: cancel }, "/history");
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.common.cancel }));
+    await waitFor(() => {
+      expect(cancel).toHaveBeenCalledTimes(1);
+    });
+    // The answer takes its time, and the user goes elsewhere by the sidebar.
+    const nav = screen.getByRole("navigation", { name: en.destinations.label });
+    await user.click(within(nav).getByRole("link", { name: en.destinations.name.settings }));
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.settings });
+
+    finish(null);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(router.state.location.pathname).toBe("/settings");
+    expect(
+      screen.getByRole("heading", { level: 1, name: en.destinations.name.settings }),
+    ).toBeInTheDocument();
+    expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
+  });
+
+  it("still returns to where the import was started when Cancel is answered on another page of the flow", async () => {
+    let finish: (value: null) => void = () => undefined;
+    const cancel = vi.fn(
+      () =>
+        new Promise<null>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { user, router } = reviewing(review(), { import_cancel: cancel }, "/history");
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.common.cancel }));
+    await waitFor(() => {
+      expect(cancel).toHaveBeenCalledTimes(1);
+    });
+    await user.click(within(main).getByRole("button", { name: text.changeMapping }));
+    await pageTitled(en.import.mapping.title);
+
+    finish(null);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/history");
+    });
+    expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
   });
 
   it("shows why the import could not be cancelled, and stays", async () => {

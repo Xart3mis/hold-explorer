@@ -2,10 +2,11 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ArgsOf } from "../../api/commands";
 import type { ImportDone } from "../../bindings/ImportDone";
+import type { TargetCheck } from "../../bindings/TargetCheck";
 import en from "../../locales/en.json";
 import { must, topBar } from "../../test/app";
 import { expectAccessible } from "../../test/axe";
-import { done, review, reviewToConfirm } from "../../test/import";
+import { done, freeTarget, review, reviewToConfirm } from "../../test/import";
 import { commandFailure } from "../../test/ipc";
 import { filled, heldCommit, importButton, ready, reviewing, reviewPage } from "../../test/review";
 import { SLOW } from "../../test/slow";
@@ -200,6 +201,92 @@ describe("why Import is disabled, for every user", () => {
     importButton(main).focus();
     expect(importButton(main)).not.toHaveFocus();
   });
+});
+
+describe("that Import has become available, for every user", () => {
+  /** The line that says so. It is announced, and the button shows the same to the eye. */
+  function available(main: HTMLElement): HTMLElement {
+    return must(
+      main.querySelector<HTMLElement>('[data-part="import-available"]'),
+      "the line that says the snapshot can be imported",
+    );
+  }
+
+  it(
+    "is said once the workspace has been checked and nothing else is in the way",
+    SLOW,
+    async () => {
+      let finish: (value: TargetCheck) => void = () => undefined;
+      reviewing(review(), {
+        import_check_target: () =>
+          new Promise<TargetCheck>((resolve) => {
+            finish = resolve;
+          }),
+      });
+      const main = await reviewPage();
+      const line = available(main);
+      expect(line).toHaveAttribute("role", "status");
+      await waitFor(() => {
+        expect(status(main)).toHaveTextContent(text.blocked.checking);
+      });
+      expect(line).toBeEmptyDOMElement();
+
+      finish(freeTarget);
+      await waitFor(() => {
+        expect(importButton(main)).toBeEnabled();
+      });
+      // The same element says it: a change inside it is what is announced.
+      expect(available(main)).toBe(line);
+      expect(line).toHaveTextContent(text.available);
+      // It is not one of the reasons, and the button has nothing to explain any more.
+      expect(status(main)).toBeEmptyDOMElement();
+      expect(importButton(main)).toHaveAccessibleDescription("");
+    },
+  );
+
+  it(
+    "is taken back when a reason returns, and said again when that reason goes",
+    SLOW,
+    async () => {
+      const { user } = reviewing(reviewToConfirm());
+      const main = await reviewPage();
+      const line = available(main);
+      await waitFor(() => {
+        expect(status(main)).toHaveTextContent(text.blocked.confirm);
+      });
+      expect(line).toBeEmptyDOMElement();
+      const confirm = within(main).getByRole("checkbox", { name: text.date.confirm });
+      await user.click(confirm);
+      await waitFor(() => {
+        expect(line).toHaveTextContent(text.available);
+      });
+      await user.click(confirm);
+      await waitFor(() => {
+        expect(line).toBeEmptyDOMElement();
+      });
+      expect(status(main)).toHaveTextContent(text.blocked.confirm);
+    },
+  );
+
+  it(
+    "is not said of an import that was never held back, and not while an import runs",
+    SLOW,
+    async () => {
+      const commit = heldCommit();
+      const { user } = reviewing(
+        review({ target: { suggested: null, matching: [], all: [] } }),
+        { import_commit: commit.handler },
+        "/welcome",
+      );
+      const main = await ready();
+      expect(available(main)).toBeEmptyDOMElement();
+      await user.click(importButton(main));
+      await waitFor(() => {
+        expect(commit.handler).toHaveBeenCalledTimes(1);
+      });
+      expect(available(main)).toBeEmptyDOMElement();
+    },
+  );
 });
 
 describe("how far a running import has come, for every user", () => {

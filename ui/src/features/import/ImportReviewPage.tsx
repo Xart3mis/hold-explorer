@@ -85,7 +85,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   }, []);
 
   const { file } = draft;
-  const date = readDate(review.detected, choices);
+  const date = readDate(review, choices);
   const target = readTarget(review, choices);
   const { workspace } = target;
   // The name of a new workspace as its field holds it at this moment; see `ReviewTarget`.
@@ -148,6 +148,12 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
     else if (already !== null) reasons.push(t("import.review.blocked.already"));
   }
 
+  // Whether Import waited for something a moment ago and waits for nothing now. That it has
+  // become available is said once, to those who cannot see the button change.
+  const isBlocked = reasons.length > 0;
+  const [hold, setHold] = useState({ isBlocked, isLifted: false });
+  if (hold.isBlocked !== isBlocked) setHold({ isBlocked, isLifted: hold.isBlocked && !isBlocked });
+
   const decide = (chosen: Partial<ImportChoices>) => {
     // A choice that is made after a failed import answers it: its error no longer applies.
     if (importCommit.isError) importCommit.reset();
@@ -156,8 +162,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
     // comes back to the day.
     const next = { ...choices, ...chosen };
     const moved =
-      readDate(review.detected, next).moment !== date.moment ||
-      readTarget(review, next).id !== target.id;
+      readDate(review, next).moment !== date.moment || readTarget(review, next).id !== target.id;
     choose(moved ? { ...chosen, replace: null } : chosen);
   };
 
@@ -431,6 +436,14 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </ul>
           )}
         </div>
+        {/*
+          That Import waits for nothing any more is said in a line of its own, so the region
+          above holds the reasons and nothing else: it is what describes the button. The eye
+          sees the button change; the line is for a screen reader.
+        */}
+        <VisuallyHidden role="status" data-part="import-available">
+          {!committing && !isBlocked && hold.isLifted ? t("import.review.available") : ""}
+        </VisuallyHidden>
       </div>
     </div>
   );

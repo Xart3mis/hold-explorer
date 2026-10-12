@@ -171,7 +171,7 @@
       "Empty": "The file has no data rows",
       "NoHolds": "No hold could be read from the file",
       "AlreadyImported": "This file is already imported",
-      "SnapshotDateOutOfRange": "The snapshot date is outside the years 2000 to 2100",
+      "SnapshotDateOutOfRange": "The snapshot date is outside the years a snapshot may have",
       "SnapshotNotFound": "The snapshot to replace is no longer there",
       "ReplaceNotOffered": "The snapshot to replace was not offered by the review",
       "WorkspaceNotFound": "The workspace was not found",
@@ -338,7 +338,7 @@
         "dateHelp": "Year, month, day",
         "timeHelp": "24-hour clock",
         "dateInvalid": "Enter the date as year, month, day, for example 2026-10-07.",
-        "dateRange": "Enter a date between the years 2000 and 2100. A year outside that range is refused.",
+        "dateRange": "Enter a date between the years {{first}} and {{last}}. A year outside that range is refused.",
         "timeInvalid": "Enter the time as hours and minutes on a 24-hour clock, for example 08:00.",
         "source": {
           "InfoSheet": "The date is from the information sheet of the file.",
@@ -386,6 +386,7 @@
         "checking": "Checking {{workspace}} for this file and for snapshots of the same day."
       },
       "import": "Import snapshot",
+      "available": "The snapshot can be imported now.",
       "blocked": {
         "date": "Enter the snapshot date and time to import.",
         "confirm": "Confirm the snapshot date, or enter the right one, to import.",

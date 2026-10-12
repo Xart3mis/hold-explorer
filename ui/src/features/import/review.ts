@@ -11,15 +11,8 @@ import {
 } from "../../app/format";
 import type { MessageKey } from "../../app/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
-import type { SnapshotDate } from "../../bindings/SnapshotDate";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import { NEW_WORKSPACE, type ImportChoices } from "./draft";
-
-/**
- * The years a snapshot date may have. The Rust side refuses any other year (the error kind
- * `SnapshotDateOutOfRange`); the date field says so before anything is sent.
- */
-export const SNAPSHOT_YEARS = { first: 2000, last: 2100 } as const;
 
 export interface DateState {
   /** What the date field holds. */
@@ -41,18 +34,23 @@ export interface DateState {
   moment: string | null;
 }
 
-/** Reads the two fields of the snapshot date. */
+/**
+ * Reads the two fields of the snapshot date. The years a snapshot date may have are the ones the
+ * review gives (`min_year` to `max_year`): the Rust side refuses any other year with the kind
+ * `SnapshotDateOutOfRange`, and the date field says so before anything is sent.
+ */
 export function readDate(
-  detected: SnapshotDate | null,
+  review: Pick<ImportReview, "detected" | "min_year" | "max_year">,
   choices: Pick<ImportChoices, "date" | "time">,
 ): DateState {
+  const { detected } = review;
   const typed = choices.date !== null || choices.time !== null;
   const dateText = choices.date ?? (detected === null ? "" : toDateInput(detected.at));
   const timeText = choices.time ?? (detected === null ? "" : toTimeInput(detected.at));
   const date = parseDateInput(dateText);
   const time = parseTimeInput(timeText);
   const year = date === null ? null : yearOf(date);
-  const inRange = year !== null && year >= SNAPSHOT_YEARS.first && year <= SNAPSHOT_YEARS.last;
+  const inRange = year !== null && year >= review.min_year && year <= review.max_year;
 
   // A field that was never touched and is empty has no error yet: the page asks for the date.
   let dateError: MessageKey | null = null;

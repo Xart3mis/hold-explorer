@@ -93,8 +93,14 @@ export function ReviewDate({ review, date, confirmed, onChoose, isDisabled }: Re
           }}
           onBlur={commit}
           onKeyDown={onKeyDown}
+          // The message of a year that is refused names the years the review allows.
           {...(typing.date === undefined && date.dateError !== null
-            ? { errorMessage: t(date.dateError) }
+            ? {
+                errorMessage: t(date.dateError, {
+                  first: review.min_year,
+                  last: review.max_year,
+                }),
+              }
             : {})}
           className={styles.dateField}
         />
