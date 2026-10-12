@@ -1,13 +1,13 @@
 import { useId, useState } from "react";
 import { asCommandError } from "../../api/error";
 import { showInFolder } from "../../api/window";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { useApp } from "../../app/useApp";
 import type { CommandError } from "../../bindings/CommandError";
 import type { Theme } from "../../bindings/Theme";
 import { Button, Notice, Select, type SelectOption } from "../../components";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import styles from "./SettingsPage.module.css";
 
 const THEMES: readonly Theme[] = ["Dark", "Light", "System"];

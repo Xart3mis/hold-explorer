@@ -15,7 +15,7 @@ import type { ImportPhase } from "../bindings/ImportPhase";
 import type { Theme } from "../bindings/Theme";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
-import { t } from "./i18n";
+import { t } from "../text/i18n";
 import { startQuery } from "./query";
 import { workspaceAction } from "./view";
 

@@ -14,8 +14,8 @@ import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
 import { connectImportStart } from "../import/start";
-import { useShell } from "./context";
-import { Page } from "./Page";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;

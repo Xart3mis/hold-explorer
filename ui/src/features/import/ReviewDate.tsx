@@ -1,6 +1,6 @@
 import { useImperativeHandle, useState, type Ref } from "react";
-import { formatDateTime, formatLongDate } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
+import { formatDateTime, formatLongDate } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotSource } from "../../bindings/SnapshotSource";
 import { Button, Checkbox, Notice, TextField } from "../../components";

@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, Minus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button as RacButton } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Skeleton } from "../Skeleton/Skeleton";

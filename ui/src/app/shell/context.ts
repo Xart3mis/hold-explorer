@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
-import { startQuery } from "../../app/query";
+import { startQuery } from "../query";
 import type { AppStart } from "../../bindings/AppStart";
 import type { CommandError } from "../../bindings/CommandError";
 

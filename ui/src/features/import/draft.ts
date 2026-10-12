@@ -8,7 +8,7 @@ import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportReview } from "../../bindings/ImportReview";
-import { useShell } from "../shell/context";
+import { useShell } from "../../app/shell/context";
 import type { Fields } from "./fields";
 import { readImportLocation } from "./start";
 

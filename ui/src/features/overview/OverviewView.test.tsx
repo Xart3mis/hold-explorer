@@ -5,7 +5,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
-import { formatDate } from "../../app/format";
+import { formatDate } from "../../text/format";
 import type { ImportDone } from "../../bindings/ImportDone";
 import type { OverviewView } from "../../bindings/OverviewView";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";

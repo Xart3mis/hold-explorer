@@ -1,5 +1,5 @@
 import { Label, ProgressBar } from "react-aria-components";
-import { formatPercent } from "../../app/format";
+import { formatPercent } from "../../text/format";
 import { cx } from "../cx";
 import styles from "./Progress.module.css";
 

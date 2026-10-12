@@ -14,7 +14,7 @@ import {
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { AppLayout } from "../features/shell/AppLayout";
-import { useShell } from "../features/shell/context";
+import { useShell } from "./shell/context";
 import { NotFoundPage } from "../features/shell/NotFoundPage";
 import { WelcomePage } from "../features/welcome/WelcomePage";
 import {

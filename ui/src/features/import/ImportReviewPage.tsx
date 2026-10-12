@@ -5,8 +5,8 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
 import { IMPORT_PATH, OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDateTime } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
+import { formatCount, formatDateTime } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import { useApp } from "../../app/useApp";
 import type { ImportCommit } from "../../bindings/ImportCommit";
 import type { ImportDraft } from "../../bindings/ImportDraft";
@@ -22,8 +22,8 @@ import {
   VisuallyHidden,
 } from "../../components";
 import { cx } from "../../components/cx";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { Details } from "./Details";
 import { clearImport, useImportDraft, type ImportChoices } from "./draft";
 import { columnLabel, fieldLabel, orderFields } from "./fields";

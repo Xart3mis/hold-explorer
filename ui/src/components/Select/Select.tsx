@@ -10,7 +10,7 @@ import {
   SelectValue,
   Text,
 } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { lengthToken } from "../../design/token-values";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";

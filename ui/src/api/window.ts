@@ -3,7 +3,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { t } from "../app/i18n";
+import { t } from "../text/i18n";
 import { IMPORT_EXTENSIONS } from "./files";
 
 /**

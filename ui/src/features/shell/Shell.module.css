@@ -275,23 +275,3 @@
   letter-spacing: var(--letter-spacing-normal);
   overflow-wrap: anywhere;
 }
-
-/* A page: its header, then its content, left-aligned. Forms and prose keep a readable width. */
-.page {
-  display: flex;
-  flex-direction: column;
-  min-block-size: 100%;
-}
-
-.page[data-width="form"] {
-  max-inline-size: var(--layout-form-max-width);
-}
-
-.page[data-width="content"] {
-  max-inline-size: var(--layout-content-max-width);
-}
-
-/* The title takes the focus when its page opens; the ring shows where a keyboard user is. */
-.page h1:focus-visible {
-  border-radius: var(--radius-sm);
-}

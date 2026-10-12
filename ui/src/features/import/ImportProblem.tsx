@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from "react";
-import { t, type MessageKey } from "../../app/i18n";
+import { t, type MessageKey } from "../../text/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import { Notice } from "../../components";
 import styles from "./Import.module.css";

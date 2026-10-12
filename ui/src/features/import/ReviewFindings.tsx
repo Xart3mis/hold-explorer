@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
-import { formatCount } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
+import { formatCount } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SkipKind } from "../../bindings/SkipKind";
 import type { SkippedRow } from "../../bindings/SkippedRow";

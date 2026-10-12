@@ -2,7 +2,7 @@
 // come from the destination list; the one shortcut that is not a destination's is named below.
 import { useEffect } from "react";
 import { needsWorkspace, type Destination } from "../../app/destinations";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 
 /** Starts an import. */
 export const IMPORT_SHORTCUT = "Ctrl+I";

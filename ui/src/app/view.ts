@@ -67,7 +67,7 @@ import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { CommandError } from "../bindings/CommandError";
 import type { ViewRef } from "../bindings/ViewRef";
-import { t } from "./i18n";
+import { t } from "../text/i18n";
 import { startQuery } from "./query";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */

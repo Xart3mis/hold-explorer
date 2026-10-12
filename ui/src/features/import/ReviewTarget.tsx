@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import { formatDate, formatDateTime, formatTime } from "../../app/format";
-import { t } from "../../app/i18n";
+import { formatDate, formatDateTime, formatTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotInfo } from "../../bindings/SnapshotInfo";

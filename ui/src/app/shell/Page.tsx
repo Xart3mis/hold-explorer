@@ -1,10 +1,10 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useLocation } from "react-router";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { durationToken } from "../../design/token-values";
 import { PageHeader, type PageHeaderProps } from "../../components";
 import { useShell } from "./context";
-import styles from "./Shell.module.css";
+import styles from "./Page.module.css";
 
 export interface PageProps extends Omit<PageHeaderProps, "titleRef" | "className"> {
   /**

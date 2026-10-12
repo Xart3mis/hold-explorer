@@ -1,4 +1,4 @@
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import { Button } from "../Button/Button";
 import { Notice } from "../Notice/Notice";

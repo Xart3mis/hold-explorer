@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "react-router";
 import type { Destination, DestinationId } from "../../app/destinations";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../../components/cx";
 import { NavItem } from "./NavItem";
 import styles from "./Shell.module.css";

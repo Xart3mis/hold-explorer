@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { asCommandError } from "../../api/error";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { useApp } from "../../app/useApp";
 import { Button, Notice, TextField } from "../../components";
 import styles from "./NewWorkspaceForm.module.css";

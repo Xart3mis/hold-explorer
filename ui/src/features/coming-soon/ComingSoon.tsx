@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router";
 import { OVERVIEW_PATH, type DestinationId } from "../../app/destinations";
-import { t, type MessageKey } from "../../app/i18n";
+import { t, type MessageKey } from "../../text/i18n";
 import { Button, EmptyState } from "../../components";
-import { Page } from "../shell/Page";
+import { Page } from "../../app/shell/Page";
 
 /**
  * What each destination will show, for the ones that are not built. A destination that is built

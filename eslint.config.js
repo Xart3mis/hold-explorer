@@ -15,7 +15,7 @@ const tauriMessage =
 
 // Numbers and dates are formatted in one module, so every screen writes them the same way.
 const formatMessage =
-  "Format numbers and dates with the helpers in ui/src/app/format.ts, the only module that calls Intl.";
+  "Format numbers and dates with the helpers in ui/src/text/format.ts, the only module that calls Intl.";
 const formatSyntax = [
   { selector: "MemberExpression[object.name='Intl']", message: formatMessage },
   { selector: "NewExpression[callee.object.name='Intl']", message: formatMessage },
@@ -28,7 +28,7 @@ const formatSyntax = [
 // Every user-facing string is in the text catalog. A component takes its visible text as props
 // from the screen that uses it, or from the catalog with t().
 const catalogMessage =
-  "Take user-facing text from the catalog, ui/src/locales/en.json, with t() from ui/src/app/i18n.ts.";
+  "Take user-facing text from the catalog, ui/src/locales/en.json, with t() from ui/src/text/i18n.ts.";
 const textAttributes =
   "/^(aria-label|aria-description|aria-roledescription|aria-valuetext|alt|title|placeholder|label)$/";
 const catalogSyntax = [
@@ -148,7 +148,7 @@ export default tseslint.config(
   },
   {
     files: ["ui/src/**/*.{ts,tsx}"],
-    ignores: ["ui/src/app/format.ts"],
+    ignores: ["ui/src/text/format.ts"],
     rules: { "no-restricted-syntax": ["error", ...formatSyntax] },
   },
   {

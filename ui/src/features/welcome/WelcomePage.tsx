@@ -4,8 +4,8 @@ import { asCommandError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { showInFolder } from "../../api/window";
 import { OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDate, formatList } from "../../app/format";
-import { t } from "../../app/i18n";
+import { formatCount, formatDate, formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { useApp } from "../../app/useApp";
 import type { CommandError } from "../../bindings/CommandError";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
@@ -18,8 +18,8 @@ import {
   type DataTableColumn,
 } from "../../components";
 import { startImport } from "../import/start";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { NewWorkspaceForm } from "../workspaces/NewWorkspaceForm";
 import styles from "./WelcomePage.module.css";
 

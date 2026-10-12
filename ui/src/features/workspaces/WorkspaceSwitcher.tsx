@@ -4,7 +4,7 @@ import { Input, TextField as RacTextField } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { asCommandError } from "../../api/error";
 import { OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { useApp, WORKSPACE_CHANGED } from "../../app/useApp";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";

@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "../app/i18n";
+import "../text/i18n";
 import { clearMocks } from "@tauri-apps/api/mocks";
 import { cleanup, configure } from "@testing-library/react";
 import { randomFillSync } from "node:crypto";

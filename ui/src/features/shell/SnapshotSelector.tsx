@@ -1,6 +1,6 @@
 import { asCommandError } from "../../api/error";
-import { formatDate, formatDateTime } from "../../app/format";
-import { t } from "../../app/i18n";
+import { formatDate, formatDateTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import { useApp } from "../../app/useApp";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import { MenuButton, MenuItem, MenuSection } from "../../components";

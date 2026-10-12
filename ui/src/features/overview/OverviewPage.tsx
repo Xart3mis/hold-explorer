@@ -3,8 +3,8 @@ import { useId, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { openHoldsFilter } from "../../api/filter";
-import { formatCount, formatDateTime, formatDays } from "../../app/format";
-import { t } from "../../app/i18n";
+import { formatCount, formatDateTime, formatDays } from "../../text/format";
+import { t } from "../../text/i18n";
 import { useSnapshotQuery } from "../../app/view";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
@@ -24,8 +24,8 @@ import {
   type DataTableColumn,
 } from "../../components";
 import { startImport } from "../import/start";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import styles from "./OverviewPage.module.css";
 
 /** The page shows the open holds, and sends the whole filter that says so. */

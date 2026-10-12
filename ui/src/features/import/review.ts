@@ -1,6 +1,6 @@
 // What the review page works out from the review and the choices: the snapshot date as the two
 // fields hold it, and the target. Nothing here is counted or dated by hand; dates are read and
-// written by ui/src/app/format.ts.
+// written by ui/src/text/format.ts.
 import {
   isSameSecond,
   parseDateInput,
@@ -8,8 +8,8 @@ import {
   toDateInput,
   toTimeInput,
   yearOf,
-} from "../../app/format";
-import type { MessageKey } from "../../app/i18n";
+} from "../../text/format";
+import type { MessageKey } from "../../text/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import { NEW_WORKSPACE, type ImportChoices } from "./draft";

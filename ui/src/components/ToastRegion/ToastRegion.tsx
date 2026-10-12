@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { durationToken } from "../../design/token-values";
 import { Button, IconButton } from "../Button/Button";
 import { Icon } from "../Icon/Icon";

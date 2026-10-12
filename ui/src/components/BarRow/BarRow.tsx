@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ToggleButton } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Skeleton } from "../Skeleton/Skeleton";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
