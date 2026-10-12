@@ -3,11 +3,25 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { AppStart } from "../bindings/AppStart";
 import type { CommandError } from "../bindings/CommandError";
+import type { ImportCommit } from "../bindings/ImportCommit";
+import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
+import type { ImportPhase } from "../bindings/ImportPhase";
+import type { ImportReview } from "../bindings/ImportReview";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
+import type { TargetCheck } from "../bindings/TargetCheck";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
+import {
+  exportDraft,
+  exportMap,
+  review,
+  reviewToConfirm,
+  reviewWithFindings,
+  savedMappingDraft,
+  unmappedDraft,
+} from "../test/import";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
 const MARKER = "hx-dev-commands";
@@ -20,6 +34,21 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The import flow, with a file already open. Open them on a page of the flow:
+  //   dev.html?state=import-clean#/import/review
+  //   dev.html?state=import-mapping#/import/mapping
+  //   dev.html?state=import-sheet#/import/sheet
+  "import-clean",
+  "import-findings",
+  "import-confirm",
+  "import-imported",
+  "import-same-day",
+  "import-limited",
+  "import-mapping",
+  "import-saved",
+  "import-sheet",
+  "import-committing",
+  "import-failed",
 ] as const;
 export type DevState = (typeof DEV_STATES)[number];
 
@@ -93,22 +122,67 @@ const offsites: WorkspaceView = {
   latest_taken_at: null,
 };
 
-const draft: ImportDraft = {
-  file: {
-    file_name: "Holds_2026-10-14.xlsx",
-    content_hash: "f".repeat(64),
-    sheet_name: "Holds",
-    sheets: ["Info", "Holds"],
-    headers: ["Line ID", "Remark"],
-    preview: [["78B01-573-4434-FW-001", "HOLD FOR 577-PR-400"]],
-    auto_map: { fields: { LineId: 0, Remark: 1 }, extras: [] },
-    error_cells: 0,
-    row_count: 9702,
-  },
-  proposed: { fields: { LineId: 0, Remark: 1 }, extras: [] },
-  missing_required: [],
-  used_saved_mapping: false,
-};
+/** The file a state of the import flow has open, when the state is one of the flow. */
+export function devDraft(state: DevState): ImportDraft | null {
+  switch (state) {
+    case "import-mapping":
+      return unmappedDraft();
+    case "import-saved":
+    case "import-confirm":
+      return savedMappingDraft();
+    case "import-sheet": {
+      const workbook = exportDraft();
+      return { ...workbook, file: { ...workbook.file, sheets: ["info", "data", "Sheet3"] } };
+    }
+    case "import-clean":
+    case "import-findings":
+    case "import-imported":
+    case "import-same-day":
+    case "import-limited":
+    case "import-committing":
+    case "import-failed":
+      return exportDraft();
+    default:
+      return null;
+  }
+}
+
+/** What the review of that file finds, by the state. */
+function devReview(state: DevState, all: WorkspaceView[]): ImportReview {
+  const target = { suggested: unit573.id, matching: [unit573], all };
+  switch (state) {
+    case "import-findings":
+      return { ...reviewWithFindings(312), target };
+    case "import-confirm":
+      return { ...reviewToConfirm(), target: { ...target, matching: [] } };
+    case "import-limited": {
+      const map = exportMap();
+      const fields = { ...map.fields };
+      delete fields.SourceId;
+      return {
+        ...review({ limited: true, mapping: { ...map, fields } }),
+        target,
+      };
+    }
+    case "import-mapping":
+    case "import-saved":
+      return {
+        ...review({
+          file_name: "open-holds.csv",
+          project_no: null,
+          detected: { at: "2026-10-12T00:00:00", source: "FileName" },
+          mapping: savedMappingDraft().proposed,
+          row_count: 5042,
+          open_count: 5042,
+          released_count: 0,
+          limited: true,
+        }),
+        target: { ...target, matching: [] },
+      };
+    default:
+      return { ...review(), target };
+  }
+}
 
 interface World {
   start: AppStart;
@@ -155,6 +229,17 @@ function world(state: DevState, theme: Theme): World {
       ];
       break;
     case "open":
+    case "import-clean":
+    case "import-findings":
+    case "import-confirm":
+    case "import-imported":
+    case "import-same-day":
+    case "import-limited":
+    case "import-mapping":
+    case "import-saved":
+    case "import-sheet":
+    case "import-committing":
+    case "import-failed":
       start.list.workspaces = all;
       start.open = opened(4, null);
       break;
@@ -190,6 +275,18 @@ function world(state: DevState, theme: Theme): World {
 export function installDevCommands(state: DevState, theme: Theme): string {
   const { start, snapshots, folderReadable } = world(state, theme);
   let nextId = 1;
+  let nextSnapshot = 5;
+  const draft = devDraft(state) ?? exportDraft();
+  // The same day as the file, earlier, and the very same file: what a target can already hold.
+  const earlier: SnapshotInfo = {
+    ...snapshot(5, "2026-10-14T06:30:00", 9688, 5021),
+    file_name: "Holds_2026-10-14_early.xlsx",
+  };
+  const sameFile: SnapshotInfo = {
+    ...snapshot(6, "2026-10-14T08:00:00", 9702, 5010),
+    content_hash: "f".repeat(64),
+    date_source: "InfoSheet",
+  };
 
   const open = (workspace: WorkspaceView): WorkspaceOpen => {
     const held = snapshots.get(workspace.id) ?? [];
@@ -295,6 +392,82 @@ export function installDevCommands(state: DevState, theme: Theme): string {
           );
         }
         return draft;
+      });
+    },
+    import_choose_sheet: (payload) => {
+      const sheet = text(payload, "sheet");
+      return later(900, () => {
+        if (sheet === "Sheet3") {
+          throw failure(
+            "NoHolds",
+            "No hold could be read: 12 rows were skipped, for example row 2: blank line_id. Check the column mapping and the date format.",
+          );
+        }
+        return sheet === "info"
+          ? {
+              ...unmappedDraft(),
+              file: { ...unmappedDraft().file, sheets: draft.file.sheets, sheet_name: sheet },
+            }
+          : { ...draft, file: { ...draft.file, sheet_name: sheet } };
+      });
+    },
+    import_review: () => later(700, () => devReview(state, start.list.workspaces)),
+    import_check_target: (payload): Promise<TargetCheck> => {
+      const target = (payload as { target?: { id?: string } } | undefined)?.target;
+      return later(350, () => {
+        if (target?.id !== unit573.id) return { already_imported: null, same_day: [] };
+        if (state === "import-imported")
+          return { already_imported: sameFile, same_day: [sameFile] };
+        if (state === "import-same-day") return { already_imported: null, same_day: [earlier] };
+        return { already_imported: null, same_day: [] };
+      });
+    },
+    import_commit: (payload): Promise<ImportDone> => {
+      const { request, onProgress } = payload as {
+        request: ImportCommit;
+        onProgress: { onmessage: (phase: ImportPhase) => void };
+      };
+      window.setTimeout(() => {
+        onProgress.onmessage("Checking");
+      }, 700);
+      if (state === "import-failed") {
+        return later(1400, () => {
+          throw failure(
+            "Io",
+            "The workspace file could not be written (the disk is full). Free some space, then import again.",
+          );
+        });
+      }
+      window.setTimeout(() => {
+        onProgress.onmessage("Storing");
+      }, 1600);
+      // A commit that is looked at stays where it is.
+      if (state === "import-committing") return new Promise<ImportDone>(() => undefined);
+      return later(2600, () => {
+        const imported: SnapshotInfo = {
+          ...snapshot(nextSnapshot, request.taken_at, 9702, 5010),
+          file_name: draft.file.file_name,
+          date_source: request.date_edited ? "User" : "InfoSheet",
+        };
+        nextSnapshot += 1;
+        const into =
+          request.target.kind === "New"
+            ? create(request.target.name, []).workspace
+            : (start.list.workspaces.find(
+                ({ id }) => id === (request.target as { id: string }).id,
+              ) ?? unit573);
+        const held = (snapshots.get(into.id) ?? []).filter(({ id }) => id !== request.replace);
+        const next = [...held, imported];
+        snapshots.set(into.id, next);
+        const workspace = {
+          ...into,
+          snapshot_count: next.length,
+          latest_taken_at: imported.taken_at,
+        };
+        start.list.workspaces = start.list.workspaces.map((entry) =>
+          entry.id === workspace.id ? workspace : entry,
+        );
+        return { open: { ...open(workspace), selected: imported.id }, snapshot: imported };
       });
     },
     import_cancel: () => null,

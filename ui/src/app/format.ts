@@ -22,6 +22,20 @@ const dateTime = new Intl.DateTimeFormat(locale, {
   timeZone: "UTC",
 });
 
+const longDate = new Intl.DateTimeFormat(locale, {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const time = new Intl.DateTimeFormat(locale, {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+});
+
 // A plain list of names with no "and" before the last: file formats, not a sentence.
 const list = new Intl.ListFormat(locale, { style: "short", type: "unit" });
 
@@ -90,4 +104,81 @@ export function formatDateTime(value: string): string {
 /** A number of days the way the export writes it: `71 d`. */
 export function formatDays(days: number): string {
   return t("units.days", { value: formatCount(days) });
+}
+
+/** A date with its weekday and its month in full, to read back a date that was typed: `Wednesday, 7 October 2026`. */
+export function formatLongDate(value: string): string {
+  const moment = parse(value);
+  return moment ? longDate.format(moment) : value;
+}
+
+/** The time of a moment on a 24-hour clock: `14:05`. Other text is returned as it is. */
+export function formatTime(value: string): string {
+  const moment = parse(value);
+  return moment ? time.format(moment) : value;
+}
+
+function two(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** The date of a moment as a date field holds it: `2026-10-07`. Empty for text that is no moment. */
+export function toDateInput(value: string): string {
+  const moment = parse(value);
+  if (!moment) return "";
+  const year = String(moment.getUTCFullYear()).padStart(4, "0");
+  return `${year}-${two(moment.getUTCMonth() + 1)}-${two(moment.getUTCDate())}`;
+}
+
+/**
+ * The time of a moment as a time field holds it: `08:00`, and `08:00:30` when the moment has
+ * seconds, so that what the field shows is the moment to the second. Empty for text that is no
+ * moment.
+ */
+export function toTimeInput(value: string): string {
+  const moment = parse(value);
+  if (!moment) return "";
+  const minutes = `${two(moment.getUTCHours())}:${two(moment.getUTCMinutes())}`;
+  const seconds = moment.getUTCSeconds();
+  return seconds === 0 ? minutes : `${minutes}:${two(seconds)}`;
+}
+
+const TYPED_DATE = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/;
+const TYPED_TIME = /^(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?$/;
+
+/**
+ * Reads a date as it is typed into a date field: year, month, day, separated by hyphens, slashes,
+ * or full stops. Returns it as `2026-10-07`, or `null` when the text is not a day of the calendar.
+ */
+export function parseDateInput(text: string): string | null {
+  const parts = TYPED_DATE.exec(text.trim());
+  if (!parts) return null;
+  const [, year = "", month = "", day = ""] = parts;
+  const written = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  return parse(written) ? written : null;
+}
+
+/**
+ * Reads a time as it is typed into a time field: hours and minutes on a 24-hour clock, with
+ * seconds when they are given. Returns it as `08:00:00`, or `null` when the text is not a time of
+ * day.
+ */
+export function parseTimeInput(text: string): string | null {
+  const parts = TYPED_TIME.exec(text.trim());
+  if (!parts) return null;
+  const [, hour = "", minute = "", second = "00"] = parts;
+  const written = `${hour.padStart(2, "0")}:${minute}:${second}`;
+  return parse(`2000-01-01T${written}`) ? written : null;
+}
+
+/** The year of a moment or of a date; `null` for text that is neither. */
+export function yearOf(value: string): number | null {
+  return parse(value)?.getUTCFullYear() ?? null;
+}
+
+/** Whether two moments are the same second. A fraction of a second does not tell them apart. */
+export function isSameSecond(first: string, second: string): boolean {
+  const one = parse(first);
+  const other = parse(second);
+  return one !== null && other !== null && one.getTime() === other.getTime();
 }

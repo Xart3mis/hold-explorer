@@ -2,6 +2,15 @@ import type { ReactElement, ReactNode } from "react";
 import { createHashRouter, Navigate, RouterProvider, type RouteObject } from "react-router";
 import { ComingSoon } from "../features/coming-soon/ComingSoon";
 import { ImportEntryPage } from "../features/import/ImportEntryPage";
+import { ImportMappingPage } from "../features/import/ImportMappingPage";
+import { ImportReviewPage } from "../features/import/ImportReviewPage";
+import { ImportSheetPage } from "../features/import/ImportSheetPage";
+import { ImportLeaveGuard } from "../features/import/leave";
+import {
+  IMPORT_MAPPING_PATH,
+  IMPORT_REVIEW_PATH,
+  IMPORT_SHEET_PATH,
+} from "../features/import/start";
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { AppLayout } from "../features/shell/AppLayout";
@@ -41,7 +50,8 @@ function NeedsWorkspace({ children }: { children: ReactNode }) {
 /**
  * The routes of the app, built from the destination list. A destination that the list marks as
  * built shows its page; any other shows its coming soon screen. The welcome page, Settings, and
- * the import page are reachable with and without a workspace; every other destination needs one.
+ * the pages of the import flow are reachable with and without a workspace; every other
+ * destination needs one. Leaving the import flow drops the file that was open for import.
  */
 export function appRoutes(
   list: readonly Destination[] = destinations,
@@ -50,7 +60,12 @@ export function appRoutes(
   return [
     {
       path: "/",
-      element: <AppLayout destinations={list} />,
+      element: (
+        <>
+          <ImportLeaveGuard />
+          <AppLayout destinations={list} />
+        </>
+      ),
       children: [
         { index: true, element: <StartPage /> },
         { path: WELCOME_PATH, element: <WelcomePage /> },
@@ -73,6 +88,9 @@ export function appRoutes(
           };
         }),
         { path: IMPORT_PATH, element: <ImportEntryPage /> },
+        { path: IMPORT_SHEET_PATH, element: <ImportSheetPage /> },
+        { path: IMPORT_MAPPING_PATH, element: <ImportMappingPage /> },
+        { path: IMPORT_REVIEW_PATH, element: <ImportReviewPage /> },
         { path: "*", element: <NotFoundPage /> },
       ],
     },

@@ -164,10 +164,243 @@
       "Unreadable": "The file could not be read",
       "EmptyFile": "The file is empty",
       "NoDataSheet": "No sheet with holds was found",
+      "SheetNotFound": "The sheet is not in the file",
+      "MissingColumns": "Required fields have no column",
+      "Empty": "The file has no data rows",
+      "NoHolds": "No hold could be read from the file",
+      "AlreadyImported": "This file is already imported",
+      "SnapshotDateOutOfRange": "The snapshot date is outside the years 2000 to 2100",
+      "SnapshotNotFound": "The snapshot to replace is no longer there",
+      "WorkspaceNotFound": "The workspace was not found",
+      "NoDraft": "No file is open for import",
       "Dialog": "The file dialog could not be opened",
-      "other": "The file could not be opened"
+      "other": "The file could not be opened",
+      "sheet": "The sheet could not be read",
+      "review": "The file could not be reviewed",
+      "check": "The workspace could not be checked",
+      "commit": "The import did not complete"
     },
-    "startError": "The import could not be started"
+    "startError": "The import could not be started",
+    "chooseSheet": "Choose another sheet",
+    "reopen": {
+      "title": "No file is open for import",
+      "text": "The file has to be read again before it can be mapped or reviewed. Open it again to continue."
+    },
+    "stillOpen": "{{file}} is still open for import.",
+    "continue": "Continue with this file",
+    "field": {
+      "SourceId": "Hold ID",
+      "LineId": "Line ID",
+      "Name": "Raised by",
+      "Role": "Role",
+      "Remark": "Hold remark",
+      "HoldType": "Hold type",
+      "Discipline": "Discipline",
+      "Created": "Creation date",
+      "Released": "Released",
+      "ReleaseRemark": "Release remark",
+      "ReleaseDate": "Release date",
+      "ModelSize": "Model size",
+      "LdtSize": "LDT size",
+      "StressCalc": "Stress calculation"
+    },
+    "sheet": {
+      "title": "Choose a sheet",
+      "description": "Choose the sheet of {{file}} to read the holds from.",
+      "list": "Sheets of {{file}}",
+      "inUse": "Read now",
+      "rows_one": "{{count, number}} row",
+      "rows_other": "{{count, number}} rows",
+      "use": "Read this sheet",
+      "useNamed": "Read this sheet: {{sheet}}",
+      "keep": "Keep the sheet {{sheet}}",
+      "none": "This file has no other sheet to choose. A text file has no sheets, and a workbook with one sheet is read from that sheet."
+    },
+    "mapping": {
+      "title": "Map columns",
+      "description": "Choose the column of {{file}} that supplies each field.",
+      "sheet": "Sheet {{sheet}}",
+      "required": "Required fields",
+      "optional": "Optional fields",
+      "optionalHelp": "A field without a column stays empty. A column that supplies no field is kept as an extra column.",
+      "requiredLabel": "{{field}} (required)",
+      "placeholder": "Choose a column",
+      "none": "Not in this file",
+      "missing": "Choose the column that holds this field.",
+      "columnNoHeader": "Column {{number}} (no header)",
+      "usedBy": "Used for {{field}}",
+      "moved": "The column {{column}} now supplies {{field}}. {{previous}} has no column now.",
+      "savedTitle": "The saved mapping of this workspace was applied",
+      "savedText": "The last import into this workspace saved which header supplies which field, and this file was mapped the same way. Reset to automatic to map it by its headers alone.",
+      "reset": "Reset to automatic",
+      "resetDone": "The automatic mapping is back: each field has the column whose header names it.",
+      "continue": "Continue",
+      "blocked": "To continue, choose a column for each required field. Still without a column: {{fields}}.",
+      "preview": "First rows of the file",
+      "previewCaption_one": "The sheet has {{count, number}} row. A column that supplies a field names it in its header.",
+      "previewCaption_other": "The first {{shown}} of {{count, number}} rows. A column that supplies a field names it in its header.",
+      "previewMapped": "{{header}} (used for {{field}})",
+      "previewEmpty": "The file has a header row and no rows under it.",
+      "error": "The file could not be read with this mapping"
+    },
+    "review": {
+      "title": "Review import",
+      "crumb": "Review",
+      "loading": "Reading the holds of {{file}}.",
+      "figures": "What was read from the file",
+      "holds": "Holds",
+      "open": "Open",
+      "released": "Released",
+      "facts": "The file",
+      "file": "File",
+      "sheet": "Sheet",
+      "project": "Project number",
+      "projectNone": "The file gives none",
+      "columnsShow": "Column mapping",
+      "columnsList": "Which column supplies which field",
+      "columnsNone": "Not in this file",
+      "changeMapping": "Change mapping",
+      "limitedTitle": "This is a limited file",
+      "limitedNoId": "No column supplies the hold ID. The file is imported as a limited snapshot: what needs the hold ID is not available for it, and says so.",
+      "limitedNoReleased": "No column says whether a hold is released, so every hold of this file counts as open. The file is imported as a limited snapshot: what needs released holds is not available for it, and says so.",
+      "limitedBoth": "No column supplies the hold ID, and none says whether a hold is released, so every hold of this file counts as open. The file is imported as a limited snapshot: what needs those columns is not available for it, and says so.",
+      "limitedOther": "The file lacks a column the full export has. It is imported as a limited snapshot: what needs the missing column is not available for it, and says so.",
+      "findings": "Skipped rows and warnings",
+      "clean": "No row was skipped, and nothing in the file had to be changed or assumed.",
+      "skipped_one": "{{count, number}} row was skipped",
+      "skipped_other": "{{count, number}} rows were skipped",
+      "skippedNone": "No row was skipped.",
+      "skippedHelp": "A row is left out of the snapshot when its line ID is blank or its creation date cannot be read.",
+      "skippedTable": "Skipped rows",
+      "skippedShown": "Showing the first {{shown}} of {{count, number}} skipped rows.",
+      "columnRow": "Row",
+      "columnReason": "Reason",
+      "columnValue": "Value",
+      "blank": "(blank)",
+      "skip": {
+        "BlankLineId": "The line ID is blank",
+        "UnreadableDate": "The creation date cannot be read"
+      },
+      "warningsNone": "The file gave no warning.",
+      "times_one": "{{count, number}} time",
+      "times_other": "{{count, number}} times",
+      "examplesOf": "Examples: {{kind}}",
+      "examplesShown": "Showing the first {{shown}} of {{count, number}}.",
+      "warning": {
+        "UnreadableReleaseDate": {
+          "title": "Release dates that cannot be read",
+          "text": "The hold is kept, without a release date."
+        },
+        "UnrecognizedReleased": {
+          "title": "Released values that are not recognized",
+          "text": "The hold is kept and counts as open."
+        },
+        "AssumedDateOrder": {
+          "title": "Day and month order assumed",
+          "text": "Nothing in the column says whether the day or the month comes first, so the dates were read day first."
+        },
+        "ErrorCells": {
+          "title": "Cells with a spreadsheet error",
+          "text": "A cell that holds an error such as #N/A was read as blank."
+        },
+        "DuplicateHeader": {
+          "title": "Column headers that repeat",
+          "text": "Each column is kept as an extra column, and the later ones get a number after their name."
+        },
+        "UnreadableSize": {
+          "title": "Sizes that are not numbers",
+          "text": "The hold is kept, without that size."
+        },
+        "UnreadableId": {
+          "title": "Hold IDs that are not whole numbers",
+          "text": "The hold is kept, without a hold ID."
+        },
+        "DuplicateId": {
+          "title": "Hold IDs used more than once",
+          "text": "Every hold is kept, and the holds that share an ID keep it."
+        },
+        "UnreadableReportDate": {
+          "title": "Report date that cannot be read",
+          "text": "The report date of the information sheet was not used. The snapshot date below comes from another source."
+        }
+      },
+      "date": {
+        "title": "Snapshot date",
+        "date": "Date",
+        "time": "Time",
+        "datePlaceholder": "2026-10-07",
+        "timePlaceholder": "08:00",
+        "dateHelp": "Year, month, day",
+        "timeHelp": "24-hour clock",
+        "dateInvalid": "Enter the date as year, month, day, for example 2026-10-07.",
+        "dateRange": "Enter a date between the years 2000 and 2100. A year outside that range is refused.",
+        "timeInvalid": "Enter the time as hours and minutes on a 24-hour clock, for example 08:00.",
+        "source": {
+          "InfoSheet": "The date is from the information sheet of the file.",
+          "FileName": "The date is from the file name.",
+          "FileTime": "The date is from the file's modified time.",
+          "User": "The date was entered by you."
+        },
+        "detected": {
+          "InfoSheet": "The information sheet of the file gives {{date}}.",
+          "FileName": "The file name gives {{date}}.",
+          "FileTime": "The file's modified time is {{date}}.",
+          "User": "The file gives {{date}}."
+        },
+        "useDetected": "Use the detected date",
+        "weakTitle": "The only date known is the file's modified time",
+        "weakText": "The file has no report date, and its name has none. The modified time changes when a file is copied or saved again, so it may not be the day the report was made. Check the date, then confirm it or enter the right one.",
+        "confirm": "The date and time above are when the report was made",
+        "noneTitle": "The file gives no date",
+        "noneText": "Neither the file, its name, nor its modified time gives a date. Enter the date and time the report was made."
+      },
+      "target": {
+        "title": "Workspace",
+        "label": "Import into",
+        "placeholder": "Choose a workspace",
+        "new": "New workspace",
+        "optionMatch": "Has project {{project}}",
+        "optionOpen": "Open now",
+        "optionOpenMatch": "Open now, has project {{project}}",
+        "newName": "Name of the new workspace",
+        "newHelp": "The workspace is created by the import. If the import fails, it is removed again.",
+        "addsProject": "{{workspace}} has no hold of project {{project}} yet. The import adds that project number to it.",
+        "fresh": "{{workspace}} does not have this file yet, and it has no snapshot of {{date}}.",
+        "alreadyTitle": "{{workspace}} already has this file",
+        "alreadyText": "It was imported as the snapshot of {{date}}, from {{file}}. The same file is not imported twice. Choose another workspace to import it there.",
+        "openIt": "Open {{workspace}}",
+        "toOverview": "Go to Overview",
+        "sameDay_one": "{{workspace}} already has {{count, number}} snapshot of {{date}}:",
+        "sameDay_other": "{{workspace}} already has {{count, number}} snapshots of {{date}}:",
+        "sameDayItem": "{{time}}, from {{file}}, {{holds}}",
+        "sameDayLabel": "Snapshots of the same day",
+        "keepBoth": "Keep both",
+        "keepAll": "Keep them all",
+        "replace": "Replace the snapshot of {{time}}. This cannot be undone.",
+        "replaceText": "The import removes the snapshot of {{date}} from {{workspace}}, with the {{holds}} it holds, and puts this file in its place. Hold Explorer cannot bring it back; to have it again, import {{file}} again.",
+        "checking": "Checking {{workspace}} for this file and for snapshots of the same day."
+      },
+      "import": "Import",
+      "blocked": {
+        "date": "Enter the snapshot date and time to import.",
+        "confirm": "Confirm the snapshot date, or enter the right one, to import.",
+        "target": "Choose the workspace to import into.",
+        "name": "Enter a name for the new workspace.",
+        "checking": "Import is available once the workspace has been checked.",
+        "check": "The workspace could not be checked, so nothing is imported into it. Try the check again, or choose another workspace.",
+        "already": "The same file is not imported twice into one workspace."
+      },
+      "phase": {
+        "waiting": "Starting the import.",
+        "Reading": "Reading the holds of {{file}}.",
+        "Checking": "Checking {{workspace}}.",
+        "Storing": "Storing the snapshot in {{workspace}}.",
+        "Done": "Opening {{workspace}}."
+      },
+      "running": "An import that has started runs to its end. If it fails, nothing is changed.",
+      "done": "Imported into {{workspace}}: {{holds}}, {{open}} open.",
+      "doneReplaced": "Imported into {{workspace}}: {{holds}}, {{open}} open. The snapshot of {{replaced}} was replaced."
+    }
   },
   "overview": {
     "loading": "Loading the overview"

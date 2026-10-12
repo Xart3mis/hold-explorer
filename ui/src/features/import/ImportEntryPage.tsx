@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -7,65 +7,39 @@ import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
 import { formatList } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
-import type { CommandError } from "../../bindings/CommandError";
-import { Button, DropZone, Notice, Progress, Skeleton } from "../../components";
+import { t } from "../../app/i18n";
+import { Button, DropZone, Notice, Progress } from "../../components";
 import { useShell } from "../shell/context";
 import { Page } from "../shell/Page";
+import { openDraft, useImportDraft } from "./draft";
 import styles from "./ImportEntryPage.module.css";
-import { IMPORT_MAPPING_PATH, IMPORT_REVIEW_PATH, readImportLocation, startImport } from "./start";
-
-/** What failed, in the words of the page, by the kind of the error. */
-const titles: Record<string, MessageKey> = {
-  NotFound: "import.error.NotFound",
-  Unreadable: "import.error.Unreadable",
-  EmptyFile: "import.error.EmptyFile",
-  NoDataSheet: "import.error.NoDataSheet",
-  Dialog: "import.error.Dialog",
-};
-
-function titleOf(error: CommandError): string {
-  return t(titles[error.kind] ?? "import.error.other");
-}
-
-/** The first-load state: blocks in the shape of the review to come, its figures and its rows. */
-function PageToCome() {
-  return (
-    <div aria-hidden="true" className={styles.shape}>
-      <div className={styles.figures}>
-        {["9ch", "7ch", "11ch"].map((width) => (
-          <div key={width} className={styles.figure}>
-            <span className={styles.line}>
-              <Skeleton width={width} />
-            </span>
-            <Skeleton variant="stat" />
-          </div>
-        ))}
-      </div>
-      {["58%", "74%", "66%", "49%"].map((width) => (
-        <span key={width} className={styles.row}>
-          <Skeleton width={width} />
-        </span>
-      ))}
-    </div>
-  );
-}
+import { ImportProblem } from "./ImportProblem";
+import { useLeaveImport } from "./leave";
+import { PageToCome } from "./PageToCome";
+import { nextStep, readImportLocation, startImport } from "./start";
 
 /**
  * The entry of the import flow. It opens the file it was given, shows that the file is being
  * read, and passes on: to the review when the file can be read as it is, to the mapping step when
  * a required field has no column. A file that cannot be opened is shown with what happened and
  * how to fix it, and with a way to choose another file. Opened without a file, it offers to
- * choose one.
+ * choose one, and names the file that is still open for import when there is one.
  */
 export function ImportEntryPage() {
   const { start, dragged } = useShell();
   const location = useLocation();
   const navigate = useNavigate();
   const client = useQueryClient();
+  const { draft: open } = useImportDraft();
 
   const home = start.open === null ? WELCOME_PATH : OVERVIEW_PATH;
-  const { path, from, others, error: dialogError } = readImportLocation(location.state, home);
+  const {
+    path,
+    from,
+    others,
+    reopen,
+    error: dialogError,
+  } = readImportLocation(location.state, home);
 
   // Every arrival on this page reads the file anew: the file may have changed since, and the
   // draft the Rust side keeps is the one of the last reading.
@@ -79,26 +53,27 @@ export function ImportEntryPage() {
   });
   const draft = reading.isPlaceholderData ? undefined : reading.data;
 
-  useEffect(() => {
-    if (draft === undefined) return;
-    client.setQueryData(keys.importDraft, draft);
-    const next = draft.missing_required.length === 0 ? IMPORT_REVIEW_PATH : IMPORT_MAPPING_PATH;
-    // The entry page is replaced, so going back does not read the file a second time.
-    void navigate(next, { replace: true, state: { from } });
-  }, [draft, client, navigate, from]);
+  const cancel = useLeaveImport();
+  // Cancel was pressed. The Rust side takes one command at a time, so a cancel that is asked for
+  // while the file is still being read is answered after the read: the read may well finish
+  // first. A cancel that was asked for wins all the same, and the flow does not move on.
+  const [cancelRequested, setCancelRequested] = useState(false);
 
-  const cancel = useMutation({
-    mutationFn: () => api.importCancel(),
-    onSuccess: () => {
-      client.removeQueries({ queryKey: keys.importDraft });
-      void navigate(from);
-    },
-  });
+  useEffect(() => {
+    if (draft === undefined || cancelRequested) return;
+    openDraft(client, draft);
+    // The entry page is replaced, so going back does not read the file a second time.
+    // What was said about the files that came with this one is said again where the file opens:
+    // a file that is read at once would otherwise take the notice with it.
+    void navigate(nextStep(draft), { replace: true, state: { from, others } });
+  }, [draft, cancelRequested, client, navigate, from, others]);
 
   const failure = dialogError ?? (reading.isError ? asCommandError(reading.error) : null);
   // The file that is being read: the one the page was given, unless reading it has failed.
   const readingPath = failure === null ? path : undefined;
   const first = dragged?.[0];
+  // A file that was opened before and is still open, while this page reads no other.
+  const stillOpen = path === undefined && failure === null ? open : undefined;
 
   return (
     <Page title={t("import.title")} width="form">
@@ -107,13 +82,31 @@ export function ImportEntryPage() {
           <Notice tone="info">{t("import.severalDropped", { count: others + 1 })}</Notice>
         ) : null}
 
-        {failure === null ? null : (
-          <div data-kind={failure.kind}>
-            <Notice tone="danger" title={titleOf(failure)}>
-              {failure.message}
-            </Notice>
-          </div>
+        {reopen === true && path === undefined && stillOpen === undefined ? (
+          <Notice tone="info" title={t("import.reopen.title")}>
+            {t("import.reopen.text")}
+          </Notice>
+        ) : null}
+
+        {stillOpen === undefined ? null : (
+          <Notice
+            tone="info"
+            actions={
+              <Button
+                variant="quiet"
+                onPress={() => {
+                  void navigate(nextStep(stillOpen), { state: { from } });
+                }}
+              >
+                {t("import.continue")}
+              </Button>
+            }
+          >
+            {t("import.stillOpen", { file: stillOpen.file.file_name })}
+          </Notice>
         )}
+
+        {failure === null ? null : <ImportProblem error={failure} general="import.error.other" />}
 
         {readingPath === undefined ? null : (
           <div aria-busy="true" className={styles.reading}>
@@ -161,7 +154,13 @@ export function ImportEntryPage() {
             variant={failure === null ? "secondary" : "quiet"}
             isPending={cancel.isPending}
             onPress={() => {
-              cancel.mutate();
+              setCancelRequested(true);
+              cancel.mutate(from, {
+                // The import goes on as if Cancel had not been pressed, and the page says why.
+                onError: () => {
+                  setCancelRequested(false);
+                },
+              });
             }}
           >
             {t("common.cancel")}

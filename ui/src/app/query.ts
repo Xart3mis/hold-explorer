@@ -53,3 +53,7 @@ queryClient.setQueryDefaults(keys.start, { staleTime: Infinity });
 // pages after it. It is the Rust side's draft, so nothing asks for it again and it is kept until
 // the import is cancelled or done, however long a page of the flow stays open or closed.
 queryClient.setQueryDefaults(keys.importDraft, { staleTime: Infinity, gcTime: Infinity });
+// The same holds for what the review of that file found and for what the user has chosen on the
+// way: both belong to the draft and go when it goes.
+queryClient.setQueryDefaults(keys.importReview, { staleTime: Infinity, gcTime: Infinity });
+queryClient.setQueryDefaults(keys.importChoices, { staleTime: Infinity, gcTime: Infinity });

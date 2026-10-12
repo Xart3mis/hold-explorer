@@ -10,6 +10,8 @@ import { asCommandError } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { CommandError } from "../bindings/CommandError";
+import type { ImportCommit } from "../bindings/ImportCommit";
+import type { ImportPhase } from "../bindings/ImportPhase";
 import type { Theme } from "../bindings/Theme";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
@@ -33,6 +35,13 @@ export interface Rename {
   /** The id of the workspace to rename. The command renames the open workspace, whichever it is. */
   id: string;
   name: string;
+}
+
+/** A commit of the file that is open for import: the request, and who hears each phase. */
+export interface Commit {
+  request: ImportCommit;
+  /** Called with each phase of the commit as it starts. */
+  onProgress: (phase: ImportPhase) => void;
 }
 
 /** Changes the cached application start, when there is one. */
@@ -99,7 +108,7 @@ function themeChangesOf(client: QueryClient): ThemeChanges {
  * also reads the workspaces folder again.
  *
  * The actions on the open workspace run one after another, and `isBusy` is true for every reader
- * while any of them runs or waits its turn.
+ * while any of them runs or waits its turn. The commit of an import is one of them.
  *
  * A failed action leaves the cached state as it was. Its error is the `error` of the mutation;
  * show it with `asCommandError`.
@@ -174,6 +183,20 @@ export function useApp() {
     onSuccess: opened,
   });
 
+  // An import makes its target the open workspace, with the new snapshot selected: it may open
+  // another workspace, or create one. So it takes its turn with the other actions on the open
+  // workspace, and the start holds what it opened before the next of them runs.
+  const importCommit = useMutation({
+    mutationKey: keys.changing,
+    scope: WORKSPACE_SCOPE,
+    mutationFn: ({ request, onProgress }: Commit) => api.importCommit(request, onProgress),
+    onSuccess: (done, { request }) => {
+      opened(done.open);
+      // A workspace the import created is new to the folder; one that existed is already listed.
+      return request.target.kind === "New" ? readList(client) : undefined;
+    },
+  });
+
   const setTheme = useMutation({
     scope: SETTINGS_SCOPE,
     mutationFn: (theme: Theme) => api.setTheme(theme),
@@ -232,6 +255,7 @@ export function useApp() {
     createWorkspace,
     renameWorkspace,
     selectSnapshot,
+    importCommit,
     setTheme,
     openDemo,
     refreshWorkspaces,

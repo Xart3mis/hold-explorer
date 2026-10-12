@@ -158,6 +158,10 @@ describe("the import page when the file cannot be opened", () => {
     ["Unreadable", en.import.error.Unreadable],
     ["EmptyFile", en.import.error.EmptyFile],
     ["NoDataSheet", en.import.error.NoDataSheet],
+    ["SheetNotFound", en.import.error.SheetNotFound],
+    ["MissingColumns", en.import.error.MissingColumns],
+    ["Empty", en.import.error.Empty],
+    ["NoHolds", en.import.error.NoHolds],
     ["Internal", en.import.error.other],
   ])("shows a %s error by its kind, with the fix the command gives", async (kind, title) => {
     renderApp({
@@ -238,6 +242,76 @@ describe("the import page when the file cannot be opened", () => {
     });
     await within(await page()).findByRole("alert");
     await expectAccessible(document.body, { page: true });
+  });
+});
+
+describe("Cancel pressed while the file is still being read", () => {
+  it("wins over the read: the flow does not move on, and the user ends where the import was started", async () => {
+    let opened: (draft: ImportDraft) => void = () => undefined;
+    let cancelled: (answer: null) => void = () => undefined;
+    const cancel = vi.fn(
+      () =>
+        new Promise<null>((resolve) => {
+          cancelled = resolve;
+        }),
+    );
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: at({ path: FILE, from: "/lines" }),
+      handlers: {
+        import_open: () =>
+          new Promise<ImportDraft>((resolve) => {
+            opened = resolve;
+          }),
+        import_cancel: cancel,
+        import_review: () => new Promise(() => undefined),
+      },
+    });
+    const main = await page();
+    await within(main).findByText(reading);
+    await user.click(within(main).getByRole("button", { name: en.common.cancel }));
+    expect(cancel).toHaveBeenCalledTimes(1);
+
+    // The read answers first, as it does when the cancel waits for it on the Rust side.
+    opened(draft());
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(router.state.location.pathname).toBe("/import");
+    expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
+
+    cancelled(null);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/lines");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(router.state.location.pathname).toBe("/lines");
+    expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
+  });
+});
+
+describe("the import page while a file is already open", () => {
+  it("names the file and leads back to its review", async () => {
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: at({ from: "/lines" }),
+      handlers: { import_review: () => new Promise(() => undefined) },
+    });
+    queryClient.setQueryData(keys.importDraft, draft());
+    const main = await page();
+    const notice = within(main).getByText(
+      en.import.stillOpen.replace("{{file}}", "Holds_2026-10-07.xlsx"),
+    );
+    expect(notice).toBeVisible();
+    await user.click(within(main).getByRole("button", { name: en.import.continue }));
+    expect(router.state.location.pathname).toBe("/import/review");
+    expect(router.state.location.state).toMatchObject({ from: "/lines" });
+  });
+
+  it("leads to the mapping page for a file whose required fields have no column", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: at({ from: "/lines" }) });
+    queryClient.setQueryData(keys.importDraft, draft({ missing_required: ["LineId"] }));
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.import.continue }));
+    expect(router.state.location.pathname).toBe("/import/mapping");
   });
 });
 

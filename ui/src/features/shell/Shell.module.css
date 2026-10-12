@@ -183,7 +183,13 @@
   display: block;
 }
 
+/*
+ * The page scrolls here and nowhere else. What a page hides from the eye and keeps for assistive
+ * technology is placed out of the flow; this is the box it is placed in, so that such an element
+ * far down a long page lengthens this scroll and never the window's.
+ */
 .scroll {
+  position: relative;
   flex: 1;
   min-block-size: 0;
   padding: var(--layout-page-padding-y) var(--layout-page-padding-x);

@@ -5,7 +5,15 @@ import {
   formatDateTime,
   formatDays,
   formatList,
+  formatLongDate,
   formatPercent,
+  formatTime,
+  isSameSecond,
+  parseDateInput,
+  parseTimeInput,
+  toDateInput,
+  toTimeInput,
+  yearOf,
 } from "./format";
 
 describe("formatCount", () => {
@@ -80,5 +88,88 @@ describe("formatDays", () => {
     expect(formatDays(0)).toBe("0 d");
     expect(formatDays(71)).toBe("71 d");
     expect(formatDays(1204)).toBe("1,204 d");
+  });
+});
+
+describe("formatLongDate and formatTime", () => {
+  it("reads a date back with its weekday and its month in full", () => {
+    expect(formatLongDate("2026-10-07T08:00:00")).toBe("Wednesday, 7 October 2026");
+    expect(formatLongDate("2026-10-07")).toBe("Wednesday, 7 October 2026");
+    expect(formatLongDate("soon")).toBe("soon");
+  });
+
+  it("writes the time on a 24-hour clock", () => {
+    expect(formatTime("2026-09-30T14:05:00")).toBe("14:05");
+    expect(formatTime("2026-09-30T00:00:00")).toBe("00:00");
+    expect(formatTime("soon")).toBe("soon");
+  });
+});
+
+describe("what a date field and a time field hold", () => {
+  it("writes the date and the time of a moment as the fields hold them", () => {
+    expect(toDateInput("2026-10-07T08:00:00")).toBe("2026-10-07");
+    expect(toTimeInput("2026-10-07T08:00:00")).toBe("08:00");
+    expect(toDateInput("0987-01-02T03:04:05")).toBe("0987-01-02");
+  });
+
+  it("keeps the seconds of a moment that has some, and drops a fraction of a second", () => {
+    expect(toTimeInput("2026-10-07T14:05:37")).toBe("14:05:37");
+    expect(toTimeInput("2026-10-07T14:05:37.250")).toBe("14:05:37");
+  });
+
+  it("writes nothing for text that is no moment", () => {
+    expect(toDateInput("soon")).toBe("");
+    expect(toTimeInput("")).toBe("");
+  });
+
+  it("reads a typed date in year, month, day order, with the usual separators", () => {
+    expect(parseDateInput("2026-10-07")).toBe("2026-10-07");
+    expect(parseDateInput(" 2026/10/7 ")).toBe("2026-10-07");
+    expect(parseDateInput("2026.1.5")).toBe("2026-01-05");
+    expect(parseDateInput("1999-12-31")).toBe("1999-12-31");
+  });
+
+  it("refuses a date that is not a day of the calendar or not in that order", () => {
+    expect(parseDateInput("2026-02-30")).toBeNull();
+    expect(parseDateInput("2026-13-01")).toBeNull();
+    expect(parseDateInput("07/10/2026")).toBeNull();
+    expect(parseDateInput("7 Oct 2026")).toBeNull();
+    expect(parseDateInput("")).toBeNull();
+  });
+
+  it("reads a typed time on a 24-hour clock, with or without seconds", () => {
+    expect(parseTimeInput("08:00")).toBe("08:00:00");
+    expect(parseTimeInput("8:05")).toBe("08:05:00");
+    expect(parseTimeInput("14.05")).toBe("14:05:00");
+    expect(parseTimeInput("14:05:37")).toBe("14:05:37");
+  });
+
+  it("refuses a time that is not a time of day", () => {
+    expect(parseTimeInput("24:00")).toBeNull();
+    expect(parseTimeInput("12:60")).toBeNull();
+    expect(parseTimeInput("2 pm")).toBeNull();
+    expect(parseTimeInput("")).toBeNull();
+  });
+
+  it("goes from a moment to the fields and back without changing it", () => {
+    const moment = "2026-10-07T14:05:37";
+    const date = parseDateInput(toDateInput(moment));
+    const time = parseTimeInput(toTimeInput(moment));
+    expect(`${date ?? ""}T${time ?? ""}`).toBe(moment);
+  });
+});
+
+describe("yearOf and isSameSecond", () => {
+  it("gives the year of a moment or a date", () => {
+    expect(yearOf("2026-10-07T08:00:00")).toBe(2026);
+    expect(yearOf("1999-12-31")).toBe(1999);
+    expect(yearOf("soon")).toBeNull();
+  });
+
+  it("tells two moments apart to the second and no finer", () => {
+    expect(isSameSecond("2026-10-07T08:00:00", "2026-10-07T08:00:00.731")).toBe(true);
+    expect(isSameSecond("2026-10-07T08:00:00", "2026-10-07 08:00")).toBe(true);
+    expect(isSameSecond("2026-10-07T08:00:00", "2026-10-07T08:00:01")).toBe(false);
+    expect(isSameSecond("soon", "soon")).toBe(false);
   });
 });

@@ -366,6 +366,70 @@ describe("navigation", () => {
     expect(document.title).toBe(`${names.settings} · ${en.app.name}`);
   });
 
+  it("takes the focus back to the heading when it falls to the body right after a navigation", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    // A menu that closes while the page opens gives the focus back to an element that may be
+    // gone, and the focus then lands on the document body: here, the moment the heading has it.
+    const steal = (event: FocusEvent) => {
+      if (!(event.target instanceof HTMLHeadingElement)) return;
+      document.removeEventListener("focusin", steal);
+      event.target.blur();
+    };
+    document.addEventListener("focusin", steal);
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    const heading = await screen.findByRole("heading", { level: 1, name: names.settings });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    document.removeEventListener("focusin", steal);
+  });
+
+  it("takes it back as well when the focus falls to the body only as the menu finishes closing", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    const heading = await screen.findByRole("heading", { level: 1, name: names.settings });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    // Later than the next frame, sooner than the exit of a menu takes.
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    heading.blur();
+    expect(document.body).toHaveFocus();
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+  });
+
+  it("never takes the focus from a control that was focused after the navigation", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    const heading = await screen.findByRole("heading", { level: 1, name: names.settings });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    const theme = screen.getByRole("button", { name: new RegExp(` ${en.settings.theme}$`) });
+    theme.focus();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(theme).toHaveFocus();
+  });
+
+  it("leaves a focus that is lost later where it is: it watches only while the page opens", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    await user.click(within(nav).getByRole("link", { name: names.settings }));
+    const heading = await screen.findByRole("heading", { level: 1, name: names.settings });
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    heading.blur();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(document.body).toHaveFocus();
+  });
+
   it("leaves the focus at the start of the window on the page the app opens on", async () => {
     const { user } = renderApp({ start: openStart(), path: "/" });
     const heading = await screen.findByRole("heading", { level: 1, name: names.overview });
