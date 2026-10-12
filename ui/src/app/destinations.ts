@@ -39,6 +39,14 @@ export const destinations: readonly Destination[] = [
   { id: "settings", path: "/settings", shortcut: "Ctrl+,", available: true, group: "setup" },
 ];
 
+/**
+ * Whether a destination shows what a workspace holds. Such a destination has nothing to show
+ * while no workspace is open; Settings is the one that does not depend on a workspace.
+ */
+export function needsWorkspace(id: DestinationId): boolean {
+  return id !== "settings";
+}
+
 /** The address a user without a workspace is sent to, and where the workspaces are listed. */
 export const WELCOME_PATH = "/welcome";
 /** The address of the first destination: where an opened workspace lands. */

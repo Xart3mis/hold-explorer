@@ -110,6 +110,10 @@ describe("SnapshotSelector", () => {
       expect(area).toHaveAttribute("data-stale");
     });
     expect(title).toBeInTheDocument();
+    // Every control that changes the open workspace or its selection shows that one is on its way.
+    expect(
+      screen.getByRole("button", { name: `${en.workspaces.switcher} Unit 573 piping` }),
+    ).toHaveAttribute("aria-busy", "true");
     expect(screen.getByRole("button", { name: trigger(NEWEST) })).toHaveAttribute(
       "aria-busy",
       "true",

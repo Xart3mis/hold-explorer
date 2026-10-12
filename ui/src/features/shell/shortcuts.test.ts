@@ -24,6 +24,19 @@ describe("matchesShortcut", () => {
     expect(matchesShortcut(key({ key: "2", ctrlKey: true }), "Ctrl+1")).toBe(false);
   });
 
+  it("matches a digit by its physical key, whatever character the layout gives it", () => {
+    // A French keyboard gives "&" for the key of 1 and "é" for the key of 2, without Shift.
+    expect(matchesShortcut(key({ key: "&", code: "Digit1", ctrlKey: true }), "Ctrl+1")).toBe(true);
+    expect(matchesShortcut(key({ key: "é", code: "Digit2", ctrlKey: true }), "Ctrl+2")).toBe(true);
+    expect(matchesShortcut(key({ key: "é", code: "Digit2", ctrlKey: true }), "Ctrl+1")).toBe(false);
+    expect(matchesShortcut(key({ key: "&", code: "Digit1" }), "Ctrl+1")).toBe(false);
+    // A key that gives the digit itself still counts, wherever it sits.
+    expect(matchesShortcut(key({ key: "1", code: "Numpad1", ctrlKey: true }), "Ctrl+1")).toBe(true);
+    // A letter is matched by what it types: Ctrl+I is the key that types I on every layout.
+    expect(matchesShortcut(key({ key: "i", code: "KeyU", ctrlKey: true }), "Ctrl+I")).toBe(true);
+    expect(matchesShortcut(key({ key: "u", code: "KeyI", ctrlKey: true }), "Ctrl+I")).toBe(false);
+  });
+
   it("does not tell a capital from a small letter", () => {
     expect(matchesShortcut(key({ key: "i", ctrlKey: true }), "Ctrl+I")).toBe(true);
     expect(matchesShortcut(key({ key: "I", ctrlKey: true }), "Ctrl+I")).toBe(true);
@@ -40,7 +53,7 @@ describe("shortcutBindings", () => {
   it("binds the shortcut of every destination that has one, and Ctrl+I to an import", () => {
     const open = vi.fn();
     const startImport = vi.fn();
-    const bindings = shortcutBindings(destinations, { open, startImport });
+    const bindings = shortcutBindings(destinations, { open, startImport, hasWorkspace: true });
     expect(bindings.map((binding) => binding.shortcut)).toEqual([
       "Ctrl+1",
       "Ctrl+2",
@@ -60,6 +73,17 @@ describe("shortcutBindings", () => {
     expect(open).toHaveBeenCalledWith("/settings");
     bindings[8]?.run();
     expect(startImport).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("shortcutBindings without a workspace", () => {
+  it("binds only what leads somewhere: Settings and the import", () => {
+    const open = vi.fn();
+    const startImport = vi.fn();
+    const bindings = shortcutBindings(destinations, { open, startImport, hasWorkspace: false });
+    expect(bindings.map((binding) => binding.shortcut)).toEqual(["Ctrl+,", IMPORT_SHORTCUT]);
+    bindings[0]?.run();
+    expect(open).toHaveBeenCalledWith("/settings");
   });
 });
 
@@ -105,6 +129,24 @@ describe("handleShortcut", () => {
     const button = document.createElement("button");
     expect(handleShortcut(key({ key: "/" }, button), [{ shortcut: "/", run }])).toBe(true);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["menu", "listbox"])("does not fire while a %s is open", (role) => {
+    const run = vi.fn();
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", role);
+    document.body.append(overlay);
+    try {
+      const event = key({ key: "3", code: "Digit3", ctrlKey: true });
+      expect(handleShortcut(event, [{ shortcut: "Ctrl+3", run }])).toBe(false);
+      expect(run).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    } finally {
+      overlay.remove();
+    }
+    expect(handleShortcut(key({ key: "3", ctrlKey: true }), [{ shortcut: "Ctrl+3", run }])).toBe(
+      true,
+    );
   });
 
   it("ignores a key that is held down and one that something else has handled", () => {

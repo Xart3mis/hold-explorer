@@ -1,8 +1,22 @@
 import { useNavigate } from "react-router";
 import { OVERVIEW_PATH, type DestinationId } from "../../app/destinations";
-import { t } from "../../app/i18n";
+import { t, type MessageKey } from "../../app/i18n";
 import { Button, EmptyState } from "../../components";
 import { Page } from "../shell/Page";
+
+/**
+ * What each destination will show, for the ones that are not built. A destination that is built
+ * has no entry: its screen is never shown, and a text nobody reads goes stale.
+ */
+const descriptions: Partial<Record<DestinationId, MessageKey>> = {
+  breakdown: "comingSoon.description.breakdown",
+  lines: "comingSoon.description.lines",
+  blockers: "comingSoon.description.blockers",
+  history: "comingSoon.description.history",
+  people: "comingSoon.description.people",
+  "follow-up": "comingSoon.description.follow-up",
+  rules: "comingSoon.description.rules",
+};
 
 /**
  * The screen of a destination that is not built yet: the page header with the destination's name,
@@ -13,6 +27,14 @@ import { Page } from "../shell/Page";
  */
 export function ComingSoon({ destination }: { destination: DestinationId }) {
   const navigate = useNavigate();
+  const description = descriptions[destination];
+  if (description === undefined) {
+    throw new Error(
+      `The destination ${destination} has no description of what it will show. ` +
+        "Add comingSoon.description to ui/src/locales/en.json and to ComingSoon.tsx before " +
+        "marking the destination as not available.",
+    );
+  }
   return (
     <Page title={t(`destinations.name.${destination}`)} width="form">
       <EmptyState
@@ -27,7 +49,7 @@ export function ComingSoon({ destination }: { destination: DestinationId }) {
           </Button>
         }
       >
-        {t(`comingSoon.description.${destination}`)}
+        {t(description)}
       </EmptyState>
     </Page>
   );

@@ -1,7 +1,7 @@
 // Keyboard shortcuts are registered here and nowhere else. The shortcuts of the destinations
 // come from the destination list; the one shortcut that is not a destination's is named below.
 import { useEffect } from "react";
-import type { Destination } from "../../app/destinations";
+import { needsWorkspace, type Destination } from "../../app/destinations";
 import { t } from "../../app/i18n";
 
 /** Starts an import. */
@@ -33,11 +33,22 @@ function parse(shortcut: string): Parsed {
   };
 }
 
+/**
+ * Whether a key press is the key a shortcut names. A digit is matched by its physical key, the
+ * one in the row above the letters, because many layouts type another character there without
+ * Shift; a key that types the digit itself counts as well. Every other key is matched by what it
+ * types, so a shortcut with a letter is the key with that letter on any layout.
+ */
+function isKey(event: KeyboardEvent, key: string): boolean {
+  if (/^[0-9]$/.test(key) && event.code === `Digit${key}`) return true;
+  return event.key.toLowerCase() === key;
+}
+
 /** Whether a key press is this shortcut: the same key with exactly the modifiers it names. */
 export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
   const wanted = parse(shortcut);
   return (
-    event.key.toLowerCase() === wanted.key &&
+    isKey(event, wanted.key) &&
     event.ctrlKey === wanted.ctrl &&
     event.shiftKey === wanted.shift &&
     event.altKey === wanted.alt &&
@@ -51,16 +62,24 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target.isContentEditable || target.matches("input, textarea, select");
 }
 
+/** Whether a menu or the list of a select is open. Its keys are its own while it is. */
+function isListOpen(): boolean {
+  return document.querySelector('[role="menu"], [role="listbox"]') !== null;
+}
+
 /**
  * Runs the binding a key press matches and keeps the key from the page. A shortcut does not fire
- * while a text field has focus, unless it has Ctrl: a plain key there is text. A key that is held
- * down, or that something else has handled, is left alone. Returns whether a binding ran.
+ * while a text field has focus, unless it has Ctrl: a plain key there is text. Nor does any
+ * shortcut fire while a menu or a list is open: the page behind it does not change under it. A
+ * key that is held down, or that something else has handled, is left alone. Returns whether a
+ * binding ran.
  */
 export function handleShortcut(
   event: KeyboardEvent,
   bindings: readonly ShortcutBinding[],
 ): boolean {
   if (event.defaultPrevented || event.repeat || event.isComposing) return false;
+  if (isListOpen()) return false;
   const typing = isTextEntry(event.target);
   for (const binding of bindings) {
     if (!matchesShortcut(event, binding.shortcut)) continue;
@@ -74,15 +93,17 @@ export function handleShortcut(
 
 /**
  * Every shortcut of the app: one for each destination of the list that names one, built or not,
- * then the import.
+ * then the import. While no workspace is open, a destination that needs one has no shortcut: its
+ * key does nothing, where a visit would only be sent back to the welcome page.
  */
 export function shortcutBindings(
   list: readonly Destination[],
-  actions: { open: (path: string) => void; startImport: () => void },
+  actions: { open: (path: string) => void; startImport: () => void; hasWorkspace: boolean },
 ): ShortcutBinding[] {
   const bindings: ShortcutBinding[] = [];
   for (const destination of list) {
     if (destination.shortcut === undefined) continue;
+    if (!actions.hasWorkspace && needsWorkspace(destination.id)) continue;
     bindings.push({
       shortcut: destination.shortcut,
       run: () => {

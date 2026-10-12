@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { formatCount, formatDate } from "../../app/format";
+import { IMPORT_EXTENSIONS } from "../../api/files";
+import { formatCount, formatDate, formatList } from "../../app/format";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
@@ -35,7 +36,9 @@ describe("the welcome page on a first run", () => {
     expect(within(main).getByText(en.workspaces.descriptionFirst)).toBeInTheDocument();
     const zone = within(main).getByRole("group", { name: en.welcome.dropTitle });
     expect(within(zone).getByText(en.welcome.dropText)).toBeInTheDocument();
-    expect(within(zone).getByText(en.welcome.fileTypes)).toBeInTheDocument();
+    // The formats shown are the ones the file dialog offers: both come from one constant.
+    const types = within(zone).getByText(formatList(IMPORT_EXTENSIONS));
+    expect(types.textContent.split(/,\s*/)).toEqual([...IMPORT_EXTENSIONS]);
     expect(within(zone).getByRole("button", { name: en.welcome.openFile })).toBeInTheDocument();
     expect(
       within(main).getByRole("heading", { level: 2, name: en.welcome.demoTitle }),
@@ -142,6 +145,54 @@ describe("the welcome page on a first run", () => {
     await page();
     await expectAccessible(document.body, { page: true });
   });
+});
+
+describe("the welcome page while an action runs", () => {
+  it(
+    "shows every control that opens a workspace as busy, and starts nothing more",
+    SLOW,
+    async () => {
+      let finish: (value: ReturnType<typeof opened>) => void = () => undefined;
+      const demoCreate = vi.fn(
+        () =>
+          new Promise<ReturnType<typeof opened>>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const open = vi.fn(() => opened());
+      const { user, router } = renderApp({
+        start: withWorkspaces(),
+        path: "/welcome?new=1",
+        handlers: { demo_create: demoCreate, workspace_open: open, workspace_create: open },
+      });
+      const main = await page();
+      await user.click(within(main).getByRole("button", { name: en.welcome.demoOpen }));
+      expect(demoCreate).toHaveBeenCalledTimes(1);
+
+      const busy = [
+        ...within(main).getAllByRole("button", { name: en.workspaces.open }),
+        within(main).getByRole("button", { name: en.welcome.demoOpen }),
+        within(main).getByRole("button", { name: en.workspaces.create }),
+      ];
+      expect(busy).toHaveLength(4);
+      for (const control of busy) expect(control).toHaveAttribute("aria-busy", "true");
+
+      // Neither a row, nor its button, nor the form starts a second action meanwhile.
+      await user.click(within(main).getByRole("rowheader", { name: "Tank farm" }));
+      await user.click(must(busy[0], "the Open button of the first row"));
+      await user.type(
+        within(main).getByRole("textbox", { name: en.workspaces.nameLabel }),
+        "Unit 9{Enter}",
+      );
+      expect(open).not.toHaveBeenCalled();
+
+      finish(opened({ workspace: workspace({ id: "d".repeat(16), name: "Demo" }) }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/overview");
+      });
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("the welcome page with workspaces", () => {

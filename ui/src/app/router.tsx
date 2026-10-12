@@ -11,6 +11,7 @@ import { WelcomePage } from "../features/welcome/WelcomePage";
 import {
   destinations,
   IMPORT_PATH,
+  needsWorkspace,
   OVERVIEW_PATH,
   WELCOME_PATH,
   type Destination,
@@ -24,9 +25,6 @@ export const destinationPages: DestinationPages = {
   overview: <OverviewPage />,
   settings: <SettingsPage />,
 };
-
-/** The destinations that show something while no workspace is open. */
-const WITHOUT_WORKSPACE: ReadonlySet<DestinationId> = new Set<DestinationId>(["settings"]);
 
 /** Where the app opens: Overview when a workspace was reopened, the welcome page otherwise. */
 function StartPage() {
@@ -67,10 +65,10 @@ export function appRoutes(
           const element = page ?? <ComingSoon destination={destination.id} />;
           return {
             path: destination.path,
-            element: WITHOUT_WORKSPACE.has(destination.id) ? (
-              element
-            ) : (
+            element: needsWorkspace(destination.id) ? (
               <NeedsWorkspace>{element}</NeedsWorkspace>
+            ) : (
+              element
             ),
           };
         }),

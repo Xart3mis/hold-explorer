@@ -7,9 +7,10 @@
 
 /* The name as a field, where the switcher was: the box of a text field. */
 .rename {
-  position: relative;
   display: flex;
   flex: 0 1 var(--layout-search-max-width);
+  gap: var(--space-1);
+  align-items: center;
   min-inline-size: var(--size-bar-label-width);
 }
 
@@ -49,17 +50,4 @@
 
 .renameInput[data-invalid] {
   border-color: var(--color-danger-text);
-}
-
-/* While the name is saved, the spinner sits inside the field and the text stops before it. */
-.rename[data-pending] .renameInput {
-  padding-inline-end: calc(var(--space-2) + var(--size-icon) + var(--space-1-5));
-}
-
-.renameSpinner {
-  position: absolute;
-  inset-block-start: calc(50% - var(--size-icon) / 2);
-  inset-inline-end: var(--space-2);
-  color: var(--color-text-secondary);
-  pointer-events: none;
 }

@@ -18,7 +18,7 @@ export interface NewWorkspaceFormProps {
  * create keeps the form, with the reason and what to do under the field.
  */
 export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps) {
-  const { createWorkspace } = useApp();
+  const { createWorkspace, isBusy } = useApp();
   const [name, setName] = useState("");
   const [isMissing, setMissing] = useState(false);
   const form = useRef<HTMLFormElement>(null);
@@ -44,7 +44,8 @@ export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps)
       aria-labelledby="new-workspace-title"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!createWorkspace.isPending) create();
+        // Another action on the workspaces is on its way: this one waits for the user to ask again.
+        if (!isBusy) create();
       }}
     >
       <h2 id="new-workspace-title" className={styles.title}>
@@ -77,7 +78,7 @@ export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps)
         </Notice>
       ) : null}
       <div className={styles.actions}>
-        <Button type="submit" isPending={createWorkspace.isPending}>
+        <Button type="submit" isPending={isBusy}>
           {t("workspaces.create")}
         </Button>
         <Button variant="quiet" onPress={onCancel}>

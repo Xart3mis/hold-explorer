@@ -178,6 +178,11 @@
   padding: var(--space-3) var(--layout-page-padding-x) 0;
 }
 
+/* A notice of the shell that says two things: each on a line of its own. */
+.noticeLine {
+  display: block;
+}
+
 .scroll {
   flex: 1;
   min-block-size: 0;

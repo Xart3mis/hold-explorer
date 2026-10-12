@@ -1,10 +1,10 @@
 import { useId, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { asCommandError } from "../../api/error";
-import { fileName } from "../../api/files";
+import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { showInFolder } from "../../api/window";
 import { OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDate } from "../../app/format";
+import { formatCount, formatDate, formatList } from "../../app/format";
 import { t } from "../../app/i18n";
 import { useApp } from "../../app/useApp";
 import type { CommandError } from "../../bindings/CommandError";
@@ -34,7 +34,7 @@ type FolderError = { at: "folder" | "files"; error: CommandError } | null;
  */
 export function WelcomePage() {
   const { start, dragged } = useShell();
-  const { openWorkspace, openDemo, refreshWorkspaces } = useApp();
+  const { openWorkspace, openDemo, refreshWorkspaces, isBusy } = useApp();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const newButtonId = useId();
@@ -52,7 +52,8 @@ export function WelcomePage() {
   };
 
   const open = (id: string) => {
-    if (openWorkspace.isPending) return;
+    // One action on the workspaces at a time: while one runs, a row starts nothing.
+    if (isBusy) return;
     setOpening(id);
     openWorkspace.mutate(id, { onSuccess: toOverview });
   };
@@ -117,7 +118,7 @@ export function WelcomePage() {
       title={t("welcome.dropTitle")}
       text={t("welcome.dropText")}
       chooseLabel={t("welcome.openFile")}
-      fileTypes={t("welcome.fileTypes")}
+      fileTypes={formatList(IMPORT_EXTENSIONS)}
       onChoose={() => {
         void startImport();
       }}
@@ -210,7 +211,7 @@ export function WelcomePage() {
               rowActions={(workspace) => (
                 <Button
                   variant="quiet"
-                  isPending={openWorkspace.isPending && opening === workspace.id}
+                  isPending={isBusy}
                   onPress={() => {
                     open(workspace.id);
                   }}
@@ -231,7 +232,7 @@ export function WelcomePage() {
           <p className={styles.text}>{t("welcome.demoText")}</p>
           <div>
             <Button
-              isPending={openDemo.isPending}
+              isPending={isBusy}
               onPress={() => {
                 openDemo.mutate(undefined, { onSuccess: toOverview });
               }}

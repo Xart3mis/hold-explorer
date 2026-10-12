@@ -5,11 +5,11 @@ import { queryClient } from "../../app/query";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
-import { renderApp } from "../../test/app";
+import { must, renderApp } from "../../test/app";
 import { draft, openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { windowApi } from "../../test/window";
+import { fileDrag, windowApi } from "../../test/window";
 
 const FILE = "/home/ada/exports/Holds_2026-10-07.xlsx";
 const reading = en.import.reading.replace("{{file}}", "Holds_2026-10-07.xlsx");
@@ -94,6 +94,50 @@ describe("the import page once the file is open", () => {
       expect(router.state.location.pathname).toBe("/import/review");
     });
     expect(router.state.historyAction).toBe("REPLACE");
+  });
+});
+
+describe("a second file dropped while the first is still being read", () => {
+  const OTHER = "/home/ada/exports/Holds_2026-10-14.xlsx";
+
+  it("starts a new read for the new file and ignores what the old read returns", async () => {
+    const answers = new Map<string, (draft: ImportDraft) => void>();
+    const open = vi.fn(
+      ({ path }: { path: string }) =>
+        new Promise<ImportDraft>((resolve) => {
+          answers.set(path, resolve);
+        }),
+    );
+    const { router } = renderApp({
+      start: openStart(),
+      path: at({ path: FILE, from: "/lines" }),
+      handlers: { import_open: open },
+    });
+    const main = await page();
+    await within(main).findByText(reading);
+    expect(open).toHaveBeenCalledTimes(1);
+
+    fileDrag.drop([OTHER]);
+    await within(main).findByText(en.import.reading.replace("{{file}}", "Holds_2026-10-14.xlsx"));
+    expect(within(main).queryByText(reading)).not.toBeInTheDocument();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open).toHaveBeenLastCalledWith({ path: OTHER });
+    // The import was started on Lines, and that is still where Cancel returns to.
+    expect(router.state.location.state).toMatchObject({ path: OTHER, from: "/lines" });
+
+    // The old read answers late, with a file that would need the mapping step. Nothing follows.
+    const stale = draft({ missing_required: ["LineId"] });
+    must(answers.get(FILE), "the first read")(stale);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(router.state.location.pathname).toBe("/import");
+    expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
+
+    const fresh = draft();
+    must(answers.get(OTHER), "the second read")(fresh);
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/import/review");
+    });
+    expect(queryClient.getQueryData(keys.importDraft)).toEqual(fresh);
   });
 });
 
@@ -205,7 +249,7 @@ describe("the import page in its other states", () => {
       handlers: { import_open: () => new Promise<ImportDraft>(() => undefined) },
     });
     const main = await page();
-    const text = en.import.severalDropped_other.replace("{{count, number}}", "3");
+    const text = en.import.severalDropped.replace("{{count, number}}", "3");
     expect(await within(main).findByText(text)).toBeInTheDocument();
     expect(within(main).getByText(reading)).toBeInTheDocument();
   });

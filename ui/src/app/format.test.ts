@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatCount, formatDate, formatDateTime, formatDays, formatPercent } from "./format";
+import {
+  formatCount,
+  formatDate,
+  formatDateTime,
+  formatDays,
+  formatList,
+  formatPercent,
+} from "./format";
 
 describe("formatCount", () => {
   it("groups thousands", () => {
@@ -7,6 +14,14 @@ describe("formatCount", () => {
     expect(formatCount(846)).toBe("846");
     expect(formatCount(5042)).toBe("5,042");
     expect(formatCount(1234567)).toBe("1,234,567");
+  });
+});
+
+describe("formatList", () => {
+  it("writes the items one after another, separated the way the locale separates a plain list", () => {
+    expect(formatList(["xlsx", "csv", "txt"])).toBe("xlsx, csv, txt");
+    expect(formatList(["xlsx"])).toBe("xlsx");
+    expect(formatList([])).toBe("");
   });
 });
 

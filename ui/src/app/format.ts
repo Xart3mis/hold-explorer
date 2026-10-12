@@ -22,6 +22,9 @@ const dateTime = new Intl.DateTimeFormat(locale, {
   timeZone: "UTC",
 });
 
+// A plain list of names with no "and" before the last: file formats, not a sentence.
+const list = new Intl.ListFormat(locale, { style: "short", type: "unit" });
+
 const percent = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 });
 
 const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/;
@@ -60,6 +63,11 @@ function parse(value: string): Date | null {
 /** A whole number with its thousands separated: `5,042`. */
 export function formatCount(value: number): string {
   return count.format(value);
+}
+
+/** A plain list, its items separated the way the locale separates them: `xlsx, csv, txt`. */
+export function formatList(items: readonly string[]): string {
+  return list.format(items);
 }
 
 /** A share of one as a whole percentage: `45%`. */

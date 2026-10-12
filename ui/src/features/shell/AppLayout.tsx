@@ -5,7 +5,7 @@ import { useIsMutating } from "@tanstack/react-query";
 import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
-import { onFileDrag } from "../../api/window";
+import { inApp, onFileDrag } from "../../api/window";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
 import { formatDateTime } from "../../app/format";
 import { t } from "../../app/i18n";
@@ -99,7 +99,7 @@ interface ShellProps {
 
 /** The shell once the application start is known. */
 function LoadedShell({ start, destinations }: ShellProps) {
-  const { selectSnapshot } = useApp();
+  const { selectSnapshot, isBusy } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const problemId = useId();
@@ -108,6 +108,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const [dragged, setDragged] = useState<readonly string[] | null>(null);
   const [problem, setProblem] = useState<ShellProblem | null>(null);
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  // Why files cannot be dropped on this window, when the window refused to say when one is.
+  const [dropProblem, setDropProblem] = useState<string | null>(null);
 
   // The page the app opened on, and whether it has been left since.
   const arrival = useRef<{ first: string | null; left: boolean }>({ first: null, left: false });
@@ -162,14 +164,23 @@ function LoadedShell({ start, destinations }: ShellProps) {
       setDragged(null);
       if (event.type !== "drop") return;
       const [first, ...others] = event.paths;
-      if (first !== undefined) void startImport(first, others.length);
+      if (first === undefined) return;
+      startImport(first, others.length).catch((error: unknown) => {
+        setProblem({
+          kind: "action",
+          title: t("import.startError"),
+          message: asCommandError(error).message,
+        });
+      });
     }).then(
       (unlisten) => {
         if (gone) unlisten();
         else stop = unlisten;
       },
-      () => {
-        // The window gives no drag events here, as in a plain browser. The file dialog remains.
+      (error: unknown) => {
+        // A plain browser has no window that gives drag events, and nothing to say about it. In
+        // the app the user is told, with the reason: a file dropped here would do nothing.
+        if (!gone && inApp()) setDropProblem(asCommandError(error).message);
       },
     );
     return () => {
@@ -183,8 +194,9 @@ function LoadedShell({ start, destinations }: ShellProps) {
       shortcutBindings(destinations, {
         open: (path) => void navigate(path),
         startImport: () => void startImport(),
+        hasWorkspace: hasSidebar,
       }),
-    [destinations, navigate],
+    [destinations, navigate, hasSidebar],
   );
   useShortcuts(bindings);
 
@@ -211,7 +223,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
         />
         {hasSidebar ? <Sidebar destinations={destinations} /> : null}
         <main className={styles.content}>
-          {problem !== null || warning !== null || older !== null ? (
+          {problem !== null || dropProblem !== null || warning !== null || older !== null ? (
             <div className={styles.notices}>
               {problem === null ? null : (
                 <div id={problemId}>
@@ -225,6 +237,18 @@ function LoadedShell({ start, destinations }: ShellProps) {
                     {problem.message}
                   </Notice>
                 </div>
+              )}
+              {dropProblem === null ? null : (
+                <Notice
+                  tone="warning"
+                  title={t("shell.dropUnavailable")}
+                  onDismiss={() => {
+                    setDropProblem(null);
+                  }}
+                >
+                  <span className={styles.noticeLine}>{dropProblem}</span>
+                  <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
+                </Notice>
               )}
               {warning === null ? null : (
                 <Notice
@@ -243,7 +267,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
                   actions={
                     <Button
                       variant="quiet"
-                      isPending={selectSnapshot.isPending}
+                      isPending={isBusy}
                       onPress={() => {
                         selectSnapshot.mutate(older.newest.id, {
                           onSuccess: () => {

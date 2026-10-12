@@ -18,6 +18,14 @@ export function chooseImportFile(): Promise<string | null> {
   });
 }
 
+/**
+ * Whether the window runs inside the app, where the Tauri runtime marks it. In a plain browser,
+ * as on the development page or in a test, there is no file dialog and no window to drop on.
+ */
+export function inApp(): boolean {
+  return (globalThis as { isTauri?: unknown }).isTauri === true;
+}
+
 /** Shows a file or a folder in the file manager of the system, selected in its folder. */
 export async function showInFolder(path: string): Promise<void> {
   await revealItemInDir(path);

@@ -67,6 +67,23 @@ describe("chooseImportFile", () => {
   });
 });
 
+describe("inApp", () => {
+  it("is false in a plain browser and under the mocked commands of a test", () => {
+    expect(real.inApp()).toBe(false);
+    plugins({});
+    expect(real.inApp()).toBe(false);
+  });
+
+  it("is true where the Tauri runtime has marked the window", () => {
+    vi.stubGlobal("isTauri", true);
+    try {
+      expect(real.inApp()).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("showInFolder", () => {
   it("asks the file manager to show the path", async () => {
     const calls = plugins({ "plugin:opener|reveal_item_in_dir": () => null });

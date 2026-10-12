@@ -1,4 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import en from "../../locales/en.json";
@@ -8,6 +10,7 @@ import { opened, openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
+import { connectImportStart } from "../import/start";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;
@@ -131,6 +134,45 @@ describe("the sidebar", () => {
   });
 });
 
+describe("where toasts sit", () => {
+  const source = join(import.meta.dirname, "../..");
+  const inset = () =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--toast-inset-inline-start")
+      .trim();
+
+  it("is the edge of the content area while the sidebar shows, and the default otherwise", async () => {
+    // The app's own stylesheet says what the mark on the root element means.
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync(join(source, "app.css"), "utf8");
+    document.head.append(sheet);
+    try {
+      expect(inset()).toBe("");
+      const open = renderApp({ start: openStart(), path: "/overview" });
+      await sidebar();
+      expect(inset()).toBe("calc(var(--layout-sidebar-width) + var(--space-6))");
+      open.unmount();
+      expect(inset()).toBe("");
+
+      renderApp({ start: startState(), path: "/welcome" });
+      await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+      expect(inset()).toBe("");
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("is read by the toast region, which falls back to the page gutter", () => {
+    const toasts = readFileSync(
+      join(source, "components/ToastRegion/ToastRegion.module.css"),
+      "utf8",
+    );
+    expect(toasts).toContain(
+      "inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));",
+    );
+  });
+});
+
 describe("the top bar", () => {
   it("holds the workspace switcher, the snapshot selector, and Import, in that order", async () => {
     renderApp({ start: openStart(), path: "/overview" });
@@ -237,6 +279,57 @@ describe("shortcuts", () => {
     expect(windowApi.chooseImportFile).toHaveBeenCalledTimes(1);
     await Promise.resolve();
     expect(router.state.location.pathname).toBe("/lines");
+  });
+
+  it("works by the physical key of a digit on a layout that types another character there", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    // The key of 3 on a French keyboard types a quotation mark without Shift.
+    await user.keyboard("{Control>}[Digit3]{/Control}");
+    expect(router.state.location.pathname).toBe("/lines");
+  });
+
+  it("does nothing for a destination while no workspace is open, and still opens Settings", async () => {
+    const { user, router } = renderApp({ start: startState(), path: "/welcome" });
+    const heading = await screen.findByRole("heading", { level: 1, name: en.workspaces.title });
+    const visits: string[] = [];
+    router.subscribe((state) => visits.push(state.location.pathname));
+    for (const digit of ["1", "2", "3", "4", "5", "6", "7"]) {
+      await user.keyboard(`{Control>}${digit}{/Control}`);
+    }
+    // Not even a visit that is sent back: nothing was navigated.
+    expect(visits).toEqual([]);
+    expect(router.state.location.pathname).toBe("/welcome");
+    expect(heading).toBeInTheDocument();
+
+    await user.keyboard("{Control>},{/Control}");
+    expect(router.state.location.pathname).toBe("/settings");
+  });
+
+  it("does not fire while a menu is open", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/overview" });
+    await user.click(await screen.findByRole("button", { name: switcher }));
+    await screen.findByRole("menu", { name: en.workspaces.switcher });
+    await user.keyboard("{Control>}3{/Control}");
+    await user.keyboard("{Control>},{/Control}");
+    expect(router.state.location.pathname).toBe("/overview");
+    expect(screen.getByRole("menu", { name: en.workspaces.switcher })).toBeInTheDocument();
+
+    // Once the menu is closed the shortcuts are back.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+    await user.keyboard("{Control>}3{/Control}");
+    expect(router.state.location.pathname).toBe("/lines");
+  });
+
+  it("does not fire while the list of a select is open", async () => {
+    const { user, router } = renderApp({ start: openStart(), path: "/settings" });
+    await user.click(await screen.findByRole("button", { name: new RegExp(en.settings.theme) }));
+    await screen.findByRole("listbox");
+    await user.keyboard("{Control>}1{/Control}");
+    expect(router.state.location.pathname).toBe("/settings");
   });
 
   it("plain keys typed in a field are text, and a shortcut with Ctrl still fires there", async () => {
@@ -464,6 +557,57 @@ describe("a file dragged over the window", () => {
       expect(router.state.location.pathname).toBe("/import");
     });
     expect(router.state.location.state).toMatchObject({ path: file, from: "/welcome", others: 2 });
+  });
+
+  it("says so in the app when the window gives no drag events, with the reason and the way that still works", async () => {
+    windowApi.inApp.mockReturnValue(true);
+    windowApi.onFileDrag.mockRejectedValue(new Error("The webview refused the listener."));
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    const notice = must(
+      (await screen.findByText(en.shell.dropUnavailable)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the title",
+    );
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(notice).toHaveTextContent("The webview refused the listener.");
+    expect(notice).toHaveTextContent(en.shell.dropUnavailableHelp);
+    expect(screen.getByRole("main")).toContainElement(notice);
+    // The page works, and so does the Import button the notice points to.
+    windowApi.chooseImportFile.mockResolvedValue(null);
+    await user.click(screen.getByRole("button", { name: en.shell.import }));
+    expect(windowApi.chooseImportFile).toHaveBeenCalledTimes(1);
+    await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
+    expect(screen.queryByText(en.shell.dropUnavailable)).not.toBeInTheDocument();
+  });
+
+  it("stays quiet about it in a plain browser, where no window gives drag events", async () => {
+    windowApi.inApp.mockReturnValue(false);
+    windowApi.onFileDrag.mockRejectedValue(new Error("There is no webview."));
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(screen.queryByText(en.shell.dropUnavailable)).not.toBeInTheDocument();
+    expect(screen.queryByText("There is no webview.")).not.toBeInTheDocument();
+  });
+
+  it("shows why a dropped file could not start an import, and rejects nothing unhandled", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const { router } = renderApp({ start: openStart(), path: "/lines" });
+      await sidebar();
+      // The connection between the import and the shell is taken away, as it is while the shell
+      // is being replaced.
+      connectImportStart(() => undefined)();
+      fileDrag.drop(["/exports/Holds.xlsx"]);
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(en.import.startError);
+      expect(router.state.location.pathname).toBe("/lines");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 
   it("stops listening when the app goes", async () => {

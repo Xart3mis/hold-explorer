@@ -1,18 +1,19 @@
+import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Input, TextField as RacTextField } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { asCommandError } from "../../api/error";
 import { OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
 import { t } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { useApp, WORKSPACE_CHANGED } from "../../app/useApp";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
+  IconButton,
   MenuButton,
   MenuItem,
   MenuSection,
   MenuSeparator,
-  Spinner,
   useToast,
   VisuallyHidden,
 } from "../../components";
@@ -23,25 +24,34 @@ import styles from "./WorkspaceSwitcher.module.css";
 /** The address that opens the welcome page with the form for a new workspace. */
 export const NEW_WORKSPACE_PATH = `${WELCOME_PATH}?new=1`;
 
+/** How the field was left: by its own keys or its cancel control, or by the focus going elsewhere. */
+type Leaving = "keys" | "focus";
+
 interface RenameFieldProps {
   /** The name the workspace has. */
   name: string;
   isPending: boolean;
-  /** The id of what says why the last try failed, when it did. */
+  /** What was typed when the last save failed. The field is marked invalid while it still says that. */
+  failed: string | null;
+  /** The id of what says why that save failed, while that is shown. */
   errorId: string | undefined;
-  onSave: (name: string) => void;
-  onCancel: () => void;
+  onSave: (name: string, leaving: Leaving) => void;
+  onCancel: (leaving: Leaving) => void;
 }
 
 /**
- * The name of the workspace as a field, in the place of the switcher. Enter saves, Escape cancels,
- * as in a cell of a spreadsheet. Leaving the field with the name untouched cancels as well; a name
- * that was changed stays in the field until one of the two keys decides.
+ * The name of the workspace as a field, in the place of the switcher. Enter saves and Escape
+ * cancels, as in a cell of a spreadsheet, and a cancel control sits beside the field. When the
+ * focus goes elsewhere, a changed name is saved, as Enter would save it, and an untouched one
+ * closes the field; the focus going to the cancel control is not a reason to save.
  */
-function RenameField({ name, isPending, errorId, onSave, onCancel }: RenameFieldProps) {
+function RenameField({ name, isPending, failed, errorId, onSave, onCancel }: RenameFieldProps) {
   const input = useRef<HTMLInputElement>(null);
   const hintId = useId();
+  const cancelId = useId();
   const [value, setValue] = useState(name);
+  // The mark of a failed save goes as soon as the name is edited: it described what was typed then.
+  const isInvalid = errorId !== undefined && failed !== null && value === failed;
 
   // The field takes the focus with the old name selected, ready to be typed over.
   useEffect(() => {
@@ -50,32 +60,45 @@ function RenameField({ name, isPending, errorId, onSave, onCancel }: RenameField
   }, []);
 
   return (
-    <span className={styles.rename} data-pending={isPending ? "" : undefined}>
+    <span className={styles.rename}>
       <RacTextField
         aria-label={t("workspaces.nameLabel")}
-        aria-describedby={errorId === undefined ? hintId : `${hintId} ${errorId}`}
+        aria-describedby={isInvalid ? `${hintId} ${errorId}` : hintId}
         value={value}
         onChange={setValue}
-        isInvalid={errorId !== undefined}
+        isInvalid={isInvalid}
         isReadOnly={isPending}
         className={cx(styles.renameField)}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.preventDefault();
-            if (!isPending) onSave(value);
+            if (!isPending) onSave(value, "keys");
           } else if (event.key === "Escape") {
             event.preventDefault();
-            if (!isPending) onCancel();
+            if (!isPending) onCancel("keys");
           }
         }}
-        onBlur={() => {
-          if (!isPending && value === name && errorId === undefined) onCancel();
+        onBlur={(event) => {
+          if (isPending) return;
+          const next: unknown = event.relatedTarget;
+          if (next instanceof Element && next.id === cancelId) return;
+          if (value.trim() === name) onCancel("focus");
+          else onSave(value, "focus");
         }}
       >
         <Input ref={input} className={cx(styles.renameInput)} />
       </RacTextField>
       <VisuallyHidden id={hintId}>{t("workspaces.renameHint")}</VisuallyHidden>
-      {isPending ? <Spinner className={styles.renameSpinner} /> : null}
+      {/* While the name is saved the control waits with it, and keeps its place. */}
+      <IconButton
+        id={cancelId}
+        icon={X}
+        label={t("workspaces.renameCancel")}
+        isPending={isPending}
+        onPress={() => {
+          onCancel("keys");
+        }}
+      />
     </span>
   );
 }
@@ -98,6 +121,10 @@ export interface WorkspaceSwitcherProps {
  * other workspaces to open, "Rename workspace", "New workspace", and "All workspaces". A rename
  * edits the name in place and offers Undo in a toast; a new workspace is named in a form on the
  * welcome page.
+ *
+ * A rename and its Undo belong to the workspace they were started for. The rename command acts
+ * on whichever workspace is open, so both name that workspace, the offer to undo is taken away
+ * when another workspace is opened, and a name that is being edited is dropped with its field.
  */
 export function WorkspaceSwitcher({
   open,
@@ -106,34 +133,47 @@ export function WorkspaceSwitcher({
   renameErrorId,
   onProblem,
 }: WorkspaceSwitcherProps) {
-  const { openWorkspace, renameWorkspace } = useApp();
+  const { openWorkspace, renameWorkspace, isBusy } = useApp();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const toast = useToast();
   const trigger = useRef<HTMLButtonElement>(null);
-  const [renaming, setRenaming] = useState(false);
-  const wasRenaming = useRef(false);
 
-  // Once the field has given its place back, the focus returns to the switcher.
+  const { id, name } = open.workspace;
+  // The workspace whose name is being edited. Once another one is open, no name is being edited.
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const renaming = renamingId === id;
+  // What was typed when the last save failed, until the next save or the end of the edit.
+  const [failed, setFailed] = useState<string | null>(null);
+  // Whether the focus returns to the switcher when the field closes: it does unless the user
+  // took it elsewhere.
+  const focusBack = useRef(false);
+  const wasRenaming = useRef(false);
   useEffect(() => {
-    if (wasRenaming.current && !renaming) trigger.current?.focus();
+    if (wasRenaming.current && !renaming && focusBack.current) trigger.current?.focus();
     wasRenaming.current = renaming;
   }, [renaming]);
 
-  const name = open.workspace.name;
-  const others = workspaces.filter((workspace) => workspace.id !== open.workspace.id);
+  // The offer to undo a rename, and the workspace it belongs to.
+  const undo = useRef<{ toast: string; workspace: string } | null>(null);
+  useEffect(() => {
+    if (undo.current === null || undo.current.workspace === id) return;
+    toast.dismiss(undo.current.toast);
+    undo.current = null;
+  }, [id, toast]);
 
-  const renameFailed = (error: unknown) => {
-    onProblem({
-      kind: "rename",
-      title: t("workspaces.renameError"),
-      message: asCommandError(error).message,
-    });
+  const others = workspaces.filter((workspace) => workspace.id !== id);
+
+  const close = (leaving: Leaving) => {
+    focusBack.current = leaving === "keys";
+    setFailed(null);
+    setRenamingId(null);
   };
 
-  const save = (typed: string) => {
+  const save = (typed: string, leaving: Leaving) => {
     const next = typed.trim();
     if (next === "") {
+      setFailed(typed);
       onProblem({
         kind: "rename",
         title: t("workspaces.renameError"),
@@ -143,32 +183,56 @@ export function WorkspaceSwitcher({
     }
     if (next === name) {
       onProblem(null);
-      setRenaming(false);
+      close(leaving);
       return;
     }
-    renameWorkspace.mutate(next, {
-      onSuccess: (renamed) => {
-        onProblem(null);
-        setRenaming(false);
-        toast.show({
-          message: t("workspaces.renamed", { name: renamed.name }),
-          action: {
-            label: t("common.undo"),
-            onAction: () => {
-              // Undo renames back through the same command.
-              renameWorkspace.mutate(name, {
-                onSuccess: (restored) => {
-                  toast.show({ message: t("workspaces.renamedBack", { name: restored.name }) });
-                },
-                onError: renameFailed,
-              });
+    renameWorkspace.mutate(
+      { id, name: next },
+      {
+        onSuccess: (renamed) => {
+          onProblem(null);
+          close(leaving);
+          const shown = toast.show({
+            message: t("workspaces.renamed", { name: renamed.name }),
+            action: {
+              label: t("common.undo"),
+              // Undo renames back through the same command, and only the workspace it renamed.
+              onAction: () => {
+                undo.current = null;
+                renameWorkspace.mutate(
+                  { id: renamed.id, name },
+                  {
+                    onSuccess: (restored) => {
+                      toast.show({ message: t("workspaces.renamedBack", { name: restored.name }) });
+                    },
+                    onError: (error) => {
+                      const reason = asCommandError(error);
+                      // Another workspace is open by now: there is nothing left to undo here.
+                      if (reason.kind === WORKSPACE_CHANGED) return;
+                      onProblem({
+                        kind: "action",
+                        title: t("workspaces.renameError"),
+                        message: reason.message,
+                      });
+                    },
+                  },
+                );
+              },
             },
-          },
-        });
+          });
+          undo.current = { toast: shown, workspace: renamed.id };
+        },
+        // The field stays in edit mode, with what was typed, beside the reason.
+        onError: (error) => {
+          setFailed(typed);
+          onProblem({
+            kind: "rename",
+            title: t("workspaces.renameError"),
+            message: asCommandError(error).message,
+          });
+        },
       },
-      // The field stays in edit mode, with what was typed, beside the reason.
-      onError: renameFailed,
-    });
+    );
   };
 
   if (renaming) {
@@ -176,18 +240,19 @@ export function WorkspaceSwitcher({
       <RenameField
         name={name}
         isPending={renameWorkspace.isPending}
+        failed={failed}
         errorId={renameErrorId}
         onSave={save}
-        onCancel={() => {
+        onCancel={(leaving) => {
           onProblem(null);
-          setRenaming(false);
+          close(leaving);
         }}
       />
     );
   }
 
-  const openOther = (id: string) => {
-    openWorkspace.mutate(id, {
+  const openOther = (other: string) => {
+    openWorkspace.mutate(other, {
       onSuccess: () => {
         onProblem(null);
         // Another workspace has the same destinations. Any other page belongs to what was open.
@@ -210,7 +275,7 @@ export function WorkspaceSwitcher({
       label={name}
       aria-label={t("workspaces.switcherName", { name })}
       menuLabel={t("workspaces.switcher")}
-      isPending={openWorkspace.isPending || renameWorkspace.isPending}
+      isPending={isBusy}
       triggerRef={trigger}
       className={styles.trigger}
     >
@@ -237,7 +302,9 @@ export function WorkspaceSwitcher({
         id="rename"
         onAction={() => {
           onProblem(null);
-          setRenaming(true);
+          setFailed(null);
+          focusBack.current = false;
+          setRenamingId(id);
         }}
       >
         {t("workspaces.rename")}

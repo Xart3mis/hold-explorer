@@ -18,7 +18,7 @@ export interface SnapshotSelectorProps {
  * snapshot, newest first, with its date, time, and number of holds. The one in view is marked.
  */
 export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
-  const { selectSnapshot } = useApp();
+  const { selectSnapshot, isBusy } = useApp();
   const selected = open.snapshots.find((snapshot) => snapshot.id === open.selected);
   // The command lists the snapshots oldest first; the menu starts with the newest.
   const newestFirst = [...open.snapshots].reverse();
@@ -28,7 +28,7 @@ export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
     <MenuButton
       label={t("snapshots.trigger", { date: formatDate(selected.taken_at) })}
       menuLabel={t("snapshots.menu")}
-      isPending={selectSnapshot.isPending}
+      isPending={isBusy}
       align="end"
     >
       <MenuSection

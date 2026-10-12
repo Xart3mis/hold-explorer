@@ -3,9 +3,10 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { fileName } from "../../api/files";
+import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
+import { formatList } from "../../app/format";
 import { t, type MessageKey } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import { Button, DropZone, Notice, Progress, Skeleton } from "../../components";
@@ -129,7 +130,7 @@ export function ImportEntryPage() {
             title={t("welcome.dropTitle")}
             text={t("welcome.dropText")}
             chooseLabel={t("welcome.openFile")}
-            fileTypes={t("welcome.fileTypes")}
+            fileTypes={formatList(IMPORT_EXTENSIONS)}
             onChoose={() => {
               void startImport();
             }}

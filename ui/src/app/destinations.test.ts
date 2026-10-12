@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import en from "../locales/en.json";
-import { destinations } from "./destinations";
+import { destinations, needsWorkspace } from "./destinations";
 
 describe("destinations", () => {
   it("lists the nine destinations in sidebar order", () => {
@@ -59,10 +59,26 @@ describe("destinations", () => {
     );
   });
 
-  it("has a name and a description in the text catalog for every destination", () => {
+  it("has a name in the text catalog for every destination", () => {
     for (const { id } of destinations) {
       expect(en.destinations.name[id]).toMatch(/\S/);
-      expect(en.comingSoon.description[id]).toMatch(/\S/);
     }
+  });
+
+  it("has a description for exactly the destinations that are not built", () => {
+    const described: Record<string, string> = en.comingSoon.description;
+    expect(Object.keys(described).sort()).toEqual(
+      destinations
+        .filter((destination) => !destination.available)
+        .map(({ id }) => id)
+        .sort(),
+    );
+    for (const text of Object.values(described)) expect(text).toMatch(/\S/);
+  });
+
+  it("says which destinations show something without a workspace", () => {
+    expect(destinations.filter(({ id }) => !needsWorkspace(id)).map(({ id }) => id)).toEqual([
+      "settings",
+    ]);
   });
 });

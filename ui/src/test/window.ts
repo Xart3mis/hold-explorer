@@ -17,6 +17,8 @@ export const windowApi = {
   chooseImportFile: vi.fn<() => Promise<string | null>>(),
   showInFolder: vi.fn<(path: string) => Promise<void>>(),
   onFileDrag: vi.fn<(handler: DragHandler) => Promise<() => void>>(),
+  /** Whether the window runs inside the app. A test is a plain browser unless it says otherwise. */
+  inApp: vi.fn<() => boolean>(),
 };
 
 /** Puts the stand-in back as a test finds it: a cancelled dialog, a folder that shows, no drag. */
@@ -24,6 +26,7 @@ export function resetWindowApi(): void {
   handlers.clear();
   windowApi.chooseImportFile.mockReset().mockResolvedValue(null);
   windowApi.showInFolder.mockReset().mockResolvedValue(undefined);
+  windowApi.inApp.mockReset().mockReturnValue(false);
   windowApi.onFileDrag.mockReset().mockImplementation((handler) => {
     handlers.add(handler);
     return Promise.resolve(() => {
