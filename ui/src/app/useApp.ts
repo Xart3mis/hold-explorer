@@ -251,7 +251,9 @@ export function useApp() {
     isReloading: start.isRefetching,
     /**
      * An action on the open workspace is running or waiting its turn, started by any part of the
-     * app. A control that starts such an action shows itself as pending meanwhile.
+     * app. A control that starts such an action is inert meanwhile (`isInert`): it starts nothing
+     * and shows no spinner. The spinner is on the control that started the action that runs,
+     * which knows it by the `isPending` of the action it called.
      */
     isBusy,
     openWorkspace,

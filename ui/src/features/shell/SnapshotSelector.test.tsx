@@ -143,6 +143,56 @@ describe("SnapshotSelector", () => {
     expect(screen.getByRole("button", { name: trigger(OLDER) })).not.toHaveAttribute("aria-busy");
   });
 
+  it("shows the spinner on the control that was pressed, and on no other", SLOW, async () => {
+    const waiting: ((value: ReturnType<typeof opened>) => void)[] = [];
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/lines",
+      handlers: {
+        snapshot_select: () =>
+          new Promise<ReturnType<typeof opened>>((resolve) => {
+            waiting.push(resolve);
+          }),
+      },
+    });
+    const spinners = (control: HTMLElement) => control.querySelectorAll("[data-part='spinner']");
+    const switcher = () =>
+      screen.getByRole("button", { name: `${en.workspaces.switcher} Unit 573 piping` });
+
+    // The selector started it: it has the spinner. The switcher waits, and shows none.
+    const menu = await openMenu(user);
+    await user.click(must(within(menu).getAllByRole("menuitemradio")[1], "the older snapshot"));
+    const selector = screen.getByRole("button", { name: trigger(NEWEST) });
+    await waitFor(() => {
+      expect(spinners(selector)).toHaveLength(1);
+    });
+    expect(switcher()).toHaveAttribute("aria-busy", "true");
+    expect(spinners(switcher())).toHaveLength(0);
+    // The control that waits starts nothing: its menu stays closed.
+    await user.click(switcher());
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    waiting.shift()?.(opened({ selected: 1 }));
+
+    // "Go to newest" starts the next one: it has the spinner, and the selector has none.
+    const toNewest = await screen.findByRole("button", { name: en.snapshots.toNewest });
+    await waitFor(() => {
+      expect(toNewest).not.toHaveAttribute("aria-busy");
+    });
+    await user.click(toNewest);
+    await waitFor(() => {
+      expect(spinners(toNewest)).toHaveLength(1);
+    });
+    const older = screen.getByRole("button", { name: trigger(OLDER) });
+    expect(older).toHaveAttribute("aria-busy", "true");
+    expect(spinners(older)).toHaveLength(0);
+    expect(spinners(switcher())).toHaveLength(0);
+    expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(1);
+    waiting.shift()?.(opened({ selected: 2 }));
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(0);
+    });
+  });
+
   it("shows the notice at once for a workspace that starts on an older snapshot", async () => {
     const { user } = renderApp({
       start: openStart({ open: opened({ selected: 1 }) }),

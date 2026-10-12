@@ -58,6 +58,37 @@ describe("WorkspaceSwitcher", () => {
     expect(within(menu).getAllByRole("menuitem")).toHaveLength(3);
   });
 
+  it("shows the spinner while it opens another workspace, and the snapshot selector waits without one", async () => {
+    let finish: (value: ReturnType<typeof opened>) => void = () => undefined;
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/lines",
+      handlers: {
+        workspace_open: () =>
+          new Promise<ReturnType<typeof opened>>((resolve) => {
+            finish = resolve;
+          }),
+      },
+    });
+    const menu = await openMenu(user);
+    await user.click(within(menu).getByRole("menuitem", { name: /^Tank farm/ }));
+    const trigger = screen.getByRole("button", { name: current });
+    await waitFor(() => {
+      expect(trigger.querySelectorAll("[data-part='spinner']")).toHaveLength(1);
+    });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    const selector = screen.getByRole("button", { name: /^Snapshot / });
+    expect(selector).toHaveAttribute("aria-busy", "true");
+    expect(selector.querySelector("[data-part='spinner']")).toBeNull();
+    expect(topBar().querySelectorAll("[data-part='spinner']")).toHaveLength(1);
+
+    finish(opened({ workspace: otherWorkspace }));
+    await screen.findByRole("button", { name: named("Tank farm") });
+    await waitFor(() => {
+      expect(topBar().querySelector("[data-part='spinner']")).toBeNull();
+    });
+  });
+
   it("opens another workspace and stays on the destination", async () => {
     const open = vi.fn(() => opened({ workspace: otherWorkspace }));
     const { user, router } = renderApp({

@@ -32,6 +32,9 @@ const MARKER = "hx-dev-commands";
 export const DEV_STATES = [
   "first-run",
   "workspaces",
+  // The list of workspaces, where an action that is started never ends: press Open on a row, or
+  // the demo button, to see the spinner on what was pressed and the other controls waiting.
+  "workspaces-pending",
   "open",
   "older",
   "list-error",
@@ -255,6 +258,7 @@ function world(state: DevState, theme: Theme): World {
     case "first-run":
       break;
     case "workspaces":
+    case "workspaces-pending":
       start.list.workspaces = all;
       start.list.unreadable = [
         {
@@ -403,6 +407,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
           "That workspace is not in the workspace folder. It may have been moved or deleted; choose a workspace from the list, or create a new one.",
         );
       }
+      if (state === "workspaces-pending") return new Promise<WorkspaceOpen>(() => undefined);
       return later(300, () => open(workspace));
     },
     workspace_rename: (payload) => {
@@ -430,7 +435,10 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       start.open = { ...start.open, selected: id };
       return later(250, () => start.open);
     },
-    demo_create: () => later(2200, () => create("Demo", fourSnapshots)),
+    demo_create: () =>
+      state === "workspaces-pending"
+        ? new Promise<WorkspaceOpen>(() => undefined)
+        : later(2200, () => create("Demo", fourSnapshots)),
     import_open: (payload) => {
       const path = text(payload, "path");
       return later(1500, () => {

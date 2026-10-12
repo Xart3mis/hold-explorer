@@ -31,6 +31,14 @@ export interface ButtonProps extends Base {
    * never waits; give it an icon to have no reserved room.
    */
   isPending?: boolean;
+  /**
+   * While true the button waits for an action that another control started and that this one
+   * would conflict with. It shows no spinner and keeps its icon, its colors, its width, and its
+   * place in the Tab order; it ignores presses and is announced as busy. The spinner is on the
+   * control that started the action, and on that one alone. `isPending` comes first: a button
+   * that is given both shows the spinner.
+   */
+  isInert?: boolean;
   /** The label: a verb that names the action. */
   children: ReactNode;
   className?: string | undefined;
@@ -41,19 +49,25 @@ export function Button({
   variant = "secondary",
   icon,
   isPending,
+  isInert,
   children,
   className,
   ...props
 }: ButtonProps) {
   const pending = isPending === true;
+  const inert = !pending && isInert === true;
+  const busy = pending || inert;
   return (
     <RacButton
       {...props}
-      isPending={pending}
+      // The component library's pending button is what both states need: it keeps the focus and
+      // its look, and no press reaches it.
+      isPending={busy}
       data-variant={variant}
+      data-inert={inert ? "" : undefined}
       data-reserve={isPending !== undefined && icon === undefined ? "" : undefined}
       className={cx(styles.button, className)}
-      render={(domProps) => <button {...domProps} aria-busy={pending ? "true" : undefined} />}
+      render={(domProps) => <button {...domProps} aria-busy={busy ? "true" : undefined} />}
     >
       {pending ? <Spinner /> : icon ? <Icon icon={icon} /> : null}
       <span className={styles.label}>{children}</span>

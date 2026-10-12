@@ -28,6 +28,12 @@ export interface MenuButtonProps {
   icon?: LucideIcon;
   /** The action the menu started is running: the spinner takes the place of the chevron. */
   isPending?: boolean;
+  /**
+   * An action that another control started is running, and one of this menu would conflict with
+   * it: the button keeps its chevron and its look, opens nothing, and is announced as busy.
+   * `isPending` comes first.
+   */
+  isInert?: boolean;
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
   /** The button, so a screen can give it the focus back after what the menu started is over. */
@@ -47,6 +53,7 @@ export function MenuButton({
   menuLabel,
   icon,
   isPending = false,
+  isInert = false,
   align = "start",
   triggerRef,
   children,
@@ -54,14 +61,17 @@ export function MenuButton({
   ...props
 }: MenuButtonProps) {
   const offset = lengthToken("--space-1");
+  const inert = !isPending && isInert;
+  const busy = isPending || inert;
   return (
     <MenuTrigger>
       <RacButton
         {...(triggerRef === undefined ? {} : { ref: triggerRef })}
         {...(props["aria-label"] === undefined ? {} : { "aria-label": props["aria-label"] })}
-        isPending={isPending}
+        isPending={busy}
+        data-inert={inert ? "" : undefined}
         className={cx(styles.trigger, className)}
-        render={(domProps) => <button {...domProps} aria-busy={isPending ? "true" : undefined} />}
+        render={(domProps) => <button {...domProps} aria-busy={busy ? "true" : undefined} />}
       >
         {icon ? <Icon icon={icon} /> : null}
         <span className={styles.triggerLabel}>{label}</span>

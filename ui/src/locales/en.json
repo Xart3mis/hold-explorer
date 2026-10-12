@@ -385,13 +385,13 @@
         "replaceText": "The import removes the snapshot of {{date}} from {{workspace}}, with the {{holds}} it holds, and puts this file in its place. Hold Explorer cannot bring it back; to have it again, import {{file}} again.",
         "checking": "Checking {{workspace}} for this file and for snapshots of the same day."
       },
-      "import": "Import",
+      "import": "Import snapshot",
       "blocked": {
         "date": "Enter the snapshot date and time to import.",
         "confirm": "Confirm the snapshot date, or enter the right one, to import.",
         "target": "Choose the workspace to import into.",
         "name": "Enter a name for the new workspace.",
-        "checking": "Import is available once the workspace has been checked.",
+        "checking": "The snapshot can be imported once the workspace has been checked.",
         "check": "The workspace could not be checked, so nothing is imported into it. Try the check again, or choose another workspace.",
         "already": "The same file is not imported twice into one workspace."
       },

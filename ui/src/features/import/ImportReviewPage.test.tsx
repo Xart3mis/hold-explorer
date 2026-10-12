@@ -8,7 +8,7 @@ import type { ImportReview } from "../../bindings/ImportReview";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
-import { must } from "../../test/app";
+import { must, topBar } from "../../test/app";
 import { expectAccessible } from "../../test/axe";
 import { opened, otherWorkspace, startState } from "../../test/fixtures";
 import { choose, openFlow, pageTitled } from "../../test/flow";
@@ -970,6 +970,18 @@ describe("importing from the review page", () => {
       });
     },
   );
+
+  it("names its button Import snapshot, apart from Import in the top bar that starts another import", async () => {
+    reviewing();
+    const main = await ready();
+    expect(importButton(main)).toHaveAccessibleName("Import snapshot");
+    expect(within(topBar()).getByRole("button", { name: en.shell.import })).toHaveAccessibleName(
+      "Import",
+    );
+    // One button of each name: nothing on the page can be taken for the other.
+    expect(screen.getAllByRole("button", { name: "Import snapshot" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Import" })).toHaveLength(1);
+  });
 
   it("drops the draft on Cancel and returns to where the import was started", async () => {
     const cancel = vi.fn(() => null);

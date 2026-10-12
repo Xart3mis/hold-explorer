@@ -273,7 +273,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
                   actions={
                     <Button
                       variant="quiet"
-                      isPending={isBusy}
+                      isPending={selectSnapshot.isPending}
+                      isInert={isBusy}
                       onPress={() => {
                         selectSnapshot.mutate(older.newest.id, {
                           onSuccess: () => {

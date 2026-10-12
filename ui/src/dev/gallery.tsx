@@ -179,6 +179,11 @@ function Buttons() {
               Export
             </Button>
           </Specimen>
+          <Specimen name="Waiting for another control">
+            <Button variant={variant} isPending={false} isInert>
+              Import
+            </Button>
+          </Specimen>
         </Row>
       ))}
       <Row label="pending keeps the width">

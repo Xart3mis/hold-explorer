@@ -9,13 +9,15 @@ function Sample({
   onAction = () => undefined,
   onSelect = () => undefined,
   isPending = false,
+  isInert = false,
 }: {
   onAction?: (id: string) => void;
   onSelect?: (id: string) => void;
   isPending?: boolean;
+  isInert?: boolean;
 }) {
   return (
-    <MenuButton label="Export" menuLabel="Export options" isPending={isPending}>
+    <MenuButton label="Export" menuLabel="Export options" isPending={isPending} isInert={isInert}>
       <MenuSection title="Format" selectedKey="xlsx" onSelectionChange={onSelect}>
         <MenuItem id="xlsx" detail="Excel workbook">
           xlsx
@@ -152,6 +154,31 @@ describe("MenuButton", () => {
     expect(trigger).toHaveAttribute("aria-busy", "true");
     expect(trigger).toHaveTextContent("Export");
     await user.click(trigger);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("shows the spinner in place of the chevron while pending", () => {
+    render(<Sample isPending />);
+    const trigger = screen.getByRole("button", { name: "Export" });
+    expect(trigger.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
+    expect(trigger.querySelector("svg")).toBeNull();
+  });
+
+  it("when inert, waits for another control: its chevron and no spinner, busy, and its menu stays closed", async () => {
+    const user = userEvent.setup();
+    render(<Sample isInert />);
+    const trigger = screen.getByRole("button", { name: "Export" });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveAttribute("data-inert");
+    expect(trigger.querySelector('[data-part="spinner"]')).toBeNull();
+    expect(trigger.querySelectorAll("svg")).toHaveLength(1);
+    expect(trigger).not.toBeDisabled();
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    await user.keyboard("{ArrowDown}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 

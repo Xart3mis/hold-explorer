@@ -16,7 +16,8 @@ export interface SnapshotSelectorProps {
 /**
  * The snapshot selector of the top bar: the date of the snapshot in view, and a menu of every
  * snapshot, newest first, with its date, time, and number of holds, and whether it is a limited
- * one. The one in view is marked.
+ * one. The one in view is marked. It shows the spinner while a snapshot chosen here is being
+ * selected; while another control's action on the workspace runs, it waits without one.
  */
 export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
   const { selectSnapshot, isBusy } = useApp();
@@ -29,7 +30,8 @@ export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
     <MenuButton
       label={t("snapshots.trigger", { date: formatDate(selected.taken_at) })}
       menuLabel={t("snapshots.menu")}
-      isPending={isBusy}
+      isPending={selectSnapshot.isPending}
+      isInert={isBusy}
       align="end"
     >
       <MenuSection

@@ -702,6 +702,7 @@ Plain and rectangular. A button names its action with a verb.
 - **Focus:** the focus ring, on every variant.
 - **Disabled:** fill `--color-surface-disabled`, text `--color-text-disabled`, border `--color-border-default` where the variant has one. Not focusable. A disabled button says why in text beside it. A tooltip may repeat the reason for pointer users, but is never the only place it is given.
 - **Loading:** the label stays, the leading icon becomes the spinner (`--size-icon`, one turn per `--motion-loop-period`), the button keeps its colors, ignores presses, and has `aria-busy`. The width does not change.
+- **Waiting for another control:** an action shows its spinner on the control that started it, and on no other. While it runs, a control that would start a conflicting action, such as the snapshot selector while another workspace is being opened, is inert: it keeps its colors, its icon, its width, and its place in the Tab order, takes no hover or pressed fill, ignores presses, and has `aria-busy`. It shows no spinner and is not disabled, so it needs no reason beside it: the one control with the spinner says what is running. A button that opens a menu follows the same rule and keeps its chevron.
 - **Error:** a button has no error state of its own. A failed action shows an inline danger notice beside or under the button.
 - **Transitions:** background, border, and text color over `--duration-fast` with `--ease-out`.
 

@@ -34,9 +34,11 @@
 
 /*
  * A button that can become pending and has no icon keeps the room of the spinner free, half on
- * each side of its label, so the spinner arrives without changing the width.
+ * each side of its label, so the spinner arrives without changing the width. A button that waits
+ * for another control shows no spinner, so it keeps that room as it does at rest.
  */
-.button[data-reserve]:not([data-pending]) .label {
+.button[data-reserve]:not([data-pending]) .label,
+.button[data-reserve][data-inert] .label {
   padding-inline: calc((var(--size-icon) + var(--space-1-5)) / 2);
 }
 

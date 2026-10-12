@@ -211,7 +211,9 @@ export function WelcomePage() {
               rowActions={(workspace) => (
                 <Button
                   variant="quiet"
-                  isPending={isBusy}
+                  // The spinner is on the row that is being opened; the others wait without one.
+                  isPending={openWorkspace.isPending && opening === workspace.id}
+                  isInert={isBusy}
                   onPress={() => {
                     open(workspace.id);
                   }}
@@ -232,7 +234,8 @@ export function WelcomePage() {
           <p className={styles.text}>{t("welcome.demoText")}</p>
           <div>
             <Button
-              isPending={isBusy}
+              isPending={openDemo.isPending}
+              isInert={isBusy}
               onPress={() => {
                 openDemo.mutate(undefined, { onSuccess: toOverview });
               }}

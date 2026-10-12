@@ -207,6 +207,66 @@ describe("the welcome page while an action runs", () => {
   );
 });
 
+describe("the welcome page and the control that was pressed", () => {
+  const spinners = (control: HTMLElement) => control.querySelectorAll("[data-part='spinner']");
+
+  it(
+    "shows the spinner on the demo button while the demo is built, and on no other control",
+    SLOW,
+    async () => {
+      const { user } = renderApp({
+        start: withWorkspaces(),
+        path: "/welcome?new=1",
+        handlers: { demo_create: () => new Promise<ReturnType<typeof opened>>(() => undefined) },
+      });
+      const main = await page();
+      const demo = within(main).getByRole("button", { name: en.welcome.demoOpen });
+      await user.click(demo);
+      await waitFor(() => {
+        expect(spinners(demo)).toHaveLength(1);
+      });
+      const waiting = [
+        ...within(main).getAllByRole("button", { name: en.workspaces.open }),
+        within(main).getByRole("button", { name: en.workspaces.create }),
+      ];
+      expect(waiting).toHaveLength(3);
+      for (const control of waiting) {
+        expect(control).toHaveAttribute("aria-busy", "true");
+        expect(spinners(control)).toHaveLength(0);
+        // It waits; it is not disabled, and it keeps its place in the Tab order.
+        expect(control).not.toBeDisabled();
+        expect(control).not.toHaveAttribute("data-disabled");
+      }
+      expect(spinners(main)).toHaveLength(1);
+    },
+  );
+
+  it(
+    "shows the spinner on the Open button of the row that is opened, and on no other",
+    SLOW,
+    async () => {
+      const { user } = renderApp({
+        start: withWorkspaces(),
+        path: "/welcome",
+        handlers: { workspace_open: () => new Promise<ReturnType<typeof opened>>(() => undefined) },
+      });
+      const main = await page();
+      const [first, second] = within(main).getAllByRole("button", { name: en.workspaces.open });
+      await user.click(must(second, "the Open button of the second row"));
+      await waitFor(() => {
+        expect(spinners(must(second, "the Open button of the second row"))).toHaveLength(1);
+      });
+      const other = must(first, "the Open button of the first row");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(spinners(other)).toHaveLength(0);
+      const demo = within(main).getByRole("button", { name: en.welcome.demoOpen });
+      expect(demo).toHaveAttribute("aria-busy", "true");
+      expect(spinners(demo)).toHaveLength(0);
+      expect(spinners(main)).toHaveLength(1);
+    },
+  );
+});
+
 describe("the welcome page with workspaces", () => {
   it("lists them with their snapshot counts and latest dates", async () => {
     renderApp({

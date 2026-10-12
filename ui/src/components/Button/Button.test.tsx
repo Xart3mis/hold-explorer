@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Download, X } from "lucide-react";
@@ -86,6 +88,69 @@ describe("Button", () => {
     await user.keyboard(" ");
     await user.click(button);
     expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it("when inert, waits for another control: no spinner, its icon and its look kept, busy, and deaf to presses", async () => {
+    const onPress = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <Button icon={Download} isPending={false} isInert onPress={onPress}>
+        Export
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Export" });
+    // It says that it waits, and it is not the one that shows what runs.
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("data-inert");
+    expect(button.querySelector('[data-part="spinner"]')).toBeNull();
+    expect(button.querySelectorAll("svg")).toHaveLength(1);
+    // It is not disabled: it keeps its look and its place in the Tab order.
+    expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute("data-disabled");
+    await user.tab();
+    expect(button).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(button);
+    expect(onPress).not.toHaveBeenCalled();
+    await user.hover(button);
+    expect(button).not.toHaveAttribute("data-hovered");
+
+    // The control that started the action shows the spinner, whatever else is said of it.
+    rerender(
+      <Button icon={Download} isPending isInert onPress={onPress}>
+        Export
+      </Button>,
+    );
+    expect(button.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
+    expect(button).not.toHaveAttribute("data-inert");
+
+    rerender(
+      <Button icon={Download} isPending={false} onPress={onPress}>
+        Export
+      </Button>,
+    );
+    expect(button).not.toHaveAttribute("aria-busy");
+    await user.click(button);
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the room of the spinner while inert, so its width is the one at rest", () => {
+    const { rerender } = render(<Button isPending={false}>Open</Button>);
+    const button = screen.getByRole("button", { name: "Open" });
+    const stylesheet = readFileSync(join(import.meta.dirname, "Button.module.css"), "utf8");
+    // The room is kept wherever no spinner fills it: at rest, and while inert.
+    expect(stylesheet).toMatch(
+      /\.button\[data-reserve\]:not\(\[data-pending\]\) \.label,\s*\.button\[data-reserve\]\[data-inert\] \.label\s*\{/,
+    );
+    rerender(
+      <Button isPending={false} isInert>
+        Open
+      </Button>,
+    );
+    expect(button).toHaveAttribute("data-reserve");
+    expect(button).toHaveAttribute("data-inert");
+    expect(button.querySelector('[data-part="spinner"]')).toBeNull();
   });
 
   it("when pending, shows the spinner in place of the leading icon", () => {

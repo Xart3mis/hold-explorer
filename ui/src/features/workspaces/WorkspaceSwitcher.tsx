@@ -275,7 +275,8 @@ export function WorkspaceSwitcher({
       label={name}
       aria-label={t("workspaces.switcherName", { name })}
       menuLabel={t("workspaces.switcher")}
-      isPending={isBusy}
+      isPending={openWorkspace.isPending}
+      isInert={isBusy}
       triggerRef={trigger}
       className={styles.trigger}
     >
