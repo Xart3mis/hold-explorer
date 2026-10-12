@@ -33,6 +33,28 @@ fn window_background(theme: Theme) -> Color {
     }
 }
 
+/// Every command of the interface, in one list: what `run` registers is what the tests of the
+/// command channel invoke.
+fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        commands::app_start,
+        commands::settings_set_theme,
+        commands::workspace_list,
+        commands::workspace_create,
+        commands::workspace_open,
+        commands::workspace_rename,
+        commands::import_open,
+        commands::import_choose_sheet,
+        commands::import_review,
+        commands::import_check_target,
+        commands::import_commit,
+        commands::import_cancel,
+        commands::snapshot_select,
+        commands::overview,
+        commands::demo_create,
+    ]
+}
+
 /// Builds and runs the application. Returns when the last window is closed.
 pub fn run() {
     let result = tauri::Builder::default()
@@ -60,23 +82,7 @@ pub fn run() {
             app.manage(Mutex::new(state));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::app_start,
-            commands::settings_set_theme,
-            commands::workspace_list,
-            commands::workspace_create,
-            commands::workspace_open,
-            commands::workspace_rename,
-            commands::import_open,
-            commands::import_choose_sheet,
-            commands::import_review,
-            commands::import_check_target,
-            commands::import_commit,
-            commands::import_cancel,
-            commands::snapshot_select,
-            commands::overview,
-            commands::demo_create,
-        ])
+        .invoke_handler(handler())
         .run(tauri::generate_context!());
     if let Err(error) = result {
         eprintln!("Hold Explorer could not start: {error}");
@@ -123,6 +129,18 @@ mod tests {
             .trim()
             .parse()
             .expect("the tool prints one hex color")
+    }
+
+    #[test]
+    fn the_windows_manifest_asks_for_version_6_of_the_common_controls() {
+        // The build script hands this file to the linker for every target on Windows; without
+        // it neither the application nor a test executable starts there.
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/windows-app-manifest.xml");
+        let manifest = std::fs::read_to_string(path).expect("the manifest is readable");
+        assert!(manifest.contains(r#"name="Microsoft.Windows.Common-Controls""#));
+        assert!(manifest.contains(r#"version="6.0.0.0""#));
+        let script = include_str!("../build.rs");
+        assert!(script.contains(r#""windows-app-manifest.xml""#));
     }
 
     #[test]

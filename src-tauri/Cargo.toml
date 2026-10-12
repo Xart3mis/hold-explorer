@@ -29,6 +29,8 @@ ts-rs.workspace = true
 [dev-dependencies]
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
+# The mock runtime: the tests invoke the commands with the arguments the interface sends.
+tauri = { workspace = true, features = ["test"] }
 
 [features]
 # Turned on by `tauri build`; embeds the built interface. Not a default feature, so
