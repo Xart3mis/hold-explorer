@@ -2,6 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { startQuery } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
+import type { CommandError } from "../../bindings/CommandError";
+
+/** Something that failed, for the shell to show: what failed, and the error of the command. */
+export interface ShellReport {
+  /** What failed, in a sentence that stands on any page: it names what it is about. */
+  title: string;
+  /** What the failed command returned. Its message says why, and how to fix it. */
+  error: CommandError;
+}
 
 export interface Shell {
   /** The application start, as the actions of `useApp()` have changed it since. */
@@ -14,6 +23,13 @@ export interface Shell {
    * start of the window, and every page opened after it takes the focus to its title.
    */
   arrivedAt: (pathname: string) => boolean;
+  /**
+   * Shows a failure as the notice of the shell, under the top bar, where it stays on every page
+   * until it is dismissed. For what a page has to say when it may no longer be shown: an action
+   * it started that fails after the user has gone elsewhere. A failure the page can still show
+   * belongs on the page, beside what failed.
+   */
+  report: (problem: ShellReport) => void;
 }
 
 export const ShellContext = createContext<Shell | null>(null);
@@ -36,5 +52,5 @@ export function useShell(): Shell {
         "Render the page through the routes of ui/src/app/router.tsx.",
     );
   }
-  return { start: data ?? shell.start, dragged: shell.dragged, arrivedAt: shell.arrivedAt };
+  return { ...shell, start: data ?? shell.start };
 }

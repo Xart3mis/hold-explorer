@@ -15,7 +15,8 @@ export interface SnapshotSelectorProps {
 
 /**
  * The snapshot selector of the top bar: the date of the snapshot in view, and a menu of every
- * snapshot, newest first, with its date, time, and number of holds. The one in view is marked.
+ * snapshot, newest first, with its date, time, and number of holds, and whether it is a limited
+ * one. The one in view is marked.
  */
 export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
   const { selectSnapshot, isBusy } = useApp();
@@ -53,7 +54,10 @@ export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
           <MenuItem
             key={snapshot.id}
             id={String(snapshot.id)}
-            detail={t("snapshots.holds", { count: snapshot.row_count })}
+            // A limited snapshot is said to be one, quietly, where its holds are counted.
+            detail={t(snapshot.limited ? "snapshots.holdsLimited" : "snapshots.holds", {
+              count: snapshot.row_count,
+            })}
           >
             {formatDateTime(snapshot.taken_at)}
           </MenuItem>

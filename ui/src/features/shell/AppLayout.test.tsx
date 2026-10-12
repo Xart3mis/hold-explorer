@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
+import { destinationPages } from "../../app/router";
+import { Button } from "../../components";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
@@ -11,6 +13,8 @@ import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
 import { connectImportStart } from "../import/start";
+import { useShell } from "./context";
+import { Page } from "./Page";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;
@@ -228,6 +232,59 @@ describe("the top bar", () => {
     expect(screen.getByRole("heading", { level: 1, name: names.overview })).toBeInTheDocument();
     await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
     expect(screen.queryByText(message)).not.toBeInTheDocument();
+  });
+});
+
+describe("what a page reports to the shell", () => {
+  const failed = {
+    title: "The import of Holds_2026-10-14.xlsx did not complete",
+    error: {
+      kind: "Io",
+      message:
+        "The workspace file could not be written (the disk is full). Free some space, then import again.",
+    },
+  };
+
+  /** A page that has something to report that outlives it. */
+  function Reporting() {
+    const { report } = useShell();
+    return (
+      <Page title={names.overview}>
+        <Button
+          onPress={() => {
+            report(failed);
+          }}
+        >
+          Report
+        </Button>
+      </Page>
+    );
+  }
+
+  it("is shown under the top bar with its title and the reason, stays on every page, and can be dismissed", async () => {
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/overview",
+      pages: { ...destinationPages, overview: <Reporting /> },
+    });
+    await user.click(await screen.findByRole("button", { name: "Report" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveAttribute("data-tone", "danger");
+    expect(alert).toHaveTextContent(failed.title);
+    expect(alert).toHaveTextContent(failed.error.message);
+    // It belongs to the shell, not to the page that reported it.
+    expect(screen.getByRole("main")).toContainElement(alert);
+    expect(must(document.querySelector("[data-part='page']"), "the page")).not.toContainElement(
+      alert,
+    );
+    await user.click(within(await sidebar()).getByRole("link", { name: names.settings }));
+    await screen.findByRole("heading", { level: 1, name: names.settings });
+    expect(screen.getByRole("alert")).toHaveTextContent(failed.title);
+
+    await user.click(
+      within(screen.getByRole("alert")).getByRole("button", { name: en.common.dismiss }),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

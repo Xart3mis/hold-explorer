@@ -21,6 +21,7 @@ import {
 import { commandFailure } from "../../test/ipc";
 import {
   filled,
+  heldCommit,
   importButton,
   ready,
   REVIEW_TARGET,
@@ -416,4 +417,57 @@ describe("after a successful import", () => {
       expect(queryClient.getQueryData(keys.importDraft)).toBeUndefined();
     },
   );
+});
+
+describe("an import that fails after the review was left", () => {
+  const message =
+    "The workspace file could not be written (the disk is full). Free some space, then import again.";
+  const title = filled(en.import.error.commitLeft, { file: "Holds_2026-10-14.xlsx" });
+
+  it(
+    "says so under the top bar, with the file and the reason, on the page the user is on",
+    SLOW,
+    async () => {
+      const commit = heldCommit();
+      const { user, router } = reviewing(review(), {
+        import_commit: commit.handler,
+        import_cancel: () => null,
+      });
+      await user.click(importButton(await ready()));
+      await waitFor(() => {
+        expect(commit.handler).toHaveBeenCalledTimes(1);
+      });
+      // The user leaves while the import runs. The review is gone, and so is its place for an error.
+      const nav = screen.getByRole("navigation", { name: en.destinations.label });
+      await user.click(within(nav).getByRole("link", { name: en.destinations.name.settings }));
+      await screen.findByRole("heading", { level: 1, name: en.destinations.name.settings });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+      commit.fail(commandFailure("Io", message));
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(title);
+      expect(alert).toHaveTextContent(message);
+      expect(alert).toHaveAttribute("data-tone", "danger");
+      expect(router.state.location.pathname).toBe("/settings");
+      // Nothing was imported, and nothing says that something was.
+      expect(
+        within(screen.getByRole("region", { name: en.toast.region })).queryByText(/Imported into/),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("says it once, on the review, while the review is still shown", SLOW, async () => {
+    const { user } = reviewing(review(), {
+      import_commit: () => {
+        throw commandFailure("Io", message);
+      },
+    });
+    const main = await ready();
+    await user.click(importButton(main));
+    const alert = await within(main).findByRole("alert");
+    expect(alert).toHaveTextContent(en.import.error.commit);
+    expect(alert).toHaveTextContent(message);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByText(title)).not.toBeInTheDocument();
+  });
 });

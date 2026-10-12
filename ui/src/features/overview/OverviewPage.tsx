@@ -17,6 +17,7 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  Notice,
   StatTile,
   StatTileGroup,
   VisuallyHidden,
@@ -188,7 +189,8 @@ function GroupSection({
  * by hold type. It shows what the `overview` command returns for the open workspace and the
  * selected snapshot, and reads it again when either changes; the numbers of before stay on
  * screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
- * state that starts an import.
+ * state that starts an import. A snapshot whose file lacked the hold ID or the released column
+ * is said to be limited, above its figures.
  *
  * What the eye is told by the skeletons and by the dimming, assistive technology is told by one
  * status line that the page keeps for as long as it is open: that the overview is loading, that
@@ -249,6 +251,10 @@ export function OverviewPage() {
           ? undefined
           : t("overview.descriptionSnapshot", { date: formatDateTime(selected.taken_at) });
 
+  // A limited snapshot is said to be one, of the snapshot the page is about: the one whose
+  // numbers are on screen, and before they are there, the one the shell has selected.
+  const about = view === null ? undefined : (view?.snapshot ?? selected);
+
   const groupsOf = (id: DimensionId, from: OverviewView) =>
     id === "discipline" ? from.by_discipline : from.by_hold_type;
 
@@ -259,6 +265,11 @@ export function OverviewPage() {
       {...(description === undefined ? {} : { description })}
     >
       <VisuallyHidden role="status">{status}</VisuallyHidden>
+      {about?.limited === true ? (
+        <Notice tone="info" title={t("overview.limitedTitle")} className={styles.limited}>
+          {t("overview.limitedText")}
+        </Notice>
+      ) : null}
       {query.isError ? (
         <ErrorState
           error={asCommandError(query.error)}

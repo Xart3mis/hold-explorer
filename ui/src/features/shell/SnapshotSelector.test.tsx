@@ -4,7 +4,7 @@ import { formatDate, formatDateTime } from "../../app/format";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
-import { opened, openStart } from "../../test/fixtures";
+import { opened, openStart, snapshot } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 
@@ -33,6 +33,23 @@ describe("SnapshotSelector", () => {
     expect(items[0]).toHaveAccessibleDescription("9,300 holds");
     expect(items[1]).toHaveAccessibleName(formatDateTime(OLDER));
     expect(items[1]).toHaveAccessibleDescription("9,120 holds");
+  });
+
+  it("says of a limited snapshot that it is limited, after its holds, and of no other", async () => {
+    const { user } = renderApp({
+      start: openStart({
+        open: opened({
+          snapshots: [snapshot(1, OLDER, { row_count: 9120, limited: true }), snapshot(2, NEWEST)],
+        }),
+      }),
+      path: "/overview",
+    });
+    const items = within(await openMenu(user)).getAllByRole("menuitemradio");
+    expect(items[0]).toHaveAccessibleDescription("9,300 holds");
+    expect(items[1]).toHaveAccessibleDescription("9,120 holds, limited");
+    expect(items[1]).toHaveAccessibleName(formatDateTime(OLDER));
+    // One limited hold is still one hold.
+    expect(en.snapshots.holdsLimited_one.replace("{{count, number}}", "1")).toBe("1 hold, limited");
   });
 
   it("marks the selected snapshot, and only it", async () => {

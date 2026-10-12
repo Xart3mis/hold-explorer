@@ -49,6 +49,18 @@ describe("the welcome page on a first run", () => {
     expect(within(main).queryByText(en.workspaces.unreadableTitle)).not.toBeInTheDocument();
   });
 
+  it("promises of the demo workspace only what this version shows", async () => {
+    renderApp({ start: startState(), path: "/welcome" });
+    const main = await page();
+    // Seven of the nine destinations are not built: the demo gives data to Overview, not to "every screen".
+    for (const said of [en.workspaces.descriptionFirst, en.welcome.demoText]) {
+      expect(within(main).getByText(said)).toBeInTheDocument();
+      expect(said).not.toMatch(/every screen/i);
+      expect(said).toContain(names.overview);
+      expect(said).toMatch(/try an import/);
+    }
+  });
+
   it("starts an import from Open a file", async () => {
     windowApi.chooseImportFile.mockResolvedValue("/exports/Holds.xlsx");
     const { user, router } = renderApp({

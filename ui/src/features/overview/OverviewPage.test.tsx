@@ -742,6 +742,59 @@ describe("the Overview of a workspace without snapshots", () => {
   });
 });
 
+describe("the Overview of a limited snapshot", () => {
+  const limited = snapshot(2, NEWEST, { limited: true });
+  const withLimited = () =>
+    openStart({ open: opened({ snapshots: [snapshot(1, OLDER, { row_count: 9120 }), limited] }) });
+
+  /** The notice that says the snapshot is limited, when the page has it. */
+  function limitedNotice(main: HTMLElement): HTMLElement | null {
+    const title = within(main).queryByText(text.limitedTitle);
+    return title?.closest<HTMLElement>('[role="status"]') ?? null;
+  }
+
+  it("says that the snapshot is limited, and what that means", async () => {
+    const { overview } = renderOverview(() => overviewView({ snapshot: limited }), {
+      start: withLimited(),
+    });
+    const main = await loaded(overview);
+    const notice = must(limitedNotice(main), "the notice of a limited snapshot");
+    expect(notice).toHaveAttribute("data-tone", "info");
+    expect(notice).toHaveTextContent(text.limitedText);
+    // It stands before the figures it is about, and is not part of what is dimmed or busy.
+    expect(content(main)).not.toContainElement(notice);
+    expect(
+      notice.compareDocumentPosition(content(main)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // It is a statement, not an error, and it offers nothing to press.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(notice).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("says so before the numbers are there, for the snapshot the shell has selected", async () => {
+    renderOverview(() => new Promise<OverviewView>(() => undefined), { start: withLimited() });
+    const main = await page();
+    await waitFor(() => {
+      expect(limitedNotice(main)).not.toBeNull();
+    });
+  });
+
+  it("says nothing of the kind for a snapshot that is not limited", async () => {
+    const { overview } = renderOverview();
+    const main = await loaded(overview);
+    expect(limitedNotice(main)).toBeNull();
+    expect(within(main).queryByText(text.limitedText)).not.toBeInTheDocument();
+  });
+
+  it("has no accessibility violation with the notice", SLOW, async () => {
+    const { overview, container } = renderOverview(() => overviewView({ snapshot: limited }), {
+      start: withLimited(),
+    });
+    await loaded(overview);
+    await expectAccessible(container, { page: true });
+  });
+});
+
 describe("the Overview and the accessibility checker", () => {
   it(
     "has no violation with the bars, with a table, and with a figure that is missing",

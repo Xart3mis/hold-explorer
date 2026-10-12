@@ -17,6 +17,7 @@ const titles: Record<string, MessageKey> = {
   AlreadyImported: "import.error.AlreadyImported",
   SnapshotDateOutOfRange: "import.error.SnapshotDateOutOfRange",
   SnapshotNotFound: "import.error.SnapshotNotFound",
+  ReplaceNotOffered: "import.error.ReplaceNotOffered",
   WorkspaceNotFound: "import.error.WorkspaceNotFound",
   NoDraft: "import.error.NoDraft",
   Dialog: "import.error.Dialog",

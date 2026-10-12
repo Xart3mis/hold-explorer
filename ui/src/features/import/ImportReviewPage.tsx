@@ -71,7 +71,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
-  const { start } = useShell();
+  const { start, report } = useShell();
   const { importCommit, openWorkspace } = useApp();
   const cancel = useLeaveImport();
   const [phase, setPhase] = useState<ImportPhase | null>(null);
@@ -203,10 +203,19 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
         });
         if (here) void navigate(OVERVIEW_PATH, { replace: true });
       },
-      () => {
-        // The failure is the mutation's error, shown below. What the workspace holds may be
-        // what made it fail, so it is asked again.
-        if (shown.current && checkable) void checking.refetch();
+      (error: unknown) => {
+        if (shown.current) {
+          // The failure is the mutation's error, shown below. What the workspace holds may be
+          // what made it fail, so it is asked again.
+          if (checkable) void checking.refetch();
+          return;
+        }
+        // The user has gone elsewhere, and the review is not there to show the failure. The
+        // shell says it on whatever page is shown, and names the file it is about.
+        report({
+          title: t("import.error.commitLeft", { file: review.file_name }),
+          error: asCommandError(error),
+        });
       },
     );
   };

@@ -13,7 +13,7 @@ import { useApp } from "../../app/useApp";
 import type { AppStart } from "../../bindings/AppStart";
 import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../components";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
-import { ShellContext } from "./context";
+import { ShellContext, type ShellReport } from "./context";
 import type { ShellProblem } from "./problem";
 import { shortcutBindings, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
@@ -210,7 +210,13 @@ function LoadedShell({ start, destinations }: ShellProps) {
       : null;
   const warning =
     open?.warning != null && open.warning.message !== dismissedWarning ? open.warning : null;
-  const shell = useMemo(() => ({ start, dragged, arrivedAt }), [start, dragged, arrivedAt]);
+  const report = useCallback(({ title, error }: ShellReport) => {
+    setProblem({ kind: "action", title, message: error.message });
+  }, []);
+  const shell = useMemo(
+    () => ({ start, dragged, arrivedAt, report }),
+    [start, dragged, arrivedAt, report],
+  );
 
   return (
     <ShellContext value={shell}>

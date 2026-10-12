@@ -38,9 +38,11 @@ export const DEV_STATES = [
   "warning",
   // The Overview: a workspace without snapshots, a snapshot whose file has no creation dates, a
   // first load that never ends, an update that never ends (select another snapshot to see it), a
-  // failure, and groups of three and of twenty-five values.
+  // failure, groups of three and of twenty-five values, and a workspace whose newest snapshot is
+  // a limited one.
   "empty",
   "no-dates",
+  "overview-limited",
   "overview-loading",
   "overview-updating",
   "overview-error",
@@ -240,6 +242,16 @@ function world(state: DevState, theme: Theme): World {
   const all = [offsites, tankFarm, unit573];
 
   switch (state) {
+    case "overview-limited": {
+      // The newest export came without its released column.
+      const held = fourSnapshots.map((taken) =>
+        taken.id === 4 ? { ...taken, limited: true, open_count: taken.row_count } : taken,
+      );
+      snapshots.set(unit573.id, held);
+      start.list.workspaces = all;
+      start.open = { ...opened(4, null), snapshots: held };
+      break;
+    }
     case "first-run":
       break;
     case "workspaces":

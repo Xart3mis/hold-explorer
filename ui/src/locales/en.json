@@ -86,7 +86,7 @@
   },
   "workspaces": {
     "title": "Workspaces",
-    "descriptionFirst": "A workspace keeps the snapshots of one project. Import a holds export to start one, or open the demo workspace to see every screen with data.",
+    "descriptionFirst": "A workspace keeps the snapshots of one project. Import a holds export to start one, or open the demo workspace to see Overview with data and to try an import.",
     "descriptionSome": "Open a workspace, or import a holds export.",
     "new": "New workspace",
     "all": "All workspaces",
@@ -126,7 +126,7 @@
     "dropText": "Drop the spreadsheet anywhere on this window, or open it.",
     "openFile": "Open a file",
     "demoTitle": "Demo workspace",
-    "demoText": "The demo workspace holds four weekly snapshots of made-up holds, so every screen has data. It contains no real project data.",
+    "demoText": "The demo workspace holds four weekly snapshots of made-up holds. It gives Overview data to show and can be used to try an import. It contains no real project data.",
     "demoOpen": "Open demo workspace",
     "demoBuilding": "Building the demo workspace from made-up holds. This takes a few seconds.",
     "demoError": "The demo workspace could not be built"
@@ -137,6 +137,8 @@
     "list": "Snapshots, newest first",
     "holds_one": "{{count, number}} hold",
     "holds_other": "{{count, number}} holds",
+    "holdsLimited_one": "{{count, number}} hold, limited",
+    "holdsLimited_other": "{{count, number}} holds, limited",
     "older": "Showing the snapshot of {{date}}. It is not the newest.",
     "toNewest": "Go to newest",
     "selectError": "The snapshot could not be selected"
@@ -171,6 +173,7 @@
       "AlreadyImported": "This file is already imported",
       "SnapshotDateOutOfRange": "The snapshot date is outside the years 2000 to 2100",
       "SnapshotNotFound": "The snapshot to replace is no longer there",
+      "ReplaceNotOffered": "The snapshot to replace was not offered by the review",
       "WorkspaceNotFound": "The workspace was not found",
       "NoDraft": "No file is open for import",
       "Dialog": "The file dialog could not be opened",
@@ -178,7 +181,8 @@
       "sheet": "The sheet could not be read",
       "review": "The file could not be reviewed",
       "check": "The workspace could not be checked",
-      "commit": "The import did not complete"
+      "commit": "The import did not complete",
+      "commitLeft": "The import of {{file}} did not complete"
     },
     "startError": "The import could not be started",
     "chooseSheet": "Choose another sheet",
@@ -410,6 +414,8 @@
     "updated": "The overview is updated",
     "error": "The overview could not be loaded",
     "descriptionSnapshot": "Snapshot of {{date}}",
+    "limitedTitle": "This is a limited snapshot",
+    "limitedText": "The file it was imported from had no column for the hold ID, or none that says whether a hold is released. What needs the missing column cannot be shown for this snapshot, and without the released column every hold counts as open.",
     "description_one": "The snapshot of {{date}} has {{count, number}} hold, {{open, number}} of them open.",
     "description_other": "The snapshot of {{date}} has {{count, number}} holds, {{open, number}} of them open.",
     "figures": "Figures of the open holds",

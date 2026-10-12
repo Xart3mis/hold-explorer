@@ -911,6 +911,11 @@ describe("importing from the review page", () => {
       "Snapshot 7 is not in this workspace. It may have been deleted; check the workspace again.",
     ],
     [
+      "ReplaceNotOffered",
+      en.import.error.ReplaceNotOffered,
+      "The import asked to replace snapshot 7, but the review did not offer that snapshot: the target workspace has no snapshot with that number that is dated on the same day as the new one or was made from the same file. Nothing was replaced and nothing was imported. Review the import again, then import.",
+    ],
+    [
       "WorkspaceNotFound",
       en.import.error.WorkspaceNotFound,
       "That workspace is not in the workspace folder. It may have been moved or deleted; choose a workspace from the list, or create a new one.",
@@ -930,18 +935,23 @@ describe("importing from the review page", () => {
           throw commandFailure(kind, message);
         })
         .mockImplementation(() => done(otherWorkspace));
-      const { user, router } = reviewing(review(), { import_commit: commit });
+      const { user, router, check } = reviewing(review(), { import_commit: commit });
       const main = await ready();
       await choose(user, target, new RegExp(`^${otherWorkspace.name}`));
       await waitFor(() => {
         expect(importButton(main)).toBeEnabled();
       });
+      const checksBefore = check.mock.calls.length;
       await user.click(importButton(main));
       const alert = await within(main).findByRole("alert");
       expect(alert).toHaveTextContent(title);
       expect(alert).toHaveTextContent(message);
       expect(alert.closest("[data-kind]")).toHaveAttribute("data-kind", kind);
       expect(router.state.location.pathname).toBe("/import/review");
+      // What the workspace holds may be what made it fail: the workspace is asked again.
+      await waitFor(() => {
+        expect(check.mock.calls.length).toBe(checksBefore + 1);
+      });
       // The page can be changed again, and what was chosen is still chosen.
       expect(within(main).queryByRole("progressbar")).not.toBeInTheDocument();
       expect(within(main).getByRole("button", { name: target })).toHaveTextContent(

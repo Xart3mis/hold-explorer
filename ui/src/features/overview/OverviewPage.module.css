@@ -64,3 +64,8 @@
   font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-normal);
 }
+
+/* What the page says about the snapshot as a whole, a header's gap above its figures. */
+.limited {
+  margin-block-end: var(--space-4);
+}
