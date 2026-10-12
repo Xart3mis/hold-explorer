@@ -41,6 +41,13 @@
  *   When the interface has moved on to another view, or is about to, the reading is dropped and
  *   the hook reads for the view that is shown. When the interface still shows the view it asked
  *   for, the hook reads again, a little later each time, and the screen stays busy meanwhile.
+ * - That does not go on for ever. After five such answers in a row the two sides disagree for
+ *   good, and the interface takes the Rust side's word: it asks for the application start again,
+ *   once. The start then usually names another view, and the hook reads for that one. If it
+ *   names the same view and the command refuses it once more, the screen gets an error of the
+ *   kind `ViewUnsettled`, whose message says what to do; it shows it as any error, with its
+ *   retry. Asking for the start again makes the Rust side start over: it reopens the workspace
+ *   that was open last, selects its newest snapshot, and drops a file that is open for import.
  */
 import {
   skipToken,
@@ -51,14 +58,23 @@ import {
   type UseMutationOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
+import type { CommandError } from "../bindings/CommandError";
 import type { ViewRef } from "../bindings/ViewRef";
+import { t } from "./i18n";
 import { startQuery } from "./query";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
 export const VIEW_CHANGED = "ViewChanged";
+
+/**
+ * The kind of the error a screen is given when a view was refused again after the interface had
+ * taken the application start from the Rust side anew. Its message is from the text catalog.
+ */
+export const VIEW_UNSETTLED = "ViewUnsettled";
 
 /**
  * The actions that change the open workspace or its selection share one scope: they run one after
@@ -67,9 +83,10 @@ export const VIEW_CHANGED = "ViewChanged";
  */
 const WORKSPACE_SCOPE = { id: "workspace" };
 
-/** How long the first reading after `ViewChanged` waits, and the longest any later one waits. */
+/** How many answers of `ViewChanged` in a row a reading takes before it asks for the application start. */
+const REFUSALS = 5;
+/** How long the first reading after `ViewChanged` waits; each one after it waits twice as long. */
 const REREAD_FIRST_MS = 50;
-const REREAD_LONGEST_MS = 1000;
 
 /** The view the interface shows, as the cached application start has it; `null` without a workspace. */
 function viewOf(start: AppStart | undefined): ViewRef | null {
@@ -89,6 +106,11 @@ function isViewChanged(error: unknown): boolean {
   return isCommandError(error) && error.kind === VIEW_CHANGED;
 }
 
+/** What a screen is told when the view stays refused: what happened, why, and what to do. */
+function unsettled(): Error & CommandError {
+  return Object.assign(new Error(t("errors.viewUnsettled")), { kind: VIEW_UNSETTLED });
+}
+
 export interface SnapshotQueryOptions<Data> {
   /** What is read, in one word that no other reading uses: "overview", "lines". Part of the key. */
   name: string;
@@ -101,8 +123,8 @@ export interface SnapshotQueryOptions<Data> {
 /**
  * Reads data of the snapshot in view; see the rule at the top of this file.
  *
- * The result is the one of `useQuery`. `error` is never the kind `ViewChanged`. Without an open
- * workspace nothing is read.
+ * The result is the one of `useQuery`. `error` is never the kind `ViewChanged`; it is the kind
+ * `ViewUnsettled` when the view stayed refused. Without an open workspace nothing is read.
  */
 export function useSnapshotQuery<Data>({
   name,
@@ -121,24 +143,44 @@ export function useSnapshotQuery<Data>({
       view === null
         ? skipToken
         : async (context) => {
-            for (let again = 0; ; again += 1) {
+            // The interface shows another view by now, or is about to: the reading is dropped
+            // as if it had never been asked for. The key the hook has then is read by itself,
+            // so nobody hears the error that is thrown after this.
+            const drop = () => client.cancelQueries({ queryKey, exact: true });
+            for (let refusals = 1; ; refusals += 1) {
               try {
                 return await read(view);
               } catch (error) {
                 if (!isViewChanged(error)) throw error;
                 if (!isShown(client, view)) {
-                  // The interface shows another view by now, or is about to: this reading is
-                  // dropped as if it had never been asked for. The key the hook has then is read
-                  // by itself, so nobody hears the error that is thrown here.
-                  await client.cancelQueries({ queryKey, exact: true });
+                  await drop();
                   throw error;
                 }
-                await new Promise((resolve) => {
-                  setTimeout(resolve, Math.min(REREAD_FIRST_MS * 4 ** again, REREAD_LONGEST_MS));
-                });
-                // Asking for the signal says that this reading may be dropped: it then is when
-                // the screen that asked is gone, and when an action on the workspace starts.
-                if (context.signal.aborted) throw error;
+                // Refused again after the application start was taken anew: it is an error now.
+                if (refusals > REFUSALS) throw unsettled();
+                if (refusals < REFUSALS) {
+                  await new Promise((resolve) => {
+                    setTimeout(resolve, REREAD_FIRST_MS * 2 ** (refusals - 1));
+                  });
+                  // Asking for the signal says that this reading may be dropped: it then is when
+                  // the screen that asked is gone, and when an action on the workspace starts.
+                  if (context.signal.aborted) throw error;
+                  continue;
+                }
+                // The two sides disagree for good. The interface takes the Rust side's word,
+                // once: the application start is asked for again and replaces the cached one.
+                // When it cannot be had, the cached one stays as it is, untouched and not failed.
+                let fresh: AppStart;
+                try {
+                  fresh = await api.appStart();
+                } catch {
+                  throw unsettled();
+                }
+                client.setQueryData(keys.start, fresh);
+                if (!isShown(client, view)) {
+                  await drop();
+                  throw error;
+                }
               }
             }
           },

@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { ViewRef } from "../bindings/ViewRef";
+import en from "../locales/en.json";
 import { opened, openStart, otherWorkspace, startState, workspace } from "../test/fixtures";
 import { commandFailure, mockCommands } from "../test/ipc";
 import { queryClient } from "./query";
-import { useSnapshotQuery, VIEW_CHANGED, workspaceAction } from "./view";
+import { useSnapshotQuery, VIEW_CHANGED, VIEW_UNSETTLED, workspaceAction } from "./view";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -42,8 +43,14 @@ function heldRead() {
  * A screen that reads the lines of the snapshot in view, beside an action on the open workspace
  * whose answer the test gives. The application start is in the cache, as the shell leaves it.
  */
-function screenWith(read: Read, start: AppStart = openStart()) {
-  mockCommands({ app_start: () => start });
+function screenWith(
+  read: Read,
+  start: AppStart = openStart(),
+  restart: () => AppStart = () => start,
+) {
+  // What the Rust side answers when the application start is asked for again.
+  const appStart = vi.fn(restart);
+  mockCommands({ app_start: appStart });
   queryClient.setQueryData(keys.start, start);
   let finish: (next: AppStart | null) => void = () => undefined;
   const sent = vi.fn();
@@ -72,6 +79,7 @@ function screenWith(read: Read, start: AppStart = openStart()) {
   return {
     ...hook,
     sent,
+    appStart,
     finish: async (next: AppStart | null) => {
       await act(async () => {
         finish(next);
@@ -240,6 +248,99 @@ describe("useSnapshotQuery", () => {
     expect(seen).toEqual([]);
     expect(result.current.lines.isError).toBe(false);
     expect(queryClient.getQueryState(keys.snapshot(HERE, "lines", ["oldest"]))?.error).toBeNull();
+  });
+
+  it("after five such answers in a row asks for the application start again, once, and reads for the view it gives", async () => {
+    const read = vi.fn<Read>((view) =>
+      view.snapshot_id === 1 ? Promise.resolve("lines of 1") : Promise.reject(viewChanged()),
+    );
+    const start = openStart();
+    // The Rust side holds the older snapshot, and says so when it is asked.
+    const { result, appStart } = screenWith(read, start, () => ({
+      ...start,
+      open: opened({ selected: 1 }),
+    }));
+    const seen: unknown[] = [];
+    const watch = setInterval(() => {
+      if (result.current.lines.isError) seen.push(result.current.lines.error);
+    }, 5);
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 1");
+    });
+    clearInterval(watch);
+    // Five answers for the view the interface showed, then one reading for the view it took over.
+    expect(read.mock.calls.map(([view]) => view.snapshot_id)).toEqual([2, 2, 2, 2, 2, 1]);
+    expect(appStart).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryData<AppStart>(keys.start)?.open?.selected).toBe(1);
+    // Nothing of it was an error to the screen, and nothing is left under the view that is gone.
+    expect(seen).toEqual([]);
+    const gone = queryClient.getQueryState(keys.snapshot(HERE, "lines", ["oldest"]));
+    expect(gone?.error ?? null).toBeNull();
+    expect(gone?.data).toBeUndefined();
+  });
+
+  it("reads once more when the application start gives the same view, and takes the answer", async () => {
+    let refusals = 5;
+    const read = vi.fn<Read>(() => {
+      refusals -= 1;
+      return refusals >= 0 ? Promise.reject(viewChanged()) : Promise.resolve("lines of 2");
+    });
+    const { result, appStart } = screenWith(read);
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 2");
+    });
+    expect(read).toHaveBeenCalledTimes(6);
+    expect(appStart).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.isError).toBe(false);
+  });
+
+  it("gives an error that says what to do when the view is refused again after the application start was read, and reads again on a retry", async () => {
+    let settled = false;
+    const read = vi.fn<Read>(() =>
+      settled ? Promise.resolve("lines of 2") : Promise.reject(viewChanged()),
+    );
+    const { result, appStart } = screenWith(read);
+    await waitFor(() => {
+      expect(result.current.lines.isError).toBe(true);
+    });
+    // Five answers, the application start once, a sixth answer, and then it stops.
+    expect(read).toHaveBeenCalledTimes(6);
+    expect(appStart).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.error).toMatchObject({
+      kind: VIEW_UNSETTLED,
+      message: en.errors.viewUnsettled,
+    });
+    expect(en.errors.viewUnsettled).toMatch(/restart Hold Explorer/i);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(read).toHaveBeenCalledTimes(6);
+    expect(appStart).toHaveBeenCalledTimes(1);
+
+    // The screen offers a retry, and a retry reads again.
+    settled = true;
+    await act(async () => {
+      await result.current.lines.refetch();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 2");
+    });
+    expect(read).toHaveBeenCalledTimes(7);
+    expect(result.current.lines.isError).toBe(false);
+  });
+
+  it("gives that error as well when the application start cannot be read again", async () => {
+    const read = vi.fn<Read>(() => Promise.reject(viewChanged()));
+    const { result, appStart } = screenWith(read, openStart(), () => {
+      throw commandFailure("Io", "The workspaces folder could not be read.");
+    });
+    await waitFor(() => {
+      expect(result.current.lines.isError).toBe(true);
+    });
+    expect(result.current.lines.error).toMatchObject({ kind: VIEW_UNSETTLED });
+    expect(appStart).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledTimes(5);
+    // What the interface held is still what it holds, and the start itself is not a failed one.
+    expect(queryClient.getQueryData<AppStart>(keys.start)?.open?.selected).toBe(2);
+    expect(queryClient.getQueryState(keys.start)?.status).toBe("success");
   });
 
   it("drops a reading the command refused once the interface shows another view, and leaves no error behind", async () => {

@@ -358,4 +358,37 @@ describe("the Overview and a view that changed on the way", () => {
     expect(screen.queryByText(/changed while the request was on its way/)).not.toBeInTheDocument();
     expect(must(content(), "the content of the Overview")).not.toHaveAttribute("aria-busy");
   });
+
+  it(
+    "says that the view could not be read, with what to do, when the command keeps refusing it, and reads again on Try again",
+    SLOW,
+    async () => {
+      let settled = false;
+      const overview = vi.fn<NonNullable<Handlers["overview"]>>(() => {
+        if (!settled) throw viewChanged();
+        return overviewView();
+      });
+      const start = openStart();
+      const appStart = vi.fn(() => start);
+      const { user } = renderApp({
+        start,
+        path: "/overview",
+        handlers: { overview, app_start: appStart },
+      });
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(text.error);
+      expect(alert).toHaveTextContent(en.errors.viewUnsettled);
+      expect(alert).not.toHaveTextContent(/changed while the request was on its way/);
+      // The application start was asked for when the app opened, and once more before giving up.
+      expect(appStart).toHaveBeenCalledTimes(2);
+      expect(overview).toHaveBeenCalledTimes(6);
+
+      settled = true;
+      await user.click(within(alert).getByRole("button", { name: en.common.retry }));
+      await waitFor(() => {
+        expect(openHolds()).toBe("5,042");
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
 });

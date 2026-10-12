@@ -4,7 +4,8 @@
     "documentTitle": "{{page}} · Hold Explorer"
   },
   "errors": {
-    "unreported": "The command failed and gave no reason. Try again; if it keeps happening, restart Hold Explorer."
+    "unreported": "The command failed and gave no reason. Try again; if it keeps happening, restart Hold Explorer.",
+    "viewUnsettled": "The workspace and snapshot on screen could not be read. Hold Explorer kept answering for another workspace or snapshot than the one shown here, also after this window had asked which one is open. Try again; if it keeps happening, restart Hold Explorer."
   },
   "breadcrumb": {
     "label": "Breadcrumb"

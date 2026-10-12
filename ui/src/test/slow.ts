@@ -1,3 +1,6 @@
+import process from "node:process";
+import { testLimits } from "./limits";
+
 /**
  * The allowance for the few tests that are slow by nature, passed as a test's options:
  * `it("...", SLOW, async () => { ... })`. Every other test keeps the default limit.
@@ -10,5 +13,8 @@
  * render of the table in its file, which builds the grid before anything is warm. One renders the
  * whole app and walks through several of its pages, or opens its lists more than once. On a loaded
  * CI runner any of them can pass the default five seconds without anything being wrong.
+ *
+ * The allowance is twenty seconds on a development machine and three times that on CI, as the
+ * default limit is; see ui/src/test/limits.ts, where both are written.
  */
-export const SLOW = { timeout: 20_000 } as const;
+export const SLOW = { timeout: testLimits(process.env).slow } as const;

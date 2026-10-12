@@ -5,17 +5,17 @@ import { cleanup, configure } from "@testing-library/react";
 import { randomFillSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import { afterEach, vi } from "vitest";
 import { queryClient } from "../app/query";
 import { checkUnhandledCommands } from "./ipc";
+import { testLimits } from "./limits";
 import { resetWindowApi } from "./window";
 
-// How long a test waits for something to appear (`findBy...`, `waitFor`). The library's default
-// is one second, and a test of a screen renders the whole app: on a loaded machine or a slow CI
-// runner the first such render of a file can take longer than that without anything being wrong.
-// It is set once, here, for every test. What a test expects does not change, and the limit of a
-// test stays where it is; a test that is slow by nature takes the allowance of ui/src/test/slow.ts.
-configure({ asyncUtilTimeout: 5000 });
+// How long a test waits for something to appear (`findBy...`, `waitFor`): longer than the
+// library's one second, and shorter than a test may take, so a wait in vain fails with what it
+// waited for. It is set once, here, for every test; ui/src/test/limits.ts says why it is what it is.
+configure({ asyncUtilTimeout: testLimits(process.env).wait });
 
 // No test reaches the file dialog, the file manager, or the window's drag events: the module that
 // talks to them is replaced by the stand-in of ui/src/test/window.ts. The test of that module
