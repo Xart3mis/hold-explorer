@@ -8,6 +8,7 @@ import { appRoutes, type DestinationPages } from "../app/router";
 import type { AppStart } from "../bindings/AppStart";
 import { startState } from "./fixtures";
 import { mockCommands, type Handlers } from "./ipc";
+import { overviewOf } from "./overview";
 
 // A test of a screen renders the whole app: the router, the query client, the shell, and the page,
 // and then waits for the application start to answer. On a loaded machine the first such render
@@ -32,7 +33,8 @@ export interface RenderAppOptions {
 /**
  * Renders the whole app, with its providers, on a router that keeps its history in memory. The
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`
- * unless the test gives its own.
+ * and `overview` with the overview of the snapshot `start` has selected, unless the test gives
+ * its own.
  */
 export function renderApp(options: RenderAppOptions = {}) {
   const start = options.start ?? startState();
@@ -41,6 +43,7 @@ export function renderApp(options: RenderAppOptions = {}) {
   mockCommands({
     app_start: () => start,
     workspace_list: () => start.list,
+    overview: () => overviewOf(start.open),
     ...options.handlers,
   });
   const router = createMemoryRouter(appRoutes(options.destinations, options.pages), {

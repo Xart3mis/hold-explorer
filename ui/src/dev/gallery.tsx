@@ -727,6 +727,14 @@ function Bars() {
           <BarRow label="90 days and over" value="610" fraction={0.46} ordinalStep={5} />
         </BarRowGroup>
       </Forced>
+      <h3 className={styles.subTitle}>
+        Static: on a screen that cannot filter by a row yet, a row is not a button
+      </h3>
+      <BarRowGroup aria-label="Holds by hold type, static">
+        <BarRow isStatic label="Design" value="2,410" secondaryValue="1,822 lines" fraction={1} />
+        <BarRow isStatic label="Vendor" value="1,102" secondaryValue="904 lines" fraction={0.457} />
+        <BarRow isStatic label="Site" value="640" secondaryValue="511 lines" fraction={0.266} />
+      </BarRowGroup>
       <h3 className={styles.subTitle}>First load, and a refetch</h3>
       <div className={styles.twoColumns}>
         <BarRowGroup aria-label="Holds by hold type, loading" isLoading skeletonRows={4} />

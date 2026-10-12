@@ -122,3 +122,45 @@ describe("BarRow", () => {
     await expectAccessible(container);
   });
 });
+
+describe("a static BarRow", () => {
+  it("shows its label, its bar, and its values, and is not a control", async () => {
+    const user = userEvent.setup();
+    render(
+      <BarRowGroup aria-label="Holds by discipline">
+        <BarRow isStatic label="Civil" value="1,515" secondaryValue="612 lines" fraction={1} />
+        <BarRow isStatic label="Process" value="846" secondaryValue="398 lines" fraction={0.558} />
+      </BarRowGroup>,
+    );
+    const group = screen.getByRole("group", { name: "Holds by discipline" });
+    const rows = [...group.querySelectorAll<HTMLElement>('[data-part="bar-row"]')];
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Civil 1,515 612 lines",
+      "Process 846 398 lines",
+    ]);
+    expect(rows[1]?.querySelector<HTMLElement>('[data-part="bar"]')?.style.inlineSize).toBe(
+      "55.8%",
+    );
+    // Nothing to press and nothing to stop at: the keyboard passes the group by.
+    expect(within(group).queryByRole("button")).not.toBeInTheDocument();
+    expect(rows[0]).not.toHaveAttribute("aria-pressed");
+    await user.tab();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("has no accessibility violation", async () => {
+    const { container } = render(
+      <BarRowGroup aria-label="Holds by discipline">
+        <BarRow isStatic label="Civil" value="1,515" secondaryValue="612 lines" fraction={1} />
+        <BarRow
+          isStatic
+          label="Unspecified"
+          value="241"
+          secondaryValue="166 lines"
+          fraction={0.159}
+        />
+      </BarRowGroup>,
+    );
+    await expectAccessible(container);
+  });
+});

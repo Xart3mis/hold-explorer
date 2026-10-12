@@ -405,6 +405,28 @@
     }
   },
   "overview": {
-    "loading": "Loading the overview"
+    "loading": "Loading the overview",
+    "error": "The overview could not be loaded",
+    "description_one": "The snapshot of {{date}} has {{count, number}} hold.",
+    "description_other": "The snapshot of {{date}} has {{count, number}} holds.",
+    "figures": "Figures of the open holds",
+    "openHolds": "Open holds",
+    "linesOnHold": "Lines on hold",
+    "singleHoldLines": "Single-hold lines",
+    "medianAge": "Median age",
+    "medianAgeMissing": "No open hold has a creation date.",
+    "byDiscipline": "Open holds by discipline",
+    "byHoldType": "Open holds by hold type",
+    "showAsTable": "Show as table",
+    "columnDiscipline": "Discipline",
+    "columnHoldType": "Hold type",
+    "columnHolds": "Holds",
+    "columnLines": "Lines",
+    "lines_one": "{{count, number}} line",
+    "lines_other": "{{count, number}} lines",
+    "noOpenHolds": "This snapshot has no open holds.",
+    "emptyTitle": "This workspace has no snapshots",
+    "emptyText": "Import a holds export to add the first snapshot. Overview then shows its open holds by discipline and by hold type.",
+    "emptyAction": "Import"
   }
 }

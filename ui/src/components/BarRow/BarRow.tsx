@@ -92,9 +92,18 @@ export interface BarRowProps {
    * order takes it; every other bar is the neutral color of plain data.
    */
   ordinalStep?: 1 | 2 | 3 | 4 | 5;
+  /**
+   * The row only shows its category: a screen that cannot filter by it yet. It is then not a
+   * button, takes no focus, and has no hover, pressed, or selected look, so nothing on it says
+   * that it can be pressed. `isSelected` and `onPress` are not used.
+   */
+  isStatic?: boolean;
 }
 
-/** One category as a row: its label, a bar as long as its share, and its value. A button. */
+/**
+ * One category as a row: its label, a bar as long as its share, and its value. A button, unless
+ * it is static.
+ */
 export function BarRow({
   label,
   value,
@@ -103,14 +112,11 @@ export function BarRow({
   isSelected,
   onPress,
   ordinalStep,
+  isStatic,
 }: BarRowProps) {
   const share = Math.min(1, Math.max(0, fraction));
-  return (
-    <ToggleButton
-      isSelected={isSelected === true}
-      {...(onPress === undefined ? {} : { onPress })}
-      className={cx(styles.row)}
-    >
+  const content = (
+    <>
       <span className={styles.label}>{label}</span>{" "}
       <span className={styles.track}>
         <span
@@ -128,6 +134,23 @@ export function BarRow({
           <span className={styles.secondary}>{secondaryValue}</span>
         </>
       )}
+    </>
+  );
+  if (isStatic === true) {
+    return (
+      <div data-part="bar-row" className={styles.row}>
+        {content}
+      </div>
+    );
+  }
+  return (
+    <ToggleButton
+      isSelected={isSelected === true}
+      {...(onPress === undefined ? {} : { onPress })}
+      data-part="bar-row"
+      className={cx(styles.row)}
+    >
+      {content}
     </ToggleButton>
   );
 }

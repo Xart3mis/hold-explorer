@@ -1,33 +1,268 @@
+import { useQuery } from "@tanstack/react-query";
+import { Upload } from "lucide-react";
+import { useId, useState } from "react";
+import { api } from "../../api/commands";
+import { asCommandError } from "../../api/error";
+import { openHoldsFilter } from "../../api/filter";
+import { keys } from "../../api/keys";
+import { formatCount, formatDateTime, formatDays } from "../../app/format";
 import { t } from "../../app/i18n";
-import { BarRowGroup, Skeleton, VisuallyHidden } from "../../components";
+import type { Group } from "../../bindings/Group";
+import type { OverviewView } from "../../bindings/OverviewView";
+import type { Summary } from "../../bindings/Summary";
+import {
+  BarRow,
+  BarRowGroup,
+  Button,
+  Checkbox,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  StatTile,
+  StatTileGroup,
+  VisuallyHidden,
+  type DataTableColumn,
+} from "../../components";
+import { startImport } from "../import/start";
+import { useShell } from "../shell/context";
 import { Page } from "../shell/Page";
 import styles from "./OverviewPage.module.css";
 
+/** The page shows the open holds, and sends the whole filter that says so. */
+const OPEN_HOLDS = openHoldsFilter();
+
+/** The two groups of the page: what each is by, in the words of its title and of its table. */
+const DIMENSIONS = [
+  { id: "discipline", title: "overview.byDiscipline", column: "overview.columnDiscipline" },
+  { id: "holdType", title: "overview.byHoldType", column: "overview.columnHoldType" },
+] as const;
+
+type DimensionId = (typeof DIMENSIONS)[number]["id"];
+
 /**
- * Overview: its page header and the layout of the page. What the page shows is read with the
- * `overview` command; until that reading is there the page is in its first-load state, blocks in
- * the shape of the figures and the bars.
+ * How many skeleton rows stand for each group on a first load. A bar row group has six shapes of
+ * skeleton row, falling like rows sorted by value; more rows than that would start again at the
+ * longest bar.
+ */
+const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4 };
+
+/** The four figures of the snapshot: one container, its cells divided by hairlines. */
+function Figures({ summary }: { summary?: Summary }) {
+  const loading = summary === undefined;
+  const age = summary?.median_age_days;
+  return (
+    <StatTileGroup aria-label={t("overview.figures")}>
+      <StatTile
+        label={t("overview.openHolds")}
+        {...(loading ? { isLoading: true } : { value: formatCount(summary.holds) })}
+      />
+      <StatTile
+        label={t("overview.linesOnHold")}
+        {...(loading ? { isLoading: true } : { value: formatCount(summary.lines) })}
+      />
+      <StatTile
+        label={t("overview.singleHoldLines")}
+        {...(loading ? { isLoading: true } : { value: formatCount(summary.single_hold_lines) })}
+      />
+      {/* An age needs a creation date. Without one the tile says so; it never shows a zero. */}
+      <StatTile
+        label={t("overview.medianAge")}
+        {...(loading
+          ? { isLoading: true }
+          : age === null || age === undefined
+            ? { unavailable: t("overview.medianAgeMissing") }
+            : { value: formatDays(age) })}
+      />
+    </StatTileGroup>
+  );
+}
+
+interface GroupSectionProps {
+  /** What the group shows: "Open holds by discipline". */
+  title: string;
+  /** What a row of it is: "Discipline". The header of the first column of its table. */
+  column: string;
+  /** The groups as the command sent them. Absent on a first load. */
+  groups?: readonly Group[];
+  skeletonRows: number;
+  /** Whether the group is shown as a table in place of its bars. */
+  asTable: boolean;
+  onAsTableChange: (asTable: boolean) => void;
+}
+
+/**
+ * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
+ * The rows are shown largest first. That is the order the command sends; a copy is put in that
+ * order here so that it does not depend on it, and rows of the same count keep the order given.
+ * The length of a bar is its row's holds as a share of the largest count of the group; no number
+ * that is shown is worked out here.
+ */
+function GroupSection({
+  title,
+  column,
+  groups,
+  skeletonRows,
+  asTable,
+  onAsTableChange,
+}: GroupSectionProps) {
+  const titleId = useId();
+  const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
+  const largest = rows[0]?.holds ?? 0;
+  const columns: DataTableColumn<Group>[] = [
+    { id: "label", header: column, cell: (group) => group.label, isRowHeader: true },
+    {
+      id: "holds",
+      header: t("overview.columnHolds"),
+      cell: (group) => formatCount(group.holds),
+      kind: "number",
+    },
+    {
+      id: "lines",
+      header: t("overview.columnLines"),
+      cell: (group) => formatCount(group.lines),
+      kind: "number",
+      isSupporting: true,
+    },
+  ];
+
+  return (
+    <section className={styles.group}>
+      <div className={styles.groupHeader}>
+        <h2 id={titleId} className={styles.groupTitle}>
+          {title}
+        </h2>
+        {rows.length === 0 ? null : (
+          <Checkbox isSelected={asTable} onChange={onAsTableChange} aria-describedby={titleId}>
+            {t("overview.showAsTable")}
+          </Checkbox>
+        )}
+      </div>
+      {groups === undefined ? (
+        <BarRowGroup isLoading skeletonRows={skeletonRows} aria-labelledby={titleId} />
+      ) : rows.length === 0 ? (
+        <p className={styles.none}>{t("overview.noOpenHolds")}</p>
+      ) : asTable ? (
+        <DataTable
+          aria-label={title}
+          columns={columns}
+          rows={rows}
+          // A blank value has the empty key, and a row needs a key that is not empty.
+          rowKey={(group) => `group:${group.key}`}
+        />
+      ) : (
+        <BarRowGroup aria-labelledby={titleId}>
+          {rows.map((group) => (
+            <BarRow
+              key={group.key}
+              isStatic
+              label={group.label}
+              value={formatCount(group.holds)}
+              secondaryValue={t("overview.lines", { count: group.lines })}
+              fraction={largest > 0 ? group.holds / largest : 0}
+            />
+          ))}
+        </BarRowGroup>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Overview: the headline figures of the snapshot in view, and its open holds by discipline and
+ * by hold type. It shows what the `overview` command returns for the open workspace and the
+ * selected snapshot, and reads it again when either changes; the numbers of before stay on
+ * screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
+ * state that starts an import.
  */
 export function OverviewPage() {
+  const { start } = useShell();
+  const open = start.open;
+  const [asTable, setAsTable] = useState<Record<DimensionId, boolean>>({
+    discipline: false,
+    holdType: false,
+  });
+  const query = useQuery({
+    queryKey: keys.overview(open?.workspace.id ?? null, open?.selected ?? null, OPEN_HOLDS),
+    queryFn: () => api.overview(OPEN_HOLDS),
+    enabled: open !== null,
+  });
+  const view: OverviewView | null | undefined = query.isError ? undefined : query.data;
+
+  // The snapshot the numbers on screen belong to. Before they are there, and when they could not
+  // be read, it is the one the shell has selected.
+  const inView =
+    view === null
+      ? undefined
+      : (view?.snapshot ?? open?.snapshots.find((snapshot) => snapshot.id === open.selected));
+  const description =
+    inView === undefined
+      ? undefined
+      : t("overview.description", {
+          date: formatDateTime(inView.taken_at),
+          count: inView.row_count,
+        });
+
+  const groupsOf = (id: DimensionId, from: OverviewView) =>
+    id === "discipline" ? from.by_discipline : from.by_hold_type;
+
   return (
-    <Page title={t("destinations.name.overview")} width="content">
-      <div aria-busy="true" className={styles.loading}>
-        <VisuallyHidden role="status">{t("overview.loading")}</VisuallyHidden>
-        <div aria-hidden="true" className={styles.figures}>
-          {Array.from({ length: 4 }, (_, index) => (
-            <div key={index} className={styles.figure}>
-              <span className={styles.figureLabel}>
-                <Skeleton width="12ch" />
-              </span>
-              <Skeleton variant="stat" />
-            </div>
-          ))}
+    <Page
+      title={t("destinations.name.overview")}
+      width="content"
+      {...(description === undefined ? {} : { description })}
+    >
+      {query.isError ? (
+        <ErrorState
+          error={asCommandError(query.error)}
+          title={t("overview.error")}
+          onRetry={() => void query.refetch()}
+          isRetrying={query.isRefetching}
+        />
+      ) : view === null ? (
+        <EmptyState
+          title={t("overview.emptyTitle")}
+          action={
+            <Button
+              variant="primary"
+              icon={Upload}
+              onPress={() => {
+                void startImport();
+              }}
+            >
+              {t("overview.emptyAction")}
+            </Button>
+          }
+        >
+          {t("overview.emptyText")}
+        </EmptyState>
+      ) : (
+        <div
+          data-part="overview"
+          aria-busy={view === undefined ? "true" : undefined}
+          data-stale={view !== undefined && query.isPlaceholderData ? "" : undefined}
+          className={styles.overview}
+        >
+          {view === undefined ? (
+            <VisuallyHidden role="status">{t("overview.loading")}</VisuallyHidden>
+          ) : null}
+          <Figures {...(view === undefined ? {} : { summary: view.summary })} />
+          <div className={styles.groups}>
+            {DIMENSIONS.map(({ id, title, column }) => (
+              <GroupSection
+                key={id}
+                title={t(title)}
+                column={t(column)}
+                skeletonRows={SKELETON_ROWS[id]}
+                {...(view === undefined ? {} : { groups: groupsOf(id, view) })}
+                asTable={asTable[id]}
+                onAsTableChange={(shown) => {
+                  setAsTable((before) => ({ ...before, [id]: shown }));
+                }}
+              />
+            ))}
+          </div>
         </div>
-        <div aria-hidden="true" className={styles.sectionTitle}>
-          <Skeleton width="20ch" />
-        </div>
-        <BarRowGroup isLoading aria-label={t("overview.loading")} />
-      </div>
+      )}
     </Page>
   );
 }

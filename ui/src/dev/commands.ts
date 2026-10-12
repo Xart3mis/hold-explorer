@@ -22,6 +22,7 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
+import { devOverview, type DevOverview } from "./overview";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
 const MARKER = "hx-dev-commands";
@@ -34,6 +35,14 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The Overview: a workspace without snapshots, a snapshot whose file has no creation dates, a
+  // first load that never ends, a failure, and groups of three and of twenty-five values.
+  "empty",
+  "no-dates",
+  "overview-loading",
+  "overview-error",
+  "overview-few",
+  "overview-many",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -184,6 +193,20 @@ function devReview(state: DevState, all: WorkspaceView[]): ImportReview {
   }
 }
 
+/** The shape of the overview a state shows. */
+function overviewShape(state: DevState): DevOverview {
+  switch (state) {
+    case "no-dates":
+      return "no-dates";
+    case "overview-few":
+      return "few";
+    case "overview-many":
+      return "many";
+    default:
+      return "full";
+  }
+}
+
 interface World {
   start: AppStart;
   /** What each workspace holds, by id. */
@@ -229,6 +252,11 @@ function world(state: DevState, theme: Theme): World {
       ];
       break;
     case "open":
+    case "no-dates":
+    case "overview-loading":
+    case "overview-error":
+    case "overview-few":
+    case "overview-many":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -246,6 +274,10 @@ function world(state: DevState, theme: Theme): World {
     case "older":
       start.list.workspaces = all;
       start.open = opened(3, null);
+      break;
+    case "empty":
+      start.list.workspaces = all;
+      start.open = { workspace: offsites, snapshots: [], selected: null, warning: null };
       break;
     case "warning":
       start.list.workspaces = all;
@@ -471,7 +503,16 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       });
     },
     import_cancel: () => null,
-    overview: () => null,
+    overview: () => {
+      if (state === "overview-loading") return new Promise(() => undefined);
+      if (state === "overview-error") {
+        throw failure(
+          "Io",
+          "The workspace file could not be read (it is locked by another program). Close the other program, then try again.",
+        );
+      }
+      return later(200, () => devOverview(start.open, overviewShape(state)));
+    },
     "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
     "plugin:opener|reveal_item_in_dir": () => null,
   };
