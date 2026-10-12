@@ -10,7 +10,7 @@ use ts_rs::TS;
 #[ts(export)]
 pub struct CommandError {
     /// The error's variant name, for example `NewerSchema`, or one of `NoWorkspace`, `NoDraft`,
-    /// `WorkspaceNotFound`, `Settings`, `Internal`.
+    /// `WorkspaceNotFound`, `ReplaceNotOffered`, `Settings`, `Internal`.
     pub kind: String,
     /// The text to show the user: what happened, why, and how to fix it.
     pub message: String,

@@ -620,6 +620,12 @@ fn years_outside_2000_to_2100_are_refused_before_anything_is_written() {
     assert!(state.import_review(None).is_ok());
 }
 
+/// Fails an import after its workspace was made, with the error the store gave when these tests
+/// could still name a snapshot to replace in a new workspace.
+fn store_fails() -> Result<(), hx_store::StoreError> {
+    Err(hx_store::StoreError::SnapshotNotFound { snapshot_id: 999 })
+}
+
 #[test]
 fn a_failed_import_into_a_new_workspace_removes_it_again_and_keeps_the_open_one() {
     let fx = Fixture::new();
@@ -627,14 +633,12 @@ fn a_failed_import_into_a_new_workspace_removes_it_again_and_keeps_the_open_one(
     let id = state.create_workspace("A").unwrap().workspace.id;
     state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
     let files = fx.workspace_files();
-    // A snapshot to replace that does not exist makes the import fail after the workspace was made.
     let error = state
-        .import_commit(
-            ImportCommit {
-                replace: Some(999),
-                ..commit(new_target("Doomed"), "2026-10-07 08:00:00")
-            },
+        .import_commit_with(
+            commit(new_target("Doomed"), "2026-10-07 08:00:00"),
             &no_progress,
+            &hx_store::delete_workspace,
+            &store_fails,
         )
         .unwrap_err();
     assert_eq!(error.kind, "SnapshotNotFound");
@@ -861,12 +865,10 @@ fn a_workspace_that_cannot_be_removed_is_named_in_the_import_error() {
     };
     let error = state
         .import_commit_with(
-            ImportCommit {
-                replace: Some(999),
-                ..commit(new_target("Doomed"), "2026-10-07 08:00:00")
-            },
+            commit(new_target("Doomed"), "2026-10-07 08:00:00"),
             &no_progress,
             &remover,
+            &store_fails,
         )
         .unwrap_err();
     assert_eq!(error.kind, "SnapshotNotFound");
@@ -884,4 +886,193 @@ fn a_workspace_that_cannot_be_removed_is_named_in_the_import_error() {
     assert!(error.message.contains(".holdx-ws"), "{}", error.message);
     // The file is really still there, as the remover claimed.
     assert_eq!(fx.workspace_files(), 1);
+}
+
+/// A remover for commits that must create no workspace: it fails the test when it is called.
+fn nothing_to_remove(path: &Path) -> Result<(), hx_store::StoreError> {
+    panic!("no workspace may be created, but {path:?} was to be removed")
+}
+
+fn replacing(replace: i64, target: TargetChoice, taken_at: &str) -> ImportCommit {
+    ImportCommit {
+        replace: Some(replace),
+        ..commit(target, taken_at)
+    }
+}
+
+fn stored(fx: &Fixture, id: &str) -> Workspace {
+    Workspace::open(&fx.workspaces().join(format!("{id}.holdx-ws"))).unwrap()
+}
+
+#[test]
+fn a_replace_of_a_snapshot_the_review_did_not_offer_is_refused_and_nothing_is_deleted() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    // Two workspaces whose only snapshot has the same small id; the days differ.
+    let a = state.create_workspace("A").unwrap().workspace.id;
+    state.import_open(&fx.synth("a.xlsx", 1, "P-1")).unwrap();
+    let in_a = state
+        .import_commit(commit(existing(&a), "2026-10-07 08:00:00"), &no_progress)
+        .unwrap()
+        .snapshot;
+    let b = state.create_workspace("B").unwrap().workspace.id;
+    state.import_open(&fx.synth("b.xlsx", 2, "P-1")).unwrap();
+    let in_b = state
+        .import_commit(commit(existing(&b), "2026-10-01 08:00:00"), &no_progress)
+        .unwrap()
+        .snapshot;
+    assert_eq!(in_a.id, in_b.id, "ids are small numbers of each workspace");
+
+    // The review of a third file offered the snapshot of A, which is of the same day.
+    state.import_open(&fx.synth("c.xlsx", 3, "P-1")).unwrap();
+    let offered = state
+        .import_check_target(&existing(&a), at("2026-10-07 17:00:00"))
+        .unwrap();
+    assert_eq!(offered.same_day, std::slice::from_ref(&in_a));
+
+    // The commit names that id and the other workspace, open or not.
+    for open in [&b, &a] {
+        state.open_workspace(open).unwrap();
+        state.import_open(&fx.synth("c.xlsx", 3, "P-1")).unwrap();
+        let phases = RefCell::new(Vec::new());
+        let error = state
+            .import_commit(
+                replacing(in_a.id, existing(&b), "2026-10-07 17:00:00"),
+                &|phase| phases.borrow_mut().push(phase),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, "ReplaceNotOffered");
+        assert!(
+            error.message.contains(&format!("snapshot {}", in_a.id)),
+            "{}",
+            error.message
+        );
+        assert!(
+            error.message.contains("Review the import again"),
+            "{}",
+            error.message
+        );
+        assert!(
+            !phases.borrow().contains(&ImportPhase::Storing),
+            "refused before anything is stored: {:?}",
+            phases.borrow()
+        );
+        assert_eq!(
+            stored(&fx, &b).snapshots().unwrap(),
+            std::slice::from_ref(&in_b)
+        );
+        assert_eq!(state.open_id(), *open, "the open workspace stays open");
+        assert!(state.import_review(None).is_ok(), "the draft is kept");
+    }
+    assert_eq!(stored(&fx, &a).snapshots().unwrap(), [in_a]);
+}
+
+#[test]
+fn a_replace_of_an_id_that_does_not_exist_is_refused_before_any_write() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let phases = RefCell::new(Vec::new());
+    let error = state
+        .import_commit(
+            replacing(999, existing(&id), "2026-10-07 08:00:00"),
+            &|phase| phases.borrow_mut().push(phase),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, "ReplaceNotOffered");
+    assert!(error.message.contains("snapshot 999"), "{}", error.message);
+    assert!(!phases.borrow().contains(&ImportPhase::Storing));
+    let workspace = stored(&fx, &id);
+    assert!(workspace.snapshots().unwrap().is_empty());
+    assert_eq!(workspace.saved_mapping().unwrap(), None);
+    assert!(workspace.info().unwrap().project_numbers.is_empty());
+    assert_eq!(state.open_id(), id);
+}
+
+#[test]
+fn a_replace_with_a_new_workspace_is_refused_and_no_workspace_file_is_created() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let first = state
+        .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
+        .unwrap()
+        .snapshot;
+    let files = fx.workspace_files();
+
+    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    let error = state
+        .import_commit_with(
+            replacing(first.id, new_target("B"), "2026-10-07 09:00:00"),
+            &no_progress,
+            &nothing_to_remove,
+            &|| Ok(()),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind, "ReplaceNotOffered");
+    assert!(error.message.contains("new workspace"), "{}", error.message);
+    assert_eq!(fx.workspace_files(), files);
+    assert_eq!(state.open_id(), id);
+    assert_eq!(stored(&fx, &id).snapshots().unwrap(), [first]);
+}
+
+#[test]
+fn the_snapshot_of_the_same_file_can_be_replaced_whatever_its_day() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let file = fx.synth("one.xlsx", 1, "P-1");
+    state.import_open(&file).unwrap();
+    let first = state
+        .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
+        .unwrap()
+        .snapshot;
+
+    // The same file again, dated on another day: the review offers the snapshot it already has.
+    state.import_open(&file).unwrap();
+    let check = state
+        .import_check_target(&existing(&id), at("2026-10-09 08:00:00"))
+        .unwrap();
+    assert_eq!(check.already_imported, Some(first.clone()));
+    assert!(check.same_day.is_empty());
+    let done = state
+        .import_commit(
+            ImportCommit {
+                date_edited: true,
+                ..replacing(first.id, existing(&id), "2026-10-09 08:00:00")
+            },
+            &no_progress,
+        )
+        .unwrap();
+    assert_eq!(done.open.snapshots, std::slice::from_ref(&done.snapshot));
+    assert_eq!(done.snapshot.taken_at, at("2026-10-09 08:00:00"));
+}
+
+#[test]
+fn a_snapshot_of_the_same_day_can_be_replaced_in_a_workspace_that_is_not_open() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let target = state.create_workspace("Target").unwrap().workspace.id;
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let first = state
+        .import_commit(
+            commit(existing(&target), "2026-10-07 08:00:00"),
+            &no_progress,
+        )
+        .unwrap()
+        .snapshot;
+    state.create_workspace("Open").unwrap();
+
+    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    let done = state
+        .import_commit(
+            replacing(first.id, existing(&target), "2026-10-07 23:59:59"),
+            &no_progress,
+        )
+        .unwrap();
+    assert_eq!(done.open.workspace.id, target);
+    assert_eq!(done.open.snapshots, std::slice::from_ref(&done.snapshot));
+    assert_eq!(state.open_id(), target);
 }

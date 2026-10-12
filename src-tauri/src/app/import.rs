@@ -224,6 +224,47 @@ fn group_warnings(warnings: &[ImportWarning]) -> Vec<WarningGroup> {
     groups
 }
 
+/// The answer to a commit that names a snapshot to replace which the review did not offer.
+fn replace_not_offered(snapshot_id: i64, target: &TargetChoice) -> CommandError {
+    let why = match target {
+        TargetChoice::Existing { .. } => {
+            "the target workspace has no snapshot with that number that is dated on the same day as the new one or was made from the same file"
+        }
+        TargetChoice::New { .. } => "a new workspace has no snapshot to replace",
+    };
+    CommandError::new(
+        "ReplaceNotOffered",
+        format!(
+            "The import asked to replace snapshot {snapshot_id}, but the review did not offer that snapshot: {why}. Nothing was replaced and nothing was imported. Review the import again, then import."
+        ),
+    )
+}
+
+/// What importing a file with this content hash into `workspace` at `taken_at` would meet.
+fn check_workspace(
+    workspace: &Workspace,
+    content_hash: &str,
+    taken_at: NaiveDateTime,
+) -> Result<TargetCheck, CommandError> {
+    Ok(TargetCheck {
+        already_imported: workspace
+            .snapshots()?
+            .into_iter()
+            .find(|s| s.content_hash == content_hash),
+        same_day: workspace.snapshots_on(taken_at)?,
+    })
+}
+
+impl TargetCheck {
+    /// True when the check offers this snapshot for replacement.
+    fn offers(&self, snapshot_id: i64) -> bool {
+        self.already_imported
+            .iter()
+            .chain(&self.same_day)
+            .any(|snapshot| snapshot.id == snapshot_id)
+    }
+}
+
 fn check_year(at: NaiveDateTime) -> Result<(), CommandError> {
     if YEARS.contains(&at.year()) {
         return Ok(());
@@ -406,41 +447,38 @@ impl AppState {
             }
             TargetChoice::Existing { id } => id,
         };
-        let check = |workspace: &Workspace| -> Result<TargetCheck, CommandError> {
-            Ok(TargetCheck {
-                already_imported: workspace
-                    .snapshots()?
-                    .into_iter()
-                    .find(|s| s.content_hash == draft.opened.content_hash),
-                same_day: workspace.snapshots_on(taken_at)?,
-            })
-        };
+        let hash = &draft.opened.content_hash;
         match &self.open {
-            Some(open) if open.info()?.id == *id => check(open),
-            _ => check(&self.load(id)?.0),
+            Some(open) if open.info()?.id == *id => check_workspace(open, hash, taken_at),
+            _ => check_workspace(&self.load(id)?.0, hash, taken_at),
         }
     }
 
     /// Stores the draft as a snapshot of the target workspace, which becomes the open workspace
-    /// with the new snapshot selected. Nothing is written when the date is out of range. When
-    /// the import fails, a workspace created for it is removed again and the workspace that was
-    /// open stays open. `progress` is told `Reading` (only when the draft was not reviewed yet),
-    /// `Checking`, `Storing`, and `Done`, in that order.
+    /// with the new snapshot selected. Nothing is written when the date is out of range, or when
+    /// `replace` names a snapshot that [`AppState::import_check_target`] would not offer for
+    /// this draft, target, and date. When the import fails, a workspace created for it is
+    /// removed again and the workspace that was open stays open. `progress` is told `Reading`
+    /// (only when the draft was not reviewed yet), `Checking`, `Storing`, and `Done`, in that
+    /// order.
     pub fn import_commit(
         &mut self,
         request: ImportCommit,
         progress: &dyn Fn(ImportPhase),
     ) -> Result<ImportDone, CommandError> {
-        self.import_commit_with(request, progress, &delete_workspace)
+        self.import_commit_with(request, progress, &delete_workspace, &|| Ok(()))
     }
 
     /// [`AppState::import_commit`] with the function that removes a workspace file that was
-    /// created for a failed import.
+    /// created for a failed import. `before_store` is called once the target workspace is in
+    /// hand, created when it is new, and before the snapshot is stored; an error from it fails
+    /// the import as a failure of the store would.
     pub(super) fn import_commit_with(
         &mut self,
         request: ImportCommit,
         progress: &dyn Fn(ImportPhase),
         remove: &dyn Fn(&Path) -> Result<(), StoreError>,
+        before_store: &dyn Fn() -> Result<(), StoreError>,
     ) -> Result<ImportDone, CommandError> {
         if self.draft.is_none() {
             return Err(no_draft());
@@ -456,6 +494,11 @@ impl AppState {
             TargetChoice::Existing { id } if !self.is_open(id)? => Some(self.load(id)?.0),
             _ => None,
         };
+        if let Some(snapshot_id) = request.replace {
+            if !self.offers_to_replace(&request, other.as_ref(), snapshot_id)? {
+                return Err(replace_not_offered(snapshot_id, &request.target));
+            }
+        }
 
         progress(ImportPhase::Storing);
         let (mut workspace, origin) = match (request.target, other) {
@@ -471,12 +514,15 @@ impl AppState {
             }
         };
 
-        match self.store_draft(
-            &mut workspace,
-            &request.taken_at,
-            request.date_edited,
-            request.replace,
-        ) {
+        let stored = before_store().map_err(CommandError::from).and_then(|()| {
+            self.store_draft(
+                &mut workspace,
+                &request.taken_at,
+                request.date_edited,
+                request.replace,
+            )
+        });
+        match stored {
             Ok((snapshot, mut open)) => {
                 open.selected = Some(snapshot.id);
                 let open = self.install_and_remember(workspace, open);
@@ -490,6 +536,28 @@ impl AppState {
                 Err(error)
             }
         }
+    }
+
+    /// True when the review of this draft, target, and date offers `snapshot_id` for
+    /// replacement: it is a snapshot of the target workspace, dated on the same calendar day as
+    /// the new one or made from the same file. `other` is the target workspace when it is not
+    /// the open one. A new workspace has nothing to replace.
+    fn offers_to_replace(
+        &self,
+        request: &ImportCommit,
+        other: Option<&Workspace>,
+        snapshot_id: i64,
+    ) -> Result<bool, CommandError> {
+        let target = match (&request.target, other) {
+            (TargetChoice::New { .. }, _) => return Ok(false),
+            (TargetChoice::Existing { .. }, Some(workspace)) => workspace,
+            (TargetChoice::Existing { .. }, None) => {
+                self.open.as_ref().ok_or_else(CommandError::no_workspace)?
+            }
+        };
+        let draft = self.draft.as_ref().ok_or_else(no_draft)?;
+        let check = check_workspace(target, &draft.opened.content_hash, request.taken_at)?;
+        Ok(check.offers(snapshot_id))
     }
 
     fn is_open(&self, id: &str) -> Result<bool, CommandError> {
