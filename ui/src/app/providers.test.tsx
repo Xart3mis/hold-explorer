@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +9,7 @@ import { useToast } from "../components/ToastRegion/ToastRegion";
 import { applyTheme } from "../design/theme";
 import { commandFailure, mockCommands } from "../test/ipc";
 import { AppProviders } from "./providers";
-import { queryClient } from "./query";
+import { queryClient, startQuery } from "./query";
 
 function start(theme: Theme): AppStart {
   return {
@@ -79,6 +80,37 @@ describe("AppProviders", () => {
       expect(queryClient.getQueryData(keys.start)).toEqual(start("Dark"));
     });
     expect(root).toHaveAttribute("data-theme", "dark");
+    expect(appStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the application start once, however many parts of the app read it", async () => {
+    const appStart = vi.fn(() => start("Dark"));
+    mockCommands({ app_start: appStart });
+    function Reader({ name }: { name: string }) {
+      const { data } = useQuery(startQuery);
+      return <p>{data ? `${name} ${data.version}` : name}</p>;
+    }
+    const { rerender } = render(
+      <AppProviders>
+        <Reader name="first" />
+      </AppProviders>,
+    );
+    expect(await screen.findByText("first 0.1.0")).toBeInTheDocument();
+
+    // A reader that mounts later, and one that reads the key with options of its own.
+    function Late() {
+      const { data } = useQuery({ queryKey: keys.start, queryFn: appStart });
+      return <p>{data ? "late 0.1.0" : "late"}</p>;
+    }
+    rerender(
+      <AppProviders>
+        <Reader name="first" />
+        <Reader name="second" />
+        <Late />
+      </AppProviders>,
+    );
+    expect(await screen.findByText("second 0.1.0")).toBeInTheDocument();
+    expect(await screen.findByText("late 0.1.0")).toBeInTheDocument();
     expect(appStart).toHaveBeenCalledTimes(1);
   });
 

@@ -274,6 +274,12 @@ function Fields() {
           isPending
           description="Stays editable."
         />
+        <TextField
+          label="Loading, in error"
+          defaultValue="Unit 573"
+          isPending
+          errorMessage="A workspace with this name exists. Enter another name."
+        />
       </div>
     </Section>
   );
@@ -317,6 +323,12 @@ function Selects() {
           options={groupings}
           isPending
           description="The options are being read."
+        />
+        <Select
+          label="Loading, in error"
+          options={groupings}
+          isPending
+          errorMessage="Choose the column that holds the line ID."
         />
         <div>
           <div

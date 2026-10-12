@@ -22,8 +22,13 @@ export interface ButtonProps extends Base {
   icon?: LucideIcon;
   /**
    * While true the button shows the spinner in place of its icon, keeps its label, its colors, and
-   * its width, ignores presses, and is announced as busy. A button without an icon that is given
-   * this property, true or false, keeps the room of the spinner free, so its width never changes.
+   * its width, ignores presses, and is announced as busy.
+   *
+   * Passing the property at all, `false` included, says that the button can become pending. A
+   * button without an icon then keeps the room of the spinner free at rest, half on each side of
+   * its label, so the spinner arrives without changing the width. It is therefore wider at rest
+   * than a button that is never given the property. Leave the property out for a button that
+   * never waits; give it an icon to have no reserved room.
    */
   isPending?: boolean;
   /** The label: a verb that names the action. */

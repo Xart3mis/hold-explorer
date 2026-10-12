@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCount, formatDate, formatDateTime, formatDays } from "./format";
+import { formatCount, formatDate, formatDateTime, formatDays, formatPercent } from "./format";
 
 describe("formatCount", () => {
   it("groups thousands", () => {
@@ -7,6 +7,15 @@ describe("formatCount", () => {
     expect(formatCount(846)).toBe("846");
     expect(formatCount(5042)).toBe("5,042");
     expect(formatCount(1234567)).toBe("1,234,567");
+  });
+});
+
+describe("formatPercent", () => {
+  it("writes a share of one as a whole percentage", () => {
+    expect(formatPercent(0)).toBe("0%");
+    expect(formatPercent(0.45)).toBe("45%");
+    expect(formatPercent(0.456)).toBe("46%");
+    expect(formatPercent(1)).toBe("100%");
   });
 });
 

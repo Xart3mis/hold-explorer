@@ -170,6 +170,70 @@
   display: block;
 }
 
+/*
+ * A first load. The body is empty and holds placeholders in the shape of rows, on the columns of
+ * the table. The one row the body has is only the carrier of what assistive technology reads, so
+ * it and its cell leave no box of their own.
+ */
+.scroller[aria-busy="true"] .body[data-empty] {
+  display: grid;
+}
+
+.scroller[aria-busy="true"] .body[data-empty] tr,
+.scroller[aria-busy="true"] .body[data-empty] td,
+.placeholders {
+  display: contents;
+}
+
+.placeholder {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  block-size: var(--density-row-height);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.placeholderCell {
+  min-inline-size: 0;
+  padding: 0 var(--density-cell-padding-x);
+  text-align: start;
+}
+
+.placeholderCell[data-kind="number"] {
+  text-align: end;
+}
+
+/* A placeholder is as wide as what it stands for: a line ID of 21 characters, a short number. */
+.placeholderCell[data-kind="identifier"] {
+  font: var(--text-mono);
+}
+
+.placeholderCell[data-kind="identifier"] .placeholderLine {
+  inline-size: 21ch;
+}
+
+.placeholderCell[data-kind="number"] .placeholderLine {
+  inline-size: 3ch;
+}
+
+/* Text varies from row to row, so the placeholders do not look ruled by one line. */
+.placeholderCell[data-kind="text"][data-shape="0"] .placeholderLine {
+  inline-size: 18ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="1"] .placeholderLine {
+  inline-size: 14ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="2"] .placeholderLine {
+  inline-size: 22ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="3"] .placeholderLine {
+  inline-size: 16ch;
+}
+
 .empty {
   padding: 0 var(--density-cell-padding-x);
   font: var(--text-body);

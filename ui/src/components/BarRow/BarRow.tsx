@@ -6,15 +6,11 @@ import { Skeleton } from "../Skeleton/Skeleton";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
 import styles from "./BarRow.module.css";
 
-/** The shapes of the skeleton rows: label, bar, and value widths that vary like real rows do. */
-const SKELETON_ROWS = [
-  { label: "9ch", bar: "100%", value: "5ch" },
-  { label: "14ch", bar: "82%", value: "5ch" },
-  { label: "7ch", bar: "57%", value: "3ch" },
-  { label: "12ch", bar: "38%", value: "3ch" },
-  { label: "10ch", bar: "24%", value: "3ch" },
-  { label: "8ch", bar: "12%", value: "2ch" },
-] as const;
+/**
+ * How many shapes a skeleton row has. The stylesheet gives each its label, bar, and value width,
+ * so the rows vary like real rows do.
+ */
+const SKELETON_SHAPES = 6;
 
 export interface BarRowGroupProps {
   /** What the bars show: "Holds by discipline". */
@@ -35,7 +31,7 @@ export interface BarRowGroupProps {
 export function BarRowGroup({
   children,
   isLoading,
-  skeletonRows = SKELETON_ROWS.length,
+  skeletonRows = SKELETON_SHAPES,
   isStale,
   className,
   ...props
@@ -52,22 +48,24 @@ export function BarRowGroup({
       {loading ? (
         <>
           <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
-          {Array.from({ length: skeletonRows }, (_, index) => {
-            const shape = SKELETON_ROWS[index % SKELETON_ROWS.length] ?? SKELETON_ROWS[0];
-            return (
-              <div key={index} data-part="skeleton-row" className={styles.row}>
-                <span className={styles.label}>
-                  <Skeleton width={shape.label} />
-                </span>
-                <span className={styles.track}>
-                  <Skeleton variant="bar" width={shape.bar} />
-                </span>
-                <span className={styles.value}>
-                  <Skeleton width={shape.value} />
-                </span>
-              </div>
-            );
-          })}
+          {Array.from({ length: skeletonRows }, (_, index) => (
+            <div
+              key={index}
+              data-part="skeleton-row"
+              data-shape={index % SKELETON_SHAPES}
+              className={styles.row}
+            >
+              <span className={styles.label}>
+                <Skeleton className={styles.skeletonLabel} />
+              </span>
+              <span className={styles.track}>
+                <Skeleton variant="bar" className={styles.skeletonBar} />
+              </span>
+              <span className={styles.value}>
+                <Skeleton className={styles.skeletonValue} />
+              </span>
+            </div>
+          ))}
         </>
       ) : (
         children

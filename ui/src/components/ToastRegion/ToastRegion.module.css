@@ -1,11 +1,14 @@
 /*
- * The bottom left of the content area: past the sidebar, one section gap from the edges. The
- * region itself takes no pointer events, so only the toasts cover what is under them.
+ * The bottom left of the content area. Where the content area starts is the layout's to say: it
+ * sets --toast-inset-inline-start on the root element (the region is rendered beside the app, not
+ * inside the layout, so the property has to come from above both). Until a layout sets it, the
+ * region keeps the page gutter from the edge of the window. The region itself takes no pointer
+ * events, so only the toasts cover what is under them.
  */
 .region {
   position: fixed;
   inset-block-end: var(--space-6);
-  inset-inline-start: calc(var(--layout-sidebar-width) + var(--space-6));
+  inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));
   z-index: var(--z-toast);
   pointer-events: none;
 }

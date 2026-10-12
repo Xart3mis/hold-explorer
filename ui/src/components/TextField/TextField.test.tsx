@@ -75,6 +75,20 @@ describe("TextField", () => {
     expect(field).toHaveValue("Unit");
   });
 
+  it("says that it is loading when it is also in error", () => {
+    render(<TextField label="Workspace name" isPending errorMessage="Enter a name." />);
+    const field = screen.getByRole("textbox", { name: "Workspace name" });
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(`Enter a name. ${en.common.loading}`);
+  });
+
+  it("says that it is loading after its helper line", () => {
+    render(<TextField label="Workspace name" isPending description="Shown in the switcher." />);
+    expect(screen.getByRole("textbox")).toHaveAccessibleDescription(
+      `Shown in the switcher. ${en.common.loading}`,
+    );
+  });
+
   it("shows a placeholder as an example, never as the label", () => {
     render(<TextField label="Snapshot date" placeholder="28/02/2026" />);
     expect(screen.getByRole("textbox", { name: "Snapshot date" })).toHaveAttribute(

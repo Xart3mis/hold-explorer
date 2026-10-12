@@ -1,4 +1,5 @@
 import { Label, ProgressBar } from "react-aria-components";
+import { formatPercent } from "../../app/format";
 import { cx } from "../cx";
 import styles from "./Progress.module.css";
 
@@ -20,17 +21,21 @@ export interface ProgressProps {
  */
 export function Progress({ label, value, className }: ProgressProps) {
   const fraction = value === undefined ? undefined : Math.min(1, Math.max(0, value));
+  // The percentage is written by the app's own formatter, for the eye and for assistive technology.
+  const share = fraction === undefined ? undefined : formatPercent(fraction);
   return (
     <ProgressBar
-      {...(fraction === undefined ? { isIndeterminate: true } : { value: fraction * 100 })}
+      {...(fraction === undefined || share === undefined
+        ? { isIndeterminate: true }
+        : { value: fraction * 100, valueLabel: share })}
       data-indeterminate={fraction === undefined ? "" : undefined}
       className={cx(styles.progress, className)}
     >
-      {({ valueText }) => (
+      {() => (
         <>
           <div className={styles.header}>
             <Label className={cx(styles.label)}>{label}</Label>
-            {fraction === undefined ? null : <span className={styles.value}>{valueText}</span>}
+            {share === undefined ? null : <span className={styles.value}>{share}</span>}
           </div>
           <div className={styles.track}>
             {fraction === undefined ? (

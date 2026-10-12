@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { ToastRegion, useToast, type ToastApi } from "./ToastRegion";
@@ -32,13 +32,9 @@ function show(...args: Parameters<ToastApi["show"]>) {
   return id;
 }
 
-beforeEach(() => {
-  document.documentElement.style.setProperty("--timeout-toast", "8000ms");
-});
-
+// A toast stays for --timeout-toast, which the token stylesheet of the tests gives as 8000ms.
 afterEach(() => {
   vi.useRealTimers();
-  document.documentElement.style.removeProperty("--timeout-toast");
 });
 
 describe("ToastRegion", () => {

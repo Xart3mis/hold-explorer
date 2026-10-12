@@ -44,6 +44,13 @@ export function TextField({
   ...props
 }: TextFieldProps) {
   const invalid = errorMessage !== undefined && errorMessage !== "";
+  // Said to assistive technology after the helper line or after the error, whichever shows.
+  const loading = isPending ? (
+    <>
+      {" "}
+      <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
+    </>
+  ) : null;
   return (
     <RacTextField {...props} isInvalid={invalid} className={cx(styles.field, className)}>
       <Label className={cx(styles.label)}>{label}</Label>
@@ -58,16 +65,12 @@ export function TextField({
         <FieldError className={cx(styles.error)}>
           <Icon icon={OctagonAlert} />
           <span>{errorMessage}</span>
+          {loading}
         </FieldError>
       ) : description !== undefined || isPending ? (
         <Text slot="description" className={cx(styles.description)}>
           {description}
-          {isPending ? (
-            <>
-              {" "}
-              <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
-            </>
-          ) : null}
+          {loading}
         </Text>
       ) : null}
     </RacTextField>

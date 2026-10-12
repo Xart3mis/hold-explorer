@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyTheme } from "./theme";
+import { applyStoredTheme, applyTheme, THEME_STORAGE_KEY } from "./theme";
 
 type Listener = (event: { matches: boolean }) => void;
 
@@ -30,7 +30,9 @@ const root = document.documentElement;
 afterEach(() => {
   applyTheme("Dark");
   root.removeAttribute("data-theme");
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 describe("applyTheme", () => {
@@ -91,5 +93,64 @@ describe("applyTheme", () => {
     vi.stubGlobal("matchMedia", undefined);
     applyTheme("System");
     expect(root).toHaveAttribute("data-theme", "dark");
+  });
+});
+
+describe("the stored theme", () => {
+  it("is written by applyTheme as the setting, not as what it resolved to", () => {
+    mockSystemScheme(true);
+    applyTheme("Light");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("Light");
+    applyTheme("System");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("System");
+    applyTheme("Dark");
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("Dark");
+  });
+
+  it("puts a stored Light on the root element before anything renders", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "Light");
+    expect(document.getElementById("root")).toBeNull();
+    applyStoredTheme();
+    expect(root).toHaveAttribute("data-theme", "light");
+  });
+
+  it("resolves a stored System like any other System", () => {
+    mockSystemScheme(true);
+    localStorage.setItem(THEME_STORAGE_KEY, "System");
+    applyStoredTheme();
+    expect(root).toHaveAttribute("data-theme", "light");
+  });
+
+  it("leaves the dark default when nothing is stored", () => {
+    applyStoredTheme();
+    expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  it("leaves the dark default when what is stored is not a theme", () => {
+    for (const stored of ["light", "Sepia", "", "null", '{"theme":"Light"}']) {
+      localStorage.setItem(THEME_STORAGE_KEY, stored);
+      applyStoredTheme();
+      expect(root, stored).not.toHaveAttribute("data-theme");
+    }
+  });
+
+  it("does without the storage when reading it throws", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    });
+    expect(() => {
+      applyStoredTheme();
+    }).not.toThrow();
+    expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  it("still applies a theme when writing it throws", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+    expect(() => {
+      applyTheme("Light");
+    }).not.toThrow();
+    expect(root).toHaveAttribute("data-theme", "light");
   });
 });

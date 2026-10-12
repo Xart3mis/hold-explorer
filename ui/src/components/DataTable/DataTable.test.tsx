@@ -1,8 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import { SLOW } from "../../test/slow";
 import { Button } from "../Button/Button";
 import { DataTable, type DataTableColumn } from "./DataTable";
 
@@ -56,7 +58,7 @@ function dataRow(index: number): HTMLElement {
 }
 
 describe("DataTable", () => {
-  it("renders a grid with its name, its headers, and one row for each item", () => {
+  it("renders a grid with its name, its headers, and one row for each item", SLOW, () => {
     render(table());
     expect(screen.getByRole("grid", { name: "Lines on hold" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
@@ -79,7 +81,7 @@ describe("DataTable", () => {
     expect(status).toHaveTextContent("1 row");
   });
 
-  it("moves the focused row with the arrow keys, Home, and End", async () => {
+  it("moves the focused row with the arrow keys, Home, and End", SLOW, async () => {
     const user = userEvent.setup();
     render(table());
     const rows = dataRows();
@@ -122,6 +124,63 @@ describe("DataTable", () => {
     await user.click(within(dataRow(2)).getByText("Piping / FIV/AIV"));
     expect(onSelectionChange).toHaveBeenCalledWith("78B01-573-4500-FW-001");
   });
+
+  it(
+    "keeps the selected row selected on a second Enter and on a click; only the parent clears it",
+    SLOW,
+    async () => {
+      const onSelectionChange = vi.fn();
+      function Lines() {
+        const [selected, setSelected] = useState<string | null>(null);
+        return (
+          <>
+            {table({
+              selectedKey: selected,
+              onSelectionChange: (key) => {
+                onSelectionChange(key);
+                setSelected(key);
+              },
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                setSelected(null);
+              }}
+            >
+              Close the detail panel
+            </button>
+          </>
+        );
+      }
+      const user = userEvent.setup();
+      render(<Lines />);
+
+      await user.tab();
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      await user.keyboard("{Enter}");
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      await user.keyboard(" ");
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      await user.click(within(dataRow(1)).getByText("Civil / 577-PR-400"));
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      expect(onSelectionChange.mock.calls.every(([key]) => key === "78B01-573-4386-FW-001")).toBe(
+        true,
+      );
+
+      await user.click(dataRow(2));
+      expect(dataRow(2)).toHaveAttribute("aria-selected", "true");
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "false");
+
+      await user.click(screen.getByRole("button", { name: "Close the detail panel" }));
+      expect(dataRows().map((row) => row.getAttribute("aria-selected"))).toEqual([
+        "false",
+        "false",
+        "false",
+        "false",
+      ]);
+    },
+  );
 
   it("marks the sorted column and asks for a new sort when a sortable header is pressed", async () => {
     const onSortChange = vi.fn();
@@ -185,7 +244,7 @@ describe("DataTable", () => {
     expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
-  it("reaches a row action by the keyboard", async () => {
+  it("reaches a row action by the keyboard", SLOW, async () => {
     const onOpen = vi.fn();
     const user = userEvent.setup();
     render(
@@ -222,12 +281,41 @@ describe("DataTable", () => {
   });
 
   it("on a first load shows skeleton rows and says it is loading", () => {
-    render(table({ rows: [], isLoading: true }));
+    render(table({ rows: [], isLoading: true, skeletonRows: 5 }));
     const grid = screen.getByRole("grid", { name: "Lines on hold" });
     expect(grid.closest('[aria-busy="true"]')).not.toBeNull();
     expect(screen.getByRole("status")).toHaveTextContent(en.table.loading);
-    expect(grid.querySelectorAll('[data-part="skeleton"]').length).toBeGreaterThan(0);
+    expect(grid.querySelectorAll('[data-part="skeleton-row"]')).toHaveLength(5);
+    expect(grid.querySelectorAll('[data-part="skeleton"]')).toHaveLength(20);
     expect(screen.getAllByRole("columnheader")).toHaveLength(4);
+  });
+
+  it("does not present a placeholder as a row: one line says that the rows are loading", () => {
+    render(table({ rows: [], isLoading: true, skeletonRows: 5 }));
+    const rows = within(screen.getByRole("grid")).getAllByRole("row");
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toHaveTextContent(en.table.loading);
+    for (const placeholder of document.querySelectorAll('[data-part="skeleton-row"]')) {
+      expect(placeholder.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(placeholder).not.toHaveAttribute("role");
+      expect(placeholder.querySelector("[tabindex], [role]")).toBeNull();
+    }
+  });
+
+  it("gives no placeholder the focus: the keyboard finds the table, then leaves it", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        {table({ rows: [], isLoading: true })}
+        <Button>Export</Button>
+      </>,
+    );
+    await user.tab();
+    expect(screen.getByRole("grid")).toHaveFocus();
+    await user.keyboard("{ArrowDown}{ArrowDown}{End}{Enter}");
+    expect(screen.getByRole("grid")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Export" })).toHaveFocus();
   });
 
   it("keeps the previous rows, marked stale, during a refetch", () => {
@@ -243,21 +331,25 @@ describe("DataTable", () => {
     expect(screen.getByRole("status")).toHaveTextContent("0 rows");
   });
 
-  it("has no accessibility violation with rows, with a selection and actions, loading, and empty", async () => {
-    const { rerender } = render(table());
-    await expectAccessible();
-    rerender(
-      table({
-        selectedKey: "78B02-538-CW-2207",
-        sort: { column: "holds", direction: "ascending" },
-        onSortChange: () => undefined,
-        rowActions: () => <Button variant="quiet">Show holds</Button>,
-      }),
-    );
-    await expectAccessible();
-    rerender(table({ rows: [], isLoading: true }));
-    await expectAccessible();
-    rerender(table({ rows: [], emptyState: <p>No holds match these filters.</p> }));
-    await expectAccessible();
-  });
+  it(
+    "has no accessibility violation with rows, with a selection and actions, loading, and empty",
+    SLOW,
+    async () => {
+      const { rerender } = render(table());
+      await expectAccessible();
+      rerender(
+        table({
+          selectedKey: "78B02-538-CW-2207",
+          sort: { column: "holds", direction: "ascending" },
+          onSortChange: () => undefined,
+          rowActions: () => <Button variant="quiet">Show holds</Button>,
+        }),
+      );
+      await expectAccessible();
+      rerender(table({ rows: [], isLoading: true }));
+      await expectAccessible();
+      rerender(table({ rows: [], emptyState: <p>No holds match these filters.</p> }));
+      await expectAccessible();
+    },
+  );
 });

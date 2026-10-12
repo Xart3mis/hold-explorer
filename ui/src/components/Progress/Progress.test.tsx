@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { formatPercent } from "../../app/format";
 import { expectAccessible } from "../../test/axe";
 import { Progress } from "./Progress";
 
@@ -17,7 +18,14 @@ describe("Progress", () => {
     expect(bar).toHaveAttribute("aria-valuemin", "0");
     expect(bar).toHaveAttribute("aria-valuemax", "100");
     expect(screen.getByText("Reading rows, 4,200 of 9,300")).toBeVisible();
-    expect(screen.getByText("45%")).toBeInTheDocument();
+    expect(screen.getByText(formatPercent(0.45))).toBeInTheDocument();
+    expect(bar).toHaveAttribute("aria-valuetext", formatPercent(0.45));
+  });
+
+  it("writes its percentage with the formatter of the app, rounded to a whole number", () => {
+    render(<Progress label="Reading rows" value={0.456} />);
+    expect(screen.getByText("46%")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuetext", "46%");
   });
 
   it("moves its fill along the track by a transform, never by a width", () => {

@@ -91,6 +91,29 @@ describe("check-dist", () => {
     expect(run.output).toContain("content security policy");
   });
 
+  it("takes only a preserved licence comment as licence text", () => {
+    expect(check({ "assets/a.js": "/*! Example 1.0 https://example.com/about */" }).status).toBe(0);
+    expect(check({ "assets/a.js": "/* @license see https://example.com/terms */" }).status).toBe(0);
+    expect(
+      check({ "assets/a.js": "/**\n * @license\n * https://example.com/terms\n */" }).status,
+    ).toBe(0);
+
+    const plain = check({ "assets/a.js": "/* the license is at https://example.com/terms */" });
+    expect(plain.status).toBe(1);
+    expect(plain.output).toContain("https://example.com/terms");
+  });
+
+  it("still catches an address that follows a comment opener inside a string", () => {
+    const run = check({
+      "assets/index.js":
+        'const glob="src/*";const open="/*";fetch("https://example.com/api");/* license */' +
+        'const more="/*!";fetch("https://example.org/data");/*! Example, MIT License */',
+    });
+    expect(run.status).toBe(1);
+    expect(run.output).toContain("https://example.com/api");
+    expect(run.output).toContain("https://example.org/data");
+  });
+
   it("fails a build that contains the development gallery", () => {
     const page = check({ "gallery.html": "<div></div>", "index.html": "<div></div>" });
     expect(page.status).toBe(1);

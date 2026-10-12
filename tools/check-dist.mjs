@@ -11,7 +11,9 @@
 //
 // Every `http://` and `https://` reference in every file is reported, except three kinds:
 //   1. XML namespaces (`http://www.w3.org/...`): names, never fetched.
-//   2. License text: a comment that states a license or a copyright, and `*.LICENSE.txt` files.
+//   2. License text: a preserved license comment, and `*.LICENSE.txt` files. A comment counts
+//      only when it starts a line and opens with `/*!` or with `@license`, the two forms a
+//      bundler keeps. So a `/*` inside a string of minified code never opens one.
 //   3. Links inside the message text of a bundled library, listed one by one in MESSAGE_LINKS with
 //      the library and the reason. A link that is not in the list fails the check.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -36,8 +38,7 @@ const GALLERY_MARKER = "hx-dev-gallery";
 
 const URL_PATTERN = /https?:\/\/[^\s"'`<>\\)]*/g;
 const INLINE_FONT = /url\(\s*["']?data:(font\/|application\/(x-)?font)/i;
-const LICENSE_COMMENT = /\/\*[\s\S]*?\*\//g;
-const LICENSE_WORDS = /licen[cs]e|copyright/i;
+const LICENSE_COMMENT = /(^|\n)[ \t]*\/\*(?:!|[\s*]*@license\b)[\s\S]*?\*\//g;
 
 function filesUnder(dir) {
   const found = [];
@@ -51,7 +52,7 @@ function filesUnder(dir) {
 
 /** The text of a file with its license comments blanked, so their links are not reported. */
 function withoutLicenseText(text) {
-  return text.replace(LICENSE_COMMENT, (comment) => (LICENSE_WORDS.test(comment) ? "" : comment));
+  return text.replace(LICENSE_COMMENT, "$1");
 }
 
 function isAllowed(url) {

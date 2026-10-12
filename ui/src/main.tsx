@@ -6,6 +6,10 @@ import "./app/i18n";
 import "./design/fonts.css";
 import "./design/tokens.css";
 import "./app.css";
+import { applyStoredTheme } from "./design/theme";
+
+// The first frame is painted in the theme of the last run; the application start confirms it.
+applyStoredTheme();
 
 const container = document.getElementById("root");
 if (!container) {

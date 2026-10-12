@@ -3,7 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { commandFailure } from "../test/ipc";
-import { queryClient } from "./query";
+import { keys } from "../api/keys";
+import { queryClient, startQuery } from "./query";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -56,6 +57,12 @@ describe("queryClient", () => {
     expect(retry(0, { kind: "Internal", message: "It broke." } as unknown as Error)).toBe(false);
     expect(retry(0, new Error("The page was reloaded."))).toBe(true);
     expect(retry(3, new Error("The page was reloaded."))).toBe(false);
+  });
+
+  it("never takes the application start for stale: it is refreshed on purpose, not on a mount", () => {
+    expect(startQuery.queryKey).toEqual(keys.start);
+    expect(startQuery.staleTime).toBe(Infinity);
+    expect(queryClient.getQueryDefaults(keys.start).staleTime).toBe(Infinity);
   });
 
   it("never retries a mutation, and runs without a network connection", () => {

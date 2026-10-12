@@ -74,6 +74,13 @@ export function Select({
 }: SelectProps) {
   const invalid = errorMessage !== undefined && errorMessage !== "";
   const offset = lengthToken("--space-1");
+  // Said to assistive technology after the helper line or after the error, whichever shows.
+  const loading = isPending ? (
+    <>
+      {" "}
+      <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
+    </>
+  ) : null;
   return (
     <RacSelect
       {...(selectedKey === undefined ? {} : { value: selectedKey })}
@@ -107,16 +114,12 @@ export function Select({
             <FieldError className={cx(styles.error)}>
               <Icon icon={OctagonAlert} />
               <span>{errorMessage}</span>
+              {loading}
             </FieldError>
           ) : description !== undefined || isPending ? (
             <Text slot="description" className={cx(styles.description)}>
               {description}
-              {isPending ? (
-                <>
-                  {" "}
-                  <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
-                </>
-              ) : null}
+              {loading}
             </Text>
           ) : null}
           <Popover

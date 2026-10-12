@@ -1,7 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import { SLOW } from "../../test/slow";
 import { Select } from "./Select";
 
 const options = [
@@ -25,41 +27,45 @@ describe("Select", () => {
     expect(screen.getByRole("button", { name: /Group by/ })).toHaveTextContent("Choose a field");
   });
 
-  it("opens with the keyboard, moves with the arrow keys, and chooses with Enter", async () => {
-    const onSelectionChange = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <Select
-        label="Group by"
-        options={options}
-        defaultSelectedKey="discipline"
-        onSelectionChange={onSelectionChange}
-      />,
-    );
-    const trigger = screen.getByRole("button", { name: /Group by/ });
+  it(
+    "opens with the keyboard, moves with the arrow keys, and chooses with Enter",
+    SLOW,
+    async () => {
+      const onSelectionChange = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <Select
+          label="Group by"
+          options={options}
+          defaultSelectedKey="discipline"
+          onSelectionChange={onSelectionChange}
+        />,
+      );
+      const trigger = screen.getByRole("button", { name: /Group by/ });
 
-    await user.tab();
-    expect(trigger).toHaveFocus();
-    await user.keyboard("{Enter}");
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    const list = screen.getByRole("listbox");
-    expect(within(list).getAllByRole("option")).toHaveLength(4);
-    expect(within(list).getByRole("option", { name: "Discipline" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-
-    await user.keyboard("{ArrowDown}");
-    await user.keyboard("{Enter}");
-    expect(onSelectionChange).toHaveBeenCalledTimes(1);
-    expect(onSelectionChange).toHaveBeenCalledWith("hold-type");
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    expect(trigger).toHaveTextContent("Hold type");
-    // Focus goes back to the trigger once the list has closed, on a later turn of the event loop.
-    await waitFor(() => {
+      await user.tab();
       expect(trigger).toHaveFocus();
-    });
-  });
+      await user.keyboard("{Enter}");
+      expect(trigger).toHaveAttribute("aria-expanded", "true");
+      const list = screen.getByRole("listbox");
+      expect(within(list).getAllByRole("option")).toHaveLength(4);
+      expect(within(list).getByRole("option", { name: "Discipline" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+
+      await user.keyboard("{ArrowDown}");
+      await user.keyboard("{Enter}");
+      expect(onSelectionChange).toHaveBeenCalledTimes(1);
+      expect(onSelectionChange).toHaveBeenCalledWith("hold-type");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      expect(trigger).toHaveTextContent("Hold type");
+      // Focus goes back to the trigger once the list has closed, on a later turn of the event loop.
+      await waitFor(() => {
+        expect(trigger).toHaveFocus();
+      });
+    },
+  );
 
   it("closes on Escape without changing the value", async () => {
     const onSelectionChange = vi.fn();
@@ -150,7 +156,18 @@ describe("Select", () => {
     expect(trigger.querySelector('[data-part="spinner"]')).not.toBeNull();
   });
 
-  it("has no accessibility violation closed, open, disabled, and in error", async () => {
+  it("says that it is loading, also when it is in error", () => {
+    const { rerender } = render(<Select label="Line ID" options={options} isPending />);
+    const trigger = screen.getByRole("button", { name: /Line ID/ });
+    expect(trigger).toHaveAccessibleDescription(en.common.loading);
+
+    rerender(
+      <Select label="Line ID" options={options} isPending errorMessage="Choose a column." />,
+    );
+    expect(trigger).toHaveAccessibleDescription(`Choose a column. ${en.common.loading}`);
+  });
+
+  it("has no accessibility violation closed, open, disabled, and in error", SLOW, async () => {
     const user = userEvent.setup();
     render(
       <>

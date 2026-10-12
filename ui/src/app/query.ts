@@ -1,5 +1,7 @@
-import { keepPreviousData, QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, QueryClient, queryOptions } from "@tanstack/react-query";
+import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
+import { keys } from "../api/keys";
 
 /** How often a failure that is not a command's own answer is tried again. */
 const RETRIES = 3;
@@ -29,3 +31,20 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+/**
+ * The application start: settings, the workspaces, the workspace that was reopened. Read it with
+ * `useQuery(startQuery)`.
+ *
+ * It is never stale. Asking again lists the workspace folder, so a part of the app that mounts
+ * must not cause it; whoever changes what the start holds (the theme, the open workspace, the
+ * list) writes the new state into the cache or invalidates this key.
+ */
+export const startQuery = queryOptions({
+  queryKey: keys.start,
+  queryFn: () => api.appStart(),
+  staleTime: Infinity,
+});
+
+// The same for a reader that names the key with options of its own.
+queryClient.setQueryDefaults(keys.start, { staleTime: Infinity });

@@ -211,8 +211,9 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
 }
 
 /**
- * Gives its children `useToast()` and shows the toasts: at the bottom left of the content area,
- * at most three, newest at the bottom. A toast never takes focus. It is announced politely, and
+ * Gives its children `useToast()` and shows the toasts: at the bottom left of the content area
+ * (the layout says where that is, with `--toast-inset-inline-start` on the root element), at
+ * most three, newest at the bottom. A toast never takes focus. It is announced politely, and
  * its buttons are reached by Tab.
  */
 export function ToastRegion({ children }: { children: ReactNode }) {

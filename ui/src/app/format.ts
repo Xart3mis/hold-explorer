@@ -22,6 +22,8 @@ const dateTime = new Intl.DateTimeFormat(locale, {
   timeZone: "UTC",
 });
 
+const percent = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 });
+
 const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/;
 
 /** The moment a wall-clock text names, read as UTC; `null` when the text is not such a moment. */
@@ -58,6 +60,11 @@ function parse(value: string): Date | null {
 /** A whole number with its thousands separated: `5,042`. */
 export function formatCount(value: number): string {
   return count.format(value);
+}
+
+/** A share of one as a whole percentage: `45%`. */
+export function formatPercent(share: number): string {
+  return percent.format(share);
 }
 
 /** A date as day, short month, year: `30 Sept 2026`. A text that is not a date is returned as it is. */

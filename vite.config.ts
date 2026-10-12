@@ -13,9 +13,5 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     globals: false,
-    // The first test of a file loads the component library, and a test that runs the
-    // accessibility checker several times is slow on a busy machine. The limit leaves room for
-    // a loaded CI runner; an assertion still fails at once.
-    testTimeout: 20_000,
   },
 });

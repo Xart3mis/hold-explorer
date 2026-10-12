@@ -93,3 +93,13 @@ describe("Skeleton.module.css", () => {
     expect(skeleton?.css).not.toMatch(/animation|transition|@keyframes/);
   });
 });
+
+describe("ToastRegion.module.css", () => {
+  it("takes its place from a property the layout sets, and from the page gutter otherwise", () => {
+    const toast = files.find((file) => file.name.includes("ToastRegion.module.css"));
+    expect(toast?.css).toContain(
+      "inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));",
+    );
+    expect(toast?.css).not.toContain("--layout-sidebar-width");
+  });
+});

@@ -47,10 +47,14 @@ export interface DataTableProps<Item> {
   rows: readonly Item[];
   /** A stable key for a row. */
   rowKey: (item: Item) => string;
-  /** The key of the selected row: the one whose detail is open. */
+  /**
+   * The key of the selected row: the one whose detail is open. The screen holds it. Enter or a
+   * click on the selected row leaves it selected; only the screen removes the selection, by
+   * passing `null`, for example when the detail panel closes on Escape.
+   */
   selectedKey?: string | null;
-  /** Called with the key of the row that was selected, or `null` when the selection was removed. */
-  onSelectionChange?: (key: string | null) => void;
+  /** Called with the key of the row that was selected. */
+  onSelectionChange?: (key: string) => void;
   /** The sort the rows are in, to mark its column. */
   sort?: DataTableSort;
   /** Called with the sort a pressed header asks for. */
@@ -72,24 +76,21 @@ export interface DataTableProps<Item> {
 
 const ACTIONS = "data-table-actions";
 
-/** The widths of the skeleton lines of a text column, so the rows do not look ruled by one line. */
-const TEXT_SHAPES = ["18ch", "14ch", "22ch", "16ch"] as const;
+/** How many shapes a skeleton line of a text column has; the stylesheet gives each its width. */
+const TEXT_SHAPES = 4;
 
 function trackOf(kind: DataTableColumnKind, width: string | undefined): string {
   if (width !== undefined) return width;
   return kind === "text" ? "minmax(0, 1fr)" : "max-content";
 }
 
-function skeletonWidth(kind: DataTableColumnKind, row: number): string {
-  if (kind === "identifier") return "21ch";
-  if (kind === "number") return "3ch";
-  return TEXT_SHAPES[row % TEXT_SHAPES.length] ?? TEXT_SHAPES[0];
-}
-
 /**
  * The table of the app: a ruled page that behaves like a grid. Arrow keys, Home, and End move
  * the focused row; Enter selects it; a sortable header is pressed to ask for a sort. It sits
  * directly on the content area, with no container around it. It is not virtualized.
+ *
+ * On a first load the body holds placeholders in the shape of rows. They are a picture, not
+ * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
  */
 export function DataTable<Item>({
   columns,
@@ -133,11 +134,12 @@ export function DataTable<Item>({
         aria-describedby={countId}
         selectionMode={loading ? "none" : "single"}
         selectionBehavior="toggle"
+        disallowEmptySelection
         selectedKeys={selectedKey === undefined || selectedKey === null ? [] : [selectedKey]}
         onSelectionChange={(keys) => {
           if (keys === "all") return;
           const [key] = keys;
-          onSelectionChange?.(key === undefined ? null : String(key));
+          if (key !== undefined) onSelectionChange?.(String(key));
         }}
         {...(sort === undefined ? {} : { sortDescriptor: sort })}
         onSortChange={(descriptor) => {
@@ -176,33 +178,35 @@ export function DataTable<Item>({
         <TableBody
           className={cx(styles.body)}
           renderEmptyState={() =>
-            emptyState === undefined ? null : <div className={styles.empty}>{emptyState}</div>
+            loading ? (
+              <>
+                {/* The one line assistive technology reads in place of the rows. */}
+                <VisuallyHidden>{t("table.loading")}</VisuallyHidden>
+                <div aria-hidden="true" className={styles.placeholders}>
+                  {Array.from({ length: skeletonRows }, (_, row) => (
+                    <div key={row} data-part="skeleton-row" className={styles.placeholder}>
+                      {columns.map((column) => (
+                        <div
+                          key={column.id}
+                          data-kind={column.kind ?? "text"}
+                          data-shape={row % TEXT_SHAPES}
+                          className={styles.placeholderCell}
+                        >
+                          <Skeleton className={styles.placeholderLine} />
+                        </div>
+                      ))}
+                      {rowActions === undefined ? null : <div />}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : emptyState === undefined ? null : (
+              <div className={styles.empty}>{emptyState}</div>
+            )
           }
         >
           {loading
-            ? Array.from({ length: skeletonRows }, (_, index) => (
-                <Row
-                  key={`skeleton-${String(index)}`}
-                  id={`skeleton-${String(index)}`}
-                  isDisabled
-                  className={cx(styles.row)}
-                >
-                  {columns.map((column, position) => (
-                    <Cell
-                      key={column.id}
-                      data-kind={column.kind ?? "text"}
-                      className={cx(styles.cell)}
-                    >
-                      <Skeleton width={skeletonWidth(column.kind ?? "text", index)} />
-                      {/* The cell that names the row is never empty for assistive technology. */}
-                      {column.isRowHeader === true || position === 0 ? (
-                        <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
-                      ) : null}
-                    </Cell>
-                  ))}
-                  {rowActions === undefined ? null : <Cell className={cx(styles.cell)} />}
-                </Row>
-              ))
+            ? null
             : rows.map((item) => {
                 const key = rowKey(item);
                 return (

@@ -1,11 +1,38 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { Tooltip } from "./Tooltip";
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("Tooltip", () => {
+  it("shows under the pointer only after the tooltip delay of DESIGN.md", () => {
+    vi.useFakeTimers();
+    render(
+      <Tooltip text="Import a holds export">
+        <Button>Import</Button>
+      </Tooltip>,
+    );
+    const button = screen.getByRole("button", { name: "Import" });
+    // The pointer moves, so the tooltip knows a pointer is in use, and then rests on the button.
+    fireEvent.pointerMove(document.body, { pointerType: "mouse" });
+    fireEvent.pointerEnter(button, { pointerType: "mouse" });
+
+    // --delay-tooltip is 500ms. The component library's own default would be 1500ms.
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Import a holds export");
+  });
+
   it("shows at once on keyboard focus and describes its control", async () => {
     const user = userEvent.setup();
     render(

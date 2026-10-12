@@ -112,6 +112,23 @@ describe("Button", () => {
     expect(button).not.toHaveAttribute("data-reserve");
   });
 
+  it("carries the same width mark at rest and while pending, so its width cannot change", () => {
+    const { rerender } = render(<Button isPending={false}>Import</Button>);
+    const button = screen.getByRole("button", { name: "Import" });
+    const atRest = { reserve: button.getAttribute("data-reserve"), classes: button.className };
+
+    rerender(<Button isPending>Import</Button>);
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect({ reserve: button.getAttribute("data-reserve"), classes: button.className }).toEqual(
+      atRest,
+    );
+
+    rerender(<Button isPending={false}>Import</Button>);
+    expect({ reserve: button.getAttribute("data-reserve"), classes: button.className }).toEqual(
+      atRest,
+    );
+  });
+
   it.each(variants)(
     "has no accessibility violation as a %s button in any state",
     async (variant) => {

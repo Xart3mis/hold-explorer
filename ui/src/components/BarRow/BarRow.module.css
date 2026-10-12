@@ -124,3 +124,55 @@
 .row .bar[data-ordinal="5"] {
   background-color: var(--color-chart-ord-5);
 }
+
+/*
+ * A first load: six shapes of row, each with its own label, bar, and value width, falling like a
+ * group sorted by value.
+ */
+.row[data-shape] .skeletonLabel {
+  inline-size: var(--skeleton-label);
+}
+
+.row[data-shape] .skeletonBar {
+  inline-size: var(--skeleton-bar);
+}
+
+.row[data-shape] .skeletonValue {
+  inline-size: var(--skeleton-value);
+}
+
+.row[data-shape="0"] {
+  --skeleton-label: 9ch;
+  --skeleton-bar: 100%;
+  --skeleton-value: 5ch;
+}
+
+.row[data-shape="1"] {
+  --skeleton-label: 14ch;
+  --skeleton-bar: 82%;
+  --skeleton-value: 5ch;
+}
+
+.row[data-shape="2"] {
+  --skeleton-label: 7ch;
+  --skeleton-bar: 57%;
+  --skeleton-value: 3ch;
+}
+
+.row[data-shape="3"] {
+  --skeleton-label: 12ch;
+  --skeleton-bar: 38%;
+  --skeleton-value: 3ch;
+}
+
+.row[data-shape="4"] {
+  --skeleton-label: 10ch;
+  --skeleton-bar: 24%;
+  --skeleton-value: 3ch;
+}
+
+.row[data-shape="5"] {
+  --skeleton-label: 8ch;
+  --skeleton-bar: 12%;
+  --skeleton-value: 2ch;
+}
