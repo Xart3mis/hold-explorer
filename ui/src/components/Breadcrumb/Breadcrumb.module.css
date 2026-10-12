@@ -1,0 +1,92 @@
+/*
+ * The trail is pulled out by the padding of its items, so the text of the first item starts on
+ * the left edge of the page title under it.
+ */
+.trail {
+  min-inline-size: 0;
+  margin-inline-start: calc(-1 * var(--space-1));
+}
+
+/* One line, always. */
+.list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-inline-size: 0;
+}
+
+/*
+ * When the trail does not fit, the ancestors give way first: they shrink, each down to the room
+ * of an ellipsis, and the current page does not shrink at all. Only when every ancestor has
+ * given all it can is the current page cut, to what the ancestors leave of the line: the line
+ * less, for each ancestor, its least width, its separator, and the two gaps around the
+ * separator. No item is ever taken out.
+ */
+.item[data-part="ancestor"] {
+  flex-shrink: 1;
+}
+
+.item[data-part="current"] {
+  flex-shrink: 0;
+  max-inline-size: calc(
+    100% - var(--trail-ancestors) * (var(--space-6) + var(--size-icon) + 2 * var(--space-1))
+  );
+}
+
+/* An ancestor: a link, underlined so it is not told by its color alone. */
+.link {
+  display: block;
+  min-inline-size: var(--space-6);
+  padding: var(--space-0-5) var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-decoration-thickness: var(--border-width-thin);
+  text-overflow: ellipsis;
+  text-underline-offset: var(--space-0-5);
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.link[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.link[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+.link[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The current page: text, quieter than the links, because the title under it says the same. */
+.current {
+  display: block;
+  min-inline-size: 0;
+  padding: var(--space-0-5) var(--space-1);
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.separator {
+  color: var(--color-text-muted);
+}

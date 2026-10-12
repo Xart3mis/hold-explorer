@@ -1,9 +1,16 @@
+/* The breadcrumb, when there is one, is the first line; the title and the actions share the next. */
 .header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+
+.row {
   display: flex;
   gap: var(--space-4);
   align-items: flex-start;
   justify-content: space-between;
-  margin-block-end: var(--space-4);
 }
 
 .text {
@@ -33,30 +40,4 @@
   flex: none;
   gap: var(--space-2);
   align-items: center;
-}
-
-.back {
-  display: inline-flex;
-  gap: var(--space-1);
-  align-items: center;
-  margin-block-end: var(--space-2);
-  border-radius: var(--radius-sm);
-  color: var(--color-accent-text);
-  font: var(--text-label);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-  text-decoration: underline;
-  text-decoration-thickness: var(--border-width-thin);
-  text-underline-offset: var(--space-0-5);
-  cursor: default;
-}
-
-.back[data-hovered],
-.back[data-pressed] {
-  text-decoration-thickness: var(--border-width-thick);
-}
-
-.back[data-focus-visible] {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
-  outline-offset: var(--focus-ring-offset);
 }

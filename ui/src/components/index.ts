@@ -1,5 +1,6 @@
 // The base components. A screen imports from here.
 export { BarRow, BarRowGroup, type BarRowGroupProps, type BarRowProps } from "./BarRow/BarRow";
+export { Breadcrumb, type BreadcrumbAncestor, type BreadcrumbProps } from "./Breadcrumb/Breadcrumb";
 export {
   Button,
   IconButton,
@@ -20,7 +21,11 @@ export { EmptyState, type EmptyStateProps } from "./EmptyState/EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState/ErrorState";
 export { Icon, type IconProps } from "./Icon/Icon";
 export { Notice, type NoticeProps, type NoticeTone } from "./Notice/Notice";
-export { PageHeader, type PageHeaderBack, type PageHeaderProps } from "./PageHeader/PageHeader";
+export {
+  PageHeader,
+  type PageHeaderBreadcrumb,
+  type PageHeaderProps,
+} from "./PageHeader/PageHeader";
 export { Progress, type ProgressProps } from "./Progress/Progress";
 export { Select, type SelectOption, type SelectProps } from "./Select/Select";
 export { Skeleton, type SkeletonProps } from "./Skeleton/Skeleton";

@@ -201,6 +201,22 @@
   border-radius: var(--radius-md);
 }
 
+.narrowPage {
+  inline-size: calc(var(--layout-detail-width) + var(--space-16));
+  margin-block-end: var(--space-4);
+  padding: var(--layout-page-padding-y) var(--layout-page-padding-x);
+  border: var(--border-width-thin) dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
+.narrowestPage {
+  inline-size: calc(var(--size-toast-min-width) - var(--space-4));
+  margin-block-end: var(--space-4);
+  padding: var(--layout-page-padding-y) var(--layout-page-padding-x);
+  border: var(--border-width-thin) dashed var(--color-border-default);
+  border-radius: var(--radius-md);
+}
+
 .dropGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--size-toast-min-width), 1fr));

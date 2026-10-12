@@ -639,7 +639,7 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | `--size-tooltip-max-width` | `280px` | Widest tooltip; longer text wraps. |
 | `--opacity-stale` | `0.6` | Opacity of the previous render while a refetch is in flight. |
 
-Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name.
+Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name. The one exception is the separator of a breadcrumb, which stands between two labels and is decoration.
 
 **Motion.** Motion marks a state change and nothing else. There are no entrance sequences and nothing animates on page load.
 
@@ -849,7 +849,7 @@ An empty state teaches the next action. It is never "Nothing here".
 
 A destination that is not built yet opens a screen made of the page header and the empty state, both unchanged, inside the normal shell. It is a complete page, not a placeholder.
 
-- **Page header:** the destination's name as the page title (`--text-page-title`), for example "Blockers". No description line and no page actions.
+- **Page header:** the destination's name as the page title (`--text-page-title`), for example "Blockers". No description line and no page actions, and no breadcrumb, as for every destination.
 - **Empty state title:** shown, as in every empty state (`--text-section-title`, `--color-text-primary`). It says what is absent: "Not available in this version". The page title names the destination and this title states its status. They are two different statements, so the screen has both.
 - **Empty state body:** one or two sentences on what the destination will show, in the empty state's own style (`--text-body`, `--color-text-secondary`, at most `--layout-prose-max-width` wide). The body is secondary ink here as in every empty state. The one statement the user must not miss, that the destination is not available, is therefore the title and not a line of body text.
 - **Action:** one secondary button, "Go to Overview".
@@ -858,10 +858,26 @@ A destination that is not built yet opens a screen made of the page header and t
 
 ### Page header
 
-- **Anatomy:** the page title (`--text-page-title`, `--color-text-primary`) on the left, with an optional one-line description under it (`--text-body`, `--color-text-secondary`); page actions as buttons on the right. Tabs or the filter bar, when the page has them, sit directly under the header.
-- **Spacing:** the header starts at the content padding (`--layout-page-padding-x`, `--layout-page-padding-y`) and is followed by a `--space-4` gap. It has no border and no background of its own.
-- **Rules:** one page title per page, and it names the destination or the step ("Lines", "Review import"). No breadcrumb above it, no icon beside it.
-- **Loading:** the title is known before the data is and never shows a skeleton.
+- **Anatomy:** on a page below a destination, a breadcrumb as the first line (see "Breadcrumb"); then the page title (`--text-page-title`, `--color-text-primary`) on the left, with an optional one-line description under it (`--text-body`, `--color-text-secondary`); page actions as buttons on the right, level with the title. Tabs or the filter bar, when the page has them, sit directly under the header.
+- **Spacing:** the header starts at the content padding (`--layout-page-padding-x`, `--layout-page-padding-y`) and is followed by a `--space-4` gap. A `--space-2` gap separates the breadcrumb from the title. The header has no border and no background of its own.
+- **Rules:** one page title per page, and it names the destination or the step ("Lines", "Review import"). No icon beside it. A destination has no breadcrumb above its title; a page below a destination has one.
+- **Loading:** the title and the breadcrumb are known before the data is and never show a skeleton.
+
+### Breadcrumb
+
+The way back up from a page that lies below a destination. It is part of the page header and sits above the page title.
+
+- **When:** only on a page below one of the nine destinations. The pages of the import flow are such pages: "Import", then "Map columns"; "Import", then "Review". A destination itself (Overview, Breakdown, Lines, Blockers, History, People, Follow-up, Rules, Settings) has no ancestor and shows no breadcrumb, because a trail of one item would only repeat the title. The workspace is not part of the trail: the top bar already names it.
+- **Anatomy:** a navigation landmark named "Breadcrumb" that holds an ordered list. First the ancestors, from the destination down, each a link to its page. Last the current page, with the page title as its label: it is text, not a link, and it is marked as the current page for assistive technology (`aria-current="page"`). Between two items sits a separator, a chevron icon at `--size-icon` in `--color-text-muted`. The separator is decoration and is hidden from assistive technology.
+- **Shape:** one line in `--text-label`. Each item has `--space-1` of padding at the sides and `--space-0-5` above and below, and corner `--radius-sm`. Items and separators are `--space-1` apart, so the focus ring of a link does not reach the separator. The trail is pulled out to the left by `--space-1`, so the text of its first item starts on the left edge of the page title.
+- **Ancestor:** a link. Text `--color-accent-text`, underlined at rest with a `--border-width-thin` line `--space-0-5` under the text, so a link is never told by its color alone.
+- **Hover:** fill `--color-surface-hover`. The ink and the underline stay.
+- **Active (pressed):** fill `--color-surface-pressed`.
+- **Focus:** the focus ring.
+- **Current page:** text `--color-text-secondary`, no underline, no fill, and no hover, active, or focus state, because it cannot be acted on. It is quieter than the links on purpose: the page title directly under it already says where the user is.
+- **Disabled, loading, and error:** none. A trail names pages, and a page that can be named can be opened.
+- **Narrow window:** the trail stays on one line and never wraps. When it does not fit, the ancestors give way first: each is cut at the end with an ellipsis, all of them together, and no item is removed from the trail. An ancestor is never narrower than `--space-6`, which is room for the ellipsis. An ancestor that is cut shows its full label in a tooltip, and its accessible name is always the full label. The current page is never dropped. It keeps its full label as long as any ancestor can still give way, and is cut at the end with an ellipsis only when the ancestors, each at its least width, still leave it too little of the line.
+- **Transitions:** the fill over `--duration-fast` with `--ease-out`.
 
 ### Sidebar item
 

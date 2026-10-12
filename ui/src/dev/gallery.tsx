@@ -885,14 +885,23 @@ function Skeletons() {
 function Pages() {
   return (
     <Section
-      title="Page header and empty state"
-      note="One page title, an optional description, actions at the trailing edge, and a link back to the step before. An empty state says what is absent, why, and offers one action."
+      title="Page header, breadcrumb, and empty state"
+      note="One page title, an optional description, and actions level with the title. A page below a destination carries a breadcrumb above its title; a destination carries none. An empty state says what is absent, why, and offers one action."
     >
+      <h3 className={styles.subTitle}>A destination: no breadcrumb</h3>
+      <div className={styles.page}>
+        <PageHeader title="Blockers" />
+        <EmptyState title="Not available in this version" action={<Button>Go to Overview</Button>}>
+          Blockers will list what each hold waits for, with the lines it keeps on hold, so you can
+          see which blocker frees the most lines when it is solved.
+        </EmptyState>
+      </div>
+      <h3 className={styles.subTitle}>A page below a destination: one ancestor</h3>
       <div className={styles.page}>
         <PageHeader
           title="Map columns"
           description="Choose the column of the file that holds each field."
-          back={{ label: "Back to review", onPress: () => undefined }}
+          breadcrumb={{ ancestors: [{ label: "Import", onPress: () => undefined }] }}
           actions={
             <>
               <Button>Cancel</Button>
@@ -901,12 +910,59 @@ function Pages() {
           }
         />
       </div>
+      <h3 className={styles.subTitle}>
+        Link states: hover, pressed, and focus (forced), then the current page
+      </h3>
       <div className={styles.page}>
-        <PageHeader title="Blockers" />
-        <EmptyState title="Not available in this version" action={<Button>Go to Overview</Button>}>
-          Blockers will list what each hold waits for, with the lines it keeps on hold, so you can
-          see which blocker frees the most lines when it is solved.
-        </EmptyState>
+        <Forced state="hovered" target="li:nth-of-type(1) [role=link], li:nth-of-type(1) a">
+          <Forced state="pressed" target="li:nth-of-type(2) [role=link], li:nth-of-type(2) a">
+            <Forced
+              state="focus-visible"
+              target="li:nth-of-type(3) [role=link], li:nth-of-type(3) a"
+            >
+              <PageHeader
+                title="Review import"
+                breadcrumb={{
+                  ancestors: [
+                    { label: "Import", onPress: () => undefined },
+                    { label: "Choose sheet", onPress: () => undefined },
+                    { label: "Map columns", onPress: () => undefined },
+                  ],
+                  current: "Review",
+                }}
+              />
+            </Forced>
+          </Forced>
+        </Forced>
+      </div>
+      <h3 className={styles.subTitle}>
+        A long trail in a narrow container: the ancestors are cut, the current page is not
+      </h3>
+      <div className={styles.narrowPage}>
+        <PageHeader
+          title="Map columns"
+          breadcrumb={{
+            ancestors: [
+              { label: "Import a holds export from the piping system", onPress: () => undefined },
+              { label: "Holds_2026-10-07_unit-573_revision-B.xlsx", onPress: () => undefined },
+            ],
+            current: "Map the columns of the file",
+          }}
+        />
+      </div>
+      <h3 className={styles.subTitle}>
+        Narrower than the current page alone: now the current page is cut as well
+      </h3>
+      <div className={styles.narrowestPage}>
+        <PageHeader
+          title="Map columns"
+          breadcrumb={{
+            ancestors: [
+              { label: "Import a holds export from the piping system", onPress: () => undefined },
+            ],
+            current: "Map the columns of the file to the fields of a hold",
+          }}
+        />
       </div>
     </Section>
   );

@@ -73,6 +73,27 @@ describe("Tooltip", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("stays away while it is switched off", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <Tooltip text="Import a holds export" isDisabled>
+        <Button>Import</Button>
+      </Tooltip>,
+    );
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Import" })).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    rerender(
+      <Tooltip text="Import a holds export">
+        <Button>Import</Button>
+      </Tooltip>,
+    );
+    await user.tab({ shift: true });
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Import a holds export");
+  });
+
   it("never takes focus and holds nothing that can be pressed", async () => {
     const user = userEvent.setup();
     render(
