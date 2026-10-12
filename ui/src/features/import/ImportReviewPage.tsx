@@ -32,7 +32,7 @@ import { ImportProblem } from "./ImportProblem";
 import { ReopenFile, useLeaveImport } from "./leave";
 import { PageToCome } from "./PageToCome";
 import { readDate, readTarget } from "./review";
-import { ReviewDate } from "./ReviewDate";
+import { ReviewDate, type ReviewDateHandle } from "./ReviewDate";
 import { ReviewFindings } from "./ReviewFindings";
 import { ReviewTarget } from "./ReviewTarget";
 import { IMPORT_MAPPING_PATH, IMPORT_SHEET_PATH, startImport } from "./start";
@@ -90,6 +90,8 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const { workspace } = target;
   // The name of a new workspace as its field holds it at this moment; see `ReviewTarget`.
   const typedNameRef = useRef<string | null>(null);
+  // The date and time fields, to ask for what is typed in them and not left; see `ReviewDate`.
+  const dateFields = useRef<ReviewDateHandle>(null);
   const committing = importCommit.isPending;
   const commitFailed = importCommit.isError;
   const statusId = useId();
@@ -167,15 +169,22 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   };
 
   const commit = () => {
+    // A date or a time can be typed and Import activated without the field being left, as
+    // some assistive tools do it. What is typed is then taken as leaving the field takes it,
+    // and nothing is sent: the workspace has not been asked about that date. Import is pressed
+    // again once the check has answered and the button stands for what is on screen.
+    if (dateFields.current?.commitTyped() === true) return;
     if (reasons.length > 0 || date.moment === null || target.id === null) return;
-    // The page was last rendered when the name field was last left, or when a name first stood
-    // in it. A press on Import leaves the field in the same moment, so the name is read as typed.
-    const newName = (typedNameRef.current ?? target.name).trim();
+    // A press can also leave a field in the same moment, before the page is rendered again.
+    // So what was chosen is read as it is now. A date that is not the one the page was
+    // rendered with was never checked, and is not sent either.
+    const now = client.getQueryData<ImportChoices>(keys.importChoices) ?? choices;
+    if (readDate(review, now).moment !== date.moment) return;
+    // The name is sent as it stands: typed and not left, or as it was last left.
+    const newName = (typedNameRef.current ?? readTarget(review, now).name).trim();
     if (target.isNew && newName === "") return;
     // What the page says while the import runs names the workspace as it was sent.
-    if (target.isNew && typedNameRef.current !== null && typedNameRef.current !== target.name) {
-      choose({ newName: typedNameRef.current });
-    }
+    if (target.isNew && typedNameRef.current !== null) choose({ newName: typedNameRef.current });
     const request: ImportCommit = {
       target: target.isNew ? { kind: "New", name: newName } : { kind: "Existing", id: target.id },
       taken_at: date.moment,
@@ -337,6 +346,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
       </section>
 
       <ReviewDate
+        ref={dateFields}
         review={review}
         date={date}
         confirmed={choices.confirmed}

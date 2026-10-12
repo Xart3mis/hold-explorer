@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { formatDate, formatDateTime, formatTime } from "../../app/format";
 import { t } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
@@ -36,7 +36,9 @@ export interface ReviewTargetProps {
   onChoose: (chosen: Partial<ImportChoices>) => void;
   /**
    * Where the name of a new workspace is written at every key, as its field holds it. The page
-   * is not rendered again for a key, so the import reads the name there when it is sent.
+   * is not rendered again for a key, so the import reads the name there when it is sent. It
+   * holds a name only while one is typed and not left: once the field is left, or is gone, it
+   * holds nothing, and the name is the one the page was given.
    */
   typedNameRef: RefObject<string | null>;
   /** An import is running: nothing can be changed. */
@@ -80,11 +82,25 @@ export function ReviewTarget({
   const project = review.project_no;
   // The name as it is being typed, until the field is left: the page works with what was last left.
   const [typing, setTyping] = useState<string | null>(null);
+  // What is typed is kept in two places, here for the field and in the ref for the page, and
+  // they are always set together.
+  const setTyped = (value: string | null) => {
+    setTyping(value);
+    typedNameRef.current = value;
+  };
   const leaveName = () => {
     if (typing === null) return;
-    setTyping(null);
+    setTyped(null);
     onChoose({ newName: typing });
   };
+  // A field that is gone shows no name, so none is typed.
+  const hasNameField = target.isNew;
+  useEffect(() => {
+    if (!hasNameField) return;
+    return () => {
+      typedNameRef.current = null;
+    };
+  }, [hasNameField, typedNameRef]);
   const matching = new Set(review.target.matching.map((workspace) => workspace.id));
 
   const options: SelectOption[] = review.target.all.map((workspace) => {
@@ -130,6 +146,7 @@ export function ReviewTarget({
         isDisabled={isDisabled}
         isPending={isChecking}
         onSelectionChange={(id) => {
+          setTyped(null);
           // Another workspace has other snapshots: what was to be replaced belongs to this one.
           onChoose({ target: id, replace: null });
         }}
@@ -145,8 +162,7 @@ export function ReviewTarget({
           isDisabled={isDisabled}
           onChange={(value) => {
             const before = typing ?? target.name;
-            setTyping(value);
-            typedNameRef.current = value;
+            setTyped(value);
             // Whether Import waits for a name is said on the page as soon as it changes.
             if ((value.trim() === "") !== (before.trim() === "")) onChoose({ newName: value });
           }}

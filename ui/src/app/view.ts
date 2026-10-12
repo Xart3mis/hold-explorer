@@ -48,6 +48,9 @@
  *   kind `ViewUnsettled`, whose message says what to do; it shows it as any error, with its
  *   retry. Asking for the start again makes the Rust side start over: it reopens the workspace
  *   that was open last, selects its newest snapshot, and drops a file that is open for import.
+ * - A reading is dropped when the screen that asked for it goes. It then reads nothing more and
+ *   never asks for the application start: only a page that is shown may make the Rust side
+ *   start over. A screen that comes back reads again.
  */
 import {
   skipToken,
@@ -142,15 +145,24 @@ export function useSnapshotQuery<Data>({
     queryFn:
       view === null
         ? skipToken
-        : async (context) => {
-            // The interface shows another view by now, or is about to: the reading is dropped
-            // as if it had never been asked for. The key the hook has then is read by itself,
-            // so nobody hears the error that is thrown after this.
+        : async ({ signal }) => {
+            // Taking the signal at the start says that this reading may be dropped: it is when
+            // the screen that asked is gone, and when an action on the workspace starts. From
+            // then on nobody waits for it, so it stops at once, after whatever it was waiting
+            // for: it reads nothing more, and above all it does not ask for the application
+            // start, which would make the Rust side start over for a page that is not there.
+            //
+            // `drop` is for a reading the interface has moved on from: it shows another view by
+            // now, or is about to. The reading is dropped as if it had never been asked for. The
+            // key the hook has then is read by itself, so nobody hears the error thrown after it.
             const drop = () => client.cancelQueries({ queryKey, exact: true });
+            // Asked each time anew: it becomes true while this function waits.
+            const isDropped = () => signal.aborted;
             for (let refusals = 1; ; refusals += 1) {
               try {
                 return await read(view);
               } catch (error) {
+                if (isDropped()) throw error;
                 if (!isViewChanged(error)) throw error;
                 if (!isShown(client, view)) {
                   await drop();
@@ -162,9 +174,7 @@ export function useSnapshotQuery<Data>({
                   await new Promise((resolve) => {
                     setTimeout(resolve, REREAD_FIRST_MS * 2 ** (refusals - 1));
                   });
-                  // Asking for the signal says that this reading may be dropped: it then is when
-                  // the screen that asked is gone, and when an action on the workspace starts.
-                  if (context.signal.aborted) throw error;
+                  if (isDropped()) throw error;
                   continue;
                 }
                 // The two sides disagree for good. The interface takes the Rust side's word,
@@ -176,7 +186,9 @@ export function useSnapshotQuery<Data>({
                 } catch {
                   throw unsettled();
                 }
+                // The Rust side has started over, whoever still waits: the interface takes it.
                 client.setQueryData(keys.start, fresh);
+                if (isDropped()) throw error;
                 if (!isShown(client, view)) {
                   await drop();
                   throw error;

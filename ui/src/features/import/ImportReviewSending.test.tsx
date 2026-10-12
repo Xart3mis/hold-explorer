@@ -1,5 +1,5 @@
 import { notifyManager } from "@tanstack/react-query";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { flushSync } from "react-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ArgsOf } from "../../api/commands";
@@ -147,6 +147,137 @@ describe("what Import sends for the snapshot date", () => {
       taken_at: "2026-10-09T07:30:00",
       date_edited: true,
     });
+  });
+});
+
+describe("a date or a time that is typed and not left", () => {
+  /**
+   * Activates Import as a tool does that moves no focus: the field that is being typed in is not
+   * left, so nothing has told the page yet what it holds.
+   */
+  function activate(main: HTMLElement) {
+    act(() => {
+      importButton(main).click();
+    });
+  }
+
+  /** Types into a field of the date and stays in it. */
+  async function typeInto(user: User, main: HTMLElement, label: string, value: string) {
+    const field = within(main).getByRole("textbox", { name: label });
+    await user.clear(field);
+    if (value !== "") await user.type(field, value);
+    return field;
+  }
+
+  it(
+    "is not sent by an activation that does not leave the field: it is taken as on leaving, checked, and sent by the next press",
+    SLOW,
+    async () => {
+      const commit = committing();
+      const { user, check } = reviewing(review(), { import_commit: commit });
+      const main = await ready();
+      check.mockClear();
+      const date = await typeInto(user, main, text.date.date, "2026-10-20");
+
+      activate(main);
+      // Nothing is sent: neither the date of before, nor the one that was not checked yet.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(commit).not.toHaveBeenCalled();
+      // The date is taken as leaving the field takes it, and the workspace is asked about it.
+      expect(date).toHaveValue("2026-10-20");
+      await waitFor(() => {
+        expect(check).toHaveBeenLastCalledWith({
+          target: { kind: "Existing", id: unit573.id },
+          takenAt: "2026-10-20T08:00:00",
+        });
+      });
+      expect(within(main).getByText("Tuesday, 20 October 2026")).toBeVisible();
+
+      // Once the check has answered, the next press sends the date that is shown.
+      expect(await press(user, main, commit)).toMatchObject({
+        taken_at: "2026-10-20T08:00:00",
+        date_edited: true,
+      });
+    },
+  );
+
+  it(
+    "is not sent either when the press itself leaves the field in the same moment",
+    SLOW,
+    async () => {
+      const commit = committing();
+      const { user, check } = reviewing(review(), { import_commit: commit });
+      const main = await ready();
+      check.mockClear();
+      await typeInto(user, main, text.date.date, "2026-10-20");
+
+      await user.click(importButton(main));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(commit).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(check).toHaveBeenLastCalledWith({
+          target: { kind: "Existing", id: unit573.id },
+          takenAt: "2026-10-20T08:00:00",
+        });
+      });
+      expect(await press(user, main, commit)).toMatchObject({ taken_at: "2026-10-20T08:00:00" });
+    },
+  );
+
+  it("goes the same way for the time field", SLOW, async () => {
+    const commit = committing();
+    const { user, check } = reviewing(review(), { import_commit: commit });
+    const main = await ready();
+    check.mockClear();
+    const time = await typeInto(user, main, text.date.time, "09:45");
+
+    activate(main);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(commit).not.toHaveBeenCalled();
+    expect(time).toHaveValue("09:45");
+    await waitFor(() => {
+      expect(check).toHaveBeenLastCalledWith({
+        target: { kind: "Existing", id: unit573.id },
+        takenAt: "2026-10-14T09:45:00",
+      });
+    });
+    expect(await press(user, main, commit)).toMatchObject({
+      taken_at: "2026-10-14T09:45:00",
+      date_edited: true,
+    });
+  });
+
+  it(
+    "sends nothing for a date that cannot be read, and shows what is wrong with the field",
+    SLOW,
+    async () => {
+      const commit = committing();
+      const { user, check } = reviewing(review(), { import_commit: commit });
+      const main = await ready();
+      check.mockClear();
+      const date = await typeInto(user, main, text.date.date, "next week");
+
+      activate(main);
+      await within(main).findByText(text.date.dateInvalid);
+      expect(date).toBeInvalid();
+      expect(commit).not.toHaveBeenCalled();
+      expect(check).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(importButton(main)).toBeDisabled();
+      });
+      expect(within(main).getByText(text.blocked.date)).toBeVisible();
+    },
+  );
+
+  it("sends at the first press when nothing is typed that was not left", SLOW, async () => {
+    const commit = committing();
+    reviewing(review(), { import_commit: commit });
+    const main = await ready();
+    activate(main);
+    await waitFor(() => {
+      expect(commit).toHaveBeenCalledTimes(1);
+    });
+    expect(sent(commit)).toMatchObject({ taken_at: "2026-10-14T08:00:00", date_edited: false });
   });
 });
 

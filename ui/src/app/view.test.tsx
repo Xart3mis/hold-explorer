@@ -343,6 +343,70 @@ describe("useSnapshotQuery", () => {
     expect(queryClient.getQueryState(keys.start)?.status).toBe("success");
   });
 
+  it("stops for good when the screen goes during the first reading: nothing more is read, and the application start is not asked for", async () => {
+    const { read, waiting } = heldRead();
+    const { unmount, appStart } = screenWith(read);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    // The user leaves the page while its first reading is on its way, and the command refuses it.
+    unmount();
+    await act(async () => {
+      waiting[0]?.reject(viewChanged());
+      await Promise.resolve();
+    });
+    // Longer than five refusals and their waits would take.
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(appStart).not.toHaveBeenCalled();
+    const left = queryClient.getQueryState(keys.snapshot(HERE, "lines", ["oldest"]));
+    expect(left?.fetchStatus ?? "idle").toBe("idle");
+    expect(left?.error ?? null).toBeNull();
+  });
+
+  it("stops as well when the screen goes after a refusal, between two readings", async () => {
+    const waiting: ((reason: unknown) => void)[] = [];
+    const read = vi.fn<Read>(
+      () =>
+        new Promise<string>((_resolve, reject) => {
+          waiting.push(reject);
+        }),
+    );
+    const { unmount, appStart } = screenWith(read);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    await act(async () => {
+      waiting[0]?.(viewChanged());
+      await Promise.resolve();
+    });
+    // The second reading is on its way when the user leaves.
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    unmount();
+    await act(async () => {
+      waiting[1]?.(viewChanged());
+      await Promise.resolve();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(appStart).not.toHaveBeenCalled();
+  });
+
+  it("does not ask for the application start for a reading that was dropped while it waited to read again", async () => {
+    const read = vi.fn<Read>(() => Promise.reject(viewChanged()));
+    const { unmount, appStart } = screenWith(read);
+    // Four refusals are in; the screen goes before the fifth.
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(4);
+    });
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(read.mock.calls.length).toBeLessThanOrEqual(5);
+    expect(appStart).not.toHaveBeenCalled();
+  });
+
   it("drops a reading the command refused once the interface shows another view, and leaves no error behind", async () => {
     const { read, waiting } = heldRead();
     const start = openStart();

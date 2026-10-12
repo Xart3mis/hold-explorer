@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useImperativeHandle, useState, type Ref } from "react";
 import { formatDateTime, formatLongDate } from "../../app/format";
 import { t, type MessageKey } from "../../app/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
@@ -24,7 +24,20 @@ const detectedAs: Record<SnapshotSource, MessageKey> = {
   User: "import.review.date.detected.User",
 };
 
+/** What the page may ask of the two fields. */
+export interface ReviewDateHandle {
+  /**
+   * Takes what is typed in a field and not left yet, exactly as leaving the field takes it, and
+   * says whether there was any. The page asks before it sends an import: a field can be typed
+   * in and Import activated without the field being left, and what is typed then was never
+   * checked against the workspace.
+   */
+  commitTyped: () => boolean;
+}
+
 export interface ReviewDateProps {
+  /** Gives the page the handle above. */
+  ref?: Ref<ReviewDateHandle>;
   review: ImportReview;
   /** The two fields as they were last left. */
   date: DateState;
@@ -42,18 +55,32 @@ export interface ReviewDateProps {
  * the detected one back. A date that is only the file's modified time is explained and has to be
  * confirmed or replaced.
  */
-export function ReviewDate({ review, date, confirmed, onChoose, isDisabled }: ReviewDateProps) {
+export function ReviewDate({
+  ref,
+  review,
+  date,
+  confirmed,
+  onChoose,
+  isDisabled,
+}: ReviewDateProps) {
   const { detected } = review;
   // What is being typed, until the field is left: the page works with what was last left.
   const [typing, setTyping] = useState<{ date?: string; time?: string }>({});
   const dateText = typing.date ?? date.dateText;
   const timeText = typing.time ?? date.timeText;
 
+  const hasTyped = typing.date !== undefined || typing.time !== undefined;
   const commit = () => {
-    if (typing.date === undefined && typing.time === undefined) return;
+    if (!hasTyped) return;
     setTyping({});
     onChoose({ date: dateText.trim(), time: timeText.trim() });
   };
+  useImperativeHandle(ref, () => ({
+    commitTyped: () => {
+      commit();
+      return hasTyped;
+    },
+  }));
   const onKeyDown = (event: { key: string; continuePropagation: () => void }) => {
     if (event.key === "Enter") commit();
     else event.continuePropagation();

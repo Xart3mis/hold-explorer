@@ -99,8 +99,10 @@ describe("Button", () => {
       </Button>,
     );
     const button = screen.getByRole("button", { name: "Export" });
-    // It says that it waits, and it is not the one that shows what runs.
+    // It says that it waits, and it is not the one that shows what runs. To assistive technology
+    // it is unavailable and busy, as DESIGN.md says of a control that waits for another.
     expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAttribute("data-inert");
     expect(button.querySelector('[data-part="spinner"]')).toBeNull();
     expect(button.querySelectorAll("svg")).toHaveLength(1);
