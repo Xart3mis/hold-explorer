@@ -1,0 +1,111 @@
+.button {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1-5);
+  align-items: center;
+  justify-content: center;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-3);
+  border: var(--border-width-thin) solid transparent;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.button[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.button[data-icon-only] {
+  inline-size: var(--density-control-height);
+  padding: 0;
+}
+
+/*
+ * A button that can become pending and has no icon keeps the room of the spinner free, half on
+ * each side of its label, so the spinner arrives without changing the width. A button that waits
+ * for another control shows no spinner, so it keeps that room as it does at rest.
+ */
+.button[data-reserve]:not([data-pending]) .label,
+.button[data-reserve][data-inert] .label {
+  padding-inline: calc((var(--size-icon) + var(--space-1-5)) / 2);
+}
+
+/* Primary: the deep accent. On the app and the panel surface only. */
+.button[data-variant="primary"] {
+  background-color: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+
+.button[data-variant="primary"][data-hovered] {
+  background-color: var(--color-accent-hover);
+}
+
+.button[data-variant="primary"][data-pressed] {
+  background-color: var(--color-accent-active);
+}
+
+/* Secondary: an outline. */
+.button[data-variant="secondary"] {
+  border-color: var(--color-border-strong);
+}
+
+.button[data-variant="secondary"][data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.button[data-variant="secondary"][data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+/*
+ * Quiet: text only. A container says what a quiet button looks like inside it: an overlay gives
+ * the overlay hover fill, a notice the primary ink.
+ */
+.button[data-variant="quiet"] {
+  color: var(--button-quiet-color, var(--color-text-secondary));
+}
+
+.button[data-variant="quiet"][data-hovered] {
+  background-color: var(--button-quiet-hover, var(--color-surface-hover));
+  color: var(--button-quiet-color, var(--color-text-primary));
+}
+
+.button[data-variant="quiet"][data-pressed] {
+  background-color: var(--color-surface-pressed);
+  color: var(--button-quiet-color, var(--color-text-primary));
+}
+
+/* Danger: a secondary button in the danger ink. */
+.button[data-variant="danger"] {
+  border-color: var(--color-danger-text);
+  color: var(--color-danger-text);
+}
+
+.button[data-variant="danger"][data-hovered],
+.button[data-variant="danger"][data-pressed] {
+  background-color: var(--color-danger-subtle);
+}
+
+/* Disabled, the same for every variant; the outline stays where the variant has one. */
+.button[data-disabled] {
+  border-color: transparent;
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+.button[data-variant="secondary"][data-disabled],
+.button[data-variant="danger"][data-disabled] {
+  border-color: var(--color-border-default);
+}

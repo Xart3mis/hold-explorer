@@ -1,0 +1,39 @@
+{
+  "app_start": {},
+  "settings_set_theme": { "theme": "Light" },
+  "workspace_list": {},
+  "workspace_create": { "name": "Unit 573 piping" },
+  "workspace_open": { "id": "a1b2c3d4e5f60718" },
+  "workspace_rename": { "name": "Unit 573 piping, phase 2" },
+  "import_open": { "path": "exports/Holds_2026-10-07.xlsx" },
+  "import_choose_sheet": { "sheet": "Holds" },
+  "import_review": { "fields": { "LineId": 0, "Remark": 3, "HoldType": 5 } },
+  "import_check_target": {
+    "target": { "kind": "New", "name": "Unit 573 piping" },
+    "takenAt": "2026-10-07T08:00:00"
+  },
+  "import_commit": {
+    "request": {
+      "target": { "kind": "Existing", "id": "a1b2c3d4e5f60718" },
+      "taken_at": "2026-10-07T08:00:00",
+      "date_edited": true,
+      "replace": 2
+    },
+    "onProgress": "__CHANNEL__:1"
+  },
+  "import_cancel": {},
+  "snapshot_select": { "id": 2 },
+  "overview": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "demo_create": {}
+}

@@ -1,0 +1,11 @@
+.icon {
+  flex: none;
+  inline-size: var(--size-icon);
+  block-size: var(--size-icon);
+  stroke-width: var(--size-icon-stroke);
+}
+
+/* The set is drawn on a 24 unit grid. The stroke keeps its token width at any icon size. */
+.icon * {
+  vector-effect: non-scaling-stroke;
+}

@@ -1,0 +1,102 @@
+/*
+ * The bottom left of the content area. Where the content area starts is the layout's to say: it
+ * sets --toast-inset-inline-start on the root element (the region is rendered beside the app, not
+ * inside the layout, so the property has to come from above both). Until a layout sets it, the
+ * region keeps the page gutter from the edge of the window. The region itself takes no pointer
+ * events, so only the toasts cover what is under them.
+ */
+.region {
+  position: fixed;
+  inset-block-end: var(--space-6);
+  inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.toast {
+  /* A quiet button in an overlay takes the overlay hover fill. */
+  --button-quiet-hover: var(--color-surface-overlay-hover);
+
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-inline-size: var(--size-toast-min-width);
+  max-inline-size: var(--size-toast-max-width);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  pointer-events: auto;
+  animation: enter var(--duration-base) var(--ease-out);
+}
+
+.toast[data-leaving] {
+  animation: leave var(--duration-fast) var(--ease-out) forwards;
+}
+
+/* A state icon wears its state color; the message beside it is its label. */
+.icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.icon[data-tone="info"] {
+  color: var(--color-info-text);
+}
+
+.icon[data-tone="success"] {
+  color: var(--color-success-text);
+}
+
+.message {
+  flex: 1;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The action is written in the accent ink: it can be acted on. */
+.action {
+  --button-quiet-color: var(--color-accent-text);
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+}
+
+@keyframes leave {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The toast appears in place: it fades, and nothing moves. */
+@keyframes enter-in-place {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: enter-in-place var(--duration-fast) var(--ease-out);
+  }
+
+  .toast[data-leaving] {
+    animation: leave var(--duration-fast) var(--ease-out) forwards;
+  }
+}

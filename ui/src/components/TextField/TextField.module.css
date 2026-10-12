@@ -1,0 +1,94 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.control {
+  position: relative;
+  display: flex;
+}
+
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-2);
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+.input[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.input[data-focused] {
+  border-color: var(--color-accent-text);
+}
+
+.input[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.input[data-invalid] {
+  border-color: var(--color-danger-text);
+}
+
+.input[data-disabled] {
+  border-color: var(--color-border-default);
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+/* Loading: the spinner sits inside the field at its trailing edge, and the text stops before it. */
+.control[data-pending] .input {
+  padding-inline-end: calc(var(--space-2) + var(--size-icon) + var(--space-1-5));
+}
+
+.spinner {
+  position: absolute;
+  inset-block-start: calc(50% - var(--size-icon) / 2);
+  inset-inline-end: var(--space-2);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.description,
+.error {
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.description {
+  color: var(--color-text-muted);
+}
+
+.error {
+  display: flex;
+  gap: var(--space-1);
+  align-items: flex-start;
+  color: var(--color-danger-text);
+}

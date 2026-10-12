@@ -1,0 +1,246 @@
+/*
+ * The table sits directly on the content area: no card, no outer border, no zebra stripes. The
+ * columns belong to the table and every row takes them over, so the cells line up like a ruled
+ * page and a column of numbers or line IDs is exactly as wide as its widest value.
+ */
+.scroller {
+  max-block-size: 100%;
+  overflow: auto;
+}
+
+.table {
+  display: grid;
+  grid-template-columns: var(--table-columns);
+  inline-size: 100%;
+  border-spacing: 0;
+  color: var(--color-text-primary);
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.head,
+.head tr,
+.body,
+.row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+/* The header row: a raised plane that stays while the rows scroll under it. */
+.head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-sticky);
+}
+
+.scroller[data-scrolled] .head {
+  box-shadow: var(--shadow-raised);
+}
+
+.head tr {
+  block-size: var(--density-header-height);
+  border-block-end: var(--border-width-thin) solid var(--color-border-default);
+  background-color: var(--color-surface-raised);
+}
+
+.column {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-inline-size: 0;
+  padding: 0 var(--density-cell-padding-x);
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: start;
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.column[data-kind="number"] {
+  justify-content: flex-end;
+}
+
+/* A sortable header is a button. The sorted one is written in the primary ink, with an arrow. */
+.column[data-allows-sorting][data-hovered] {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.column[data-allows-sorting][data-pressed] {
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
+.column[aria-sort="ascending"],
+.column[aria-sort="descending"] {
+  color: var(--color-text-primary);
+}
+
+/* A row: one line, one height, a hairline under it. */
+.row {
+  align-items: center;
+  block-size: var(--density-row-height);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * A row answers to the pointer only where it can be selected. A table that is there to be read,
+ * such as a preview or a group of Overview shown as a table, keeps its rows as they are.
+ */
+.table[data-selectable] .row[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.table[data-selectable] .row[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+/* Selection is a tint across the whole row. */
+.table[data-selectable] .row[data-selected] {
+  background-color: var(--color-accent-subtle);
+}
+
+.table[data-selectable] .row[data-selected][data-hovered],
+.table[data-selectable] .row[data-selected][data-pressed] {
+  background-color: var(--color-accent-subtle-hover);
+}
+
+.cell {
+  min-inline-size: 0;
+  padding: 0 var(--density-cell-padding-x);
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell[data-kind="number"] {
+  font-variant-numeric: var(--font-numeric-tabular);
+  text-align: end;
+}
+
+/* An identifier is copied as the exact source text, and is never wrapped or cut in the middle. */
+.cell[data-kind="identifier"] {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.cell[data-supporting] {
+  color: var(--color-text-secondary);
+}
+
+/* Row actions keep their own focus rings, so the cell does not clip them. */
+.cell[data-kind="actions"] {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: flex-end;
+  overflow: visible;
+}
+
+/* Inside a table an outer ring would be clipped, so the ring is inset. */
+.row:focus-visible,
+.row[data-focus-visible],
+.cell:focus-visible,
+.cell[data-focus-visible],
+.column:focus-visible,
+.column[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* A refetch keeps the previous rows, dimmed. */
+.body {
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.scroller[data-stale] .body {
+  opacity: var(--opacity-stale);
+}
+
+/* The empty state sits in the table area, under the header row, where the rows would be. */
+.body[data-empty],
+.body[data-empty] tr,
+.body[data-empty] td {
+  display: block;
+}
+
+/*
+ * A first load. The body is empty and holds placeholders in the shape of rows, on the columns of
+ * the table. The one row the body has is only the carrier of what assistive technology reads, so
+ * it and its cell leave no box of their own.
+ */
+.scroller[aria-busy="true"] .body[data-empty] {
+  display: grid;
+}
+
+.scroller[aria-busy="true"] .body[data-empty] tr,
+.scroller[aria-busy="true"] .body[data-empty] td,
+.placeholders {
+  display: contents;
+}
+
+.placeholder {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+  block-size: var(--density-row-height);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.placeholderCell {
+  min-inline-size: 0;
+  padding: 0 var(--density-cell-padding-x);
+  text-align: start;
+}
+
+.placeholderCell[data-kind="number"] {
+  text-align: end;
+}
+
+/* A placeholder is as wide as what it stands for: a line ID of 21 characters, a short number. */
+.placeholderCell[data-kind="identifier"] {
+  font: var(--text-mono);
+}
+
+.placeholderCell[data-kind="identifier"] .placeholderLine {
+  inline-size: 21ch;
+}
+
+.placeholderCell[data-kind="number"] .placeholderLine {
+  inline-size: 3ch;
+}
+
+/* Text varies from row to row, so the placeholders do not look ruled by one line. */
+.placeholderCell[data-kind="text"][data-shape="0"] .placeholderLine {
+  inline-size: 18ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="1"] .placeholderLine {
+  inline-size: 14ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="2"] .placeholderLine {
+  inline-size: 22ch;
+}
+
+.placeholderCell[data-kind="text"][data-shape="3"] .placeholderLine {
+  inline-size: 16ch;
+}
+
+.empty {
+  padding: 0 var(--density-cell-padding-x);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  white-space: normal;
+}

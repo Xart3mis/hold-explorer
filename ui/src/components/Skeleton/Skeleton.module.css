@@ -1,0 +1,28 @@
+.skeleton {
+  display: inline-block;
+  max-inline-size: 100%;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-skeleton);
+  vertical-align: middle;
+}
+
+/* A line of text: thinner than its line box, so a column of lines reads as text. */
+.skeleton[data-variant="text"] {
+  inline-size: 100%;
+  block-size: var(--space-3);
+}
+
+/* The value of a stat tile: as tall as the figure, as wide as a number of five digits. */
+.skeleton[data-variant="stat"] {
+  display: block;
+  inline-size: 5ch;
+  block-size: var(--line-height-md);
+  margin-block: var(--space-1);
+  font: var(--text-stat);
+}
+
+/* The bar of a bar row. */
+.skeleton[data-variant="bar"] {
+  display: block;
+  block-size: var(--size-bar-height);
+}

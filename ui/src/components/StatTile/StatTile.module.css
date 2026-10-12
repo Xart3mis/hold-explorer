@@ -1,0 +1,82 @@
+/*
+ * One container. The tiles are its cells, and the hairlines between them are the container
+ * showing through a gap one hairline wide, so a row that wraps is ruled between its lines too.
+ */
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--border-width-thin);
+  overflow: hidden;
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-border-subtle);
+}
+
+.tile {
+  display: flex;
+  flex: 1 1 var(--size-stat-tile-min-width);
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+  min-inline-size: var(--size-stat-tile-min-width);
+  padding: var(--space-4);
+  border: 0;
+  border-radius: 0;
+  background-color: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.tile[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.tile[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+.tile[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.label {
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  color: var(--color-text-primary);
+  font: var(--text-stat);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+.value[data-missing] {
+  color: var(--color-text-disabled);
+}
+
+.delta {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.caption {
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}

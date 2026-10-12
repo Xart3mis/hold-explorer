@@ -164,11 +164,12 @@ fn run_ws(command: WsCmd) -> Result<(), Box<dyn Error>> {
                     return Err("Could not work out when this file was taken: it has no report date and no date in its name. Pass the date with --date, for example --date 2026-10-07.".into());
                 }
             };
-            let info = ws.import(&loaded, taken, &ImportOptions { replace })?;
-            ws.set_saved_mapping(&map.to_saved(&loaded.headers))?;
-            if let Some(project) = loaded.project_no() {
-                ws.add_project_number(project)?;
-            }
+            let options = ImportOptions {
+                replace,
+                save_mapping: Some(map.to_saved(&loaded.headers)),
+                add_project_number: loaded.project_no().map(str::to_string),
+            };
+            let info = ws.import(&loaded, taken, &options)?;
             let mut out = serde_json::to_value(&info)?;
             out["warnings"] = loaded.parsed.warnings.len().into();
             out["skipped"] = loaded.parsed.skipped.len().into();
@@ -196,10 +197,10 @@ fn run_ws(command: WsCmd) -> Result<(), Box<dyn Error>> {
                 .cloned();
             print_json(&report(
                 &ds,
-                detail.info.taken_at,
-                detail.info.date_source,
+                detail.snapshot.taken_at,
+                detail.snapshot.date_source,
                 project,
-                detail.info.limited,
+                detail.snapshot.limited,
                 detail.skipped.len(),
                 detail.warnings.len(),
             ))?;

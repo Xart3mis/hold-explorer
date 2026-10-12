@@ -1,0 +1,78 @@
+/* What every screen stands on: the page, the text of the body, and the focus ring. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-surface-app);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  block-size: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-surface-app);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* The focus ring of DESIGN.md, on every focusable element. Components only change its offset. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+::selection {
+  background: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+}
+
+.app {
+  display: grid;
+  block-size: 100%;
+  place-items: center;
+}
+
+.app h1 {
+  font: var(--text-page-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-tight);
+}
+
+/*
+ * Where the content area starts, for the toast region, which is rendered beside the layout: the
+ * shell marks the root element while its sidebar shows.
+ */
+:root[data-sidebar] {
+  --toast-inset-inline-start: calc(var(--layout-sidebar-width) + var(--space-6));
+}

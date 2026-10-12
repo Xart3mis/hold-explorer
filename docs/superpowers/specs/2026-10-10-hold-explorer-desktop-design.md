@@ -100,7 +100,9 @@ Required: `line_id`, `hold_remark`, `hold_type`. Everything else is optional. An
 
 ### 5.2 Contract between interface and core
 
-The interface sends a `FilterSpec` and a view name. The core returns a finished view model: aggregates, rows, and deltas. TypeScript types are generated from the Rust command signatures, so no type is written twice.
+The interface sends a `FilterSpec` and a view name. The core returns a finished view model: aggregates, rows, and deltas. TypeScript types are generated from the Rust types, so no type is written twice; the calls themselves are written once, in one module, and a shared fixture of every command's arguments is tested from both sides.
+
+A command that reads the data in view is told which workspace and snapshot the interface is showing, and refuses to answer for another, so an answer can never be stored under the wrong view. A command that fails answers with the kind of the error and a message that says what happened, why, and how to fix it.
 
 The core keeps the active workspace in memory. At the expected scale, each query answers in milliseconds. Import, bundle merge, and export run off the interface thread and report progress as events.
 
@@ -122,10 +124,10 @@ The app makes no network request except the update check. Fonts and libraries ar
 
 ### 6.1 Pipeline
 
-1. Open a workbook (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`) or a delimited text file (`.csv`, `.tsv`, `.txt`). In a workbook, choose the sheet named `data`; failing that, the first sheet whose header row maps the required columns; failing that, the first sheet with rows, and let the user pick another sheet in the mapping step. Read `info` when present. For delimited text, detect the encoding (a byte-order mark decides; otherwise UTF-8 when valid, else Windows-1252) and the delimiter (comma, semicolon, or tab, whichever splits the first line into the most fields).
+1. Open a workbook (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`, `.ods`) or a delimited text file (`.csv`, `.tsv`, `.txt`). Only a regular file of at most 256 MiB is read. In a workbook, choose the sheet named `data`; failing that, the first sheet whose header row maps the required columns; failing that, the first sheet with rows, and let the user pick another sheet in the mapping step. Read `info` when present. For delimited text, detect the encoding (a byte-order mark decides; otherwise UTF-8 when valid, else Windows-1252) and the delimiter (comma, semicolon, or tab, whichever splits the first line into the most fields).
 2. Map columns. Known headers and aliases map automatically, ignoring case and treating runs of spaces, hyphens, and underscores alike. An unknown layout opens the mapping step. The mapping is saved per workspace by header, not by column position, so it applies to later files whose columns are in another order. It remembers which of several same-named columns holds which field, and which columns the user chose to leave unmapped.
 3. Normalize every row (6.2).
-4. Show the import review: project number, snapshot date and time with its source, open and released counts, skipped rows, warnings grouped by kind, target workspace. The user confirms or edits.
+4. Show the import review: project number, snapshot date and time with its source, open and released counts, skipped rows, warnings grouped by kind, target workspace. The user confirms or edits. A date known only from the file's modified time must be confirmed or replaced before the import is allowed. A snapshot on the same day can be kept beside the new one or replaced by it; only a snapshot the review offered can be replaced.
 5. Write the snapshot in a single database transaction.
 6. Open History on "Changes since previous snapshot" and show a notice. Before milestone 2 delivers that screen, the app opens Overview instead.
 
@@ -272,7 +274,8 @@ The user ticks blockers as solved. The app shows lines freed now, lines one bloc
 ### 9.1 Shell
 
 - Top bar: workspace switcher, global search, snapshot selector, Import.
-- Left sidebar with labeled destinations: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then Rules and Settings.
+- Left sidebar with labeled destinations: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then Rules and Settings. A destination that is not built yet is listed like the others with a quiet "Soon" tag, and opens a screen that says what the destination will show and that it is not available in this version. With no workspace open there is no sidebar; the top bar then leads to the workspaces and to Settings.
+- A page below a destination shows a breadcrumb above its title: the ancestors as links and the page itself last. A destination shows none. The workspace is not part of the trail.
 - Filter chips under the top bar on every data screen.
 - Right panel for the selected line, hold, or blocker. The list stays visible.
 - The snapshot selector defaults to the newest snapshot. Choosing an older one shows the data as it stood then, and a banner names the snapshot in view.
@@ -303,7 +306,7 @@ Attributes (sizes, stress calc, mismatch), open and released holds, timeline, bl
 
 ### 9.4 First run
 
-A welcome screen with a drop zone, "Open history bundle", and "Open demo workspace". The demo workspace is built from synthetic data.
+The first screen is the list of workspaces, with a drop zone, "Open history bundle", and "Open demo workspace". It greets nobody and says what can be done. The demo workspace is built from synthetic data: four weekly snapshots. Workspace files that cannot be read are listed apart with the reason.
 
 ### 9.5 Keyboard
 
@@ -378,7 +381,7 @@ At startup, at most once a day, the app reads the latest GitHub release. If a ne
 ## 13. Design direction
 
 - **Register**: product interface. The tool should disappear into the task. Familiar patterns are a feature.
-- **Color**: restrained. Tinted neutrals and one accent, used for the primary action, the current selection, and state. A fuller palette appears only inside charts.
+- **Color**: restrained. Tinted neutrals and one accent, used for the primary action, the current selection, and state. A fuller palette appears only inside charts. The accent is teal, chosen by the owner; nothing is purple. Plain data is drawn in neutral gray, so that teal always means something can be acted on; ramps are blue. The exact values, and the checks that hold them, are in `DESIGN.md`.
 - **Scene**: a piping engineer at a desk, working down the hold list between modeling sessions; a lead showing Overview on a meeting-room screen in the weekly hold review.
 - **Theme**: dark by default, light available. Both are designed, not derived by inversion.
 - **Anchors**: Linear for density and keyboard use; Stripe Dashboard for a calm overview and good tables; Excel for grid behavior this audience already knows.
@@ -391,7 +394,8 @@ At startup, at most once a day, the app reads the latest GitHub release. If a ne
 - Motion lasts 150 to 250 ms, marks state changes only, and respects the reduced-motion setting.
 - An error message says what happened, why, and how to fix it.
 - Nothing is available by hover alone.
-- Destructive actions (delete a snapshot, delete a note, reverse a merge) offer undo instead of a confirmation prompt.
+- Destructive actions (delete a snapshot, delete a note, reverse a merge) offer undo instead of a confirmation prompt. Where an action cannot be undone yet (replacing a snapshot during import), the choice itself says so.
+- While an action runs, the control that started it shows that it is working; controls beside it that would conflict are inert and show nothing.
 - Contrast meets WCAG AA.
 - Banned: colored side-stripe accents, nested cards, gradient text, decorative glass effects, and the gradient hero-metric tile.
 
@@ -417,6 +421,8 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 - A workspace file that cannot be opened is named with its reason and what to do: update the app, close the other program, or restore a copy. It is never changed and never hides other workspaces.
 - An export to a file that is open elsewhere says to close the file or choose another name.
 - A second launch focuses the running window; two instances never write the same data.
+- A settings file that cannot be read is set aside, never overwritten; when it cannot even be set aside, the app works with defaults and refuses to save settings until the file is dealt with. A failure to save settings never stops a workspace from opening.
+- The window may ask the system for two things only: to choose a file to open, and to show a file in its folder. It cannot open web addresses, and its pages can load nothing from another host.
 - A crash writes a log to the data folder. About offers "Copy diagnostics". The app sends no telemetry.
 - When WebView2 is missing on Windows, a native message with a download link appears before any window opens. The per-user WebView2 installer needs no admin rights.
 

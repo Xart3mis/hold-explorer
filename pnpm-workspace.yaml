@@ -1,0 +1,5 @@
+# eslint-plugin-jsx-a11y 6.10 declares ESLint up to 9 as its peer. Its rules run under ESLint 10
+# (checked with an img without alt, which `pnpm lint` reports), so the mismatch is accepted here.
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-jsx-a11y>eslint: "10"

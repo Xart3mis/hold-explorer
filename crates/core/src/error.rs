@@ -7,6 +7,7 @@ use crate::mapping::Field;
 
 /// Every message says what went wrong and what the user can do about it.
 #[derive(Debug, Clone, PartialEq, Error, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "kind")]
 pub enum ImportError {
     #[error(

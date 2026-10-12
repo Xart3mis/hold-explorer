@@ -10,6 +10,7 @@ use crate::workspace::{Workspace, WorkspaceInfo, EXTENSION};
 
 /// The workspaces of a folder, and the workspace files that could not be read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct WorkspaceList {
     /// Readable workspaces, sorted by name, then id.
     pub workspaces: Vec<WorkspaceInfo>,
@@ -19,6 +20,7 @@ pub struct WorkspaceList {
 
 /// A workspace file that could not be opened.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct UnreadableWorkspace {
     /// The workspace file.
     pub path: PathBuf,

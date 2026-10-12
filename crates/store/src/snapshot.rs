@@ -7,7 +7,7 @@ use hx_core::dataset::Dataset;
 use hx_core::fingerprint::state_hash;
 use hx_core::import::SkippedRow;
 use hx_core::load::Loaded;
-use hx_core::mapping::ColumnMap;
+use hx_core::mapping::{ColumnMap, SavedMapping};
 use hx_core::model::Hold;
 use hx_core::rules::RuleSet;
 use hx_core::snapshot_date::{SnapshotDate, SnapshotSource};
@@ -17,10 +17,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::codec::{decode_ids, decode_time, encode_ids, encode_time};
 use crate::error::{database, StoreError};
-use crate::workspace::Workspace;
+use crate::workspace::{insert_project_number, store_saved_mapping, Workspace};
 
 /// What the workspace knows about one snapshot, apart from its holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SnapshotInfo {
     /// The snapshot's id in this workspace.
     pub id: i64,
@@ -45,9 +46,10 @@ pub struct SnapshotInfo {
 
 /// A snapshot with everything the import review showed, apart from its holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SnapshotDetail {
     /// The snapshot's summary.
-    pub info: SnapshotInfo,
+    pub snapshot: SnapshotInfo,
     /// The date the app detected, when the user replaced it.
     pub detected: Option<SnapshotDate>,
     /// The key/value pairs of the file's information sheet.
@@ -64,10 +66,15 @@ pub struct SnapshotDetail {
 
 /// How an import treats an existing snapshot.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct ImportOptions {
     /// Delete this snapshot in the same transaction, replacing it with the new one.
     pub replace: Option<i64>,
+    /// Stored as the workspace's saved mapping in the import's transaction.
+    pub save_mapping: Option<SavedMapping>,
+    /// Added to the workspace's project numbers in the import's transaction.
+    pub add_project_number: Option<String>,
 }
 
 /// The stored text of a snapshot date source.
@@ -265,6 +272,9 @@ impl Workspace {
     /// unless that snapshot is the one `options.replace` names. A date the user typed keeps the
     /// date the file gave as the detected date. A date whose year is outside 0000 to 9999 is
     /// refused with `SnapshotDateOutOfRange`.
+    ///
+    /// `options.save_mapping` and `options.add_project_number` are written in the same
+    /// transaction, so a failed import stores neither.
     pub fn import(
         &mut self,
         loaded: &Loaded,
@@ -376,6 +386,13 @@ impl Workspace {
             }
         }
 
+        if let Some(mapping) = &options.save_mapping {
+            store_saved_mapping(&tx, mapping)?;
+        }
+        if let Some(project_no) = &options.add_project_number {
+            insert_project_number(&tx, project_no)?;
+        }
+
         let detected = match (taken.source, loaded.snapshot) {
             (SnapshotSource::User, Some(detected)) => Some(detected),
             _ => None,
@@ -474,7 +491,7 @@ impl Workspace {
 
     /// A snapshot with its information sheet, headers, mapping, skipped rows, and warnings.
     pub fn snapshot_detail(&self, snapshot_id: i64) -> Result<SnapshotDetail, StoreError> {
-        let info = self.snapshot(snapshot_id)?;
+        let snapshot = self.snapshot(snapshot_id)?;
         let (detected_at, detected_source, info_json, headers, mapping, skipped, warnings): (
             Option<String>,
             Option<String>,
@@ -512,7 +529,7 @@ impl Workspace {
             _ => None,
         };
         Ok(SnapshotDetail {
-            info,
+            snapshot,
             detected,
             info_sheet: from_json(&info_json, "information sheet")?,
             headers: from_json(&headers, "headers")?,
@@ -931,6 +948,7 @@ mod tests {
                 taken_of(&other),
                 &ImportOptions {
                     replace: Some(old.id),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -976,6 +994,7 @@ mod tests {
                     taken_of(&next),
                     &ImportOptions {
                         replace: Some(newest),
+                        ..Default::default()
                     },
                 )
                 .unwrap()
@@ -999,6 +1018,7 @@ mod tests {
                 taken_of(&loaded),
                 &ImportOptions {
                     replace: Some(old.id),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -1049,6 +1069,7 @@ mod tests {
             taken_of(&second),
             &ImportOptions {
                 replace: Some(info.id),
+                ..Default::default()
             },
         );
         assert!(
@@ -1058,6 +1079,76 @@ mod tests {
         assert_eq!(count(&ws, "snapshot"), snapshots);
         assert_eq!(count(&ws, "row_state"), states);
         assert_eq!(ws.holds(info.id).unwrap(), first.parsed.holds);
+    }
+
+    fn mapping_to_save() -> SavedMapping {
+        SavedMapping {
+            columns: vec![SavedColumn {
+                key: "line_id".into(),
+                occurrence: 0,
+                field: Some(Field::LineId),
+            }],
+        }
+    }
+
+    #[test]
+    fn an_import_stores_the_mapping_and_the_project_number_with_the_snapshot() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = small(dir.path());
+        let mut ws = workspace(dir.path());
+        let info = ws
+            .import(
+                &first,
+                taken_of(&first),
+                &ImportOptions {
+                    save_mapping: Some(mapping_to_save()),
+                    add_project_number: Some(" P-7 ".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(ws.saved_mapping().unwrap(), Some(mapping_to_save()));
+        assert_eq!(ws.info().unwrap().project_numbers, vec!["P-7"]);
+        assert_eq!(ws.snapshots().unwrap(), vec![info]);
+    }
+
+    #[test]
+    fn an_import_without_those_options_leaves_the_mapping_and_project_numbers_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = small(dir.path());
+        let mut ws = workspace(dir.path());
+        import_plain(&mut ws, &first);
+        assert_eq!(ws.saved_mapping().unwrap(), None);
+        assert!(ws.info().unwrap().project_numbers.is_empty());
+    }
+
+    #[test]
+    fn a_failed_import_stores_neither_the_mapping_nor_the_project_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = small(dir.path());
+        let mut ws = workspace(dir.path());
+        ws.conn
+            .execute_batch(
+                "CREATE TRIGGER refuse BEFORE INSERT ON snapshot \
+                 BEGIN SELECT RAISE(ABORT, 'refused'); END;",
+            )
+            .unwrap();
+        let result = ws.import(
+            &first,
+            taken_of(&first),
+            &ImportOptions {
+                save_mapping: Some(mapping_to_save()),
+                add_project_number: Some("P-7".into()),
+                ..Default::default()
+            },
+        );
+        assert!(
+            matches!(result, Err(StoreError::Database { .. })),
+            "{result:?}"
+        );
+        assert_eq!(ws.saved_mapping().unwrap(), None);
+        assert!(ws.info().unwrap().project_numbers.is_empty());
+        assert_eq!(count(&ws, "snapshot"), 0);
     }
 
     #[test]
@@ -1074,7 +1165,10 @@ mod tests {
             .import(
                 &other,
                 taken_of(&other),
-                &ImportOptions { replace: Some(999) },
+                &ImportOptions {
+                    replace: Some(999),
+                    ..Default::default()
+                },
             )
             .unwrap_err();
         assert_eq!(error, StoreError::SnapshotNotFound { snapshot_id: 999 });
@@ -1310,7 +1404,7 @@ mod tests {
             .import(&loaded, taken, &ImportOptions::default())
             .unwrap();
         let detail = ws.snapshot_detail(info.id).unwrap();
-        assert_eq!(detail.info, info);
+        assert_eq!(detail.snapshot, info);
         assert_eq!(detail.detected, None);
         assert_eq!(detail.info_sheet, loaded.info);
         assert_eq!(detail.headers, loaded.headers);
@@ -1375,6 +1469,7 @@ mod tests {
                 taken_of(&files[1]),
                 &ImportOptions {
                     replace: Some(old.id),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -1468,6 +1563,7 @@ mod tests {
                 ImportOptions::default(),
                 ImportOptions {
                     replace: Some(kept.id),
+                    ..Default::default()
                 },
             ] {
                 let error = ws.import(&other, taken, &options).unwrap_err();
@@ -1721,7 +1817,7 @@ mod tests {
                 )
                 .unwrap();
             let detail = ws.snapshot_detail(id).unwrap();
-            assert_eq!(detail.info.date_source, source);
+            assert_eq!(detail.snapshot.date_source, source);
             assert_eq!(detail.detected, Some(SnapshotDate { at: at(7), source }));
             assert_eq!(detail.info_sheet, expected.info_sheet);
             assert_eq!(detail.headers, expected.headers);

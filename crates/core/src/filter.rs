@@ -8,6 +8,7 @@ use crate::table::format_number;
 
 /// A dimension holds can be grouped and filtered by.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Dim {
     /// The hold's discipline (`Unspecified` when blank).
     Discipline,
@@ -55,6 +56,7 @@ impl Dim {
 
 /// Which holds a filter keeps by release state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub enum Status {
     /// Holds not yet released (the default).
     #[default]
@@ -67,6 +69,7 @@ pub enum Status {
 
 /// Keeps rows by the value of one dimension.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FieldFilter {
     /// The dimension tested.
     pub dim: Dim,
@@ -79,6 +82,7 @@ pub struct FieldFilter {
 
 /// Inclusive bounds in days. A missing bound is open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct AgeBand {
     /// Smallest age kept, in days; `None` for no lower bound.
@@ -95,6 +99,7 @@ impl AgeBand {
 
 /// Inclusive calendar-date bounds. A missing bound is open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct DateRange {
     /// First day kept; `None` for no lower bound.
@@ -118,6 +123,7 @@ impl DateRange {
 
 /// A complete filter: every part must hold for a row to be kept.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct FilterSpec {
     /// Release state kept; open holds by default.

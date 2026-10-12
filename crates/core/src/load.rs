@@ -32,6 +32,7 @@ fn project_no_of(info: &BTreeMap<String, String>) -> Option<&str> {
 
 /// A file read but not yet parsed into holds: what the mapping screen shows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Opened {
     /// The file's name without its directory.
     pub file_name: String,
@@ -73,10 +74,50 @@ impl Opened {
             })
             .collect()
     }
+
+    /// The slim view, with at most `preview_rows` rows.
+    pub fn view(&self, preview_rows: usize) -> OpenedView {
+        OpenedView {
+            file_name: self.file_name.clone(),
+            content_hash: self.content_hash.clone(),
+            sheet_name: self.sheet_name.clone(),
+            sheets: self.sheets.clone(),
+            headers: self.table.headers.clone(),
+            preview: self.preview(preview_rows),
+            auto_map: self.auto_map.clone(),
+            error_cells: self.error_cells,
+            row_count: self.table.rows.len(),
+        }
+    }
+}
+
+/// What the interface needs to show a file that is open but not yet imported.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct OpenedView {
+    /// The file's name without its directory.
+    pub file_name: String,
+    /// Lower-case hex SHA-256 of the file's bytes.
+    pub content_hash: String,
+    /// The sheet the table was read from.
+    pub sheet_name: String,
+    /// Every sheet name of the workbook in workbook order; empty for delimited text.
+    pub sheets: Vec<String>,
+    /// The header row, in column order.
+    pub headers: Vec<String>,
+    /// The first rows as display text, one entry per header.
+    pub preview: Vec<Vec<String>>,
+    /// The mapping `ColumnMap::auto` proposes for `headers`.
+    pub auto_map: ColumnMap,
+    /// How many cells held an Excel error such as `#N/A`; they were read as blank.
+    pub error_cells: usize,
+    /// How many data rows the sheet has.
+    pub row_count: usize,
 }
 
 /// A file read and parsed into holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Loaded {
     /// The file's name without its directory.
     pub file_name: String,
@@ -307,6 +348,112 @@ mod tests {
         assert_eq!(preview.len(), 3);
         assert!(preview.iter().all(|r| r.len() == 14));
         assert!(a.preview(0).is_empty());
+    }
+
+    #[test]
+    fn the_view_of_a_workbook_has_headers_a_preview_and_the_automatic_mapping() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = synth_workbook(dir.path(), "holds.xlsx", 1);
+        let opened = open_file(&path).unwrap();
+        let view = opened.view(3);
+        assert_eq!(view.file_name, "holds.xlsx");
+        assert_eq!(view.content_hash, opened.content_hash);
+        assert_eq!(view.sheet_name, opened.sheet_name);
+        assert_eq!(view.sheets, opened.sheets);
+        assert_eq!(view.headers, opened.table.headers);
+        assert_eq!(view.headers.len(), 14);
+        assert_eq!(view.row_count, 50);
+        assert_eq!(view.error_cells, 0);
+        assert_eq!(view.auto_map, opened.auto_map);
+        assert_eq!(view.preview.len(), 3);
+        assert!(view.preview.iter().all(|row| row.len() == 14));
+
+        let column = |name: &str| view.headers.iter().position(|h| h == name).unwrap();
+        let created = &view.preview[0][column("date")];
+        assert!(
+            NaiveDateTime::parse_from_str(created, "%Y-%m-%d %H:%M:%S").is_ok(),
+            "{created:?}"
+        );
+        let id = &view.preview[0][column("id")];
+        assert!(
+            !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()),
+            "{id:?}"
+        );
+        let size = &view.preview[0][column("model_size")];
+        assert!(!size.contains('.'), "{size:?}");
+    }
+
+    #[test]
+    fn the_view_of_a_delimited_file_has_no_sheets() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("holds_07-Oct.csv");
+        std::fs::write(
+            &path,
+            "line_id,hold_remark,hold_type,date\nL-1,x,MISC.,2026-10-01 09:00:00\nL-2,,MISC.\n",
+        )
+        .unwrap();
+        let view = open_file(&path).unwrap().view(10);
+        assert_eq!(view.file_name, "holds_07-Oct.csv");
+        assert!(view.sheets.is_empty());
+        assert_eq!(
+            view.headers,
+            vec!["line_id", "hold_remark", "hold_type", "date"]
+        );
+        assert_eq!(view.row_count, 2);
+        assert_eq!(
+            view.preview,
+            vec![
+                vec!["L-1", "x", "MISC.", "2026-10-01 09:00:00"],
+                vec!["L-2", "", "MISC.", ""],
+            ]
+        );
+        assert!(view.auto_map.missing_required().is_empty());
+    }
+
+    #[test]
+    fn the_view_with_no_preview_rows_has_an_empty_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = synth_workbook(dir.path(), "holds.xlsx", 1);
+        let view = open_file(&path).unwrap().view(0);
+        assert!(view.preview.is_empty());
+        assert_eq!(view.row_count, 50);
+    }
+
+    #[test]
+    fn the_view_shows_numbers_and_dates_as_the_import_reads_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cells.xlsx");
+        let mut book = rust_xlsxwriter::Workbook::new();
+        let sheet = book.add_worksheet();
+        sheet.set_name("data").unwrap();
+        for (i, h) in ["line_id", "hold_remark", "hold_type", "size", "when"]
+            .iter()
+            .enumerate()
+        {
+            sheet.write_string(0, i as u16, *h).unwrap();
+        }
+        sheet.write_string(1, 0, "L-1").unwrap();
+        sheet.write_string(1, 1, "x").unwrap();
+        sheet.write_string(1, 2, "MISC.").unwrap();
+        sheet.write_number(1, 3, 4.0).unwrap();
+        let date = rust_xlsxwriter::ExcelDateTime::from_ymd(2026, 10, 1)
+            .unwrap()
+            .and_hms(9, 30, 0)
+            .unwrap();
+        sheet
+            .write_datetime_with_format(
+                1,
+                4,
+                &date,
+                &rust_xlsxwriter::Format::new().set_num_format("yyyy-mm-dd hh:mm:ss"),
+            )
+            .unwrap();
+        book.save(&path).unwrap();
+        let view = open_file(&path).unwrap().view(3);
+        assert_eq!(
+            view.preview,
+            vec![vec!["L-1", "x", "MISC.", "4", "2026-10-01 09:30:00"]]
+        );
     }
 
     #[test]

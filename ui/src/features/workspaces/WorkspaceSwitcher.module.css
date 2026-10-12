@@ -1,0 +1,53 @@
+/* The name of a workspace may be long. The button gives way to the rest of the top bar. */
+.trigger {
+  flex: 0 1 auto;
+  max-inline-size: var(--layout-search-max-width);
+  color: var(--color-text-primary);
+}
+
+/* The name as a field, where the switcher was: the box of a text field. */
+.rename {
+  display: flex;
+  flex: 0 1 var(--layout-search-max-width);
+  gap: var(--space-1);
+  align-items: center;
+  min-inline-size: var(--size-bar-label-width);
+}
+
+.renameField {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.renameInput {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-2);
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.renameInput[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.renameInput[data-focused] {
+  border-color: var(--color-accent-text);
+}
+
+.renameInput[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.renameInput[data-invalid] {
+  border-color: var(--color-danger-text);
+}

@@ -1,0 +1,119 @@
+/* The ways in, one under the other: sections sit apart, what belongs together sits close. */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding-block-start: var(--space-2);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+  align-items: stretch;
+  min-inline-size: 0;
+}
+
+.title {
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.text {
+  max-inline-size: var(--layout-prose-max-width);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-wrap: pretty;
+}
+
+.progress {
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+/* The name of a workspace, cut at the end when it does not fit, with its tag after it. */
+.name {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-inline-size: 0;
+}
+
+.nameText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The neutral tag. */
+.tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  block-size: var(--size-tag-height);
+  padding: 0 var(--space-1-5);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The two lines of the folder error: where, then why and what to do. */
+.errorFolder,
+.errorText {
+  display: block;
+}
+
+.errorFolder {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Files that cannot be read: a ruled list, each with its reason and its one action. */
+.files {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+  list-style: none;
+}
+
+.file {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-block: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.fileText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding-block: calc((var(--density-control-height) - var(--line-height-body)) / 2);
+}
+
+.fileName {
+  color: var(--color-text-primary);
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-body);
+  overflow-wrap: anywhere;
+}
+
+.fileReason {
+  max-inline-size: var(--layout-prose-max-width);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}

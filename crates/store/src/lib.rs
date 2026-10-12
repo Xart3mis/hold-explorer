@@ -23,3 +23,6 @@ pub use directory::{
 pub use dump::logical_dump;
 pub use snapshot::{ImportOptions, SnapshotDetail, SnapshotInfo};
 pub use workspace::{Workspace, WorkspaceInfo};
+
+#[cfg(all(test, feature = "ts"))]
+mod ts_tests;

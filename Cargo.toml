@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/synth", "crates/cli", "crates/store"]
+members = ["crates/core", "crates/synth", "crates/cli", "crates/store", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -22,4 +22,29 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 tempfile = "3"
+tauri = "~2.12"
+tauri-build = "~2.7"
+tauri-plugin-dialog = "~2.8"
+tauri-plugin-opener = "~2.7"
+tauri-plugin-single-instance = "~2.5"
+tauri-plugin-window-state = "~2.5"
 thiserror = "2"
+ts-rs = { version = "12.0", features = ["chrono-impl"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
+
+# The release build is optimized for size, except where the time of an import and of a query is
+# spent: the engine, the store, and SQLite are optimized for speed. The limits these protect are
+# in crates/cli/tests/perf.rs.
+[profile.release.package.hx-core]
+opt-level = 3
+
+[profile.release.package.hx-store]
+opt-level = 3
+
+[profile.release.package.libsqlite3-sys]
+opt-level = 3

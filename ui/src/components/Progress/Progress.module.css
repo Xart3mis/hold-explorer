@@ -1,0 +1,74 @@
+.progress {
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+.header {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  margin-block-end: var(--space-2);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.value {
+  flex: none;
+  color: var(--color-text-secondary);
+  text-align: end;
+}
+
+.track {
+  block-size: var(--size-progress-height);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border-default);
+}
+
+/* As wide as the track, and moved along it so that its leading edge marks the progress. */
+.fill {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-text);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * No total is known: a segment travels along the track. The runner is as wide as the track, so
+ * its own width is the distance to travel, and the segment sits at its leading edge.
+ */
+.runner {
+  inline-size: 100%;
+  block-size: 100%;
+  animation: travel var(--motion-loop-period) var(--ease-linear) infinite;
+}
+
+.segment {
+  inline-size: var(--size-progress-segment);
+  block-size: 100%;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-text);
+}
+
+@keyframes travel {
+  from {
+    transform: translateX(calc(-1 * var(--size-progress-segment)));
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* The segment rests at the start of the track; the label carries the state. */
+@media (prefers-reduced-motion: reduce) {
+  .fill {
+    transition: none;
+  }
+
+  .runner {
+    animation: none;
+  }
+}

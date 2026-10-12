@@ -15,16 +15,46 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # A cold job compiles Tauri several times over (tests, lint, a release build with link-time
+    # optimization), and a job that is cancelled saves no build cache, so a limit that a cold job
+    # cannot meet is never met. Lower it once warm runs have been measured.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.97.0
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+      - name: Install interface dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Interface lint
+        run: pnpm lint
+      - name: Interface type check
+        run: pnpm typecheck
+      - name: Interface tests
+        run: pnpm test
+      - name: Bindings
+        run: pnpm bindings
+      - name: Bindings are up to date
+        shell: bash
+        run: |
+          changes="$(git status --porcelain -- ui/src/bindings)"
+          if [ -n "$changes" ]; then
+            echo "ui/src/bindings is out of date. Run pnpm bindings and commit the result:"
+            echo "$changes"
+            exit 1
+          fi
       - name: Format
         run: cargo fmt --all -- --check
       - name: Lint
@@ -33,3 +63,23 @@ jobs:
         run: cargo test --workspace --locked
       - name: Performance budget
         run: cargo test --release -p hx-cli --test perf --locked -- --ignored --nocapture
+      - name: Build the app
+        run: pnpm tauri build --no-bundle
+      - name: The build names no other host
+        run: pnpm check:dist
+      - name: Size of the binary, and its manifest on Windows
+        shell: bash
+        run: |
+          bin=target/release/hx-desktop
+          if [ "$RUNNER_OS" = "Windows" ]; then bin="$bin.exe"; fi
+          echo "$bin: $(du -m "$bin" | cut -f1) MB"
+          # The build script hands the application manifest to the linker. A test executable
+          # without it does not start, so the tests check themselves; nothing starts this binary,
+          # and without the manifest it would fail on a user's machine only.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if ! grep -a -q "Microsoft.Windows.Common-Controls" "$bin"; then
+              echo "$bin holds no application manifest that asks for version 6 of the common controls (Microsoft.Windows.Common-Controls), so it would not start. See the linker arguments in src-tauri/build.rs and src-tauri/windows-app-manifest.xml."
+              exit 1
+            fi
+            echo "$bin holds the application manifest."
+          fi

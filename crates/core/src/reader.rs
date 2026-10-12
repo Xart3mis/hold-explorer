@@ -39,9 +39,46 @@ fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
     }
 }
 
+/// The largest file that is read, in bytes.
+pub(crate) const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Refuses what is not a regular file, or is larger than [`MAX_FILE_BYTES`], before anything is
+/// read: a device or a named pipe could block or never end.
+fn check_plain_file(path: &Path) -> Result<(), ImportError> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(ImportError::NotFound {
+                path: path.display().to_string(),
+            })
+        }
+        Err(e) => return Err(unreadable(path, e)),
+    };
+    if !metadata.is_file() {
+        return Err(unreadable(
+            path,
+            "it is not a regular file (it is a folder, a device, or a pipe); choose an Excel workbook or a CSV file",
+        ));
+    }
+    if metadata.len() > MAX_FILE_BYTES {
+        let megabytes = |bytes: u64| bytes.div_ceil(1024 * 1024);
+        return Err(unreadable(
+            path,
+            format!(
+                "the file is {} MB, which is over the limit of {} MB; split the export into smaller files",
+                megabytes(metadata.len()),
+                megabytes(MAX_FILE_BYTES)
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// The bytes of a file and its modified time. The file is opened and read once. A missing file
-/// is `NotFound`, an empty one is `EmptyFile`, and any other I/O error is `Unreadable`.
+/// is `NotFound`, an empty one is `EmptyFile`, one that is not a regular file or is larger than
+/// [`MAX_FILE_BYTES`] is `Unreadable`, and any other I/O error is `Unreadable`.
 pub(crate) fn read_file_bytes(path: &Path) -> Result<(Vec<u8>, Option<SystemTime>), ImportError> {
+    check_plain_file(path)?;
     let read = || -> std::io::Result<(Vec<u8>, Option<SystemTime>)> {
         let mut file = std::fs::File::open(path)?;
         let modified = file.metadata().and_then(|m| m.modified()).ok();
@@ -671,6 +708,45 @@ mod tests {
         let err = read_workbook(dir.path()).unwrap_err();
         assert!(matches!(err, ImportError::Unreadable { .. }), "{err:?}");
     }
+
+    #[test]
+    fn a_file_over_the_size_limit_is_refused_before_it_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.csv");
+        // Sparse: no disk is used and nothing is read.
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_FILE_BYTES + 1).unwrap();
+        let err = read_file_bytes(&path).unwrap_err();
+        let ImportError::Unreadable { detail, .. } = &err else {
+            panic!("{err:?}");
+        };
+        assert!(detail.contains("257 MB"), "{detail}");
+        assert!(detail.contains("256 MB"), "{detail}");
+        assert!(detail.contains("limit"), "{detail}");
+    }
+
+    #[test]
+    fn a_directory_says_it_is_not_a_regular_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = read_file_bytes(dir.path()).unwrap_err();
+        let ImportError::Unreadable { detail, .. } = &err else {
+            panic!("{err:?}");
+        };
+        assert!(detail.contains("not a regular file"), "{detail}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_device_is_refused_without_being_read() {
+        let err = read_file_bytes(Path::new("/dev/null")).unwrap_err();
+        let ImportError::Unreadable { detail, .. } = &err else {
+            panic!("{err:?}");
+        };
+        assert!(detail.contains("not a regular file"), "{detail}");
+    }
+
+    // A named pipe cannot be made with the standard library alone, so only /dev/null covers
+    // the non-regular case.
 
     #[cfg(unix)]
     #[test]

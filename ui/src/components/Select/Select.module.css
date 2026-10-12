@@ -1,0 +1,205 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The same box as a text field. */
+.trigger {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  min-inline-size: 0;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-2);
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: start;
+  cursor: default;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.value {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value[data-placeholder] {
+  color: var(--color-text-muted);
+}
+
+.indicator {
+  color: var(--color-text-secondary);
+}
+
+.trigger[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.trigger[data-focus-visible] {
+  border-color: var(--color-accent-text);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.field[data-invalid] .trigger {
+  border-color: var(--color-danger-text);
+}
+
+/* While the list is open the trigger keeps the focused look, however it was opened. */
+.trigger[aria-expanded="true"] {
+  border-color: var(--color-accent-text);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.trigger[data-disabled] {
+  border-color: var(--color-border-default);
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+.trigger[data-disabled] .value,
+.trigger[data-disabled] .indicator {
+  color: var(--color-text-disabled);
+}
+
+.description,
+.error {
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.description {
+  color: var(--color-text-muted);
+}
+
+.error {
+  display: flex;
+  gap: var(--space-1);
+  align-items: flex-start;
+  color: var(--color-danger-text);
+}
+
+/* The list: a menu on the overlay surface, at least as wide as the trigger. */
+.popover {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: var(--trigger-width);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-overlay);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+.popover[data-entering],
+.popover[data-exiting] {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--space-1)));
+}
+
+.popover[data-placement="top"][data-entering],
+.popover[data-placement="top"][data-exiting] {
+  transform: translateY(var(--space-1));
+}
+
+.popover[data-exiting] {
+  transition-duration: var(--duration-fast);
+}
+
+.list {
+  min-block-size: 0;
+  padding: var(--space-1);
+  overflow: auto;
+}
+
+.option {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  cursor: default;
+}
+
+.optionLabel {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  flex: none;
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.check {
+  color: var(--color-accent-text);
+}
+
+/* Highlighted by the pointer or by the arrow keys. */
+.option[data-hovered],
+.option[data-focused] {
+  background-color: var(--color-surface-overlay-hover);
+}
+
+.option:focus-visible,
+.option[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.option[data-selected] {
+  font-weight: var(--font-weight-medium);
+}
+
+.option[data-disabled] {
+  color: var(--color-text-disabled);
+}
+
+/* The list appears in place: it fades, and nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .popover[data-entering],
+  .popover[data-exiting],
+  .popover[data-placement="top"][data-entering],
+  .popover[data-placement="top"][data-exiting] {
+    transform: none;
+  }
+}

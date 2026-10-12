@@ -9,6 +9,7 @@ use crate::rules::{Blocker, RuleSet};
 
 /// A hold with the values derived from it for one snapshot.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Row {
     /// The hold as imported.
     pub hold: Hold,

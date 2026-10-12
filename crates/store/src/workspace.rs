@@ -25,6 +25,7 @@ const MAPPING_KEY: &str = "saved_mapping";
 
 /// What a workspace file says about itself.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct WorkspaceInfo {
     /// The workspace id: 16 lower-case hex characters.
     pub id: String,
@@ -171,6 +172,11 @@ impl Workspace {
         })
     }
 
+    /// The file the workspace was opened or created with.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// What the workspace file says about itself.
     pub fn info(&self) -> Result<WorkspaceInfo, StoreError> {
         let mut stmt = self
@@ -213,16 +219,7 @@ impl Workspace {
     /// Adds a project number (trimmed, compared exactly). Adding one twice, or a blank one, does
     /// nothing.
     pub fn add_project_number(&mut self, project_no: &str) -> Result<(), StoreError> {
-        let project_no = project_no.trim();
-        if !project_no.is_empty() {
-            self.conn
-                .execute(
-                    "INSERT OR IGNORE INTO project (project_no) VALUES (?1)",
-                    [project_no],
-                )
-                .map_err(database)?;
-        }
-        Ok(())
+        insert_project_number(&self.conn, project_no)
     }
 
     /// Removes a project number (trimmed, compared exactly). A number not in the list is ignored.
@@ -257,17 +254,37 @@ impl Workspace {
 
     /// Remembers the column mapping for this workspace, replacing any earlier one.
     pub fn set_saved_mapping(&mut self, mapping: &SavedMapping) -> Result<(), StoreError> {
-        let json = serde_json::to_string(mapping).map_err(|e| StoreError::Corrupt {
-            detail: format!("the column mapping could not be saved ({e})"),
-        })?;
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO setting (key, value_json) VALUES (?1, ?2)",
-                [MAPPING_KEY, json.as_str()],
-            )
-            .map_err(database)?;
-        Ok(())
+        store_saved_mapping(&self.conn, mapping)
     }
+}
+
+/// Adds a project number on `conn`, which may be a transaction in progress.
+pub(crate) fn insert_project_number(conn: &Connection, project_no: &str) -> Result<(), StoreError> {
+    let project_no = project_no.trim();
+    if !project_no.is_empty() {
+        conn.execute(
+            "INSERT OR IGNORE INTO project (project_no) VALUES (?1)",
+            [project_no],
+        )
+        .map_err(database)?;
+    }
+    Ok(())
+}
+
+/// Stores the saved mapping on `conn`, which may be a transaction in progress.
+pub(crate) fn store_saved_mapping(
+    conn: &Connection,
+    mapping: &SavedMapping,
+) -> Result<(), StoreError> {
+    let json = serde_json::to_string(mapping).map_err(|e| StoreError::Corrupt {
+        detail: format!("the column mapping could not be saved ({e})"),
+    })?;
+    conn.execute(
+        "INSERT OR REPLACE INTO setting (key, value_json) VALUES (?1, ?2)",
+        [MAPPING_KEY, json.as_str()],
+    )
+    .map_err(database)?;
+    Ok(())
 }
 
 #[cfg(test)]

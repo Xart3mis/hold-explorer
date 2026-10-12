@@ -19,3 +19,5 @@ Hold Explorer.html
 .serena/
 .superpowers/
 .tokensave/
+src-tauri/gen/
+.playwright-mcp/

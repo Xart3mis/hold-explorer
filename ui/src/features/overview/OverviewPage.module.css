@@ -1,0 +1,71 @@
+/*
+ * The page, top to bottom: the figures, then the two groups, a section's gap apart. Density never
+ * changes these gaps. A refetch for another snapshot keeps what was there, dimmed.
+ */
+.overview {
+  /*
+   * The least width of a group's column: two and a half label columns, which is the label column
+   * and one and a half times that for the bar and the two counts. It decides when the two groups
+   * share a row. It is a layout decision of the design, kept here until DESIGN.md has a token
+   * for it; when it does, this property goes and the grid reads the token.
+   */
+  --overview-group-min-width: calc(2.5 * var(--size-bar-label-width));
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.overview[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+/*
+ * The two groups sit side by side while each column keeps its least width, and a content area
+ * narrower than two such columns stacks them. The gap between the columns is wider than the gap
+ * between sections, so the counts of one group are not read into the labels of the next.
+ */
+.groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--overview-group-min-width)), 1fr));
+  gap: var(--space-8) var(--space-12);
+  align-items: start;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+/* The title and the switch share a line as tall as the switch, so the line is the same without it. */
+.groupHeader {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: var(--density-control-height);
+}
+
+.groupTitle {
+  min-inline-size: 0;
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* What a group says when the snapshot gives it no row. */
+.none {
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* What the page says about the snapshot as a whole, a header's gap above its figures. */
+.limited {
+  margin-block-end: var(--space-4);
+}
