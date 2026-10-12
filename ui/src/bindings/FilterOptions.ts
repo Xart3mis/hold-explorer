@@ -24,6 +24,6 @@ age_bands: Array<AgeBand>,
  */
 custom_dims: Array<string>, 
 /**
- * Optional fields the snapshot has no value for.
+ * Optional fields the snapshot has no value for; empty for a workspace without a snapshot.
  */
 absent: Array<Field>, };

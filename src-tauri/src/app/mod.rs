@@ -27,6 +27,11 @@ pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
 use settings::{load_settings_checked, save_settings, LoadedSettings};
 
+/// Most rows a data command returns in one answer.
+pub const PAGE_ROWS: usize = 200;
+/// Most values `filter_values` returns.
+pub const PICKER_VALUES: usize = 200;
+
 /// The dataset that was built last, with the workspace and the snapshot it belongs to, and the
 /// solve plan of its open holds once one was asked for. Read it through [`AppState::dataset`]
 /// and [`AppState::plan`] only, which ask for the snapshot.
@@ -35,6 +40,9 @@ struct Cache {
     snapshot_id: i64,
     dataset: Dataset,
     plan: Option<SolvePlan>,
+    /// The count of the state, to add to where a plan is built.
+    #[cfg(test)]
+    plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 /// What the application holds between commands.
@@ -56,7 +64,7 @@ pub struct AppState {
     dataset_builds: usize,
     /// How many solve plans were built since the application started.
     #[cfg(test)]
-    plan_builds: usize,
+    plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl AppState {
@@ -77,7 +85,7 @@ impl AppState {
             #[cfg(test)]
             dataset_builds: 0,
             #[cfg(test)]
-            plan_builds: 0,
+            plan_builds: Default::default(),
         }
     }
 

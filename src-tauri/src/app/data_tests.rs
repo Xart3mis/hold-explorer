@@ -5,9 +5,9 @@ use hx_core::mapping::Field;
 use hx_core::query::{self, HoldQuery, HoldSort, LineQuery, LineSort};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
-use super::data::{FilterOptions, PAGE_ROWS, PICKER_VALUES};
+use super::data::FilterOptions;
 use super::snapshot_tests::{import, open_holds, view_of, Fixture};
-use super::{AppState, ViewRef};
+use super::{AppState, ViewRef, PAGE_ROWS, PICKER_VALUES};
 
 /// The view the interface shows when it shows what the state holds.
 fn shown(state: &AppState) -> ViewRef {
@@ -113,6 +113,7 @@ fn a_workspace_without_snapshots_answers_as_for_an_empty_snapshot() {
     assert!(options.facets.age_bands.iter().all(|n| *n == 0));
     assert_eq!(options.age_bands.len(), options.facets.age_bands.len());
     assert!(options.custom_dims.is_empty());
+    assert!(options.absent.is_empty(), "{:?}", options.absent);
 
     let values = state
         .filter_values(&spec, &Dim::Discipline, "", &view)

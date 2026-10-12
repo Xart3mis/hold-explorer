@@ -99,6 +99,8 @@ impl AppState {
                     snapshot_id,
                     dataset,
                     plan: None,
+                    #[cfg(test)]
+                    plan_builds: self.plan_builds.clone(),
                 }
             }
         };
@@ -116,16 +118,14 @@ impl AppState {
         &mut self,
         snapshot_id: i64,
     ) -> Result<(&Dataset, &SolvePlan), CommandError> {
-        #[cfg(test)]
-        {
-            if self.cache(snapshot_id)?.plan.is_none() {
-                self.plan_builds += 1;
-            }
-        }
         let cache = self.cache(snapshot_id)?;
-        let plan = cache
-            .plan
-            .get_or_insert_with(|| solve_plan(&cache.dataset, &FilterSpec::default(), None));
+        let plan = cache.plan.get_or_insert_with(|| {
+            #[cfg(test)]
+            cache
+                .plan_builds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            solve_plan(&cache.dataset, &FilterSpec::default(), None)
+        });
         Ok((&cache.dataset, plan))
     }
 
@@ -165,6 +165,6 @@ impl AppState {
     /// How many solve plans were built since the application started.
     #[cfg(test)]
     pub(super) fn plan_builds(&self) -> usize {
-        self.plan_builds
+        self.plan_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 }

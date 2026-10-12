@@ -7,8 +7,8 @@ use hx_core::detail::{line_detail, HoldRef, LineDetail};
 use hx_core::filter::{default_age_bands, AgeBand, Dim, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{
-    facet_counts, holds, line_page, value_page, FacetCounts, HoldQuery, LinePage, LineQuery,
-    ValuePage,
+    facet_counts, holds, line_page, summary, value_page, FacetCounts, HoldQuery, LinePage,
+    LineQuery, ValuePage,
 };
 use hx_core::rules::RuleSet;
 use serde::Serialize;
@@ -16,12 +16,7 @@ use ts_rs::TS;
 
 use super::error::CommandError;
 use super::snapshots::ViewRef;
-use super::AppState;
-
-/// Most rows a data command returns in one answer.
-pub const PAGE_ROWS: usize = 200;
-/// Most values `filter_values` returns.
-pub const PICKER_VALUES: usize = 200;
+use super::{AppState, PAGE_ROWS, PICKER_VALUES};
 
 /// What the filter bar needs for the snapshot in view and a filter.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -35,7 +30,7 @@ pub struct FilterOptions {
     pub age_bands: Vec<AgeBand>,
     /// Extra columns of the snapshot, by header name.
     pub custom_dims: Vec<String>,
-    /// Optional fields the snapshot has no value for.
+    /// Optional fields the snapshot has no value for; empty for a workspace without a snapshot.
     pub absent: Vec<Field>,
 }
 
@@ -61,29 +56,44 @@ fn empty_dataset() -> Dataset {
 }
 
 impl AppState {
+    /// Checks `view` and gives `read` the dataset of the snapshot in view, or an empty one for a
+    /// workspace without a snapshot, so the two cases cannot answer differently.
+    fn in_view<T>(
+        &mut self,
+        view: &ViewRef,
+        read: impl FnOnce(&Dataset, bool) -> T,
+    ) -> Result<T, CommandError> {
+        self.check_view(view)?;
+        Ok(match self.selected {
+            Some(selected) => read(self.dataset(selected)?, true),
+            None => read(&empty_dataset(), false),
+        })
+    }
+
     /// Checks `view` and returns the selected snapshot, or `None` for a workspace without one.
     fn snapshot_in_view(&self, view: &ViewRef) -> Result<Option<i64>, CommandError> {
         self.check_view(view)?;
         Ok(self.selected)
     }
 
-    /// The options of the filter bar for this filter. Without a snapshot every count is zero.
+    /// The options of the filter bar for this filter. Without a snapshot every count is zero and
+    /// `absent` is empty: nothing is missing from a snapshot that does not exist.
     pub fn filter_options(
         &mut self,
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<FilterOptions, CommandError> {
         let bands = default_age_bands();
-        let options = |ds: &Dataset| FilterOptions {
-            total: hx_core::query::summary(ds, spec).holds,
+        self.in_view(view, |ds, exists| FilterOptions {
+            total: summary(ds, spec).holds,
             facets: facet_counts(ds, spec, &bands),
             age_bands: bands.clone(),
             custom_dims: ds.custom_dims(),
-            absent: ds.absent_fields(),
-        };
-        Ok(match self.snapshot_in_view(view)? {
-            Some(selected) => options(self.dataset(selected)?),
-            None => options(&empty_dataset()),
+            absent: if exists {
+                ds.absent_fields()
+            } else {
+                Vec::new()
+            },
         })
     }
 
@@ -96,9 +106,8 @@ impl AppState {
         search: &str,
         view: &ViewRef,
     ) -> Result<ValuePage, CommandError> {
-        Ok(match self.snapshot_in_view(view)? {
-            Some(selected) => value_page(self.dataset(selected)?, spec, dim, search, PICKER_VALUES),
-            None => value_page(&empty_dataset(), spec, dim, search, PICKER_VALUES),
+        self.in_view(view, |ds, _| {
+            value_page(ds, spec, dim, search, PICKER_VALUES)
         })
     }
 
@@ -110,15 +119,8 @@ impl AppState {
         offset: usize,
         view: &ViewRef,
     ) -> Result<LinePage, CommandError> {
-        Ok(match self.snapshot_in_view(view)? {
-            Some(selected) => line_page(
-                self.dataset(selected)?,
-                spec,
-                query,
-                offset,
-                Some(PAGE_ROWS),
-            ),
-            None => line_page(&empty_dataset(), spec, query, offset, Some(PAGE_ROWS)),
+        self.in_view(view, |ds, _| {
+            line_page(ds, spec, query, offset, Some(PAGE_ROWS))
         })
     }
 
@@ -133,10 +135,7 @@ impl AppState {
             limit: Some(query.limit.map_or(PAGE_ROWS, |limit| limit.min(PAGE_ROWS))),
             ..*query
         };
-        let page = match self.snapshot_in_view(view)? {
-            Some(selected) => holds(self.dataset(selected)?, spec, &query),
-            None => holds(&empty_dataset(), spec, &query),
-        };
+        let page = self.in_view(view, |ds, _| holds(ds, spec, &query))?;
         Ok(HoldsView {
             total: page.total,
             widest_line_id: page.widest_line_id,
@@ -148,7 +147,6 @@ impl AppState {
                 .collect(),
         })
     }
-
     /// The detail of one Line of the snapshot in view; `None` when the snapshot has no such Line.
     pub fn line_detail(
         &mut self,
