@@ -50,7 +50,8 @@
     "dropUnavailable": "Files cannot be dropped on this window",
     "dropUnavailableHelp": "The Import button still opens a file.",
     "viewResyncedTitle": "The workspace or snapshot on screen was brought back in step",
-    "viewResyncedText": "This window showed another workspace or snapshot than the one Hold Explorer has open. It now shows the one that is open. If your last action seems to be missing, do it again."
+    "viewResyncedText": "This window showed another workspace or snapshot than the one Hold Explorer has open. It now shows the one that is open. If your last action seems to be missing, do it again.",
+    "viewResyncedNoneText": "This window showed a workspace that Hold Explorer no longer has open. No workspace is open now. If your last action seems to be missing, do it again."
   },
   "destinations": {
     "label": "Destinations",

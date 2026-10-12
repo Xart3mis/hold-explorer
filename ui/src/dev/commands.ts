@@ -386,8 +386,11 @@ export function installDevCommands(state: DevState, theme: Theme): string {
   const answers: Record<string, (payload: unknown) => unknown> = {
     app_start: () => {
       const answer = structuredClone(start);
-      // From here on the Rust side holds another snapshot than the one it has just named.
-      if (state === "view-resynced" && start.open) start.open = { ...start.open, selected: 3 };
+      // From here on the Rust side holds another snapshot than the one it has just named: the
+      // one before the newest.
+      if (state === "view-resynced" && start.open) {
+        start.open = { ...start.open, selected: start.open.snapshots.at(-2)?.id ?? null };
+      }
       return answer;
     },
     workspace_current: () => start.open,

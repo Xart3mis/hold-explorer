@@ -19,7 +19,7 @@
  *          read: (view, spec) => api.filterOptions(spec, view),
  *        });
  *
- *        const lines = useSnapshotPages<LineRow, LinePage, [FilterSpec, LineQuery]>({
+ *        const lines = useSnapshotPages({
  *          name: "lines",
  *          params: [spec, query],
  *          read: (view, offset, spec, query) => api.lines(spec, query, offset, view),
@@ -29,14 +29,26 @@
  *    on, so the command is always sent what the key names. Do not build a `ViewRef` from the
  *    application start, do not write a key under `keys.snapshots`, and do not pass a command that
  *    takes a view to `useQuery`. The hooks take the key and the view from the same place, so the
- *    answer of a command is always kept under the view it was asked for.
+ *    answer of a command is always kept under the view it was asked for. A paged reading and a
+ *    plain one may have the same name and params: the key of the paged one has a marker after
+ *    the name (`keys.snapshotPages`), so the pages of one are never taken for the answer of the
+ *    other.
  * 2. Show what the hook returns as every screen does. Of `useSnapshotQuery`: `data` is the answer
  *    for the view on screen; while `isPlaceholderData` is true it is the answer for the view or
  *    the parameters of before, to be shown dimmed and marked as busy until the new one is there;
- *    without `data` the screen shows its skeletons. Of `useSnapshotPages`: `rows` are the rows
- *    loaded so far, `loadMore` asks for the next page when the table nears their end, and
- *    `isPlaceholderData` and `isPending` mean the same. The answer is read again whenever the
- *    view changes and whenever an action on the workspace has ended.
+ *    without `data` the screen shows its skeletons. It is read again whenever the view changes
+ *    and whenever an action on the workspace has ended. Of `useSnapshotPages`: `rows` are the
+ *    rows loaded so far, `loadMore` asks for the next page when the table nears their end, and
+ *    `isPlaceholderData` and `isPending` mean the same. A table may call `loadMore` whenever it
+ *    is near the end of its rows: the call does nothing while a page is on its way, while
+ *    `error` is set, and once `hasMore` is false, which it is when the rows are all there and
+ *    also after a page that came without rows. A page that failed is not asked for again by
+ *    itself: the screen shows `error` with a retry, and `refetch` reads that page, once.
+ *    The pages that are loaded are not read again while the key stays the same: not after an
+ *    action that left the view as it was, and not when the screen comes back. The data of a
+ *    snapshot cannot change under its key, which names the view and the params, and a snapshot
+ *    that is replaced gets another id. They are read again only after `keys.snapshots` was
+ *    invalidated, and `isRefetching` is true meanwhile.
  * 3. Send a command that changes the open workspace or the selected snapshot, or that may, only
  *    as an action made with `workspaceAction()`. The actions that exist are the hooks of
  *    ui/src/app/actions/; a new one is added there. Those commands are in
@@ -44,7 +56,8 @@
  *    feature cannot send one, and the lint rules refuse the import.
  * 4. A command that changes the data of a snapshot without changing the view (there is none yet;
  *    the first is the edit of a snapshot's date) invalidates `keys.snapshots` once it has
- *    answered, so every reading of every screen is read again.
+ *    answered, so every reading of every screen is read again. It must: nothing else makes a
+ *    paged reading read its pages again.
  *
  * What the three functions do with that:
  *
@@ -65,13 +78,18 @@
  *   snapshot on screen was brought back in step, and that an action that seems to be missing
  *   should be done again. If the answer names the same view and the command refuses it once
  *   more, the screen gets an error of the kind `ViewUnsettled`, whose message says what to do;
- *   it shows it as any error, with its retry.
+ *   it shows it as any error, with its retry. The answer is taken also when the screen that
+ *   asked has gone meanwhile: what the Rust side holds is what every page shows from then on.
+ *   It is discarded only when an action on the workspace was asked for after the question: the
+ *   action says what is open when it is done, and the answer may be older than that.
  * - The application start (`app_start`) is asked for once, when the page loads, by the start
  *   query, and by nothing in this module: asking for it makes the Rust side start over.
  * - A reading is dropped when the screen that asked for it goes. It then reads nothing more and
- *   asks the Rust side nothing. A screen that comes back reads again.
+ *   asks the Rust side nothing. A screen that comes back reads what it does not have: a plain
+ *   reading again, a paged one only when its pages are not there.
  */
 import {
+  keepPreviousData,
   skipToken,
   useInfiniteQuery,
   useIsMutating,
@@ -82,7 +100,7 @@ import {
   type UseMutationOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
@@ -135,6 +153,16 @@ function isShown(client: QueryClient, view: ViewRef): boolean {
   return isSameView(shownView(client), view);
 }
 
+/**
+ * The number of the action on the open workspace that was asked for last; 0 when there was none.
+ * Every action gets a higher number than the one before it, so a higher number later on says
+ * that an action was asked for in between, whether it still runs or is over.
+ */
+function lastAction(client: QueryClient): number {
+  const actions = client.getMutationCache().findAll({ mutationKey: keys.workspaceAction });
+  return Math.max(0, ...actions.map((action) => action.mutationId));
+}
+
 function isViewChanged(error: unknown): boolean {
   return isCommandError(error) && error.kind === VIEW_CHANGED;
 }
@@ -150,7 +178,9 @@ interface Reading {
   /** The key the answer is kept under. It names `view`. */
   queryKey: QueryKey;
   view: ViewRef;
-  /** Aborted when the reading is dropped: the screen is gone, or an action on the workspace starts. */
+  /**
+   * Aborted when the reading is dropped: the screen is gone, or an action on the workspace starts.
+   */
   signal: AbortSignal;
   /** Shows a notice of the shell. */
   notify: (notice: ShellNotice) => void;
@@ -198,14 +228,17 @@ async function readForView<Data>(
       // The two sides disagree for good. The interface takes the Rust side's word, once: it asks
       // which workspace and snapshot are open, which changes nothing there. When that cannot be
       // had, the cached start stays as it is, untouched and not failed.
+      const asked = lastAction(client);
       let held: WorkspaceOpen | null;
       try {
         held = await api.workspaceCurrent();
       } catch {
         throw unsettled();
       }
-      // An action that started meanwhile will write what it opened; this answer may be older.
-      if (isDropped()) throw error;
+      // An action that was asked for meanwhile says what is open when it is done, and this
+      // answer may be older than that. Nothing else is a reason to discard it: when the screen
+      // that asked has gone, what the Rust side holds is still what every page shows from now on.
+      if (lastAction(client) > asked) throw error;
       // Another reading of the same screen may have brought the start in step a moment ago. The
       // user is told once, by the reading that changes what is on screen.
       const moved = !isSameView(shownView(client), viewOf(held));
@@ -213,8 +246,12 @@ async function readForView<Data>(
         start === undefined ? start : { ...start, open: held },
       );
       if (moved) {
-        notify({ title: t("shell.viewResyncedTitle"), text: t("shell.viewResyncedText") });
+        notify({
+          title: t("shell.viewResyncedTitle"),
+          text: t(held === null ? "shell.viewResyncedNoneText" : "shell.viewResyncedText"),
+        });
       }
+      if (isDropped()) throw error;
       if (!isShown(client, view)) {
         await drop();
         throw error;
@@ -223,20 +260,29 @@ async function readForView<Data>(
   }
 }
 
-/** What is read for the snapshot in view, in one word that no other reading uses. Part of the key. */
+/**
+ * What is read for the snapshot in view, in one word that no other reading uses. Part of the key.
+ * A reading is plain or paged, and a name may be used for one of each: the key of a paged reading
+ * has a marker after the name (`keys.snapshotPages`), so the two never share a key.
+ */
 export type ReadingName =
   "overview" | "filterOptions" | "filterValues" | "lines" | "holds" | "lineDetail" | "holdDetail";
 
 /**
- * What both hooks start from: the key of a reading for the view on screen, whether it may be read
- * now, and the function that performs it for that view; `null` while no workspace is open.
+ * What both hooks start from: the key of a reading for the view on screen, built by `keyOf`,
+ * whether it may be read now, and the function that performs it for that view; `null` while no
+ * workspace is open.
  */
-function useReading(name: ReadingName, params: readonly unknown[]) {
+function useReading(
+  keyOf: (view: ViewRef | null, name: string, params: readonly unknown[]) => QueryKey,
+  name: ReadingName,
+  params: readonly unknown[],
+) {
   const client = useQueryClient();
   const { start, notify } = useShell();
   const isChanging = useIsMutating({ mutationKey: keys.workspaceAction }) > 0;
   const view = viewOf(start.open);
-  const queryKey = keys.snapshot(view, name, params);
+  const queryKey = keyOf(view, name, params);
   return {
     queryKey,
     isReadable: view !== null && !isChanging,
@@ -262,8 +308,9 @@ export interface SnapshotQueryOptions<Data, Params extends readonly unknown[]> {
  * Reads data of the snapshot in view; see the rule at the top of this file.
  *
  * `params` is taken as the list it is written as, each entry with its own type, so `read` is
- * handed them typed without naming their types. The result is the one of `useQuery`. `error` is never the kind `ViewChanged`; it is the kind
- * `ViewUnsettled` when the view stayed refused. Without an open workspace nothing is read.
+ * handed them typed without naming their types. The result is the one of `useQuery`. `error` is
+ * never the kind `ViewChanged`; it is the kind `ViewUnsettled` when the view stayed refused.
+ * Without an open workspace nothing is read.
  */
 export function useSnapshotQuery<Data, const Params extends readonly unknown[]>({
   name,
@@ -271,7 +318,7 @@ export function useSnapshotQuery<Data, const Params extends readonly unknown[]>(
   read,
   enabled = true,
 }: SnapshotQueryOptions<Data, Params>): UseQueryResult<Data> {
-  const { queryKey, isReadable, perform } = useReading(name, params);
+  const { queryKey, isReadable, perform } = useReading(keys.snapshot, name, params);
 
   return useQuery({
     queryKey,
@@ -295,18 +342,45 @@ export interface SnapshotPages<Row, Page extends Paged<Row>> {
   /** The first page as answered: its total, and whatever else the command says once. */
   first: Page | undefined;
   total: number | undefined;
+  /** False once the rows are all there, and after a page that came without rows. */
   hasMore: boolean;
+  /**
+   * Asks for the next page. It does nothing while a page is on its way, while `error` is set,
+   * while the rows stand in for others, and once `hasMore` is false.
+   */
   loadMore: () => void;
   isLoadingMore: boolean;
   /** True on a first load: nothing to show yet. */
   isPending: boolean;
   /** True while the rows shown are those of the filter, sort, or view of before. */
   isPlaceholderData: boolean;
+  /**
+   * True while the pages that are loaded are read again, after `keys.snapshots` was invalidated.
+   * The rows of before stay meanwhile, to be shown dimmed, and `loadMore` waits.
+   */
+  isRefetching: boolean;
   error: Error | null;
+  /**
+   * The retry of the screen. After a later page failed it reads that page; after anything else
+   * failed it reads again what was being read.
+   */
   refetch: () => void;
 }
 
 const NO_ROWS: readonly never[] = [];
+
+/**
+ * The offset of the page after these: the number of rows loaded. There is none once the rows are
+ * all there, and none after a page that came without rows: the offset would stay where it was,
+ * and the same page would be asked for without end.
+ */
+function nextOffset(pages: readonly Paged<unknown>[]): number | undefined {
+  const [first] = pages;
+  const last = pages.at(-1);
+  if (first === undefined || last === undefined || last.rows.length === 0) return undefined;
+  const loaded = pages.reduce((count, page) => count + page.rows.length, 0);
+  return loaded < first.total ? loaded : undefined;
+}
 
 /**
  * Reads data of the snapshot in view a page at a time; see the rule at the top of this file.
@@ -316,19 +390,19 @@ const NO_ROWS: readonly never[] = [];
  * until it is there and are then replaced whole, so rows of two readings are never shown
  * together. `error` is never the kind `ViewChanged`. Without an open workspace nothing is read.
  *
- * Name the three types when calling it: the type of a row cannot be told from the page alone.
+ * The type of a row is the one of the rows of the page `read` answers; no type is named at the
+ * call.
  */
 export function useSnapshotPages<
-  Row,
-  Page extends Paged<Row>,
+  Page extends Paged<unknown>,
   const Params extends readonly unknown[],
 >(options: {
   name: ReadingName;
   params: Params;
   read: (view: ViewRef, offset: number, ...params: Params) => Promise<Page>;
-}): SnapshotPages<Row, Page> {
+}): SnapshotPages<Page["rows"][number], Page> {
   const { name, params, read } = options;
-  const { queryKey, isReadable, perform } = useReading(name, params);
+  const { queryKey, isReadable, perform } = useReading(keys.snapshotPages, name, params);
 
   const query = useInfiniteQuery({
     queryKey,
@@ -337,41 +411,55 @@ export function useSnapshotPages<
         ? skipToken
         : ({ signal, pageParam }) => perform(signal, (view) => read(view, pageParam, ...params)),
     initialPageParam: 0,
-    // The next offset is the number of rows loaded; there is none once they are all there.
-    getNextPageParam: (_last: Page, pages: Page[]) => {
-      const loaded = pages.reduce((count, page) => count + page.rows.length, 0);
-      return loaded < (pages[0]?.total ?? 0) ? loaded : undefined;
-    },
+    getNextPageParam: (_last: Page, pages: Page[]) => nextOffset(pages),
+    // The rows of the params or the view of before stand in until the first page is there.
+    placeholderData: keepPreviousData,
+    // The pages that are loaded are never read again by themselves: not when an action on the
+    // workspace has ended, and not when the screen comes back. The data of a snapshot cannot
+    // change under this key: the key names the view and the params, and a snapshot that is
+    // replaced gets another id. So a command that does change the data of a snapshot must
+    // invalidate `keys.snapshots`; nothing else reads these pages again.
+    staleTime: Infinity,
     enabled: isReadable,
   });
 
   const pages = query.data?.pages;
-  const rows = useMemo<readonly Row[]>(
+  const rows = useMemo<readonly Page["rows"][number][]>(
     () => pages?.flatMap((page) => page.rows) ?? NO_ROWS,
     [pages],
   );
-  const first = pages?.[0];
-  const total = first?.total;
-  const hasMore = total !== undefined && rows.length < total;
-  // Nothing is added to rows that stand in for others, and nothing is read while an action on
-  // the workspace runs or while a reading of this key is on its way.
-  const canLoadMore = isReadable && hasMore && !query.isPlaceholderData && !query.isFetching;
-  const { fetchNextPage, refetch } = query;
+  const hasMore = pages !== undefined && nextOffset(pages) !== undefined;
+  // Nothing is added to rows that stand in for others. Nothing is read while an action on the
+  // workspace runs or while a reading of this key is on its way. And a page that failed is not
+  // asked for again by a table that only looks whether it is near its end: that takes a retry.
+  const canLoadMore =
+    isReadable && hasMore && !query.isPlaceholderData && !query.isFetching && query.error === null;
+  const { fetchNextPage, refetch, isFetchNextPageError } = query;
+
+  const loadMore = useCallback(() => {
+    // A call that comes before the screen knows a page is on its way is ignored by the query.
+    if (canLoadMore) void fetchNextPage({ cancelRefetch: false });
+  }, [canLoadMore, fetchNextPage]);
+
+  const retry = useCallback(() => {
+    // After a later page failed, the pages before it are there and are what they were: only the
+    // page that failed is read. After anything else failed, what was being read is read again.
+    void (isFetchNextPageError ? fetchNextPage({ cancelRefetch: false }) : refetch());
+  }, [isFetchNextPageError, fetchNextPage, refetch]);
 
   return {
     rows,
-    first,
-    total,
+    first: pages?.[0],
+    total: pages?.[0]?.total,
     hasMore,
-    loadMore: () => {
-      // A call that comes before the screen knows a page is on its way is ignored by the query.
-      if (canLoadMore) void fetchNextPage({ cancelRefetch: false });
-    },
+    loadMore,
     isLoadingMore: query.isFetchingNextPage,
     isPending: query.isPending,
     isPlaceholderData: query.isPlaceholderData,
+    // Rows that stand in for others are waited for, not read again.
+    isRefetching: query.isRefetching && !query.isPlaceholderData,
     error: query.error,
-    refetch: () => void refetch(),
+    refetch: retry,
   };
 }
 

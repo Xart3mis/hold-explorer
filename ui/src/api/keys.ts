@@ -41,6 +41,20 @@ export const keys = {
    */
   snapshot: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
     ["snapshot", view?.workspace_id ?? null, view?.snapshot_id ?? null, name, ...params] as const,
+  /**
+   * The same for a reading that is kept a page at a time (`useSnapshotPages`). What is kept under
+   * it is the list of the pages, not one answer, so it must never be the key of a plain reading:
+   * the marker after the name keeps the two apart, also for the same name and params.
+   */
+  snapshotPages: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
+    [
+      "snapshot",
+      view?.workspace_id ?? null,
+      view?.snapshot_id ?? null,
+      name,
+      { pages: true },
+      ...params,
+    ] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

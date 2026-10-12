@@ -187,8 +187,7 @@ function heldPages() {
 /** A screen with a table of the lines of the snapshot in view, read page by page, in an order. */
 function tableWith(read: ReadPage, start: AppStart = openStart(), held: Held = () => start.open) {
   return renderScreen(
-    ({ sort }: { sort: string }) =>
-      useSnapshotPages<string, LinesPage, [string]>({ name: "lines", params: [sort], read }),
+    ({ sort }: { sort: string }) => useSnapshotPages({ name: "lines", params: [sort], read }),
     { sort: "oldest" },
     start,
     held,
@@ -466,6 +465,7 @@ describe("useSnapshotQuery", () => {
     expect(notices).toEqual([
       { title: en.shell.viewResyncedTitle, text: en.shell.viewResyncedText },
     ]);
+    expect(en.shell.viewResyncedText).toMatch(/shows the one that is open/i);
     expect(en.shell.viewResyncedText).toMatch(/do it again/i);
     expect(result.current.lines.isError).toBe(false);
     expect(beside.result.current.isError).toBe(false);
@@ -479,12 +479,129 @@ describe("useSnapshotQuery", () => {
       expect(queryClient.getQueryData<AppStart>(keys.start)?.open).toBeNull();
     });
     expect(queryClient.getQueryData<AppStart>(keys.start)).toEqual({ ...start, open: null });
-    expect(notices).toHaveLength(1);
+    // No workspace is open, so the notice does not speak of one that is.
+    expect(notices).toEqual([
+      { title: en.shell.viewResyncedTitle, text: en.shell.viewResyncedNoneText },
+    ]);
+    expect(en.shell.viewResyncedNoneText).toMatch(/no workspace is open/i);
+    expect(en.shell.viewResyncedNoneText).not.toMatch(/the one that is open/i);
+    expect(en.shell.viewResyncedNoneText).toMatch(/do it again/i);
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(read).toHaveBeenCalledTimes(5);
     expect(current).toHaveBeenCalledTimes(1);
     expect(result.current.lines.isError).toBe(false);
     expect(result.current.lines.fetchStatus).toBe("idle");
+  });
+
+  it("takes the answer of the Rust side also when the screen that asked has gone meanwhile", async () => {
+    const read = vi.fn<Read>(() => Promise.reject(viewChanged()));
+    const answers: ((open: WorkspaceOpen) => void)[] = [];
+    const start = openStart();
+    const { unmount, current } = screenWith(
+      read,
+      start,
+      () =>
+        new Promise<WorkspaceOpen>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    await waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    // The user leaves the page while the Rust side is being asked what it holds.
+    unmount();
+    await act(async () => {
+      answers[0]?.(opened({ selected: 1 }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    // What it holds is what every page shows from now on, and the user is told.
+    expect(queryClient.getQueryData<AppStart>(keys.start)).toEqual({
+      ...start,
+      open: opened({ selected: 1 }),
+    });
+    expect(notices).toEqual([
+      { title: en.shell.viewResyncedTitle, text: en.shell.viewResyncedText },
+    ]);
+    // The reading itself is over: its screen is not there.
+    expect(read).toHaveBeenCalledTimes(5);
+    expect(current).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards the answer of the Rust side when an action on the open workspace was asked for meanwhile", async () => {
+    const read = vi.fn<Read>((view) =>
+      view.snapshot_id === 2 ? Promise.reject(viewChanged()) : Promise.resolve("lines of 1"),
+    );
+    const answers: ((open: WorkspaceOpen) => void)[] = [];
+    const start = openStart();
+    const { result, finish, current } = screenWith(
+      read,
+      start,
+      () =>
+        new Promise<WorkspaceOpen>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    await waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    // The answer is of before the action: the action will say what is open when it is done.
+    await act(async () => {
+      answers[0]?.(opened({ workspace: otherWorkspace }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(queryClient.getQueryData<AppStart>(keys.start)).toEqual(start);
+    expect(notices).toEqual([]);
+
+    // Also once the action is over, an answer that was asked for before it is not taken.
+    await finish({ ...start, open: opened({ selected: 1 }) });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 1");
+    });
+    expect(queryClient.getQueryData<AppStart>(keys.start)?.open?.workspace.id).toBe(workspace().id);
+    expect(notices).toEqual([]);
+    expect(current).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards the answer as well when an action was asked for and was over before the answer came", async () => {
+    const read = vi.fn<Read>((view) =>
+      view.snapshot_id === 2 ? Promise.reject(viewChanged()) : Promise.resolve("lines of 1"),
+    );
+    const answers: ((open: WorkspaceOpen) => void)[] = [];
+    const start = openStart();
+    const { result, finish } = screenWith(
+      read,
+      start,
+      () =>
+        new Promise<WorkspaceOpen>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    await waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    await finish({ ...start, open: opened({ selected: 1 }) });
+    await waitFor(() => {
+      expect(result.current.action.isSuccess).toBe(true);
+    });
+    // No action runs now, and the answer is still older than what the action opened.
+    await act(async () => {
+      answers[0]?.(opened({ workspace: otherWorkspace }));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(queryClient.getQueryData<AppStart>(keys.start)?.open).toEqual(opened({ selected: 1 }));
+    expect(notices).toEqual([]);
   });
 
   it("reads once more when the Rust side holds the same view, and takes the answer", async () => {
@@ -699,10 +816,11 @@ describe("useSnapshotPages", () => {
     expect(lines.hasMore).toBe(true);
     expect(lines.isPending).toBe(false);
     expect(lines.isLoadingMore).toBe(false);
+    expect(lines.isRefetching).toBe(false);
     expect(lines.isPlaceholderData).toBe(false);
     expect(lines.error).toBeNull();
     // The pages are kept under the key every reading for a snapshot has: view, name, params.
-    expect(queryClient.getQueryData(keys.snapshot(HERE, "lines", ["oldest"]))).toMatchObject({
+    expect(queryClient.getQueryData(keys.snapshotPages(HERE, "lines", ["oldest"]))).toMatchObject({
       pages: [lines.first],
     });
   });
@@ -733,6 +851,7 @@ describe("useSnapshotPages", () => {
     // The rows that are there stay as they are while the next ones are on their way.
     expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
     expect(result.current.lines.isPlaceholderData).toBe(false);
+    expect(result.current.lines.isRefetching).toBe(false);
     act(() => {
       waiting[1]?.answer();
     });
@@ -873,6 +992,8 @@ describe("useSnapshotPages", () => {
     expect(result.current.lines.rows).toEqual(before);
     expect(result.current.lines.isPlaceholderData).toBe(true);
     expect(result.current.lines.isPending).toBe(false);
+    // Rows that stand in are not rows that are read again.
+    expect(result.current.lines.isRefetching).toBe(false);
     // Rows that stand in are not added to: the next page would be of the order of before.
     act(() => {
       result.current.lines.loadMore();
@@ -948,7 +1069,7 @@ describe("useSnapshotPages", () => {
       expect(result.current.lines.rows).toEqual(["oldest 1:0", "oldest 1:1"]);
     });
     expect(result.current.lines.isPlaceholderData).toBe(false);
-    expect(queryClient.getQueryData(keys.snapshot(HERE, "lines", ["oldest"]))).toMatchObject({
+    expect(queryClient.getQueryData(keys.snapshotPages(HERE, "lines", ["oldest"]))).toMatchObject({
       pages: [pageOf(HERE, 0, "oldest")],
     });
   });
@@ -1036,6 +1157,368 @@ describe("useSnapshotPages", () => {
     });
     expect(result.current.lines.error).toBeNull();
     expect(read).toHaveBeenLastCalledWith(HERE, 0, "oldest");
+  });
+
+  it("does not ask again for a later page that failed, however often the table asks for more, and reads it once on a retry", async () => {
+    let failing = true;
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      offset > 0 && failing
+        ? Promise.reject(commandFailure("Io", "The workspace file could not be read."))
+        : Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const { result } = tableWith(read);
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.error).toMatchObject({ kind: "Io" });
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    // The rows that are there stay, and there are more: only the page after them failed.
+    expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    expect(result.current.lines.hasMore).toBe(true);
+    expect(result.current.lines.isLoadingMore).toBe(false);
+
+    // A table that is at the end of its rows asks for more whenever it looks.
+    for (let asked = 0; asked < 3; asked += 1) {
+      act(() => {
+        result.current.lines.loadMore();
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(result.current.lines.error).toMatchObject({ kind: "Io" });
+
+    // The retry of the screen reads the page that failed, once, and no page that is there.
+    failing = false;
+    act(() => {
+      result.current.lines.refetch();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(4);
+    });
+    expect(read).toHaveBeenCalledTimes(3);
+    expect(read).toHaveBeenLastCalledWith(HERE, 2, "oldest");
+    expect(result.current.lines.error).toBeNull();
+  });
+
+  it("ends the loading when a page comes without rows, though the total says there are more", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(
+        offset === 0 ? pageOf(view, offset, sort) : { total: 5, rows: [], widest: 21 },
+      ),
+    );
+    const { result } = tableWith(read);
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    expect(result.current.lines.hasMore).toBe(true);
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.hasMore).toBe(false);
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    expect(result.current.lines.total).toBe(5);
+    // The same offset is not asked for again.
+    for (let asked = 0; asked < 3; asked += 1) {
+      act(() => {
+        result.current.lines.loadMore();
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(result.current.lines.error).toBeNull();
+  });
+
+  /** A table whose first two pages are loaded, with the reading still held by the test. */
+  async function twoPages(start: AppStart = openStart()) {
+    const { read, waiting } = heldPages();
+    const table = tableWith(read, start);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      waiting[0]?.answer();
+    });
+    await waitFor(() => {
+      expect(table.result.current.lines.rows).toHaveLength(2);
+    });
+    act(() => {
+      table.result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    act(() => {
+      waiting[1]?.answer();
+    });
+    await waitFor(() => {
+      expect(table.result.current.lines.rows).toHaveLength(4);
+    });
+    return { ...table, read, waiting };
+  }
+
+  it("reads no page again after an action on the workspace that leaves the view as it was", async () => {
+    const { result, finish, read } = await twoPages();
+    const before = result.current.lines.rows;
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    // A rename: the workspace and the snapshot in view are the ones of before.
+    await finish(null);
+    await waitFor(() => {
+      expect(result.current.action.isSuccess).toBe(true);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(result.current.lines.rows).toBe(before);
+    expect(result.current.lines.isPlaceholderData).toBe(false);
+    expect(result.current.lines.isRefetching).toBe(false);
+  });
+
+  it("reads nothing when the table goes and comes back with the same key", async () => {
+    const { unmount, read } = await twoPages();
+    unmount();
+    const back = tableWith(read);
+    // The rows are there at once, and nothing asks for them again.
+    expect(back.result.current.lines.rows).toHaveLength(4);
+    expect(back.result.current.lines.isPending).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(back.result.current.lines.isRefetching).toBe(false);
+  });
+
+  it("reads the loaded pages again when the readings of the snapshots are invalidated, and says so meanwhile", async () => {
+    const { result, read, waiting } = await twoPages();
+    expect(result.current.lines.isRefetching).toBe(false);
+    // What a command does that changes the data of a snapshot.
+    act(() => {
+      void queryClient.invalidateQueries({ queryKey: keys.snapshots });
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(3);
+    });
+    expect(waiting[2]).toMatchObject({ view: HERE, offset: 0, sort: "oldest" });
+    await waitFor(() => {
+      expect(result.current.lines.isRefetching).toBe(true);
+    });
+    // The rows of before stay on screen, as the rows of this reading, and nothing is added to them.
+    expect(result.current.lines.rows).toHaveLength(4);
+    expect(result.current.lines.isPlaceholderData).toBe(false);
+    expect(result.current.lines.isLoadingMore).toBe(false);
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(waiting).toHaveLength(3);
+
+    act(() => {
+      waiting[2]?.answer();
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(4);
+    });
+    expect(waiting[3]).toMatchObject({ view: HERE, offset: 2, sort: "oldest" });
+    expect(result.current.lines.isRefetching).toBe(true);
+    act(() => {
+      waiting[3]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.isRefetching).toBe(false);
+    });
+    expect(result.current.lines.rows).toHaveLength(4);
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it("drops a page that is on its way when an action starts that leaves the view as it was, and reads it when the table asks again", async () => {
+    const { read, waiting } = heldPages();
+    const { result, finish } = tableWith(read);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      waiting[0]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.lines.isLoadingMore).toBe(false);
+    });
+    await act(async () => {
+      waiting[1]?.answer();
+      await Promise.resolve();
+    });
+    await finish(null);
+    await waitFor(() => {
+      expect(result.current.action.isSuccess).toBe(true);
+    });
+    // The page that was dropped is not kept, and nothing reads by itself.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(waiting).toHaveLength(2);
+    expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    expect(result.current.lines.hasMore).toBe(true);
+
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(3);
+    });
+    expect(waiting[2]).toMatchObject({ view: HERE, offset: 2, sort: "oldest" });
+    act(() => {
+      waiting[2]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(4);
+    });
+  });
+
+  it("reads the first page once the action is over that dropped it and left the view as it was", async () => {
+    const { read, waiting } = heldPages();
+    const { result, finish } = tableWith(read);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    await act(async () => {
+      waiting[0]?.answer();
+      await Promise.resolve();
+    });
+    expect(result.current.lines.rows).toEqual([]);
+    // Nothing is there for this key, so it is read: that the pages are never stale is about pages.
+    await finish(null);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    expect(waiting[1]).toMatchObject({ view: HERE, offset: 0, sort: "oldest" });
+    act(() => {
+      waiting[1]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    });
+  });
+
+  it("keeps its pages apart from a plain reading of the same name and params", async () => {
+    const page = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const { result } = tableWith(page);
+    const plain = renderHook(
+      () =>
+        useSnapshotQuery({
+          name: "lines",
+          params: ["oldest"],
+          read: (view, sort) => Promise.resolve(`${sort} lines of ${String(view.snapshot_id)}`),
+        }),
+      { wrapper },
+    );
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    await waitFor(() => {
+      expect(plain.result.current.data).toBe("oldest lines of 2");
+    });
+    const plainKey = keys.snapshot(HERE, "lines", ["oldest"]);
+    const pagesKey = keys.snapshotPages(HERE, "lines", ["oldest"]);
+    expect(pagesKey).not.toEqual(plainKey);
+    expect(queryClient.getQueryData(plainKey)).toBe("oldest lines of 2");
+    expect(queryClient.getQueryData(pagesKey)).toMatchObject({
+      pages: [pageOf(HERE, 0, "oldest")],
+    });
+    // Both are readings of a snapshot: an action on the workspace and an invalidation find both.
+    for (const key of [plainKey, pagesKey]) {
+      expect(key.slice(0, keys.snapshots.length)).toEqual(keys.snapshots);
+      expect(key.slice(1, 4)).toEqual([HERE.workspace_id, HERE.snapshot_id, "lines"]);
+      expect(key.at(-1)).toBe("oldest");
+    }
+    expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+  });
+
+  it("keeps loadMore and refetch the same functions from one render to the next", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const { result, rerender } = tableWith(read);
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    const { loadMore, refetch } = result.current.lines;
+    rerender({ sort: "oldest" });
+    expect(result.current.lines.loadMore).toBe(loadMore);
+    expect(result.current.lines.refetch).toBe(refetch);
+    // An effect that depends on them does not run again for a render that changed nothing.
+    rerender({ sort: "oldest" });
+    expect(result.current.lines.loadMore).toBe(loadMore);
+    expect(result.current.lines.refetch).toBe(refetch);
+  });
+
+  it("asks which workspace and snapshot are open after five such answers for a later page: the pages of the view of before stay under its key, and page zero is read for the view it is told", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      view.snapshot_id === 2 && offset > 0
+        ? Promise.reject(viewChanged())
+        : Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const { result, appStart, current } = tableWith(read, openStart(), () =>
+      opened({ selected: 1 }),
+    );
+    const seen: unknown[] = [];
+    const watch = setInterval(() => {
+      if (result.current.lines.error !== null) seen.push(result.current.lines.error);
+    }, 5);
+    await waitFor(() => {
+      expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    });
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toEqual(["oldest 1:0", "oldest 1:1"]);
+    });
+    clearInterval(watch);
+    expect(read.mock.calls.map(([view, offset]) => [view.snapshot_id, offset])).toEqual([
+      [2, 0],
+      [2, 2],
+      [2, 2],
+      [2, 2],
+      [2, 2],
+      [2, 2],
+      [1, 0],
+    ]);
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(appStart).not.toHaveBeenCalled();
+    expect(notices).toHaveLength(1);
+    expect(seen).toEqual([]);
+    expect(result.current.lines.isPlaceholderData).toBe(false);
+    // The view of before keeps the page it had, without the page that was refused and without an error.
+    const gone = queryClient.getQueryState(keys.snapshotPages(HERE, "lines", ["oldest"]));
+    expect(gone?.data).toMatchObject({ pages: [pageOf(HERE, 0, "oldest")] });
+    expect(gone?.error ?? null).toBeNull();
+    expect(gone?.fetchStatus).toBe("idle");
   });
 
   it("reads nothing while no workspace is open", async () => {

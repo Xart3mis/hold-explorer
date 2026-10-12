@@ -12,20 +12,26 @@ const root = resolve(import.meta.dirname, "../../..");
  */
 const eslint = new ESLint({ cwd: root, overrideConfig: [tseslint.configs.disableTypeChecked] });
 
-/**
- * What the import rule says about a module at `file` (a path from the repository root) that
- * imports `source`: its messages, none when the import is allowed.
- */
-async function refusals(file: string, source: string): Promise<string[]> {
-  const [result] = await eslint.lintText(`import ${JSON.stringify(source)};\n`, {
-    filePath: join(root, file),
-  });
+/** The messages of one rule about a module at `file` (a path from the repository root) that holds `code`. */
+async function messages(file: string, code: string, rule: string): Promise<string[]> {
+  const [result] = await eslint.lintText(code, { filePath: join(root, file) });
   if (result === undefined) throw new Error(`ESLint gave no result for ${file}.`);
   const broken = result.messages.find((message) => message.fatal === true);
   if (broken !== undefined) throw new Error(`ESLint could not read ${file}: ${broken.message}`);
+  // A file ESLint is told to leave alone gets one warning that says so, and no rule is run on it.
+  const ignored = result.messages.find((message) => message.ruleId === null);
+  if (ignored !== undefined) throw new Error(`ESLint did not lint ${file}: ${ignored.message}`);
   return result.messages
-    .filter((message) => message.ruleId === "no-restricted-imports")
+    .filter((message) => message.ruleId === rule)
     .map((message) => message.message);
+}
+
+/**
+ * What the import rule says about a module at `file` that imports `source`: its messages, none
+ * when the import is allowed.
+ */
+function refusals(file: string, source: string): Promise<string[]> {
+  return messages(file, `import ${JSON.stringify(source)};\n`, "no-restricted-imports");
 }
 
 /** An import that breaks two rules is refused by both, so one of the messages is the one meant. */
@@ -81,6 +87,44 @@ describe("the commands that change the view", () => {
   it("leave the other commands open to a feature", async () => {
     await expectAllowed("ui/src/features/lines/LinesPage.tsx", "../../api/commands");
   });
+
+  /** What the syntax rule says about a module at `file` that holds `code`. */
+  const syntax = (file: string, code: string) => messages(file, code, "no-restricted-syntax");
+
+  it("are refused as well when they are imported while the app runs, with import()", async () => {
+    for (const file of [
+      "ui/src/features/lines/LinesPage.tsx",
+      "ui/src/features/lines/sorts.ts",
+      "ui/src/components/Tag/Tag.tsx",
+      "ui/src/text/format.ts",
+      "ui/src/api/window.ts",
+      "ui/src/dev/commands.ts",
+      "ui/src/features/lines/LinesPage.test.tsx",
+    ]) {
+      for (const code of [
+        'void import("../../api/workspace-commands");\n',
+        "void import(`../../api/workspace-commands`);\n",
+        'export const load = () => import("../api/workspace-commands.ts");\n',
+      ]) {
+        const said = await syntax(file, code);
+        expect(said, `${file}: ${code}`).toHaveLength(1);
+        expect(said[0]).toMatch(/workspaceAction\(\)/);
+      }
+    }
+  });
+
+  it("may be imported with import() by a module of ui/src/app/, and any other module by anyone", async () => {
+    expect(
+      await syntax("ui/src/app/actions/demo.ts", 'void import("../../api/workspace-commands");\n'),
+    ).toEqual([]);
+    expect(
+      await syntax("ui/src/app/shell/Page.tsx", 'void import("../../api/workspace-commands");\n'),
+    ).toEqual([]);
+    expect(
+      await syntax("ui/src/features/lines/LinesPage.tsx", 'void import("../../api/commands");\n'),
+    ).toEqual([]);
+    expect(await syntax("ui/src/dev/app.tsx", 'void import("../main");\n')).toEqual([]);
+  });
 });
 
 describe("the layers", () => {
@@ -133,6 +177,44 @@ describe("the layers", () => {
     for (const source of ["../text/i18n", "../api/keys", "../components", "../design/theme"]) {
       await expectAllowed("ui/src/app/providers.tsx", source);
     }
+  });
+
+  it("refuse a design module that imports from the api, a component, the app, or a feature", async () => {
+    for (const source of [
+      "../api/keys",
+      "../components",
+      "../app/query",
+      "../features/shell/AppLayout",
+    ]) {
+      await expectRefused("ui/src/design/theme.ts", source, /ui\/src\/design\//);
+    }
+    await expectAllowed("ui/src/design/theme.ts", "../bindings/Theme");
+    await expectAllowed("ui/src/design/theme.ts", "./token-values");
+    await expectAllowed("ui/src/design/tokens.test.ts", "../test/limits");
+  });
+
+  it("refuse a binding that imports from the api, a component, the app, or a feature", async () => {
+    for (const source of [
+      "../api/keys",
+      "../components",
+      "../app/query",
+      "../features/shell/AppLayout",
+    ]) {
+      await expectRefused("ui/src/bindings/AppStart.ts", source, /ui\/src\/bindings\//);
+    }
+    await expectAllowed("ui/src/bindings/AppStart.ts", "./WorkspaceOpen");
+  });
+
+  it("refuse a module beside the catalog that imports from the api, a component, the app, or a feature", async () => {
+    for (const source of [
+      "../api/keys",
+      "../components",
+      "../app/query",
+      "../features/shell/AppLayout",
+    ]) {
+      await expectRefused("ui/src/locales/plurals.ts", source, /ui\/src\/locales\//);
+    }
+    await expectAllowed("ui/src/locales/plurals.ts", "./en.json");
   });
 
   it("let a feature import every layer", async () => {
