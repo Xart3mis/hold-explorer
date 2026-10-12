@@ -18,9 +18,11 @@
 //! 4. Build a dataset: [`dataset::Dataset::build`] derives each hold's blocker (with
 //!    [`rules::RuleSet::builtin`]), age, and duration as of the snapshot.
 //! 5. Filter: a [`filter::FilterSpec`] selects rows with [`filter::FilterSpec::matches`].
-//! 6. Query: [`query::summary`], [`query::group_by`], [`query::matrix`], [`query::lines`], and
-//!    [`query::holds`] aggregate the selected holds.
+//! 6. Query: [`query::summary`], [`query::group_by`], [`query::matrix`], [`query::line_page`],
+//!    [`query::lines`], and [`query::holds`] aggregate the selected holds; [`query::facet_counts`]
+//!    and [`query::value_page`] count what a filter would keep.
 //! 7. Solve: [`solve::solve_plan`] orders the blockers to solve to free the most lines.
+//! 8. Detail: [`detail::line_detail`] gathers one line's holds and the blockers that keep it.
 //!
 //! The history store keeps each distinct hold row once, addressed by
 //! [`fingerprint::state_hash`], the versioned content hash of a [`model::Hold`].
@@ -29,6 +31,7 @@
 #![warn(missing_docs)]
 
 pub mod dataset;
+pub mod detail;
 pub mod error;
 pub mod filter;
 pub mod fingerprint;

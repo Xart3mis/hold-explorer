@@ -12,4 +12,12 @@ total: number,
 /**
  * The holds of the page, in the order `HoldQuery::sort` gives.
  */
-rows: Array<Row>, };
+rows: Array<Row>, 
+/**
+ * The position in `Dataset::rows` of each entry of `rows`.
+ */
+positions: Array<number>, 
+/**
+ * Characters of the longest line ID among the selected holds; 0 when there is none.
+ */
+widest_line_id: number, };

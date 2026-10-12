@@ -12,4 +12,13 @@ sort: LineSort,
 /**
  * Keep only lines with exactly one hold in the selection.
  */
-single_hold_only: boolean, };
+single_hold_only: boolean, 
+/**
+ * Keep only lines whose sizes differ. Combines with `single_hold_only` by AND.
+ */
+size_mismatch_only: boolean, 
+/**
+ * Reverse the order among the lines that have the sorted value; the others stay last and
+ * ties still end in line ID order.
+ */
+reverse: boolean, };

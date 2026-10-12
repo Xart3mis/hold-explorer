@@ -7,12 +7,17 @@ use serde::Serialize;
 use ts_rs::{Config, TS};
 
 use crate::dataset::Dataset;
+use crate::detail::line_detail;
+use crate::filter::default_age_bands;
 use crate::filter::{AgeBand, DateRange, Dim, FieldFilter, FilterSpec, Status};
 use crate::load::{load_file, open_file, OpenedView};
 use crate::mapping::{ColumnMap, Field};
-use crate::query::{group_by, lines, summary, HoldQuery, LineQuery};
+use crate::query::{
+    facet_counts, group_by, holds, line_page, lines, summary, value_page, HoldQuery, LineQuery,
+};
 use crate::rules::RuleSet;
 use crate::snapshot_date::{SnapshotDate, SnapshotSource};
+use crate::solve::solve_plan;
 
 fn export_dir() -> PathBuf {
     PathBuf::from(std::env::var("TS_RS_EXPORT_DIR").expect("cargo sets TS_RS_EXPORT_DIR"))
@@ -104,6 +109,12 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         crate::query::HoldSort,
         crate::query::HoldQuery,
         crate::query::HoldPage,
+        crate::query::LinePage,
+        crate::query::FacetCounts,
+        crate::query::ValuePage,
+        crate::detail::HoldRef,
+        crate::detail::ChainLink,
+        crate::detail::LineDetail,
         crate::snapshot_date::SnapshotSource,
         crate::snapshot_date::SnapshotDate,
         crate::warning::WarningKind,
@@ -120,21 +131,26 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         "Blocker",
         "BlockerNode",
         "Cell",
+        "ChainLink",
         "ColumnMap",
         "DateOrder",
         "DateRange",
         "Dim",
         "ExtraColumn",
+        "FacetCounts",
         "Field",
         "FieldFilter",
         "FilterSpec",
         "Group",
         "Hold",
         "HoldPage",
+        "HoldRef",
         "HoldQuery",
         "HoldSort",
         "ImportError",
         "ImportWarning",
+        "LineDetail",
+        "LinePage",
         "LineQuery",
         "LineRow",
         "LineSort",
@@ -155,6 +171,7 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         "Status",
         "Step",
         "Summary",
+        "ValuePage",
         "WarningKind",
     ]
     .into_iter()
@@ -246,6 +263,14 @@ fn declarations_name_the_keys_of_the_json() {
     names_the_keys_of(&summary(&ds, &open));
     names_the_keys_of(&group_by(&ds, &open, &Dim::HoldType)[0]);
     names_the_keys_of(&lines(&ds, &open, &LineQuery::default())[0]);
+    names_the_keys_of(&line_page(&ds, &open, &LineQuery::default(), 0, None));
+    names_the_keys_of(&holds(&ds, &open, &HoldQuery::default()));
+    names_the_keys_of(&facet_counts(&ds, &open, &default_age_bands()));
+    names_the_keys_of(&value_page(&ds, &open, &Dim::HoldType, "", 10));
+    let detail = line_detail(&ds, &solve_plan(&ds, &open, None), "L-1").unwrap();
+    names_the_keys_of(&detail);
+    names_the_keys_of(&detail.open[0]);
+    names_the_keys_of(&detail.chain[0]);
     let opened = open_file(&dir.path().join("holds_07-Oct.csv")).unwrap();
     names_the_keys_of(&opened);
     let view: OpenedView = opened.view(2);

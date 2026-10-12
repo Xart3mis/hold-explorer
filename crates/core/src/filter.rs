@@ -144,7 +144,29 @@ pub struct FilterSpec {
     pub size_mismatch: Option<bool>,
 }
 
+/// The age bands a workspace starts with: 0 to 13, 14 to 29, 30 to 59, 60 to 89, and 90 or more days.
+pub fn default_age_bands() -> Vec<AgeBand> {
+    let band = |min_days, max_days| AgeBand {
+        min_days: Some(min_days),
+        max_days,
+    };
+    vec![
+        band(0, Some(13)),
+        band(14, Some(29)),
+        band(30, Some(59)),
+        band(60, Some(89)),
+        band(90, None),
+    ]
+}
+
 impl FilterSpec {
+    /// This filter without its entries for `dim`: what a picker for `dim` counts against.
+    pub fn without(&self, dim: &Dim) -> FilterSpec {
+        let mut spec = self.clone();
+        spec.fields.retain(|filter| &filter.dim != dim);
+        spec
+    }
+
     /// Whether `row` passes every part of the filter.
     pub fn matches(&self, row: &Row) -> bool {
         match self.status {
@@ -491,5 +513,61 @@ mod tests {
         };
         let json = serde_json::to_string(&spec).unwrap();
         assert_eq!(serde_json::from_str::<FilterSpec>(&json).unwrap(), spec);
+    }
+
+    #[test]
+    fn without_drops_every_entry_of_the_dimension_and_nothing_else() {
+        let day = NaiveDate::parse_from_str("2026-01-02", "%Y-%m-%d").unwrap();
+        let spec = FilterSpec {
+            status: Status::Released,
+            fields: vec![
+                entry(Dim::Discipline, &["Civil"], false),
+                entry(Dim::HoldType, &["P&ID"], false),
+                entry(Dim::Discipline, &["Piping"], true),
+            ],
+            text: "pr".to_string(),
+            age_bands: default_age_bands(),
+            created: DateRange {
+                from: Some(day),
+                to: None,
+            },
+            released: DateRange {
+                from: None,
+                to: Some(day),
+            },
+            size_mismatch: Some(true),
+        };
+        let expected = FilterSpec {
+            fields: vec![entry(Dim::HoldType, &["P&ID"], false)],
+            ..spec.clone()
+        };
+        assert_eq!(spec.without(&Dim::Discipline), expected);
+        assert_eq!(spec.without(&Dim::Custom("Area".into())), spec);
+        assert_eq!(spec.without(&Dim::HoldType).fields.len(), 2);
+    }
+
+    #[test]
+    fn default_age_bands_are_the_five_bands_of_the_spec() {
+        let bands = default_age_bands();
+        let bounds: Vec<_> = bands.iter().map(|b| (b.min_days, b.max_days)).collect();
+        assert_eq!(
+            bounds,
+            vec![
+                (Some(0), Some(13)),
+                (Some(14), Some(29)),
+                (Some(30), Some(59)),
+                (Some(60), Some(89)),
+                (Some(90), None),
+            ]
+        );
+        let in_bands = |age: i64| -> Vec<usize> {
+            (0..bands.len())
+                .filter(|&i| bands[i].contains(age))
+                .collect()
+        };
+        assert_eq!(in_bands(13), vec![0]);
+        assert_eq!(in_bands(14), vec![1]);
+        assert_eq!(in_bands(90), vec![4]);
+        assert_eq!(in_bands(5000), vec![4]);
     }
 }

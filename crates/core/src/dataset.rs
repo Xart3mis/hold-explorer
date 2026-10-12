@@ -3,8 +3,9 @@
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
+use crate::mapping::Field;
 use crate::model::Hold;
-use crate::normalize::fold_key;
+use crate::normalize::{fold_key, DASH, UNSPECIFIED};
 use crate::rules::{Blocker, RuleSet};
 
 /// A hold with the values derived from it for one snapshot.
@@ -93,6 +94,35 @@ impl Dataset {
             .flat_map(|row| row.hold.extra.keys())
             .collect();
         keys.into_iter().cloned().collect()
+    }
+
+    /// The optional fields no row has a value for, in the order of `mapping::Field`: `SourceId`
+    /// when no hold has one, `Released` when no hold is released, `Name`, `Role`, and
+    /// `Discipline` when every row has the blank spelling, and so on for the others.
+    pub fn absent_fields(&self) -> Vec<Field> {
+        Field::ALL
+            .into_iter()
+            .filter(|field| !Field::REQUIRED.contains(field))
+            .filter(|field| !self.rows.iter().any(|row| has_value(*field, &row.hold)))
+            .collect()
+    }
+}
+
+/// Whether `hold` has a value for `field`, the blank spellings of an import counting as none.
+fn has_value(field: Field, hold: &Hold) -> bool {
+    match field {
+        Field::SourceId => hold.source_id.is_some(),
+        Field::Name => hold.name != DASH,
+        Field::Role => hold.role != DASH,
+        Field::Discipline => hold.discipline != UNSPECIFIED,
+        Field::Created => hold.created.is_some(),
+        Field::Released => hold.released,
+        Field::ReleaseRemark => !hold.release_remark.is_empty(),
+        Field::ReleaseDate => hold.release_date.is_some(),
+        Field::ModelSize => hold.model_size.is_some(),
+        Field::LdtSize => hold.ldt_size.is_some(),
+        Field::StressCalc => !hold.stress_calc.is_empty(),
+        Field::LineId | Field::Remark | Field::HoldType => true,
     }
 }
 
@@ -195,5 +225,96 @@ mod tests {
         ds.rows[2].hold.extra.insert("Zone".into(), "c".into());
         assert_eq!(ds.custom_dims(), vec!["Area", "Zone"]);
         assert!(sample().custom_dims().is_empty());
+    }
+
+    fn full_hold(line: &str) -> crate::model::Hold {
+        let mut h = crate::testkit::hold(line, "Civil", "MISC.", "x", 3);
+        h.source_id = Some(1);
+        h.released = true;
+        h.release_remark = "done".to_string();
+        h.release_date = Some(crate::testkit::snapshot());
+        h.model_size = Some(4.0);
+        h.ldt_size = Some(4.0);
+        h.stress_calc = "NR".to_string();
+        h
+    }
+
+    fn build(holds: Vec<crate::model::Hold>) -> super::Dataset {
+        super::Dataset::build(
+            holds,
+            crate::rules::RuleSet::builtin(),
+            crate::testkit::snapshot(),
+        )
+    }
+
+    #[test]
+    fn absent_fields_lists_what_no_row_has_in_field_order() {
+        use crate::mapping::Field;
+        // `sample` has no id, no release remark, no release date on open rows... but one release.
+        let ds = build(vec![
+            crate::testkit::hold("L1", "Civil", "MISC.", "x", 3),
+            crate::testkit::hold("L2", "Piping", "P&ID", "x", 4),
+        ]);
+        assert_eq!(
+            ds.absent_fields(),
+            vec![
+                Field::SourceId,
+                Field::Released,
+                Field::ReleaseRemark,
+                Field::ReleaseDate,
+                Field::ModelSize,
+                Field::LdtSize,
+                Field::StressCalc
+            ]
+        );
+    }
+
+    #[test]
+    fn absent_fields_is_empty_when_every_value_is_there() {
+        assert!(build(vec![full_hold("L1")]).absent_fields().is_empty());
+    }
+
+    #[test]
+    fn one_row_with_a_value_removes_its_field() {
+        use crate::mapping::Field;
+        let mut with_id = crate::testkit::hold("L2", "Civil", "MISC.", "x", 4);
+        with_id.source_id = Some(7);
+        with_id.model_size = Some(2.0);
+        let ds = build(vec![
+            crate::testkit::hold("L1", "Civil", "MISC.", "x", 3),
+            with_id,
+        ]);
+        let absent = ds.absent_fields();
+        assert!(!absent.contains(&Field::SourceId));
+        assert!(!absent.contains(&Field::ModelSize));
+        assert!(absent.contains(&Field::LdtSize));
+    }
+
+    #[test]
+    fn blank_spellings_count_as_no_value() {
+        use crate::mapping::Field;
+        let mut h = full_hold("L1");
+        h.name = crate::normalize::DASH.to_string();
+        h.role = crate::normalize::DASH.to_string();
+        h.discipline = crate::normalize::UNSPECIFIED.to_string();
+        h.created = None;
+        assert_eq!(
+            build(vec![h.clone()]).absent_fields(),
+            vec![Field::Name, Field::Role, Field::Discipline, Field::Created]
+        );
+        let mut named = h;
+        named.name = "Alice".to_string();
+        assert!(!build(vec![named]).absent_fields().contains(&Field::Name));
+    }
+
+    #[test]
+    fn required_fields_are_never_absent() {
+        use crate::mapping::Field;
+        let mut h = crate::testkit::hold("", "Civil", "—", "", 3);
+        h.line_id.clear();
+        let absent = build(vec![h]).absent_fields();
+        for field in Field::REQUIRED {
+            assert!(!absent.contains(&field), "{field:?}");
+        }
     }
 }

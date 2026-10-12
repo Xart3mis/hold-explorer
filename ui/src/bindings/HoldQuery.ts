@@ -16,4 +16,9 @@ offset: number,
 /**
  * Most rows to return; `None` returns every row from `offset`.
  */
-limit: number | null, };
+limit: number | null, 
+/**
+ * Reverse the order among the holds that have the sorted value; the others stay last and
+ * ties stay in file order. On `FileOrder` it gives the file backwards.
+ */
+reverse: boolean, };
