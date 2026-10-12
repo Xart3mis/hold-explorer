@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import process from "node:process";
 import { defineConfig } from "vitest/config";
-import { testLimits } from "./ui/src/test/limits";
+import { testLimits } from "./ui/src/test/limits.ts";
 
 export default defineConfig({
   root: "ui",
@@ -17,7 +17,8 @@ export default defineConfig({
     globals: false,
     // Five seconds for a test on a development machine, fifteen on CI (the environment variable
     // CI, which GitHub sets): a runner is slower, and a slow test there is not a failed one. The
-    // allowance of ui/src/test/slow.ts grows the same way. ui/src/test/limits.ts holds the times.
+    // allowance of ui/src/test/slow.ts and the wait of the queries grow the same way.
+    // ui/src/test/limits.ts holds the times.
     testTimeout: testLimits(process.env).test,
   },
 });

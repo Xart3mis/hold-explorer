@@ -12,9 +12,10 @@ import { checkUnhandledCommands } from "./ipc";
 import { testLimits } from "./limits";
 import { resetWindowApi } from "./window";
 
-// How long a test waits for something to appear (`findBy...`, `waitFor`): longer than the
-// library's one second, and shorter than a test may take, so a wait in vain fails with what it
-// waited for. It is set once, here, for every test; ui/src/test/limits.ts says why it is what it is.
+// How long a test waits for something to appear (`findBy...`, `waitFor`): three seconds, nine on
+// CI. That is longer than the library's one second, and shorter than a test may take, so a wait
+// in vain fails with what it waited for. It is set once, here, for every test;
+// ui/src/test/limits.ts says why it is what it is.
 configure({ asyncUtilTimeout: testLimits(process.env).wait });
 
 // No test reaches the file dialog, the file manager, or the window's drag events: the module that

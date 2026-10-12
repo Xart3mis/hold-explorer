@@ -11,9 +11,14 @@ describe("the time a test is given", () => {
     expect(testLimits({ CI: "" })).toEqual(testLimits({}));
   });
 
-  it("is three times that on CI, for both, and the wait of the queries stays where it is", () => {
-    expect(testLimits({ CI: "true" })).toEqual({ wait: 3000, test: 15_000, slow: 60_000 });
+  it("is three times that on CI, and so is the wait of the queries: a runner is slower in everything", () => {
+    expect(testLimits({ CI: "true" })).toEqual({ wait: 9000, test: 15_000, slow: 60_000 });
     expect(testLimits({ CI: "1" })).toEqual(testLimits({ CI: "true" }));
+    // The three times keep their proportions, so what holds for them locally holds on CI.
+    const local = testLimits({});
+    const ci = testLimits({ CI: "true" });
+    expect(ci.wait / local.wait).toBe(ci.test / local.test);
+    expect(ci.test / local.test).toBe(ci.slow / local.slow);
   });
 
   it("keeps the wait of the queries below the limit of a test, so a wait in vain says what it waited for", () => {
