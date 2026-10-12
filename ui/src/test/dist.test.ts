@@ -142,6 +142,24 @@ describe("check-dist", () => {
     }
   });
 
+  it("fails a page that holds a style element", () => {
+    // Tauri gives every style element of a page a nonce, and a style policy with a nonce no
+    // longer allows the styles a library adds at run time.
+    for (const element of ["<style>html { background: #0b1011; }</style>", '<STYLE media="all">']) {
+      const run = check({ "index.html": `<head>${element}</head>` });
+      expect(run.status).toBe(1);
+      expect(run.output).toContain("index.html");
+      expect(run.output).toContain("style element");
+    }
+
+    // A stylesheet that is linked, an attribute, and the word in a script are no style element.
+    const run = check({
+      "index.html": '<link rel="stylesheet" href="/assets/index.css"><div style="color: red">',
+      "assets/index.js": 'const tag = "<style>";',
+    });
+    expect(run.status).toBe(0);
+  });
+
   it("fails a build that contains the development gallery", () => {
     const page = check({ "gallery.html": "<div></div>", "index.html": "<div></div>" });
     expect(page.status).toBe(1);

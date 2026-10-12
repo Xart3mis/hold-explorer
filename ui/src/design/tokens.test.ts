@@ -48,13 +48,19 @@ describe("tokens.css", () => {
     );
   });
 
-  it("gives index.html the dark surface color for the first paint", () => {
+  it("gives the window the dark surface color for the first paint", () => {
     const hex = spawnSync(
       process.execPath,
       ["tools/design/check-tokens.mjs", "--hex", "dark", "--color-surface-app"],
       { cwd: root, encoding: "utf8" },
     );
     expect(hex.status).toBe(0);
-    expect(read("ui/index.html")).toContain(`background: ${hex.stdout.trim()};`);
+    // The window paints its first frame itself: a style element in the page would get a nonce
+    // from Tauri, and with it the style policy would refuse what the component library adds.
+    const config: unknown = JSON.parse(read("src-tauri/tauri.conf.json"));
+    expect(config).toMatchObject({
+      app: { windows: [{ label: "main", backgroundColor: hex.stdout.trim() }] },
+    });
+    expect(read("ui/index.html")).not.toMatch(/<style/i);
   });
 });

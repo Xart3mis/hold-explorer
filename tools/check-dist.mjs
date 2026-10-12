@@ -1,4 +1,5 @@
-// Scans the built interface for anything that names another host, and for the development pages.
+// Scans the built interface for anything that names another host, for the development pages, and
+// for a style element in a page.
 //
 //   node tools/check-dist.mjs [--dir <path>]      (default: dist; run after `pnpm build`)
 //
@@ -8,6 +9,11 @@
 //
 // A font written into a stylesheet as a `data:` address is reported as well: the policy lets
 // fonts load from the app's own files only, so such a font would never show.
+//
+// A `<style>` element in a page is reported too. Tauri gives every style element of a page a
+// nonce and adds it to the style policy, and a policy with a nonce no longer honours
+// 'unsafe-inline': the styles a component library adds at run time would then be refused in the
+// built app only. The first frame of the window gets its color from `tauri.conf.json` instead.
 //
 // Every `http://` and `https://` reference in every file is reported, except four kinds:
 //   1. XML namespaces (`http://www.w3.org/...`): names, never fetched.
@@ -80,6 +86,7 @@ const DEVELOPMENT_PAGES = [
 
 const URL_PATTERN = /https?:\/\/[^\s"'`<>\\)]*/g;
 const INLINE_FONT = /url\(\s*["']?data:(font\/|application\/(x-)?font)/i;
+const STYLE_ELEMENT = /<style[\s>]/i;
 const LICENSE_COMMENT = /(^|\n)[ \t]*\/\*(?:!|[\s*]*@license\b)[\s\S]*?\*\//g;
 
 function filesUnder(dir) {
@@ -126,6 +133,13 @@ export function scan(dir) {
         problem: "holds a font as a data: address, which the content security policy refuses",
       });
     }
+    if (/\.html?$/i.test(file) && STYLE_ELEMENT.test(text)) {
+      problems.push({
+        file,
+        problem:
+          "holds a style element, which gets a nonce that makes the style policy refuse styles added at run time",
+      });
+    }
     if (/\.LICENSE\.txt$/i.test(file)) continue;
     const seen = new Set();
     for (const url of withoutLicenseText(text).match(URL_PATTERN) ?? []) {
@@ -154,16 +168,17 @@ function main(argv) {
   if (problems.length > 0) {
     console.error(
       `check-dist: FAILED, ${problems.length} problem(s) in ${files.length} files. ` +
-        "Bundle the resource with the app, or remove the reference.",
+        "Bundle the resource with the app, or remove what is reported.",
     );
     return 1;
   }
   console.log(
-    `check-dist: PASSED, ${files.length} files, no reference to another host and no development page.`,
+    `check-dist: PASSED, ${files.length} files, no reference to another host, no development page, and no style element in a page.`,
   );
   return 0;
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === import.meta.filename) {
-  process.exit(main(process.argv.slice(2)));
-}
+// Nothing imports this file, so it always runs: a comparison of its own path with the path it was
+// started by can come out false (a link, another spelling of a drive), and the check would then
+// end without checking and without a word.
+process.exit(main(process.argv.slice(2)));
