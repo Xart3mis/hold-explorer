@@ -8,8 +8,14 @@ import type { WorkspaceView } from "../bindings/WorkspaceView";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { FilterOptions } from "../bindings/FilterOptions";
+import type { HoldRef } from "../bindings/HoldRef";
+import type { HoldsView } from "../bindings/HoldsView";
+import type { LineDetail } from "../bindings/LineDetail";
+import type { LinePage } from "../bindings/LinePage";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { TargetCheck } from "../bindings/TargetCheck";
+import type { ValuePage } from "../bindings/ValuePage";
 import type { api } from "./commands";
 
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
@@ -31,6 +37,13 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.snapshotSelect>, Promise<WorkspaceOpen>>>,
   Check<Equal<ReturnType<typeof api.overview>, Promise<OverviewView | null>>>,
   Check<Equal<ReturnType<typeof api.demoCreate>, Promise<WorkspaceOpen>>>,
+  Check<Equal<ReturnType<typeof api.filterOptions>, Promise<FilterOptions>>>,
+  Check<Equal<ReturnType<typeof api.filterValues>, Promise<ValuePage>>>,
+  Check<Equal<ReturnType<typeof api.lines>, Promise<LinePage>>>,
+  Check<Equal<ReturnType<typeof api.holds>, Promise<HoldsView>>>,
+  Check<Equal<ReturnType<typeof api.lineDetail>, Promise<LineDetail | null>>>,
+  Check<Equal<ReturnType<typeof api.holdDetail>, Promise<HoldRef | null>>>,
+  Check<Equal<ReturnType<typeof api.workspaceCurrent>, Promise<WorkspaceOpen | null>>>,
   Check<Equal<AppStart["list_error"], CommandError | null>>,
   Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];

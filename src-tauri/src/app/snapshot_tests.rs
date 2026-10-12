@@ -16,12 +16,12 @@ use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::snapshots::{OverviewView, ViewRef};
 use super::AppState;
 
-struct Fixture {
-    dir: TempDir,
+pub(super) struct Fixture {
+    pub(super) dir: TempDir,
 }
 
 impl Fixture {
-    fn new() -> Fixture {
+    pub(super) fn new() -> Fixture {
         Fixture {
             dir: TempDir::new().unwrap(),
         }
@@ -31,11 +31,11 @@ impl Fixture {
         self.dir.path().join("data").join("workspaces")
     }
 
-    fn state(&self) -> AppState {
+    pub(super) fn state(&self) -> AppState {
         AppState::new(self.dir.path().join("config"), self.dir.path().join("data"))
     }
 
-    fn synth(&self, name: &str, seed: u64) -> PathBuf {
+    pub(super) fn synth(&self, name: &str, seed: u64) -> PathBuf {
         let cfg = SynthConfig::new(seed, 10, 60);
         let dir = self.dir.path().join("input");
         std::fs::create_dir_all(&dir).unwrap();
@@ -45,14 +45,19 @@ impl Fixture {
     }
 }
 
-fn at(text: &str) -> NaiveDateTime {
+pub(super) fn at(text: &str) -> NaiveDateTime {
     NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").unwrap()
 }
 
 fn no_progress(_: ImportPhase) {}
 
 /// Imports the file as a snapshot dated `taken_at` into a new workspace, or into the open one.
-fn import(state: &mut AppState, path: &Path, taken_at: &str, new_workspace: bool) -> i64 {
+pub(super) fn import(
+    state: &mut AppState,
+    path: &Path,
+    taken_at: &str,
+    new_workspace: bool,
+) -> i64 {
     let target = if new_workspace {
         TargetChoice::New { name: "W".into() }
     } else {
@@ -76,11 +81,11 @@ fn import(state: &mut AppState, path: &Path, taken_at: &str, new_workspace: bool
         .id
 }
 
-fn open_holds() -> FilterSpec {
+pub(super) fn open_holds() -> FilterSpec {
     FilterSpec::default()
 }
 
-fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
+pub(super) fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
     ViewRef {
         workspace_id: workspace_id.to_string(),
         snapshot_id,

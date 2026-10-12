@@ -44,6 +44,20 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   snapshot_select: () => api.snapshotSelect(fixture.snapshot_select.id),
   overview: () => api.overview(fixture.overview.spec, fixture.overview.view),
   demo_create: () => api.demoCreate(),
+  filter_options: () => api.filterOptions(fixture.filter_options.spec, fixture.filter_options.view),
+  filter_values: () =>
+    api.filterValues(
+      fixture.filter_values.spec,
+      fixture.filter_values.dim,
+      fixture.filter_values.search,
+      fixture.filter_values.view,
+    ),
+  lines: () =>
+    api.lines(fixture.lines.spec, fixture.lines.query, fixture.lines.offset, fixture.lines.view),
+  holds: () => api.holds(fixture.holds.spec, fixture.holds.query, fixture.holds.view),
+  line_detail: () => api.lineDetail(fixture.line_detail.lineId, fixture.line_detail.view),
+  hold_detail: () => api.holdDetail(fixture.hold_detail.position, fixture.hold_detail.view),
+  workspace_current: () => api.workspaceCurrent(),
 };
 
 const names = Object.keys(calls).sort() as CommandName[];

@@ -1,18 +1,27 @@
 // The only module that imports `invoke`: command names and argument keys are written here once.
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
+import type { Dim } from "../bindings/Dim";
 import type { Field } from "../bindings/Field";
+import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { HoldQuery } from "../bindings/HoldQuery";
+import type { HoldRef } from "../bindings/HoldRef";
+import type { HoldsView } from "../bindings/HoldsView";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { LineDetail } from "../bindings/LineDetail";
+import type { LinePage } from "../bindings/LinePage";
+import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { Settings } from "../bindings/Settings";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { TargetChoice } from "../bindings/TargetChoice";
 import type { Theme } from "../bindings/Theme";
+import type { ValuePage } from "../bindings/ValuePage";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceListView } from "../bindings/WorkspaceListView";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
@@ -41,6 +50,19 @@ interface CommandMap {
   snapshot_select: { args: { id: number }; result: WorkspaceOpen };
   overview: { args: { spec: FilterSpec; view: ViewRef }; result: OverviewView | null };
   demo_create: { args: Record<string, never>; result: WorkspaceOpen };
+  filter_options: { args: { spec: FilterSpec; view: ViewRef }; result: FilterOptions };
+  filter_values: {
+    args: { spec: FilterSpec; dim: Dim; search: string; view: ViewRef };
+    result: ValuePage;
+  };
+  lines: {
+    args: { spec: FilterSpec; query: LineQuery; offset: number; view: ViewRef };
+    result: LinePage;
+  };
+  holds: { args: { spec: FilterSpec; query: HoldQuery; view: ViewRef }; result: HoldsView };
+  line_detail: { args: { lineId: string; view: ViewRef }; result: LineDetail | null };
+  hold_detail: { args: { position: number; view: ViewRef }; result: HoldRef | null };
+  workspace_current: { args: Record<string, never>; result: WorkspaceOpen | null };
 }
 
 export type CommandName = keyof CommandMap;
@@ -80,4 +102,25 @@ export const api = {
    */
   overview: (spec: FilterSpec, view: ViewRef) => call("overview", { spec, view }),
   demoCreate: () => call("demo_create", {}),
+  /**
+   * The data commands below answer for the snapshot in view, like `overview`, and reject with the
+   * kind `ViewChanged` when `view` is not what the state holds. The options of the filter bar:
+   * the count of the kept holds, the facet counts, the extra columns, and the absent fields.
+   */
+  filterOptions: (spec: FilterSpec, view: ViewRef) => call("filter_options", { spec, view }),
+  /** The values of one dimension a picker offers, at most 200, whose label contains `search`. */
+  filterValues: (spec: FilterSpec, dim: Dim, search: string, view: ViewRef) =>
+    call("filter_values", { spec, dim, search, view }),
+  /** At most 200 Lines from `offset`. */
+  lines: (spec: FilterSpec, query: LineQuery, offset: number, view: ViewRef) =>
+    call("lines", { spec, query, offset, view }),
+  /** At most 200 Holds, from `query.offset`. */
+  holds: (spec: FilterSpec, query: HoldQuery, view: ViewRef) =>
+    call("holds", { spec, query, view }),
+  /** The detail of one Line; `null` when the snapshot has no such Line. */
+  lineDetail: (lineId: string, view: ViewRef) => call("line_detail", { lineId, view }),
+  /** The Hold at this position of the snapshot; `null` past the end. */
+  holdDetail: (position: number, view: ViewRef) => call("hold_detail", { position, view }),
+  /** The open workspace with the snapshot that is selected; `null` without one. Changes nothing. */
+  workspaceCurrent: () => call("workspace_current", {}),
 };

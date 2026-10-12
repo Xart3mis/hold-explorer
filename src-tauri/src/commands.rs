@@ -13,15 +13,17 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::NaiveDateTime;
-use hx_core::filter::FilterSpec;
+use hx_core::detail::{HoldRef, LineDetail};
+use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
+use hx_core::query::{HoldQuery, LinePage, LineQuery, ValuePage};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::app::{
-    AppStart, AppState, CommandError, ImportCommit, ImportDone, ImportDraft, ImportPhase,
-    ImportReview, OverviewView, Settings, TargetCheck, TargetChoice, Theme, ViewRef,
-    WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    AppStart, AppState, CommandError, FilterOptions, HoldsView, ImportCommit, ImportDone,
+    ImportDraft, ImportPhase, ImportReview, OverviewView, Settings, TargetCheck, TargetChoice,
+    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -190,6 +192,82 @@ pub async fn overview<R: Runtime>(
     blocking(app, move |state| state.overview(&spec, &view)).await
 }
 
+/// The options of the filter bar for this filter, when `view` is the view in the state.
+#[tauri::command]
+pub async fn filter_options<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    view: ViewRef,
+) -> Result<FilterOptions, CommandError> {
+    blocking(app, move |state| state.filter_options(&spec, &view)).await
+}
+
+/// The values of one dimension a picker offers, when `view` is the view in the state.
+#[tauri::command]
+pub async fn filter_values<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    dim: Dim,
+    search: String,
+    view: ViewRef,
+) -> Result<ValuePage, CommandError> {
+    blocking(app, move |state| {
+        state.filter_values(&spec, &dim, &search, &view)
+    })
+    .await
+}
+
+/// A page of Lines, when `view` is the view in the state.
+#[tauri::command]
+pub async fn lines<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    query: LineQuery,
+    offset: usize,
+    view: ViewRef,
+) -> Result<LinePage, CommandError> {
+    blocking(app, move |state| state.lines(&spec, &query, offset, &view)).await
+}
+
+/// A page of Holds, when `view` is the view in the state.
+#[tauri::command]
+pub async fn holds<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    query: HoldQuery,
+    view: ViewRef,
+) -> Result<HoldsView, CommandError> {
+    blocking(app, move |state| state.holds(&spec, &query, &view)).await
+}
+
+/// The detail of one Line, when `view` is the view in the state.
+#[tauri::command]
+pub async fn line_detail<R: Runtime>(
+    app: AppHandle<R>,
+    line_id: String,
+    view: ViewRef,
+) -> Result<Option<LineDetail>, CommandError> {
+    blocking(app, move |state| state.line_detail(&line_id, &view)).await
+}
+
+/// The detail of one Hold, when `view` is the view in the state.
+#[tauri::command]
+pub async fn hold_detail<R: Runtime>(
+    app: AppHandle<R>,
+    position: usize,
+    view: ViewRef,
+) -> Result<Option<HoldRef>, CommandError> {
+    blocking(app, move |state| state.hold_detail(position, &view)).await
+}
+
+/// The open workspace with the snapshot that is selected; nothing changes.
+#[tauri::command]
+pub async fn workspace_current<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<WorkspaceOpen>, CommandError> {
+    blocking(app, |state| state.current()).await
+}
+
 /// Makes the demo workspace and opens it.
 #[tauri::command]
 pub async fn demo_create<R: Runtime>(app: AppHandle<R>) -> Result<WorkspaceOpen, CommandError> {
@@ -313,6 +391,11 @@ mod tests {
             [
                 ("app_start", "Ok"),
                 ("demo_create", "Ok"),
+                // The view of the fixture is not the demo workspace.
+                ("filter_options", "ViewChanged"),
+                ("filter_values", "ViewChanged"),
+                ("hold_detail", "ViewChanged"),
+                ("holds", "ViewChanged"),
                 ("import_cancel", "Ok"),
                 // No file is open for import: the three steps that need one say so, which they
                 // can only do once their arguments were read.
@@ -322,12 +405,14 @@ mod tests {
                 // The file of the fixture does not exist.
                 ("import_open", "NotFound"),
                 ("import_review", "NoDraft"),
-                // The view of the fixture is not the demo workspace.
+                ("line_detail", "ViewChanged"),
+                ("lines", "ViewChanged"),
                 ("overview", "ViewChanged"),
                 ("settings_set_theme", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),
                 ("workspace_create", "Ok"),
+                ("workspace_current", "Ok"),
                 ("workspace_list", "Ok"),
                 // The workspace of the fixture is not in the folder.
                 ("workspace_open", "WorkspaceNotFound"),
@@ -435,6 +520,8 @@ mod tests {
             .lines()
             .skip(1)
             .filter(|line| line.starts_with("  ") && !line.starts_with("   "))
+            // The end of an entry written over several lines.
+            .filter(|line| !line.trim_start().starts_with('}'))
             .filter_map(|line| line.trim().split(':').next())
             .map(str::to_string)
             .collect()

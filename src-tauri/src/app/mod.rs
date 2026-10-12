@@ -1,6 +1,7 @@
 //! The state of the application and the operations on it, in plain functions that take plain
 //! arguments, so tests need no window.
 
+mod data;
 mod demo;
 mod error;
 mod import;
@@ -12,8 +13,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use hx_core::dataset::Dataset;
+use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
+pub use data::{FilterOptions, HoldsView};
 pub use error::CommandError;
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
@@ -24,6 +27,16 @@ pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
 use settings::{load_settings_checked, save_settings, LoadedSettings};
 
+/// The dataset that was built last, with the workspace and the snapshot it belongs to, and the
+/// solve plan of its open holds once one was asked for. Read it through [`AppState::dataset`]
+/// and [`AppState::plan`] only, which ask for the snapshot.
+struct Cache {
+    workspace_id: String,
+    snapshot_id: i64,
+    dataset: Dataset,
+    plan: Option<SolvePlan>,
+}
+
 /// What the application holds between commands.
 pub struct AppState {
     config_dir: PathBuf,
@@ -32,15 +45,18 @@ pub struct AppState {
     /// Why saving the settings is refused, when the settings file could not be read or moved aside.
     settings_blocked: Option<CommandError>,
     open: Option<Workspace>,
+    /// The id of the workspace in `open`, kept beside it so a check of the view reads no file.
+    open_id: Option<String>,
     selected: Option<i64>,
     /// The file being imported, when there is one.
     draft: Option<import::Draft>,
-    /// The dataset that was built last, with the id of its snapshot. Read it through
-    /// [`AppState::dataset`] only, which asks for the snapshot.
-    dataset: Option<(i64, Dataset)>,
+    cache: Option<Cache>,
     /// How many datasets were built since the application started.
     #[cfg(test)]
     dataset_builds: usize,
+    /// How many solve plans were built since the application started.
+    #[cfg(test)]
+    plan_builds: usize,
 }
 
 impl AppState {
@@ -54,11 +70,14 @@ impl AppState {
             settings,
             settings_blocked: blocked,
             open: None,
+            open_id: None,
             selected: None,
             draft: None,
-            dataset: None,
+            cache: None,
             #[cfg(test)]
             dataset_builds: 0,
+            #[cfg(test)]
+            plan_builds: 0,
         }
     }
 
@@ -77,6 +96,18 @@ impl AppState {
     #[cfg(test)]
     fn selected_snapshot(&self) -> Option<i64> {
         self.selected
+    }
+
+    /// The open workspace as the state holds it, with the snapshot that is selected; `None`
+    /// without one. It changes nothing: the selection, the cache, and a file open for import
+    /// stay.
+    pub fn current(&self) -> Result<Option<WorkspaceOpen>, CommandError> {
+        let Some(workspace) = &self.open else {
+            return Ok(None);
+        };
+        let mut open = describe(workspace)?;
+        open.selected = self.selected;
+        Ok(Some(open))
     }
 
     /// Saves the settings, unless the settings file was left untouched because it could not be
@@ -106,8 +137,9 @@ impl AppState {
     /// and what the result says is open is exactly what the state holds.
     pub fn start(&mut self) -> AppStart {
         self.open = None;
+        self.open_id = None;
         self.selected = None;
-        self.dataset = None;
+        self.cache = None;
         self.draft = None;
         let folder = self.folder();
         let (raw, list_error) = match list_workspaces(&folder) {
@@ -242,8 +274,9 @@ impl AppState {
     /// A file open for import is dropped.
     fn install(&mut self, workspace: Workspace, open: &WorkspaceOpen) {
         self.draft = None;
-        self.dataset = None;
+        self.cache = None;
         self.open = Some(workspace);
+        self.open_id = Some(open.workspace.id.clone());
         self.selected = open.selected;
     }
 }
@@ -260,6 +293,8 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     })
 }
 
+#[cfg(test)]
+mod data_tests;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]
