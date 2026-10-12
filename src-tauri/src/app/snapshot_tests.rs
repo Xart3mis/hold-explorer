@@ -6,12 +6,14 @@ use hx_core::filter::{Dim, FieldFilter, FilterSpec, Status};
 use hx_core::load::load_file;
 use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
+use hx_core::warning::WarningKind;
 use hx_store::{delete_workspace, list_workspaces, StoreError, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 use tempfile::TempDir;
 
 use super::error::CommandError;
 use super::import::{ImportCommit, ImportPhase, TargetChoice};
+use super::snapshots::{OverviewView, ViewRef};
 use super::AppState;
 
 struct Fixture {
@@ -78,6 +80,19 @@ fn open_holds() -> FilterSpec {
     FilterSpec::default()
 }
 
+fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
+    ViewRef {
+        workspace_id: workspace_id.to_string(),
+        snapshot_id,
+    }
+}
+
+/// The overview as the interface asks for it when what it shows is what the state holds.
+fn overview(state: &mut AppState, spec: &FilterSpec) -> Option<OverviewView> {
+    let view = view_of(&state.open_id(), state.selected_snapshot());
+    state.overview(spec, &view).unwrap()
+}
+
 /// The numbers `overview` must give for a file, computed without the app.
 fn direct(
     path: &Path,
@@ -96,13 +111,16 @@ fn direct(
 fn overview_without_a_workspace_says_so_and_without_snapshots_is_none() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    assert_eq!(
-        state.overview(&open_holds()).unwrap_err().kind,
-        "NoWorkspace"
-    );
+    for snapshot_id in [None, Some(1)] {
+        let view = view_of("0123456789abcdef", snapshot_id);
+        assert_eq!(
+            state.overview(&open_holds(), &view).unwrap_err().kind,
+            "NoWorkspace"
+        );
+    }
     assert_eq!(state.select_snapshot(1).unwrap_err().kind, "NoWorkspace");
     state.create_workspace("Empty").unwrap();
-    assert_eq!(state.overview(&open_holds()).unwrap(), None);
+    assert_eq!(overview(&mut state, &open_holds()), None);
 }
 
 #[test]
@@ -111,7 +129,7 @@ fn the_overview_equals_the_engine_run_on_the_same_file() {
     let path = fx.synth("a.xlsx", 1);
     let mut state = fx.state();
     let id = import(&mut state, &path, "2026-09-29 13:16:00", true);
-    let view = state.overview(&open_holds()).unwrap().unwrap();
+    let view = overview(&mut state, &open_holds()).unwrap();
     let (expected, groups) = direct(&path, at("2026-09-29 13:16:00"), &open_holds());
     assert_eq!(view.snapshot.id, id);
     assert!(view.is_latest);
@@ -145,14 +163,14 @@ fn selecting_the_older_snapshot_gives_its_numbers_and_says_it_is_not_the_latest(
     assert_eq!(opened.workspace.snapshot_count, 2);
     assert_eq!(state.selected_snapshot(), Some(older));
 
-    let view = state.overview(&open_holds()).unwrap().unwrap();
+    let view = overview(&mut state, &open_holds()).unwrap();
     assert_eq!(view.snapshot.id, older);
     assert!(!view.is_latest);
     let (expected, _) = direct(&first, at("2026-09-01 00:00:00"), &open_holds());
     assert_eq!(view.summary, expected);
 
     state.select_snapshot(newer).unwrap();
-    let view = state.overview(&open_holds()).unwrap().unwrap();
+    let view = overview(&mut state, &open_holds()).unwrap();
     assert!(view.is_latest);
     let (expected, _) = direct(&second, at("2026-09-08 00:00:00"), &open_holds());
     assert_eq!(view.summary, expected);
@@ -176,24 +194,157 @@ fn the_dataset_is_built_once_and_again_after_a_selection_or_an_import() {
     let mut state = fx.state();
     let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
     assert_eq!(state.dataset_builds(), 0);
-    state.overview(&open_holds()).unwrap();
-    state.overview(&open_holds()).unwrap();
+    overview(&mut state, &open_holds());
+    overview(&mut state, &open_holds());
     assert_eq!(state.dataset_builds(), 1);
 
     import(&mut state, &second, "2026-09-08 00:00:00", false);
-    state.overview(&open_holds()).unwrap();
+    overview(&mut state, &open_holds());
     assert_eq!(state.dataset_builds(), 2, "an import drops the dataset");
-    state.overview(&open_holds()).unwrap();
+    overview(&mut state, &open_holds());
     assert_eq!(state.dataset_builds(), 2);
 
     state.select_snapshot(older).unwrap();
-    state.overview(&open_holds()).unwrap();
+    overview(&mut state, &open_holds());
     assert_eq!(state.dataset_builds(), 3, "a selection drops the dataset");
 
     let id = state.open_id();
     state.open_workspace(&id).unwrap();
-    state.overview(&open_holds()).unwrap();
+    overview(&mut state, &open_holds());
     assert_eq!(state.dataset_builds(), 4, "opening a workspace drops it");
+}
+
+#[test]
+fn the_overview_answers_only_for_the_view_the_interface_shows() {
+    let fx = Fixture::new();
+    let (first, second) = (fx.synth("a.xlsx", 1), fx.synth("b.xlsx", 2));
+    let mut state = fx.state();
+    let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
+    let newer = import(&mut state, &second, "2026-09-08 00:00:00", false);
+    let workspace = state.open_id();
+
+    // The view the interface shows: answered, for that snapshot.
+    let answer = state
+        .overview(&open_holds(), &view_of(&workspace, Some(newer)))
+        .unwrap()
+        .unwrap();
+    assert_eq!(answer.snapshot.id, newer);
+    assert_eq!(state.dataset_builds(), 1);
+
+    // Another workspace, another snapshot, and no snapshot at all: refused, and nothing is read.
+    for stale in [
+        view_of("0123456789abcdef", Some(newer)),
+        view_of(&workspace, Some(older)),
+        view_of(&workspace, Some(newer + 100)),
+        view_of(&workspace, None),
+    ] {
+        let error = state.overview(&open_holds(), &stale).unwrap_err();
+        assert_eq!(error.kind, "ViewChanged", "{stale:?}");
+        assert!(
+            error
+                .message
+                .contains("changed while the request was on its way"),
+            "{}",
+            error.message
+        );
+        assert!(
+            error.message.contains("reads it again"),
+            "{}",
+            error.message
+        );
+    }
+    assert_eq!(state.dataset_builds(), 1);
+
+    // A request made for the newer snapshot that arrives after the older one was selected is
+    // refused, and so is one made for the workspace that was open before another was opened.
+    state.select_snapshot(older).unwrap();
+    let late = state.overview(&open_holds(), &view_of(&workspace, Some(newer)));
+    assert_eq!(late.unwrap_err().kind, "ViewChanged");
+    let now = overview(&mut state, &open_holds()).unwrap();
+    assert_eq!(now.snapshot.id, older);
+    let other = state.create_workspace("Other").unwrap().workspace.id;
+    let late = state.overview(&open_holds(), &view_of(&workspace, Some(older)));
+    assert_eq!(late.unwrap_err().kind, "ViewChanged");
+
+    // A workspace without snapshots answers `None` for no snapshot, and refuses a snapshot.
+    assert_eq!(
+        state
+            .overview(&open_holds(), &view_of(&other, None))
+            .unwrap(),
+        None
+    );
+    let error = state
+        .overview(&open_holds(), &view_of(&other, Some(older)))
+        .unwrap_err();
+    assert_eq!(error.kind, "ViewChanged");
+}
+
+#[test]
+fn the_view_reference_reads_what_the_interface_sends() {
+    let view: ViewRef =
+        serde_json::from_str(r#"{"workspace_id":"0123456789abcdef","snapshot_id":3}"#).unwrap();
+    assert_eq!(view, view_of("0123456789abcdef", Some(3)));
+    let view: ViewRef =
+        serde_json::from_str(r#"{"workspace_id":"0123456789abcdef","snapshot_id":null}"#).unwrap();
+    assert_eq!(view, view_of("0123456789abcdef", None));
+}
+
+/// A file of the given rows, imported into a new workspace: its overview for open holds, and
+/// the kinds of the warnings its review gave.
+fn overview_of_text(fx: &Fixture, name: &str, content: &str) -> (OverviewView, Vec<WarningKind>) {
+    let dir = fx.dir.path().join("input");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    std::fs::write(&path, content).unwrap();
+    let mut state = fx.state();
+    state.import_open(&path).unwrap();
+    let review = state.import_review(None).unwrap();
+    let kinds = review.warnings.iter().map(|group| group.kind).collect();
+    import(&mut state, &path, "2026-09-29 00:00:00", true);
+    (overview(&mut state, &open_holds()).unwrap(), kinds)
+}
+
+#[test]
+fn the_open_count_of_the_snapshot_equals_the_holds_of_the_default_overview() {
+    let fx = Fixture::new();
+
+    // A full file: an id and a released column, some holds released.
+    let mut state = fx.state();
+    import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-29 00:00:00",
+        true,
+    );
+    let full = overview(&mut state, &open_holds()).unwrap();
+    assert!(!full.snapshot.limited);
+    assert!(full.snapshot.open_count > 0);
+    assert!(full.snapshot.open_count < full.snapshot.row_count);
+    assert_eq!(full.summary.holds, full.snapshot.open_count);
+
+    // A limited file: no released column, so every hold counts as open.
+    let (limited, _) = overview_of_text(
+        &fx,
+        "limited.csv",
+        "line_id,hold_remark,hold_type\nL-1,waiting for a drawing,MISC.\nL-2,waiting for a valve,MISC.\nL-2,waiting for a datasheet,MISC.\n",
+    );
+    assert!(limited.snapshot.limited);
+    assert_eq!(limited.snapshot.open_count, 3);
+    assert_eq!(limited.summary.holds, limited.snapshot.open_count);
+
+    // Released values the engine does not recognize, beside ones it does.
+    let (odd, warnings) = overview_of_text(
+        &fx,
+        "odd.csv",
+        "id,line_id,hold_remark,hold_type,released\n1,L-1,a,MISC.,maybe\n2,L-2,b,MISC.,Yes\n3,L-3,c,MISC.,No\n4,L-4,d,MISC.,??\n5,L-5,e,MISC.,\n",
+    );
+    assert!(
+        warnings.contains(&WarningKind::UnrecognizedReleased),
+        "{warnings:?}"
+    );
+    assert_eq!(odd.snapshot.row_count, 5);
+    assert!(odd.snapshot.open_count < odd.snapshot.row_count);
+    assert_eq!(odd.summary.holds, odd.snapshot.open_count);
 }
 
 #[test]
@@ -202,7 +353,7 @@ fn a_filter_with_a_discipline_returns_only_that_disciplines_holds() {
     let path = fx.synth("a.xlsx", 1);
     let mut state = fx.state();
     import(&mut state, &path, "2026-09-29 00:00:00", true);
-    let all = state.overview(&open_holds()).unwrap().unwrap();
+    let all = overview(&mut state, &open_holds()).unwrap();
     let top = all.by_discipline.first().unwrap().clone();
     assert!(all.by_discipline.len() > 1);
 
@@ -214,7 +365,7 @@ fn a_filter_with_a_discipline_returns_only_that_disciplines_holds() {
         }],
         ..FilterSpec::default()
     };
-    let view = state.overview(&spec).unwrap().unwrap();
+    let view = overview(&mut state, &spec).unwrap();
     assert_eq!(view.by_discipline, std::slice::from_ref(&top));
     assert_eq!(view.summary.holds, top.holds);
     assert_eq!(
@@ -273,7 +424,7 @@ fn the_demo_workspace_has_four_snapshots_seven_days_apart_and_the_newest_selecte
     }
     assert!(workspace.saved_mapping().unwrap().is_some());
 
-    let view = state.overview(&open_holds()).unwrap().unwrap();
+    let view = overview(&mut state, &open_holds()).unwrap();
     assert!(view.is_latest);
     assert!(view.summary.holds > 0);
 

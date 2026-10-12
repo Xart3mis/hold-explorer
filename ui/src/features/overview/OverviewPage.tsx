@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { useId, useState } from "react";
 import { api } from "../../api/commands";
@@ -205,7 +205,14 @@ export function OverviewPage() {
   });
   const query = useQuery({
     queryKey: keys.overview(open?.workspace.id ?? null, open?.selected ?? null, OPEN_HOLDS),
-    queryFn: () => api.overview(OPEN_HOLDS),
+    queryFn:
+      open === null
+        ? skipToken
+        : () =>
+            api.overview(OPEN_HOLDS, {
+              workspace_id: open.workspace.id,
+              snapshot_id: open.selected,
+            }),
     enabled: open !== null,
   });
   // What was read for the snapshot or the workspace of before is shown until the new reading is

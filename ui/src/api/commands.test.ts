@@ -122,8 +122,9 @@ describe("the snapshot commands", () => {
         return overview;
       },
     });
-    expect(await api.overview(openHoldsFilter())).toEqual(overview);
-    expect(sent).toEqual({ spec: openHolds });
+    const view = { workspace_id: workspace.id, snapshot_id: done.snapshot.id };
+    expect(await api.overview(openHoldsFilter(), view)).toEqual(overview);
+    expect(sent).toEqual({ spec: openHolds, view });
     expect(openHoldsFilter()).toEqual(openHolds);
   });
 

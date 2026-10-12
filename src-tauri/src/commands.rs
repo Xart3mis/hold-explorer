@@ -17,8 +17,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::app::{
     AppStart, AppState, CommandError, ImportCommit, ImportDone, ImportDraft, ImportPhase,
-    ImportReview, OverviewView, Settings, TargetCheck, TargetChoice, Theme, WorkspaceListView,
-    WorkspaceOpen, WorkspaceView,
+    ImportReview, OverviewView, Settings, TargetCheck, TargetChoice, Theme, ViewRef,
+    WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -156,13 +156,14 @@ pub async fn snapshot_select(app: AppHandle, id: i64) -> Result<WorkspaceOpen, C
     blocking(app, move |state| state.select_snapshot(id)).await
 }
 
-/// The Overview of the selected snapshot for this filter.
+/// The Overview of the selected snapshot for this filter, when `view` is the view in the state.
 #[tauri::command]
 pub async fn overview(
     app: AppHandle,
     spec: FilterSpec,
+    view: ViewRef,
 ) -> Result<Option<OverviewView>, CommandError> {
-    blocking(app, move |state| state.overview(&spec)).await
+    blocking(app, move |state| state.overview(&spec, &view)).await
 }
 
 /// Makes the demo workspace and opens it.

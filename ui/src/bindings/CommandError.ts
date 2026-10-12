@@ -6,7 +6,7 @@
 export type CommandError = { 
 /**
  * The error's variant name, for example `NewerSchema`, or one of `NoWorkspace`, `NoDraft`,
- * `WorkspaceNotFound`, `ReplaceNotOffered`, `Settings`, `Internal`.
+ * `WorkspaceNotFound`, `ReplaceNotOffered`, `ViewChanged`, `Settings`, `Internal`.
  */
 kind: string, 
 /**

@@ -22,7 +22,7 @@ pub use import::{
 pub use settings::{
     load_settings, load_settings_checked, save_settings, LoadedSettings, Settings, Theme,
 };
-pub use snapshots::OverviewView;
+pub use snapshots::{OverviewView, ViewRef};
 pub use workspaces::{AppStart, UnreadableView, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
 /// What the application holds between commands.
@@ -36,9 +36,11 @@ pub struct AppState {
     selected: Option<i64>,
     /// The file being imported, when there is one.
     draft: Option<import::Draft>,
-    /// The dataset of the selected snapshot, built when first asked for.
-    dataset: Option<Dataset>,
+    /// The dataset that was built last, with the id of its snapshot. Read it through
+    /// [`AppState::dataset`] only, which asks for the snapshot.
+    dataset: Option<(i64, Dataset)>,
     /// How many datasets were built since the application started.
+    #[cfg(test)]
     dataset_builds: usize,
 }
 
@@ -56,6 +58,7 @@ impl AppState {
             selected: None,
             draft: None,
             dataset: None,
+            #[cfg(test)]
             dataset_builds: 0,
         }
     }

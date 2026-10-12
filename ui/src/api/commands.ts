@@ -13,6 +13,7 @@ import type { Settings } from "../bindings/Settings";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { TargetChoice } from "../bindings/TargetChoice";
 import type { Theme } from "../bindings/Theme";
+import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceListView } from "../bindings/WorkspaceListView";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
@@ -38,7 +39,7 @@ interface CommandMap {
   import_commit: { args: { request: ImportCommit; onProgress: Progress }; result: ImportDone };
   import_cancel: { args: Record<string, never>; result: null };
   snapshot_select: { args: { id: number }; result: WorkspaceOpen };
-  overview: { args: { spec: FilterSpec }; result: OverviewView | null };
+  overview: { args: { spec: FilterSpec; view: ViewRef }; result: OverviewView | null };
   demo_create: { args: Record<string, never>; result: WorkspaceOpen };
 }
 
@@ -72,7 +73,11 @@ export const api = {
   },
   importCancel: () => call("import_cancel", {}),
   snapshotSelect: (id: number) => call("snapshot_select", { id }),
-  /** The Overview of the selected snapshot; `null` when the workspace has no snapshot. */
-  overview: (spec: FilterSpec) => call("overview", { spec }),
+  /**
+   * The Overview of the snapshot in view; `null` when the workspace has no snapshot. `view` names
+   * the workspace and the snapshot the interface shows; when the state holds another, the command
+   * rejects with the kind `ViewChanged` and answers nothing.
+   */
+  overview: (spec: FilterSpec, view: ViewRef) => call("overview", { spec, view }),
   demoCreate: () => call("demo_create", {}),
 };

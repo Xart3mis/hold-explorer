@@ -22,6 +22,17 @@ const NEWEST = "2026-10-07T08:00:00";
 type Answer = NonNullable<Handlers["overview"]>;
 
 /**
+ * What the page asks with: the complete default filter, and the view it shows, which is the
+ * workspace the tests open with this snapshot selected, or with none.
+ */
+function asked(snapshotId: number | null) {
+  return {
+    spec: openHoldsFilter(),
+    view: { workspace_id: workspace().id, snapshot_id: snapshotId },
+  };
+}
+
+/**
  * Renders the app on the Overview with the test's own answer to the `overview` command. The
  * answer is a spy, so a test sees that the page asked, and what it asked with: the default
  * answer of `renderApp` is never what a test of this page reads.
@@ -82,7 +93,7 @@ async function loaded(overview: Mock<Answer>): Promise<HTMLElement> {
     expect(content(main)).not.toHaveAttribute("aria-busy");
   });
   expect(overview).toHaveBeenCalled();
-  for (const [args] of overview.mock.calls) expect(args).toEqual({ spec: openHoldsFilter() });
+  for (const [args] of overview.mock.calls) expect(args.spec).toEqual(openHoldsFilter());
   return main;
 }
 
@@ -149,7 +160,7 @@ describe("the Overview with a snapshot", () => {
     const { overview } = renderOverview();
     await loaded(overview);
     expect(overview).toHaveBeenCalledTimes(1);
-    expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
+    expect(overview).toHaveBeenCalledWith(asked(2));
   });
 
   it("says under its title how many holds the snapshot has and how many of them are open", async () => {
@@ -458,7 +469,7 @@ describe("the Overview while it changes", () => {
       expect(status(main)).toHaveTextContent(text.loading);
     });
     expect(content(main)).toHaveAttribute("aria-busy", "true");
-    expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
+    expect(overview).toHaveBeenCalledWith(asked(2));
     // The line that is announced is not inside what is busy, so it is not held back.
     expect(content(main)).not.toContainElement(status(main));
     // The labels of the figures are known; a block stands for each value.
@@ -690,7 +701,7 @@ describe("the Overview of a workspace without snapshots", () => {
     expect(
       await within(main).findByRole("heading", { level: 2, name: text.emptyTitle }),
     ).toBeInTheDocument();
-    expect(overview).toHaveBeenCalledWith({ spec: openHoldsFilter() });
+    expect(overview).toHaveBeenCalledWith(asked(null));
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
