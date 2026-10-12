@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dataset::{Dataset, Row};
 use crate::filter::{AgeBand, Dim, FilterSpec, Status};
+use crate::normalize::{DASH, UNSPECIFIED};
 
 fn filtered<'a>(ds: &'a Dataset, spec: &'a FilterSpec) -> impl Iterator<Item = &'a Row> {
     ds.rows.iter().filter(move |row| spec.matches(row))
@@ -247,13 +248,13 @@ pub enum HoldSort {
     OldestFirst,
     /// Line ID ascending, in byte order.
     LineId,
-    /// Discipline ascending.
+    /// Discipline ascending; holds with the blank spelling `Unspecified` come last.
     Discipline,
-    /// Hold type ascending.
+    /// Hold type ascending; holds with the blank spelling `—` come last.
     HoldType,
     /// Blocker ascending: the discipline, then the item.
     Blocker,
-    /// Name ascending.
+    /// Name ascending; holds with the blank spelling `—` come last.
     Name,
 }
 
@@ -328,7 +329,7 @@ pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
         .unwrap_or(0);
     let reverse = query.reverse;
     let same = |_: &(usize, &Row), _: &(usize, &Row)| Ordering::Equal;
-    let text = |value: &str| Some(value.to_lowercase());
+    let text = |value: &str, blank: &str| (value != blank).then(|| value.to_lowercase());
     match query.sort {
         HoldSort::FileOrder if reverse => selected.reverse(),
         HoldSort::FileOrder => {}
@@ -348,21 +349,21 @@ pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
         ),
         HoldSort::Discipline => order_by(
             &mut selected,
-            |(_, row)| text(&row.hold.discipline),
+            |(_, row)| text(&row.hold.discipline, UNSPECIFIED),
             |a, b| a.cmp(b),
             reverse,
             same,
         ),
         HoldSort::HoldType => order_by(
             &mut selected,
-            |(_, row)| text(&row.hold.hold_type),
+            |(_, row)| text(&row.hold.hold_type, DASH),
             |a, b| a.cmp(b),
             reverse,
             same,
         ),
         HoldSort::Name => order_by(
             &mut selected,
-            |(_, row)| text(&row.hold.name),
+            |(_, row)| text(&row.hold.name, DASH),
             |a, b| a.cmp(b),
             reverse,
             same,
@@ -638,7 +639,11 @@ pub fn value_page(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testkit::sample;
+    use crate::dataset::Dataset;
+    use crate::filter::{default_age_bands, FieldFilter};
+    use crate::model::Hold;
+    use crate::rules::RuleSet;
+    use crate::testkit::{hold, sample, snapshot};
 
     fn open() -> FilterSpec {
         FilterSpec::default()
@@ -934,12 +939,6 @@ mod tests {
         let l3 = rows.iter().find(|r| r.line_id == "L3").unwrap();
         assert_eq!(l3.oldest_age_days, None);
     }
-
-    use crate::dataset::Dataset;
-    use crate::filter::{default_age_bands, FieldFilter};
-    use crate::model::Hold;
-    use crate::rules::RuleSet;
-    use crate::testkit::{hold, snapshot};
 
     fn only(dim: Dim, values: &[&str]) -> FilterSpec {
         FilterSpec {
@@ -1317,7 +1316,7 @@ mod tests {
         );
         assert_eq!(
             hold_positions(&ds, HoldSort::Name, true),
-            vec![4, 0, 3, 1, 2]
+            vec![0, 3, 1, 2, 4]
         );
         assert_eq!(
             hold_positions(&ds, HoldSort::Blocker, true),
@@ -1331,6 +1330,43 @@ mod tests {
             hold_positions(&ds, HoldSort::FileOrder, true),
             vec![4, 3, 2, 1, 0]
         );
+    }
+
+    #[test]
+    fn holds_with_a_blank_spelling_come_last_in_both_directions() {
+        let make = |discipline: &str, hold_type: &str, name: &str| -> Hold {
+            let mut h = hold("L", discipline, hold_type, "x", 3);
+            h.name = name.to_string();
+            h
+        };
+        // Position 1 is blank for all three sorts; 0 and 3 tie on every value.
+        let ds = Dataset::build(
+            vec![
+                make("Civil", "b", "bob"),
+                make(UNSPECIFIED, DASH, DASH),
+                make("Piping", "a", "Alice"),
+                make("Civil", "b", "bob"),
+                make(UNSPECIFIED, DASH, DASH),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        for (sort, forward, backward) in [
+            (
+                HoldSort::Discipline,
+                vec![0, 3, 2, 1, 4],
+                vec![2, 0, 3, 1, 4],
+            ),
+            (HoldSort::HoldType, vec![2, 0, 3, 1, 4], vec![0, 3, 2, 1, 4]),
+            (HoldSort::Name, vec![2, 0, 3, 1, 4], vec![0, 3, 2, 1, 4]),
+        ] {
+            assert_eq!(hold_positions(&ds, sort, false), forward, "{sort:?}");
+            assert_eq!(
+                hold_positions(&ds, sort, true),
+                backward,
+                "{sort:?} reversed"
+            );
+        }
     }
 
     #[test]

@@ -85,6 +85,8 @@ pub fn line_detail(ds: &Dataset, plan: &SolvePlan, line_id: &str) -> Option<Line
         if chain.iter().any(|link| link.key == key) {
             continue;
         }
+        // The plan has no node for the blocker only when it was built from another filter than
+        // the open holds of `ds`, which the contract of this function excludes.
         let lines = match plan.nodes.iter().find(|node| node.key == key) {
             Some(node) => node.lines.len(),
             None => lines_with_open_blocker(ds, &key),

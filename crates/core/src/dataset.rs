@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn absent_fields_lists_what_no_row_has_in_field_order() {
         use crate::mapping::Field;
-        // `sample` has no id, no release remark, no release date on open rows... but one release.
+        // Two open holds with a line, a name, a role, a discipline, and a creation date, and nothing else.
         let ds = build(vec![
             crate::testkit::hold("L1", "Civil", "MISC.", "x", 3),
             crate::testkit::hold("L2", "Piping", "P&ID", "x", 4),
