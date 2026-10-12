@@ -50,10 +50,15 @@ export interface DataTableProps<Item> {
   /**
    * The key of the selected row: the one whose detail is open. The screen holds it. Enter or a
    * click on the selected row leaves it selected; only the screen removes the selection, by
-   * passing `null`, for example when the detail panel closes on Escape.
+   * passing `null`, for example when the detail panel closes on Escape. It marks a row only in
+   * a table whose rows can be selected.
    */
   selectedKey?: string | null;
-  /** Called with the key of the row that was selected. */
+  /**
+   * Called with the key of the row that was selected. Giving it makes the rows selectable.
+   * Without it the table is there to be read: no row is marked as selectable or selected, and a
+   * row does not answer to the pointer.
+   */
   onSelectionChange?: (key: string) => void;
   /** The sort the rows are in, to mark its column. */
   sort?: DataTableSort;
@@ -86,8 +91,9 @@ function trackOf(kind: DataTableColumnKind, width: string | undefined): string {
 
 /**
  * The table of the app: a ruled page that behaves like a grid. Arrow keys, Home, and End move
- * the focused row; Enter selects it; a sortable header is pressed to ask for a sort. It sits
- * directly on the content area, with no container around it. It is not virtualized.
+ * the focused row; in a table with a selection handler Enter selects it; a sortable header is
+ * pressed to ask for a sort. It sits directly on the content area, with no container around it.
+ * It is not virtualized.
  *
  * On a first load the body holds placeholders in the shape of rows. They are a picture, not
  * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
@@ -112,6 +118,7 @@ export function DataTable<Item>({
   const countId = useId();
   const [scrolled, setScrolled] = useState(false);
   const loading = isLoading === true;
+  const selectable = onSelectionChange !== undefined && !loading;
   const tracks = columns.map((column) => trackOf(column.kind ?? "text", column.width));
   if (rowActions !== undefined) tracks.push("max-content");
 
@@ -132,10 +139,13 @@ export function DataTable<Item>({
       <Table
         aria-label={props["aria-label"]}
         aria-describedby={countId}
-        selectionMode={loading ? "none" : "single"}
+        data-selectable={selectable ? "" : undefined}
+        selectionMode={selectable ? "single" : "none"}
         selectionBehavior="toggle"
         disallowEmptySelection
-        selectedKeys={selectedKey === undefined || selectedKey === null ? [] : [selectedKey]}
+        selectedKeys={
+          !selectable || selectedKey === undefined || selectedKey === null ? [] : [selectedKey]
+        }
         onSelectionChange={(keys) => {
           if (keys === "all") return;
           const [key] = keys;

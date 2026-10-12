@@ -224,6 +224,8 @@ describe("what the review page shows", () => {
     expect(rows).toHaveLength(12);
     expect(rows[0]).toHaveTextContent(`418${text.skip.BlankLineId}${text.blank}`);
     expect(rows[1]).toHaveTextContent(`425${text.skip.UnreadableDate}31/02/2025`);
+    // The rows are there to be read: none says that it can be selected.
+    for (const row of rows) expect(row).not.toHaveAttribute("aria-selected");
     // Every skipped row is listed, so nothing says that some are left out.
     expect(within(main).queryByText(/Showing the first/)).not.toBeInTheDocument();
   });

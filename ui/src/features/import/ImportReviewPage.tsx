@@ -88,6 +88,8 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const date = readDate(review.detected, choices);
   const target = readTarget(review, choices);
   const { workspace } = target;
+  // The name of a new workspace as its field holds it at this moment; see `ReviewTarget`.
+  const typedNameRef = useRef<string | null>(null);
   const committing = importCommit.isPending;
   const commitFailed = importCommit.isError;
   const statusId = useId();
@@ -161,10 +163,16 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
 
   const commit = () => {
     if (reasons.length > 0 || date.moment === null || target.id === null) return;
+    // The page was last rendered when the name field was last left, or when a name first stood
+    // in it. A press on Import leaves the field in the same moment, so the name is read as typed.
+    const newName = (typedNameRef.current ?? target.name).trim();
+    if (target.isNew && newName === "") return;
+    // What the page says while the import runs names the workspace as it was sent.
+    if (target.isNew && typedNameRef.current !== null && typedNameRef.current !== target.name) {
+      choose({ newName: typedNameRef.current });
+    }
     const request: ImportCommit = {
-      target: target.isNew
-        ? { kind: "New", name: workspaceName }
-        : { kind: "Existing", id: target.id },
+      target: target.isNew ? { kind: "New", name: newName } : { kind: "Existing", id: target.id },
       taken_at: date.moment,
       date_edited: date.edited,
       replace: replaced?.id ?? null,
@@ -337,6 +345,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
         onOpen={openIt}
         isOpening={cancel.isPending || openWorkspace.isPending}
         onChoose={decide}
+        typedNameRef={typedNameRef}
         isDisabled={committing}
       >
         {openWorkspace.isError ? (

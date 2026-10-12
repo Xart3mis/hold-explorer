@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { formatCount } from "../../app/format";
 import { t, type MessageKey } from "../../app/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
@@ -58,37 +59,44 @@ const warnings: Record<WarningKind, { title: MessageKey; text: MessageKey }> = {
  * Everything the import did not take as written: the rows it left out and what it changed or
  * assumed. The counts and what the app did are on the page at once; the rows and the examples
  * are one press away, in the same place. A file with nothing of the kind says so.
+ *
+ * It depends on the review alone and is rendered again only for another review: its table may
+ * hold two hundred rows, and what the user chooses or types elsewhere on the page changes none
+ * of them.
  */
-export function ReviewFindings({ review }: { review: ImportReview }) {
+export const ReviewFindings = memo(function ReviewFindings({ review }: { review: ImportReview }) {
   const { skipped, skipped_count: skippedCount, warnings: groups } = review;
+  const skippedColumns = useMemo(
+    (): DataTableColumn<SkippedRow>[] => [
+      {
+        id: "row",
+        header: t("import.review.columnRow"),
+        kind: "number",
+        isRowHeader: true,
+        // A row is named as the file numbers it, without separators.
+        cell: (row) => String(row.row_number),
+      },
+      {
+        id: "reason",
+        header: t("import.review.columnReason"),
+        cell: (row) => t(reasons[row.kind]),
+        width: "max-content",
+      },
+      {
+        id: "value",
+        header: t("import.review.columnValue"),
+        // The value is the text of the file, written as an identifier is: exactly, in the monospace.
+        kind: "identifier",
+        isSupporting: true,
+        cell: (row) => row.value ?? t("import.review.blank"),
+        width: "minmax(0, 1fr)",
+      },
+    ],
+    [],
+  );
   if (skippedCount === 0 && groups.length === 0) {
     return <p className={styles.text}>{t("import.review.clean")}</p>;
   }
-  const skippedColumns: DataTableColumn<SkippedRow>[] = [
-    {
-      id: "row",
-      header: t("import.review.columnRow"),
-      kind: "number",
-      isRowHeader: true,
-      // A row is named as the file numbers it, without separators.
-      cell: (row) => String(row.row_number),
-    },
-    {
-      id: "reason",
-      header: t("import.review.columnReason"),
-      cell: (row) => t(reasons[row.kind]),
-      width: "max-content",
-    },
-    {
-      id: "value",
-      header: t("import.review.columnValue"),
-      // The value is the text of the file, written as an identifier is: exactly, in the monospace.
-      kind: "identifier",
-      isSupporting: true,
-      cell: (row) => row.value ?? t("import.review.blank"),
-      width: "minmax(0, 1fr)",
-    },
-  ];
   return (
     <div className={styles.detailsList}>
       {skippedCount === 0 ? (
@@ -154,4 +162,4 @@ export function ReviewFindings({ review }: { review: ImportReview }) {
       )}
     </div>
   );
-}
+});

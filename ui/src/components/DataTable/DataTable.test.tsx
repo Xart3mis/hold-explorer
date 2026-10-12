@@ -100,6 +100,49 @@ describe("DataTable", () => {
     expect(rows[0]).toHaveFocus();
   });
 
+  it("is read, not selected, without a selection handler: no row is selectable, hovered, or pressed", async () => {
+    const user = userEvent.setup();
+    render(table({ selectedKey: "78B01-573-4386-FW-001" }));
+    const grid = screen.getByRole("grid");
+    const row = dataRow(1);
+    // Nothing says that a row can be selected, also not the row whose key is given as selected.
+    expect(grid).not.toHaveAttribute("data-selectable");
+    for (const each of dataRows()) {
+      expect(each).not.toHaveAttribute("aria-selected");
+      expect(each).not.toHaveAttribute("data-selected");
+    }
+
+    // The pointer changes nothing about a row.
+    await user.hover(row);
+    expect(row).not.toHaveAttribute("data-hovered");
+    await user.pointer({ keys: "[MouseLeft>]", target: row });
+    expect(row).not.toHaveAttribute("data-pressed");
+    await user.pointer({ keys: "[/MouseLeft]", target: row });
+    expect(row).not.toHaveAttribute("aria-selected");
+    expect(row).not.toHaveAttribute("data-selected");
+
+    // The keyboard still moves through the rows, and Enter and Space select nothing.
+    row.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(dataRow(2)).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    for (const each of dataRows()) expect(each).not.toHaveAttribute("aria-selected");
+  });
+
+  it("says that its rows can be selected when it has a selection handler, and shows the pointer on a row", async () => {
+    const user = userEvent.setup();
+    render(table({ onSelectionChange: () => undefined }));
+    const row = dataRow(1);
+    expect(screen.getByRole("grid")).toHaveAttribute("data-selectable");
+    expect(row).toHaveAttribute("aria-selected", "false");
+    await user.hover(row);
+    expect(row).toHaveAttribute("data-hovered");
+    await user.pointer({ keys: "[MouseLeft>]", target: row });
+    expect(row).toHaveAttribute("data-pressed");
+    await user.pointer({ keys: "[/MouseLeft]", target: row });
+  });
+
   it("does not select a row by moving to it; Enter selects", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();
@@ -340,6 +383,7 @@ describe("DataTable", () => {
       rerender(
         table({
           selectedKey: "78B02-538-CW-2207",
+          onSelectionChange: () => undefined,
           sort: { column: "holds", direction: "ascending" },
           onSortChange: () => undefined,
           rowActions: () => <Button variant="quiet">Show holds</Button>,

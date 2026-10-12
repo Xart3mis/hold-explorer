@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 import { formatDate, formatDateTime, formatTime } from "../../app/format";
 import { t } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
@@ -34,6 +34,11 @@ export interface ReviewTargetProps {
   onOpen: (workspace: string) => void;
   isOpening: boolean;
   onChoose: (chosen: Partial<ImportChoices>) => void;
+  /**
+   * Where the name of a new workspace is written at every key, as its field holds it. The page
+   * is not rendered again for a key, so the import reads the name there when it is sent.
+   */
+  typedNameRef: RefObject<string | null>;
   /** An import is running: nothing can be changed. */
   isDisabled: boolean;
   /** What else the page has to say under the target. */
@@ -49,6 +54,11 @@ function holdsOf(snapshot: SnapshotInfo): string {
  * already has against the file. A workspace that holds the same file blocks the import and is
  * offered to open; snapshots of the same day are listed, and are all kept unless the user
  * chooses to replace one, which the choice itself says cannot be undone.
+ *
+ * The name of a new workspace takes effect when its field is left or Enter is pressed in it, not
+ * at every key, as the snapshot date does: a key in the field renders this section and nothing
+ * else of the page. One thing the page hears at once, because it says it at once: that the name
+ * is missing, or no longer is.
  */
 export function ReviewTarget({
   review,
@@ -63,10 +73,18 @@ export function ReviewTarget({
   onOpen,
   isOpening,
   onChoose,
+  typedNameRef,
   isDisabled,
   children,
 }: ReviewTargetProps) {
   const project = review.project_no;
+  // The name as it is being typed, until the field is left: the page works with what was last left.
+  const [typing, setTyping] = useState<string | null>(null);
+  const leaveName = () => {
+    if (typing === null) return;
+    setTyping(null);
+    onChoose({ newName: typing });
+  };
   const matching = new Set(review.target.matching.map((workspace) => workspace.id));
 
   const options: SelectOption[] = review.target.all.map((workspace) => {
@@ -123,10 +141,19 @@ export function ReviewTarget({
           label={t("import.review.target.newName")}
           description={t("import.review.target.newHelp")}
           placeholder={t("workspaces.namePlaceholder")}
-          value={target.name}
+          value={typing ?? target.name}
           isDisabled={isDisabled}
           onChange={(value) => {
-            onChoose({ newName: value });
+            const before = typing ?? target.name;
+            setTyping(value);
+            typedNameRef.current = value;
+            // Whether Import waits for a name is said on the page as soon as it changes.
+            if ((value.trim() === "") !== (before.trim() === "")) onChoose({ newName: value });
+          }}
+          onBlur={leaveName}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") leaveName();
+            else event.continuePropagation();
           }}
           className={styles.narrow}
         />

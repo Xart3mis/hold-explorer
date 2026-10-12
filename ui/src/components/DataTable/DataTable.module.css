@@ -92,21 +92,25 @@
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 
-.row[data-hovered] {
+/*
+ * A row answers to the pointer only where it can be selected. A table that is there to be read,
+ * such as a preview or a group of Overview shown as a table, keeps its rows as they are.
+ */
+.table[data-selectable] .row[data-hovered] {
   background-color: var(--color-surface-hover);
 }
 
-.row[data-pressed] {
+.table[data-selectable] .row[data-pressed] {
   background-color: var(--color-surface-pressed);
 }
 
 /* Selection is a tint across the whole row. */
-.row[data-selected] {
+.table[data-selectable] .row[data-selected] {
   background-color: var(--color-accent-subtle);
 }
 
-.row[data-selected][data-hovered],
-.row[data-selected][data-pressed] {
+.table[data-selectable] .row[data-selected][data-hovered],
+.table[data-selectable] .row[data-selected][data-pressed] {
   background-color: var(--color-accent-subtle-hover);
 }
 

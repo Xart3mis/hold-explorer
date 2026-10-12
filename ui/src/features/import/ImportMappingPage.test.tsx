@@ -196,6 +196,10 @@ describe("the mapping page", () => {
     ]);
     expect(within(table).getAllByRole("row")).toHaveLength(4);
     expect(within(table).getByText("78B01-573-4434-FW-002")).toBeInTheDocument();
+    // The rows are there to be read: none says that it can be selected.
+    for (const row of within(table).getAllByRole("row")) {
+      expect(row).not.toHaveAttribute("aria-selected");
+    }
   });
 
   it(

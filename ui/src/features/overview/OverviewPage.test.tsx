@@ -380,6 +380,12 @@ describe("the Overview with a snapshot", () => {
     const [, firstRow] = within(grid).getAllByRole("row");
     const cells = within(must(firstRow, "the first row")).getAllByRole("gridcell");
     expect(cells.map((cell) => cell.getAttribute("data-kind"))).toEqual(["number", "number"]);
+    // The table is read, not selected: no row says that it can be.
+    for (const row of within(grid).getAllByRole("row")) {
+      expect(row).not.toHaveAttribute("aria-selected");
+    }
+    await user.click(must(firstRow, "the first row"));
+    expect(must(firstRow, "the first row")).not.toHaveAttribute("aria-selected");
     // The table stands in for the bars of its group; the other group keeps its bars.
     expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: text.byHoldType })).toBeInTheDocument();
