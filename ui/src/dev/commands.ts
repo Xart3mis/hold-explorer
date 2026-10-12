@@ -10,6 +10,7 @@ import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
+import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
@@ -507,7 +508,20 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       });
     },
     import_cancel: () => null,
-    overview: () => {
+    overview: (payload) => {
+      // As the Rust side does: a request for another view than the one it holds is refused.
+      const view = (payload as { view?: ViewRef } | undefined)?.view;
+      if (!start.open)
+        throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
+      if (
+        view?.workspace_id !== start.open.workspace.id ||
+        view.snapshot_id !== start.open.selected
+      ) {
+        throw failure(
+          "ViewChanged",
+          "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
+        );
+      }
       overviewReadings += 1;
       if (state === "overview-loading") return new Promise(() => undefined);
       // The first reading answers; every reading after it stays on its way.

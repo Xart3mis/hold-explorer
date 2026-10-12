@@ -5,6 +5,7 @@ import { keys } from "../../api/keys";
 import { formatDateTime } from "../../app/format";
 import { queryClient } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
+import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { OverviewView } from "../../bindings/OverviewView";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
@@ -49,6 +50,11 @@ function renderOverview(
     handlers: { ...options.handlers, overview },
   });
   return { ...app, overview };
+}
+
+/** The key the page keeps a reading under: the one a snapshot query has for this view and filter. */
+function keyOf(workspaceId: string, snapshotId: number, spec: FilterSpec) {
+  return keys.snapshot({ workspace_id: workspaceId, snapshot_id: snapshotId }, "overview", [spec]);
 }
 
 /** What the page says under its title once the numbers of a snapshot of several holds are there. */
@@ -675,13 +681,13 @@ describe("the Overview while it changes", () => {
 
   it("keys what it read by the workspace, the snapshot, and the filter", () => {
     const spec = openHoldsFilter();
-    const key = keys.overview("a1b2c3d4e5f60718", 2, spec);
+    const key = keyOf("a1b2c3d4e5f60718", 2, spec);
     expect(key).toContain("a1b2c3d4e5f60718");
     expect(key).toContain(2);
     expect(key).toContainEqual(spec);
-    expect(keys.overview("a1b2c3d4e5f60718", 1, spec)).not.toEqual(key);
-    expect(keys.overview("b2c3d4e5f6071829", 2, spec)).not.toEqual(key);
-    expect(keys.overview("a1b2c3d4e5f60718", 2, { ...spec, status: "Released" })).not.toEqual(key);
+    expect(keyOf("a1b2c3d4e5f60718", 1, spec)).not.toEqual(key);
+    expect(keyOf("b2c3d4e5f6071829", 2, spec)).not.toEqual(key);
+    expect(keyOf("a1b2c3d4e5f60718", 2, { ...spec, status: "Released" })).not.toEqual(key);
   });
 });
 

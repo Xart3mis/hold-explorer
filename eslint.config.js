@@ -48,6 +48,19 @@ const catalogSyntax = [
   },
 ];
 
+// A command that changes the open workspace or the selected snapshot is sent as an action of
+// useApp(), made with workspaceAction(). A feature that sent one by itself would run outside the
+// order of the actions, and while it ran a page could read one snapshot's data for another.
+const actionMessage =
+  "Send a command that changes the open workspace or the selected snapshot through an action of useApp() (ui/src/app/useApp.ts), made with workspaceAction() of ui/src/app/view.ts.";
+const actionSyntax = [
+  {
+    selector:
+      "MemberExpression[object.name='api'][property.name=/^(workspaceOpen|workspaceCreate|workspaceRename|snapshotSelect|importCommit|demoCreate)$/]",
+    message: actionMessage,
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -144,6 +157,19 @@ export default tseslint.config(
     files: ["ui/src/**/*.tsx"],
     ignores: ["ui/src/dev/**", "ui/src/**/*.test.tsx", "ui/src/**/*.test-d.tsx"],
     rules: { "no-restricted-syntax": ["error", ...formatSyntax, ...catalogSyntax] },
+  },
+  {
+    // The features: the rules above, and no action on the open workspace of their own.
+    files: ["ui/src/features/**/*.ts"],
+    ignores: ["ui/src/**/*.test.ts", "ui/src/**/*.test-d.ts"],
+    rules: { "no-restricted-syntax": ["error", ...formatSyntax, ...actionSyntax] },
+  },
+  {
+    files: ["ui/src/features/**/*.tsx"],
+    ignores: ["ui/src/**/*.test.tsx", "ui/src/**/*.test-d.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", ...formatSyntax, ...catalogSyntax, ...actionSyntax],
+    },
   },
   {
     files: ["**/*.js", "**/*.mjs"],

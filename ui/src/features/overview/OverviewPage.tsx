@@ -1,12 +1,11 @@
-import { skipToken, useQuery } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
 import { useId, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { openHoldsFilter } from "../../api/filter";
-import { keys } from "../../api/keys";
 import { formatCount, formatDateTime, formatDays } from "../../app/format";
 import { t } from "../../app/i18n";
+import { useSnapshotQuery } from "../../app/view";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
 import type { Summary } from "../../bindings/Summary";
@@ -203,17 +202,10 @@ export function OverviewPage() {
     discipline: false,
     holdType: false,
   });
-  const query = useQuery({
-    queryKey: keys.overview(open?.workspace.id ?? null, open?.selected ?? null, OPEN_HOLDS),
-    queryFn:
-      open === null
-        ? skipToken
-        : () =>
-            api.overview(OPEN_HOLDS, {
-              workspace_id: open.workspace.id,
-              snapshot_id: open.selected,
-            }),
-    enabled: open !== null,
+  const query = useSnapshotQuery({
+    name: "overview",
+    params: [OPEN_HOLDS],
+    read: (view) => api.overview(OPEN_HOLDS, view),
   });
   // What was read for the snapshot or the workspace of before is shown until the new reading is
   // there, with one exception: that the workspace of before had no snapshot says nothing about

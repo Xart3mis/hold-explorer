@@ -1,4 +1,4 @@
-import type { FilterSpec } from "../bindings/FilterSpec";
+import type { ViewRef } from "../bindings/ViewRef";
 
 /** Cache keys for what commands return; one place, so a key is spelled once. */
 export const keys = {
@@ -28,13 +28,19 @@ export const keys = {
   /** What importing into a workspace at a date would meet. */
   importCheck: (workspace: string, takenAt: string) =>
     ["import", "check", workspace, takenAt] as const,
+  /** Everything that was read for a snapshot in view, of whatever workspace: the prefix of those keys. */
+  snapshots: ["snapshot"] as const,
   /**
-   * The overview of one snapshot under one filter. The command answers for the workspace that is
-   * open and the snapshot that is selected, so both are part of the key: another workspace or
-   * another snapshot is another reading. `null` stands for a workspace without snapshots.
+   * One reading for one view: `name` says what was read, `params` what else the answer depends on,
+   * such as the filter. The command answers for the workspace that is open and the snapshot that
+   * is selected, so both are part of the key: another workspace or another snapshot is another
+   * reading. `null` stands for a workspace without snapshots, and for no workspace at all.
+   *
+   * Only `useSnapshotQuery` (ui/src/app/view.ts) builds such a key: it sends the same view to the
+   * command, so the two cannot differ.
    */
-  overview: (workspace: string | null, snapshot: number | null, spec: FilterSpec) =>
-    ["overview", workspace, snapshot, spec] as const,
+  snapshot: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
+    ["snapshot", view?.workspace_id ?? null, view?.snapshot_id ?? null, name, ...params] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

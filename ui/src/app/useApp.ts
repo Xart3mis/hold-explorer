@@ -17,13 +17,8 @@ import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../bindings/WorkspaceView";
 import { t } from "./i18n";
 import { startQuery } from "./query";
+import { workspaceAction } from "./view";
 
-/**
- * The actions that change the open workspace or its selection share one scope: they run one after
- * another, in the order they were asked for. Each command acts on whatever workspace is open when
- * it arrives, so the order must not depend on which answer happens to come back first.
- */
-const WORKSPACE_SCOPE = { id: "workspace" };
 /** Changes of the settings are sent one after another as well, so the last one asked for is the last one saved. */
 const SETTINGS_SCOPE = { id: "settings" };
 
@@ -107,8 +102,10 @@ function themeChangesOf(client: QueryClient): ThemeChanges {
  * has and nothing else. An action that changes which workspaces exist, or what one is called,
  * also reads the workspaces folder again.
  *
- * The actions on the open workspace run one after another, and `isBusy` is true for every reader
- * while any of them runs or waits its turn. The commit of an import is one of them.
+ * The actions on the open workspace are made with `workspaceAction()` (ui/src/app/view.ts), and
+ * only so: they run one after another, `isBusy` is true for every reader while any of them runs
+ * or waits its turn, and nothing is read for the snapshot in view meanwhile. The commit of an
+ * import is one of them.
  *
  * A failed action leaves the cached state as it was. Its error is the `error` of the mutation;
  * show it with `asCommandError`.
@@ -127,75 +124,81 @@ export function useApp() {
     return readList(client);
   };
 
-  const openWorkspace = useMutation({
-    mutationKey: keys.switching,
-    scope: WORKSPACE_SCOPE,
-    mutationFn: (id: string) => api.workspaceOpen(id),
-    onSuccess: opened,
-  });
+  const openWorkspace = useMutation(
+    workspaceAction(client, {
+      kind: "switching",
+      mutationFn: (id: string) => api.workspaceOpen(id),
+      onSuccess: opened,
+    }),
+  );
 
-  const createWorkspace = useMutation({
-    mutationKey: keys.changing,
-    scope: WORKSPACE_SCOPE,
-    mutationFn: (name: string) => api.workspaceCreate(name),
-    onSuccess: openedAndListed,
-  });
+  const createWorkspace = useMutation(
+    workspaceAction(client, {
+      kind: "changing",
+      mutationFn: (name: string) => api.workspaceCreate(name),
+      onSuccess: openedAndListed,
+    }),
+  );
 
-  const openDemo = useMutation({
-    mutationKey: keys.changing,
-    scope: WORKSPACE_SCOPE,
-    mutationFn: () => api.demoCreate(),
-    onSuccess: openedAndListed,
-  });
+  const openDemo = useMutation(
+    workspaceAction(client, {
+      kind: "changing",
+      mutationFn: () => api.demoCreate(),
+      onSuccess: openedAndListed,
+    }),
+  );
 
-  const renameWorkspace = useMutation({
-    mutationKey: keys.changing,
-    scope: WORKSPACE_SCOPE,
-    // The check is made when the rename's turn comes: an action asked for before it may have
-    // opened another workspace, and the command would give that one the name.
-    mutationFn: ({ id, name }: Rename) => {
-      const open = client.getQueryData<AppStart>(keys.start)?.open;
-      if (open?.workspace.id !== id) {
-        const gone: Error & CommandError = Object.assign(new Error(t("workspaces.renameGone")), {
-          kind: WORKSPACE_CHANGED,
-        });
-        return Promise.reject(gone);
-      }
-      return api.workspaceRename(name);
-    },
-    onSuccess: (workspace) => {
-      change(client, (state) =>
-        listed(
-          state.open?.workspace.id === workspace.id
-            ? { ...state, open: { ...state.open, workspace } }
-            : state,
-          workspace,
-        ),
-      );
-      return readList(client);
-    },
-  });
+  const renameWorkspace = useMutation(
+    workspaceAction(client, {
+      kind: "changing",
+      // The check is made when the rename's turn comes: an action asked for before it may have
+      // opened another workspace, and the command would give that one the name.
+      mutationFn: ({ id, name }: Rename) => {
+        const open = client.getQueryData<AppStart>(keys.start)?.open;
+        if (open?.workspace.id !== id) {
+          const gone: Error & CommandError = Object.assign(new Error(t("workspaces.renameGone")), {
+            kind: WORKSPACE_CHANGED,
+          });
+          return Promise.reject(gone);
+        }
+        return api.workspaceRename(name);
+      },
+      onSuccess: (workspace) => {
+        change(client, (state) =>
+          listed(
+            state.open?.workspace.id === workspace.id
+              ? { ...state, open: { ...state.open, workspace } }
+              : state,
+            workspace,
+          ),
+        );
+        return readList(client);
+      },
+    }),
+  );
 
-  const selectSnapshot = useMutation({
-    mutationKey: keys.switching,
-    scope: WORKSPACE_SCOPE,
-    mutationFn: (id: number) => api.snapshotSelect(id),
-    onSuccess: opened,
-  });
+  const selectSnapshot = useMutation(
+    workspaceAction(client, {
+      kind: "switching",
+      mutationFn: (id: number) => api.snapshotSelect(id),
+      onSuccess: opened,
+    }),
+  );
 
   // An import makes its target the open workspace, with the new snapshot selected: it may open
   // another workspace, or create one. So it takes its turn with the other actions on the open
   // workspace, and the start holds what it opened before the next of them runs.
-  const importCommit = useMutation({
-    mutationKey: keys.changing,
-    scope: WORKSPACE_SCOPE,
-    mutationFn: ({ request, onProgress }: Commit) => api.importCommit(request, onProgress),
-    onSuccess: (done, { request }) => {
-      opened(done.open);
-      // A workspace the import created is new to the folder; one that existed is already listed.
-      return request.target.kind === "New" ? readList(client) : undefined;
-    },
-  });
+  const importCommit = useMutation(
+    workspaceAction(client, {
+      kind: "changing",
+      mutationFn: ({ request, onProgress }: Commit) => api.importCommit(request, onProgress),
+      onSuccess: (done, { request }) => {
+        opened(done.open);
+        // A workspace the import created is new to the folder; one that existed is already listed.
+        return request.target.kind === "New" ? readList(client) : undefined;
+      },
+    }),
+  );
 
   const setTheme = useMutation({
     scope: SETTINGS_SCOPE,
