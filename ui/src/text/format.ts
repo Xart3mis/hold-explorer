@@ -112,9 +112,8 @@ export function formatDays(days: number): string {
  */
 export function formatAgeBand(band: { min_days: number | null; max_days: number | null }): string {
   const { min_days: min, max_days: max } = band;
-  if (min === null && max === null) return t("ageBand.any");
-  if (max === null) return t("ageBand.from", { count: min ?? 0 });
-  if (min === null) return t("ageBand.upTo", { count: max });
+  if (min === null) return max === null ? t("ageBand.any") : t("ageBand.upTo", { count: max });
+  if (max === null) return t("ageBand.from", { count: min });
   if (min === max) return t("ageBand.exact", { count: max });
   return t("ageBand.between", { min: formatCount(min), count: max });
 }
@@ -125,9 +124,8 @@ export function formatAgeBand(band: { min_days: number | null; max_days: number 
  */
 export function formatDateRange(range: { from: string | null; to: string | null }): string {
   const { from, to } = range;
-  if (from === null && to === null) return "";
-  if (to === null) return t("dateRange.from", { from: formatDate(from ?? "") });
-  if (from === null) return t("dateRange.until", { to: formatDate(to) });
+  if (from === null) return to === null ? "" : t("dateRange.until", { to: formatDate(to) });
+  if (to === null) return t("dateRange.from", { from: formatDate(from) });
   if (from === to) return formatDate(from);
   return t("dateRange.between", { from: formatDate(from), to: formatDate(to) });
 }

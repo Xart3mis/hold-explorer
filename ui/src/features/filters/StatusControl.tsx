@@ -4,16 +4,15 @@ import { MenuButton, MenuItem, MenuSection } from "../../components";
 import { formatCount } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 
-/** The three statuses, in the order the menu lists them, each with its name in the catalog. */
-const STATUSES: readonly { status: Status; name: MessageKey }[] = [
-  { status: "Open", name: "filters.status.Open" },
-  { status: "Released", name: "filters.status.Released" },
-  { status: "All", name: "filters.status.All" },
-];
+/** The name of each status, in the text catalog. A status without a name does not compile. */
+const NAMES: Record<Status, MessageKey> = {
+  Open: "filters.status.Open",
+  Released: "filters.status.Released",
+  All: "filters.status.All",
+};
 
-function isStatus(id: string): id is Status {
-  return STATUSES.some(({ status }) => status === id);
-}
+/** The three statuses, in the order the menu lists them. */
+const STATUSES: readonly Status[] = ["Open", "Released", "All"];
 
 export interface StatusControlProps {
   /** The status in view. */
@@ -22,8 +21,8 @@ export interface StatusControlProps {
   /** How many holds each status would keep, as the command counted them; absent until it has. */
   facets?: FacetCounts | undefined;
   /**
-   * The snapshot can tell an open hold from a released one. Without that only the open holds are
-   * offered, and the status in view, so that it can be left.
+   * The snapshot in view is known to have released holds. Until it is, and for a snapshot that
+   * has none, only the open holds are offered, and the status in view, so that it can be left.
    */
   hasReleased: boolean;
   /** An action on the workspace runs: the control keeps its look and opens nothing. */
@@ -45,11 +44,8 @@ export function StatusControl({
   isInert = false,
   className,
 }: StatusControlProps) {
-  const offered = STATUSES.filter(
-    (entry) => hasReleased || entry.status === "Open" || entry.status === status,
-  );
-  const current = STATUSES.find((entry) => entry.status === status);
-  const label = current === undefined ? status : t(current.name);
+  const offered = STATUSES.filter((entry) => hasReleased || entry === "Open" || entry === status);
+  const label = t(NAMES[status]);
   const count = (of: Status): number | undefined =>
     of === "Open" ? facets?.open : of === "Released" ? facets?.released : undefined;
 
@@ -59,24 +55,27 @@ export function StatusControl({
       aria-label={t("filters.status.name", { status: label })}
       menuLabel={t("filters.status.menu")}
       isInert={isInert}
+      isFlush
       className={className}
     >
       <MenuSection
         title={t("filters.status.list")}
         selectedKey={status}
         onSelectionChange={(id) => {
-          if (isStatus(id)) onChange(id);
+          // The menu reports the key of an item, and the items are the statuses that are offered.
+          const chosen = offered.find((entry) => entry === id);
+          if (chosen !== undefined) onChange(chosen);
         }}
       >
         {offered.map((entry) => {
-          const kept = count(entry.status);
+          const kept = count(entry);
           return (
             <MenuItem
-              key={entry.status}
-              id={entry.status}
+              key={entry}
+              id={entry}
               {...(kept === undefined ? {} : { detail: formatCount(kept) })}
             >
-              {t(entry.name)}
+              {t(NAMES[entry])}
             </MenuItem>
           );
         })}

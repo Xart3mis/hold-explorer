@@ -1,10 +1,9 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import fixture from "../../api/open-holds-filter.json";
-import { keys } from "../../api/keys";
-import { defaultFilters, type Filters } from "../../app/filters/state";
-import { queryClient } from "../../app/query";
+import { defaultFilters, useFilters, type Filters } from "../../app/filters/state";
 import type { OverviewView } from "../../bindings/OverviewView";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
@@ -14,19 +13,42 @@ import { openStart, workspace } from "../../test/fixtures";
 import type { Handlers } from "../../test/ipc";
 import { group, overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
+import { SettingsPage } from "../settings/SettingsPage";
+import { OverviewPage } from "./OverviewPage";
 
 const text = en.overview;
 const VIEW = { workspace_id: workspace().id, snapshot_id: 2 };
 
 type Answer = NonNullable<Handlers["overview"]>;
 
+/** The filters as a page inside the shell reads them: what the tests set them through. */
+const probe: { filters?: ReturnType<typeof useFilters> } = {};
+
+function Probe() {
+  const filters = useFilters();
+  useEffect(() => {
+    probe.filters = filters;
+  });
+  return null;
+}
+
 /** The Overview with the test's own answers to `overview` and to `filter_options`, both spies. */
 function renderOverview(answer: Answer = () => overviewView()) {
+  delete probe.filters;
   const overview = vi.fn(answer);
   const options = vi.fn(() => filterOptions());
   const app = renderApp({
     start: openStart(),
     path: "/overview",
+    pages: {
+      overview: (
+        <>
+          <OverviewPage />
+          <Probe />
+        </>
+      ),
+      settings: <SettingsPage />,
+    },
     handlers: { overview, filter_options: options },
   });
   return { ...app, overview, options };
@@ -47,10 +69,7 @@ async function content(): Promise<HTMLElement> {
 /** Sets the filters of the open workspace, as a control of the filter bar does. */
 function set(filters: Partial<Filters>): void {
   act(() => {
-    queryClient.setQueryData<Filters>(keys.workspaceFilters(workspace().id), {
-      ...defaultFilters,
-      ...filters,
-    });
+    must(probe.filters, "the filters of the page").set({ ...defaultFilters, ...filters });
   });
 }
 

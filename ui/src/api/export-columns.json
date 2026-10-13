@@ -1,0 +1,16 @@
+{
+  "SourceId": "id",
+  "LineId": "line_id",
+  "Name": "name",
+  "Role": "role",
+  "Remark": "hold_remark",
+  "HoldType": "hold_type",
+  "Discipline": "discipline",
+  "Created": "date",
+  "Released": "released",
+  "ReleaseRemark": "release_remark",
+  "ReleaseDate": "release_date",
+  "ModelSize": "model_size",
+  "LdtSize": "ldt_size",
+  "StressCalc": "stress_calc"
+}

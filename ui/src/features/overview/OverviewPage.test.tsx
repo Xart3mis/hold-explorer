@@ -780,6 +780,10 @@ describe("the Overview of a limited snapshot", () => {
     const notice = must(limitedNotice(main), "the notice of a limited snapshot");
     expect(notice).toHaveAttribute("data-tone", "info");
     expect(notice).toHaveTextContent(text.limitedText);
+    // It says what follows for the numbers under it. Which columns the snapshot lacks is said
+    // once, by the filter bar above, and not again here.
+    expect(text.limitedText).toMatch(/counts as open/);
+    expect(text.limitedText).not.toMatch(/column|hold ID/i);
     // It stands before the figures it is about, and is not part of what is dimmed or busy.
     expect(content(main)).not.toContainElement(notice);
     expect(

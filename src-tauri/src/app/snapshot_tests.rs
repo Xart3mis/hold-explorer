@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use chrono::{Duration, NaiveDateTime};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FieldFilter, FilterSpec, Status};
 use hx_core::load::load_file;
+use hx_core::mapping::Field;
 use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
 use hx_core::warning::WarningKind;
@@ -385,6 +387,23 @@ fn the_complete_default_filter_the_interface_sends_means_open_holds() {
     let spec: FilterSpec = serde_json::from_str(json).unwrap();
     assert_eq!(spec, FilterSpec::default());
     assert_eq!(spec.status, Status::Open);
+}
+
+#[test]
+fn the_export_column_names_the_interface_shows_are_the_labels_of_the_fields() {
+    let json = include_str!("../../../ui/src/api/export-columns.json");
+    let names: BTreeMap<String, String> = serde_json::from_str(json).unwrap();
+    for field in Field::ALL {
+        let key = serde_json::to_value(field).unwrap();
+        let key = key.as_str().unwrap();
+        assert_eq!(
+            names.get(key).map(String::as_str),
+            Some(field.label()),
+            "the interface names the column of {key} as the engine does"
+        );
+    }
+    // Every name belongs to a field: the loop found one for each field, and there is no other.
+    assert_eq!(names.len(), Field::ALL.len());
 }
 
 fn demo_snapshots(fx: &Fixture, id: &str) -> Workspace {

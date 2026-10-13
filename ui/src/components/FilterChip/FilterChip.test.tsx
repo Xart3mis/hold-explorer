@@ -103,6 +103,33 @@ describe("FilterChip", () => {
     expect(onRemove).not.toHaveBeenCalled();
   });
 
+  it("when disabled, keeps the X where it was, as a picture, so the chip is as wide as it was", () => {
+    const { unmount } = render(
+      <FilterChip
+        field="Discipline"
+        value="Civil"
+        onPress={() => undefined}
+        onRemove={() => undefined}
+      />,
+    );
+    // What gives the remove button its circle, as wide as the chip is tall.
+    const circle = screen.getByRole("button", { name: removeDiscipline }).className;
+    expect(circle).not.toBe("");
+    expect(document.querySelector("[data-part='filter-chip-x']")).toBeNull();
+    unmount();
+
+    setup({ isDisabled: true });
+    const kept = document.querySelector("[data-part='filter-chip-x']");
+    expect(kept).not.toBeNull();
+    expect(kept?.className).toBe(circle);
+    expect(kept?.querySelector("svg")).not.toBeNull();
+    // It is a picture: no control, and nothing for assistive technology.
+    expect(kept?.tagName).toBe("SPAN");
+    expect(kept).toHaveAttribute("aria-hidden", "true");
+    expect(kept).not.toHaveAttribute("tabindex");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
   it("is removed by Backspace and by Delete while its remove button has the focus as well", async () => {
     const { onPress, onRemove, user } = setup();
     await user.tab();

@@ -1,5 +1,8 @@
 /* The button: a quiet button with its label and a chevron. */
 .trigger {
+  /* The room before the label. A flush button is moved out by exactly this, and by its border. */
+  --menu-trigger-lead: var(--space-3);
+
   display: inline-flex;
   flex: none;
   gap: var(--space-1-5);
@@ -7,7 +10,7 @@
   min-inline-size: 0;
   max-inline-size: 100%;
   block-size: var(--density-control-height);
-  padding: 0 var(--space-2) 0 var(--space-3);
+  padding: 0 var(--space-2) 0 var(--menu-trigger-lead);
   border: var(--border-width-thin) solid transparent;
   border-radius: var(--radius-sm);
   background-color: transparent;
@@ -21,6 +24,14 @@
   transition:
     background-color var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * At the start of a row of content: the label starts on the line of what stands around the
+ * button, and the hover fill reaches into the margin.
+ */
+.trigger[data-flush] {
+  margin-inline-start: calc(-1 * (var(--menu-trigger-lead) + var(--border-width-thin)));
 }
 
 /* A long value is cut at the end; the button never grows past the room it is given. */

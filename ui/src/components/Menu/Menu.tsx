@@ -36,6 +36,11 @@ export interface MenuButtonProps {
   isInert?: boolean;
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
+  /**
+   * The button starts a row of content: it is moved out by its own leading padding and border,
+   * so its label starts on the line of what stands above and below it.
+   */
+  isFlush?: boolean;
   /** The button, so a screen can give it the focus back after what the menu started is over. */
   triggerRef?: Ref<HTMLButtonElement>;
   /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. */
@@ -55,6 +60,7 @@ export function MenuButton({
   isPending = false,
   isInert = false,
   align = "start",
+  isFlush = false,
   triggerRef,
   children,
   className,
@@ -70,6 +76,7 @@ export function MenuButton({
         {...(props["aria-label"] === undefined ? {} : { "aria-label": props["aria-label"] })}
         isPending={busy}
         data-inert={inert ? "" : undefined}
+        data-flush={isFlush ? "" : undefined}
         className={cx(styles.trigger, className)}
         render={(domProps) => <button {...domProps} aria-busy={busy ? "true" : undefined} />}
       >

@@ -1,11 +1,13 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
+import { keys } from "../../api/keys";
 import { renderApp } from "../../test/app";
 import { opened, openStart, otherWorkspace, twoSnapshots, workspace } from "../../test/fixtures";
 import { useSnapshotActions } from "../actions/snapshots";
 import { useWorkspaceActions } from "../actions/workspaces";
+import { queryClient } from "../query";
 import { useShell } from "../shell/context";
 import { defaultFilters, useFilters, type Filters } from "./state";
 
@@ -214,16 +216,55 @@ describe("useFilters", () => {
     expect(now().filters).toEqual(CIVIL);
   });
 
-  it("starts a new session at the default", async () => {
-    const first = await renderProbe();
+  it("still has the filters of a workspace after more than five minutes in another one", async () => {
+    // The query client drops what nobody has read for five minutes, unless it is told to keep
+    // it. Time is advanced by hand here, and goes on by itself so that the page can be waited for.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await renderProbe();
+      act(() => {
+        now().set(CIVIL);
+      });
+      await screen.findByText("valve");
+
+      act(() => {
+        now().open(otherWorkspace.id);
+      });
+      await screen.findByText("no text");
+      await act(() => vi.advanceTimersByTimeAsync(6 * 60 * 1000));
+
+      act(() => {
+        now().open(workspace().id);
+      });
+      await screen.findByText("valve");
+      expect(now().filters).toEqual(CIVIL);
+
+      // And of the workspace in view, which nothing else holds either.
+      await act(() => vi.advanceTimersByTimeAsync(6 * 60 * 1000));
+      expect(now().filters).toEqual(CIVIL);
+      expect(screen.getByText("valve")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the filters in the memory of the session and nowhere else", async () => {
+    const stored = () => window.localStorage.length + window.sessionStorage.length;
+    const before = stored();
+    // A command that was sent without a handler fails the test: setting filters sends none.
+    await renderProbe();
     act(() => {
       now().set(CIVIL);
     });
     await screen.findByText("valve");
-    first.unmount();
+    expect(stored()).toBe(before);
+    expect(queryClient.getQueryData(keys.workspaceFilters(workspace().id))).toEqual(CIVIL);
 
-    // The filters live in the query client of the session; an app that starts has a fresh one.
-    await renderProbe();
+    // An app that starts has a query client that holds nothing: every workspace has the default.
+    act(() => {
+      queryClient.removeQueries({ queryKey: keys.filters });
+    });
+    await screen.findByText("no text");
     expect(now().filters).toBe(defaultFilters);
     expect(now().isDefault).toBe(true);
   });

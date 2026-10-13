@@ -46,8 +46,9 @@ export interface FilterChipProps {
   /** Removes the filter. Its remove button, Backspace, and Delete call it. */
   onRemove: () => void;
   /**
-   * The filters cannot be changed for the moment. The chip takes no focus and no press and shows
-   * no remove button; the line after the chips says why.
+   * The filters cannot be changed for the moment. The chip takes no focus and no press and has
+   * no remove button. Its X stays as a picture, so the chip keeps its width and nothing beside
+   * it moves; the bar says why.
    */
   isDisabled?: boolean;
   className?: string | undefined;
@@ -85,7 +86,12 @@ export function FilterChip({
       >
         <span className={styles.text}>{reading(field, value, isNegated)}</span>
       </RacButton>
-      {isDisabled ? null : (
+      {isDisabled ? (
+        // The X without its button: the same circle in the same place, and nothing to press.
+        <span aria-hidden="true" data-part="filter-chip-x" className={styles.remove}>
+          <Icon icon={X} />
+        </span>
+      ) : (
         <Tooltip text={remove}>
           {/*
             A plain button, on purpose. A button of the component library takes the press of

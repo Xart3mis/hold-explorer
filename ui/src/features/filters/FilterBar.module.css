@@ -38,35 +38,40 @@
   min-block-size: var(--density-control-height);
 }
 
-/*
- * The label of the status control starts where the page title starts: the button is moved out by
- * its own padding and border, so its hover fill reaches into the padding of the page.
- */
-.status {
-  margin-inline-start: calc(-1 * (var(--space-3) + var(--border-width-thin)));
+/* "Add filter" and "Clear all" stay together when the line wraps. */
+.actions {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-2);
+  align-items: center;
 }
 
 /*
- * Why nothing can be changed, for the moment. Empty, it is taken out of the line, so it takes no
- * room and no gap; it stays in the document, where what it comes to say is announced.
+ * The trailing part: the total, or in its place why nothing can be changed. It has one width
+ * whatever it holds, so the controls have the same room at rest and while an action runs, and it
+ * is as tall as a control, which is two lines of the caption.
  */
+.end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  inline-size: var(--size-filterbar-end-width);
+  min-block-size: var(--density-control-height);
+}
+
+/* Why nothing can be changed, for the moment. Empty, it takes no room beside the total. */
 .reason {
   color: var(--color-text-muted);
   font: var(--text-caption);
   font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-normal);
+  text-align: end;
 }
 
-.reason:empty {
-  position: absolute;
-}
-
-/* How many holds the filters keep. It stays on the first line, level with the controls. */
+/* How many holds the filters keep. A long count reaches toward the controls, never past the edge. */
 .total {
-  display: flex;
   flex: none;
-  align-items: center;
-  min-block-size: var(--density-control-height);
   color: var(--color-text-secondary);
   font: var(--text-label);
   font-variant-numeric: var(--font-numeric-tabular);
@@ -75,18 +80,23 @@
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-.total[data-stale] {
-  opacity: var(--opacity-stale);
-}
-
-/* Which columns of the export the snapshot lacks: one line of running text under the controls. */
-.absent {
+/*
+ * What the snapshot lacks: running text under the controls. It is dimmed with the total while
+ * both still say what was read for the filters or the view of before.
+ */
+.notes {
   max-inline-size: min(var(--layout-prose-max-width), var(--page-max-width, 100%));
   padding-block-end: var(--space-1);
   color: var(--color-text-muted);
   font: var(--text-caption);
   font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-normal);
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.total[data-stale],
+.notes[data-stale] {
+  opacity: var(--opacity-stale);
 }
 
 .error {

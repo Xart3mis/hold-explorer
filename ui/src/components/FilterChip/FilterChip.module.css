@@ -115,11 +115,17 @@
   color: var(--color-text-disabled);
 }
 
-.chip[data-disabled] .body {
-  padding-inline-end: var(--space-2);
+.chip[data-disabled] .field {
+  color: var(--color-text-disabled);
 }
 
-.chip[data-disabled] .field {
+/*
+ * The X of a disabled chip is a picture in the place of the button: the same circle, so the chip
+ * is as wide as it was, in the disabled ink, and without an answer to the pointer.
+ */
+.chip[data-disabled] .remove {
+  border-color: transparent;
+  background-color: transparent;
   color: var(--color-text-disabled);
 }
 

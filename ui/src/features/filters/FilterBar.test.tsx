@@ -411,7 +411,7 @@ describe("FilterBar", () => {
     expect(total(region).querySelector("[data-part='skeleton']")).toBeNull();
   });
 
-  it("disables everything while an action on the workspace runs, and says why", async () => {
+  it("disables everything while an action on the workspace runs, and says why in the place of the total", async () => {
     const select = held<WorkspaceOpen>();
     const { user } = renderBar(undefined, { snapshot_select: select.handler });
     const region = await bar();
@@ -419,8 +419,13 @@ describe("FilterBar", () => {
     await waitFor(() => {
       expect(chips(region)).toHaveLength(3);
     });
-    const reason = must(region.querySelector<HTMLElement>("[role='status']"), "the reason line");
+    const end = must(region.querySelector<HTMLElement>("[data-part='filter-end']"), "the end");
+    const reason = must(end.querySelector<HTMLElement>("[role='status']"), "the reason");
     expect(reason).toBeEmptyDOMElement();
+    expect(end).toContainElement(total(region));
+    // What the X of a chip is styled by: its circle, as wide as the chip is tall.
+    const circle = removeButton(region, "Discipline").className;
+    expect(circle).not.toBe("");
 
     act(() => {
       now().select(1);
@@ -428,10 +433,16 @@ describe("FilterBar", () => {
     await waitFor(() => {
       expect(reason).toHaveTextContent(text.busySwitching);
     });
-    for (const disabled of region.querySelectorAll("[data-part='filter-chip']")) {
+    // The sentence stands where the total stood, which says nothing certain meanwhile.
+    expect(region.querySelector("[data-part='filter-total']")).toBeNull();
+    expect(region.querySelectorAll("[role='status']")).toHaveLength(1);
+    for (const disabled of region.querySelectorAll<HTMLElement>("[data-part='filter-chip']")) {
       expect(disabled).toHaveAttribute("data-disabled");
-      expect(within(disabled as HTMLElement).getAllByRole("button")).toHaveLength(1);
-      expect(within(disabled as HTMLElement).getByRole("button")).toBeDisabled();
+      expect(within(disabled).getAllByRole("button")).toHaveLength(1);
+      expect(within(disabled).getByRole("button")).toBeDisabled();
+      // The chip keeps the room of its remove circle, so nothing beside it moves.
+      const kept = must(disabled.querySelector("[data-part='filter-chip-x']"), "the X of the chip");
+      expect(kept.className).toBe(circle);
     }
     expect(chips(region)).toEqual(["Discipline Civil", "Hold type Vendor data", "Role Lead"]);
     expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeDisabled();
@@ -450,8 +461,13 @@ describe("FilterBar", () => {
     await waitFor(() => {
       expect(reason).toBeEmptyDOMElement();
     });
+    await waitFor(() => {
+      expect(total(region)).toHaveTextContent(holds("5,042"));
+    });
+    expect(end).toContainElement(total(region));
     expect(chip(region, "Discipline Civil")).toBeEnabled();
     expect(removeButton(region, "Discipline")).toBeInTheDocument();
+    expect(region.querySelector("[data-part='filter-chip-x']")).toBeNull();
     expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeEnabled();
     expect(within(region).getByRole("button", { name: text.clear })).toBeEnabled();
     expect(within(region).getByRole("button", { name: statusName("Open") })).not.toHaveAttribute(
@@ -465,7 +481,7 @@ describe("FilterBar", () => {
     const rename = held<ReturnType<typeof workspace>>();
     renderBar(undefined, { workspace_rename: rename.handler });
     const region = await bar();
-    const reason = must(region.querySelector<HTMLElement>("[role='status']"), "the reason line");
+    const reason = must(region.querySelector<HTMLElement>("[role='status']"), "the reason");
 
     act(() => {
       now().rename("Unit 573");
@@ -473,6 +489,7 @@ describe("FilterBar", () => {
     await waitFor(() => {
       expect(reason).toHaveTextContent(text.busyChanging);
     });
+    expect(region.querySelector("[data-part='filter-total']")).toBeNull();
     expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeDisabled();
 
     await act(async () => {
@@ -484,30 +501,129 @@ describe("FilterBar", () => {
     });
   });
 
-  it("says once which export columns the snapshot lacks, by the names the export gives them", async () => {
+  it("keeps the reason short: two lines of the trailing part hold it", () => {
+    // The trailing part is as wide as about eighteen characters of the caption, and a control is
+    // as tall as two of its lines. A longer sentence would make the bar taller while it shows.
+    for (const sentence of [text.busySwitching, text.busyChanging]) {
+      const words = sentence.split(" ");
+      expect(sentence.length).toBeLessThanOrEqual(30);
+      expect(Math.max(...words.map((word) => word.length))).toBeLessThanOrEqual(16);
+    }
+  });
+
+  it("keeps Add filter and Clear all together, and starts the status on the line of the page", async () => {
+    renderBar();
+    const region = await bar();
+    set(THREE);
+    const clear = await within(region).findByRole("button", { name: text.clear });
+    const add = within(region).getByRole("button", { name: en.filterChip.add });
+    // The two wrap as one, so a line never starts with the label of the quiet button.
+    const actions = must(add.closest("[data-part='filter-actions']"), "the two actions");
+    expect(actions).toContainElement(clear);
+    expect(within(actions as HTMLElement).getAllByRole("button")).toHaveLength(2);
+    // The status button moves itself out by its own padding.
+    expect(within(region).getByRole("button", { name: statusName("Open") })).toHaveAttribute(
+      "data-flush",
+    );
+  });
+
+  /** The line under the controls, and its two sentences, when it has them. */
+  function notes(region: HTMLElement) {
+    const line = region.querySelector<HTMLElement>("[data-part='filter-notes']");
+    return {
+      line,
+      noReleased: line?.querySelector("[data-part='filter-no-released']")?.textContent ?? null,
+      absent: line?.querySelector("[data-part='filter-absent']")?.textContent ?? null,
+    };
+  }
+
+  it("says once which columns the snapshot lacks, by the names PlantIM gives them", async () => {
     renderBar(() => filterOptions({ absent: ["ModelSize", "LdtSize", "StressCalc"] }));
     const region = await bar();
-    const line = must(region.querySelector<HTMLElement>("[data-part='filter-absent']"), "the line");
-    expect(line).toHaveTextContent(
+    expect(notes(region).absent).toBe(
       text.absent_other.replace("{{columns}}", "model_size, ldt_size, stress_calc"),
     );
+    // Only size fields are absent: nothing is said about released holds.
+    expect(notes(region).noReleased).toBeNull();
+    expect(region.querySelectorAll("[data-part='filter-notes']")).toHaveLength(1);
     expect(region.querySelectorAll("[data-part='filter-absent']")).toHaveLength(1);
   });
 
   it("names one missing column as one, and says nothing when the snapshot lacks none", async () => {
     const { unmount } = renderBar(() => filterOptions({ absent: ["StressCalc"] }));
     const region = await bar();
-    expect(must(region.querySelector("[data-part='filter-absent']"), "the line")).toHaveTextContent(
-      text.absent_one.replace("{{columns}}", "stress_calc"),
-    );
+    expect(notes(region).absent).toBe(text.absent_one.replace("{{columns}}", "stress_calc"));
     unmount();
 
     renderBar();
     const full = await bar();
-    expect(full.querySelector("[data-part='filter-absent']")).toBeNull();
+    expect(notes(full).line).toBeNull();
   });
 
-  it("offers only the open holds when the snapshot has no released column", async () => {
+  it("says that no hold is released, and names no release column as missing, when only the release fields are absent", async () => {
+    // A complete export in which no hold is released yet answers the same as a file without the
+    // released column: the sentence is true of both, and "has no values in released" is not.
+    renderBar(() => filterOptions({ absent: ["Released", "ReleaseRemark", "ReleaseDate"] }));
+    const region = await bar();
+    expect(notes(region).noReleased).toBe(text.noReleased);
+    expect(notes(region).absent).toBeNull();
+    expect(region).not.toHaveTextContent("release_date");
+    expect(region).not.toHaveTextContent("release_remark");
+  });
+
+  it("says both, and leaves the release columns out of the missing ones, when sizes and release fields are absent", async () => {
+    renderBar(() =>
+      filterOptions({
+        absent: ["SourceId", "Released", "ReleaseRemark", "ReleaseDate", "ModelSize", "LdtSize"],
+      }),
+    );
+    const region = await bar();
+    expect(notes(region).noReleased).toBe(text.noReleased);
+    expect(notes(region).absent).toBe(
+      text.absent_other.replace("{{columns}}", "id, model_size, ldt_size"),
+    );
+    // The sentence about the holds comes first.
+    expect(must(notes(region).line, "the line").textContent).toMatch(
+      new RegExp(`^${text.noReleased.replace(/[.]/g, "\\.")}`),
+    );
+  });
+
+  it("names a release column that is missing while holds are released", async () => {
+    renderBar(() => filterOptions({ absent: ["ReleaseRemark", "ReleaseDate"] }));
+    const region = await bar();
+    expect(notes(region).noReleased).toBeNull();
+    expect(notes(region).absent).toBe(
+      text.absent_other.replace("{{columns}}", "release_remark, release_date"),
+    );
+  });
+
+  it("dims the line with the total while the answer is that of before", async () => {
+    const later = held<FilterOptions>();
+    let readings = 0;
+    renderBar(() => {
+      readings += 1;
+      return readings === 1 ? filterOptions({ absent: ["StressCalc"] }) : later.handler();
+    });
+    const region = await bar();
+    expect(notes(region).line).not.toHaveAttribute("data-stale");
+
+    set({ text: "valve" });
+    await waitFor(() => {
+      expect(total(region)).toHaveAttribute("data-stale");
+    });
+    expect(notes(region).line).toHaveAttribute("data-stale");
+    expect(notes(region).absent).toBe(text.absent_one.replace("{{columns}}", "stress_calc"));
+
+    await act(async () => {
+      must(later.waiting[0], "the second reading").resolve(filterOptions());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(notes(region).line).toBeNull();
+    });
+  });
+
+  it("offers only the open holds when no hold of the snapshot is released", async () => {
     const { user } = renderBar(() =>
       filterOptions({
         absent: ["Released", "ReleaseDate"],
@@ -515,9 +631,7 @@ describe("FilterBar", () => {
       }),
     );
     const region = await bar();
-    expect(must(region.querySelector("[data-part='filter-absent']"), "the line")).toHaveTextContent(
-      text.absent_other.replace("{{columns}}", "released, release_date"),
-    );
+    expect(notes(region).noReleased).toBe(text.noReleased);
     await user.click(within(region).getByRole("button", { name: statusName("Open") }));
     const menu = await screen.findByRole("menu", { name: text.status.menu });
     const items = within(menu).getAllByRole("menuitemradio");
@@ -541,6 +655,46 @@ describe("FilterBar", () => {
     await user.click(must(items[0], "the open holds"));
     await within(region).findByRole("button", { name: statusName("Open") });
     expect(now().filters.status).toBe("Open");
+  });
+
+  it("offers only the open holds, and the status in view, until the counts are there", async () => {
+    const first = held<FilterOptions>();
+    const { user } = renderBar(() => first.handler());
+    const region = await screen.findByRole("group", { name: text.bar });
+    // Whether the snapshot has released holds is not known yet.
+    await user.click(within(region).getByRole("button", { name: statusName("Open") }));
+    const menu = await screen.findByRole("menu", { name: text.status.menu });
+    const items = within(menu).getAllByRole("menuitemradio");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveAccessibleName(text.status.Open);
+    expect(items[0]).toHaveAccessibleDescription("");
+    await user.keyboard("{Escape}");
+
+    await act(async () => {
+      must(first.waiting[0], "the first reading").resolve(filterOptions());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(total(region)).toHaveTextContent(holds("5,042"));
+    });
+    await user.click(within(region).getByRole("button", { name: statusName("Open") }));
+    const full = await screen.findByRole("menu", { name: text.status.menu });
+    expect(within(full).getAllByRole("menuitemradio")).toHaveLength(3);
+  });
+
+  it("offers only the open holds, and the status in view, while the counts cannot be read", async () => {
+    const { user } = renderBar(() => {
+      throw commandFailure("Io", "The workspace file could not be read. Try again.");
+    });
+    const region = await screen.findByRole("group", { name: text.bar });
+    await within(region).findByRole("alert");
+    set({ status: "Released" });
+    await user.click(await within(region).findByRole("button", { name: statusName("Released") }));
+    const menu = await screen.findByRole("menu", { name: text.status.menu });
+    const items = within(menu).getAllByRole("menuitemradio");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveAccessibleName(text.status.Open);
+    expect(items[1]).toHaveAccessibleName(text.status.Released);
   });
 
   it("says that the counts could not be read, keeps the chips, and reads again on a retry", async () => {
