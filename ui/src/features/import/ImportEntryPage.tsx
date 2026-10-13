@@ -152,6 +152,7 @@ export function ImportEntryPage() {
           {/* Beside another action Cancel is the quiet one; alone it is an ordinary button. */}
           <Button
             variant={failure === null ? "secondary" : "quiet"}
+            reservesPendingSpace
             isPending={cancel.isPending}
             onPress={() => {
               setCancelRequested(true);

@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,8 +16,14 @@ import { Button, IconButton } from "../Button/Button";
 import { Icon } from "../Icon/Icon";
 import styles from "./ToastRegion.module.css";
 
-/** The most toasts shown at once. A newer toast pushes the oldest out. */
+/**
+ * The most toasts shown at once. A newer toast pushes out the oldest one that offers no action.
+ * One that carries an action, an undo, is never pushed out, so for a moment there can be more.
+ */
 const MAX_TOASTS = 3;
+
+/** How a toast is found on the page: by this part name, and by the id of its item. */
+const TOAST = '[data-part="toast"]';
 
 export interface ToastAction {
   /** The label of the action, for example "Undo". */
@@ -71,6 +78,8 @@ function isTextEntry(target: EventTarget | null): boolean {
 }
 
 export interface ToastProps extends ToastOptions {
+  /** The id of the toast in its region, by which the region finds it on the page. */
+  id?: string;
   /** The toast is fading out. */
   isLeaving?: boolean;
   onAction?: () => void;
@@ -83,6 +92,7 @@ export interface ToastProps extends ToastOptions {
 
 /** One toast: what was done, an action, and a close button. `ToastRegion` shows and times it. */
 export function Toast({
+  id,
   message,
   action,
   tone,
@@ -93,6 +103,7 @@ export function Toast({
   onLeft,
 }: ToastProps) {
   const element = useRef<HTMLDivElement>(null);
+  const messageId = useId();
   const hovered = useRef(false);
   const focused = useRef(false);
   const hold = (next: { hovered?: boolean; focused?: boolean }) => {
@@ -122,7 +133,14 @@ export function Toast({
   return (
     <div
       ref={element}
+      // A toast takes the focus in one case only: the toast that held it has gone, and this one
+      // is next. It is a group named by its message, so what has the focus can be said. The
+      // region makes it focusable for that moment, and it stops being so when the focus leaves:
+      // a click on its text must not give it the focus, which would hold its timer.
+      role="group"
+      aria-labelledby={messageId}
       data-part="toast"
+      data-toast-id={id}
       data-leaving={isLeaving ? "" : undefined}
       className={styles.toast}
       onPointerEnter={() => {
@@ -135,6 +153,7 @@ export function Toast({
         hold({ focused: true });
       }}
       onBlur={(event) => {
+        if (event.target === event.currentTarget) event.currentTarget.removeAttribute("tabindex");
         if (!event.currentTarget.contains(event.relatedTarget)) hold({ focused: false });
       }}
     >
@@ -143,7 +162,9 @@ export function Toast({
           <Icon icon={icons[tone]} />
         </span>
       )}
-      <span className={styles.message}>{message}</span>
+      <span id={messageId} className={styles.message}>
+        {message}
+      </span>
       {action === undefined ? null : (
         <Button
           variant="quiet"
@@ -194,6 +215,7 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
 
   return (
     <Toast
+      id={id}
       message={item.message}
       {...(item.action === undefined ? {} : { action: item.action })}
       {...(item.tone === undefined ? {} : { tone: item.tone })}
@@ -212,43 +234,89 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
 
 /**
  * Gives its children `useToast()` and shows the toasts: at the bottom left of the content area
- * (the layout says where that is, with `--toast-inset-inline-start` on the root element), at
- * most three, newest at the bottom. A toast never takes focus. It is announced politely, and
- * its buttons are reached by Tab.
+ * (the layout says where that is, with `--toast-inset-inline-start` on the root element), three
+ * at most unless each carries an action, newest at the bottom. A toast never takes focus when it
+ * appears. It is announced politely, and its buttons are reached by Tab, in the order the toasts
+ * appeared. When the toast that holds the focus goes, the focus moves to the next toast, or back
+ * to where it was before the toasts took it.
  */
 export function ToastRegion({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([]);
+  // The toasts as they are now, also between a change and the render that shows it: two changes
+  // in a row each start from what the one before left.
   const latest = useRef(items);
   const nextId = useRef(0);
   // The toasts whose action has run, so one toast never runs its action twice.
   const acted = useRef(new Set<string>());
+  const stack = useRef<HTMLDivElement>(null);
+  // What had the focus before it entered the toasts.
+  const cameFrom = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    latest.current = items;
-  }, [items]);
-
-  const dismiss = useCallback((id: string) => {
-    setItems((current) =>
-      current.map((item) => (item.id === id ? { ...item, leaving: true } : item)),
-    );
+  const change = useCallback((next: ToastItem[]) => {
+    latest.current = next;
+    setItems(next);
   }, []);
 
-  const remove = useCallback((id: string) => {
-    acted.current.delete(id);
-    setItems((current) => current.filter((item) => item.id !== id));
+  /**
+   * Before toasts go: when one of them holds the focus, the focus moves to the toast after it,
+   * or to the one before it, of those that stay. The toast itself takes it, not one of its
+   * buttons, so a key that is pressed twice does not act on a second toast. With no toast left,
+   * the focus goes back to where it was before it entered the toasts.
+   */
+  const moveFocusFrom = useCallback((going: readonly string[]) => {
+    const active = document.activeElement;
+    const all = [...(stack.current?.querySelectorAll<HTMLElement>(TOAST) ?? [])];
+    const holder = all.find((toast) => toast.contains(active));
+    if (holder === undefined || !going.includes(holder.dataset.toastId ?? "")) return;
+    const stays = (toast: HTMLElement) =>
+      !toast.hasAttribute("data-leaving") && !going.includes(toast.dataset.toastId ?? "");
+    const at = all.indexOf(holder);
+    const next = all.slice(at + 1).find(stays) ?? all.slice(0, at).reverse().find(stays);
+    if (next !== undefined) {
+      next.tabIndex = -1;
+      next.focus();
+    } else if (cameFrom.current?.isConnected === true) cameFrom.current.focus();
   }, []);
 
-  const show = useCallback((options: ToastOptions) => {
-    nextId.current += 1;
-    const id = `toast-${String(nextId.current)}`;
-    setItems((current) => {
-      const staying = current.filter((item) => !item.leaving);
-      const pushedOut = staying.length - (MAX_TOASTS - 1);
-      const kept = pushedOut > 0 ? staying.slice(pushedOut) : staying;
-      return [...kept, { ...options, id, leaving: false }];
-    });
-    return id;
-  }, []);
+  const dismiss = useCallback(
+    (id: string) => {
+      moveFocusFrom([id]);
+      change(latest.current.map((item) => (item.id === id ? { ...item, leaving: true } : item)));
+    },
+    [change, moveFocusFrom],
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      acted.current.delete(id);
+      change(latest.current.filter((item) => item.id !== id));
+    },
+    [change],
+  );
+
+  const show = useCallback(
+    (options: ToastOptions) => {
+      nextId.current += 1;
+      const id = `toast-${String(nextId.current)}`;
+      const staying = latest.current.filter((item) => !item.leaving);
+      // The new toast needs a place: the oldest toasts without an action give theirs up.
+      const going: string[] = [];
+      for (const item of staying) {
+        if (staying.length - going.length < MAX_TOASTS) break;
+        if (item.action === undefined) going.push(item.id);
+      }
+      // A toast that was already leaving goes now as well.
+      const gone = latest.current.filter((item) => item.leaving || going.includes(item.id));
+      moveFocusFrom(gone.map((item) => item.id));
+      for (const item of gone) acted.current.delete(item.id);
+      change([
+        ...staying.filter((item) => !going.includes(item.id)),
+        { ...options, id, leaving: false },
+      ]);
+      return id;
+    },
+    [change, moveFocusFrom],
+  );
 
   const act = useCallback(
     (id: string) => {
@@ -282,8 +350,25 @@ export function ToastRegion({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div role="region" aria-label={t("toast.region")} className={styles.region}>
-        <div role="status" aria-live="polite" aria-atomic="false" className={styles.stack}>
+      <div
+        role="region"
+        aria-label={t("toast.region")}
+        className={styles.region}
+        onFocus={(event) => {
+          // The focus came in from the page: that is where it goes back to.
+          const from = event.relatedTarget;
+          if (from instanceof HTMLElement && !event.currentTarget.contains(from)) {
+            cameFrom.current = from;
+          }
+        }}
+      >
+        <div
+          ref={stack}
+          role="status"
+          aria-live="polite"
+          aria-atomic="false"
+          className={styles.stack}
+        >
           {items.map((item) => (
             <TimedToast
               key={item.id}

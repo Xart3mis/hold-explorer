@@ -4,7 +4,18 @@
 //   /gallery.html                              both themes side by side, with a density switch
 //   /gallery.html?frame=1&theme=light          one theme alone, as a page of its own
 //   /gallery.html?frame=1&theme=dark&density=compact
-import { Check, Download, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  CircleCheck,
+  Download,
+  Info,
+  OctagonAlert,
+  Plus,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { StrictMode, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nProvider } from "react-aria-components";
@@ -13,19 +24,33 @@ import "../design/fonts.css";
 import "../design/tokens.css";
 import "../app.css";
 import {
+  AddFilterChip,
   BarRow,
   BarRowGroup,
   Button,
   Checkbox,
+  ChoiceGroup,
   DataTable,
+  Disclosure,
+  DisclosureGroup,
+  DisclosureStatement,
   DropZone,
   EmptyState,
   ErrorState,
+  FactList,
+  FilterChip,
   Icon,
   IconButton,
+  MenuButton,
+  MenuItem,
+  MenuSection,
+  MenuSeparator,
   Notice,
+  OptionList,
   PageHeader,
+  Popover,
   Progress,
+  SectionTitle,
   Select,
   Skeleton,
   StatTile,
@@ -34,6 +59,7 @@ import {
   TabList,
   TabPanel,
   Tabs,
+  Tag,
   TextField,
   ToastRegion,
   Tooltip,
@@ -42,6 +68,8 @@ import {
   type ButtonVariant,
   type DataTableColumn,
 } from "../components";
+import menuStyles from "../components/Menu/Menu.module.css";
+import popoverStyles from "../components/Popover/Popover.module.css";
 import selectStyles from "../components/Select/Select.module.css";
 import { Toast } from "../components/ToastRegion/ToastRegion";
 import tooltipStyles from "../components/Tooltip/Tooltip.module.css";
@@ -180,7 +208,7 @@ function Buttons() {
             </Button>
           </Specimen>
           <Specimen name="Waiting for another control">
-            <Button variant={variant} isPending={false} isInert>
+            <Button variant={variant} reservesPendingSpace isPending={false} isInert>
               Import
             </Button>
           </Specimen>
@@ -188,6 +216,19 @@ function Buttons() {
       ))}
       <Row label="pending keeps the width">
         <PendingToggle />
+      </Row>
+      <Row label="room for the spinner">
+        <Specimen name="Asked for: wider at rest">
+          <Button reservesPendingSpace>Import</Button>
+        </Specimen>
+        <Specimen name="Asked for, pending: the same width">
+          <Button reservesPendingSpace isPending>
+            Import
+          </Button>
+        </Specimen>
+        <Specimen name="Not asked for: as wide as its label">
+          <Button>Import</Button>
+        </Specimen>
       </Row>
       <Row label="icon only">
         <Specimen name="Default">
@@ -219,7 +260,7 @@ function PendingToggle() {
   return (
     <>
       <Specimen name={pending ? "Pending, press Toggle" : "At rest, press Toggle"}>
-        <Button variant="primary" isPending={pending}>
+        <Button variant="primary" reservesPendingSpace isPending={pending}>
           Import
         </Button>
         <Button isPending={pending} icon={Download}>
@@ -361,6 +402,701 @@ function Selects() {
             Open list: highlighted and chosen, then a disabled option
           </p>
         </div>
+      </div>
+    </Section>
+  );
+}
+
+function Menus() {
+  return (
+    <Section
+      title="Menu"
+      note="A quiet button with a chevron that opens a list of actions or of choices. The first three are real; the open menu is a still copy made from the same styles: a section that holds a choice, a highlighted item, a separator, an action, and a disabled item."
+    >
+      <Row>
+        <Specimen name="Real: open it">
+          <MenuButton label="Unit 573 piping" menuLabel="Workspace">
+            <MenuSection title="Workspaces" selectedKey="unit" onSelectionChange={() => undefined}>
+              <MenuItem id="unit" detail="3 snapshots">
+                Unit 573 piping
+              </MenuItem>
+              <MenuItem id="tank" detail="1 snapshot">
+                Tank farm
+              </MenuItem>
+            </MenuSection>
+            <MenuSeparator />
+            <MenuItem id="rename">Rename</MenuItem>
+            <MenuItem id="folder" isDisabled>
+              Show in folder
+            </MenuItem>
+          </MenuButton>
+        </Specimen>
+        <Specimen name="Hover">
+          <Forced state="hovered">
+            <MenuButton label="Unit 573 piping" menuLabel="Workspace">
+              <MenuItem id="rename">Rename</MenuItem>
+            </MenuButton>
+          </Forced>
+        </Specimen>
+        <Specimen name="Focus">
+          <Forced state="focus-visible">
+            <MenuButton label="Unit 573 piping" menuLabel="Workspace">
+              <MenuItem id="rename">Rename</MenuItem>
+            </MenuButton>
+          </Forced>
+        </Specimen>
+        <Specimen name="Loading">
+          <MenuButton label="Snapshot 7 Oct 2026" menuLabel="Snapshot" isPending>
+            <MenuItem id="a">7 Oct 2026</MenuItem>
+          </MenuButton>
+        </Specimen>
+        <Specimen name="Waiting for another control">
+          <MenuButton label="Snapshot 7 Oct 2026" menuLabel="Snapshot" isInert>
+            <MenuItem id="a">7 Oct 2026</MenuItem>
+          </MenuButton>
+        </Specimen>
+        <Specimen name="Open (still)">
+          <div>
+            <div className={menuStyles.trigger} aria-expanded="true">
+              <span className={menuStyles.triggerLabel}>Unit 573 piping</span>
+              <Icon icon={ChevronDown} className={menuStyles.chevron ?? ""} />
+            </div>
+            <div className={styles.gapSmall} />
+            <div
+              className={menuStyles.popover}
+              style={{ "--trigger-width": "100%" } as CSSProperties}
+            >
+              <div className={menuStyles.menu}>
+                <div className={menuStyles.section}>
+                  <div className={menuStyles.sectionTitle}>Workspaces</div>
+                  <div
+                    className={menuStyles.item}
+                    role="menuitemradio"
+                    aria-checked="true"
+                    data-selected="true"
+                  >
+                    <span className={menuStyles.itemLabel}>Unit 573 piping</span>
+                    <span className={menuStyles.detail}>3 snapshots</span>
+                    <Icon icon={Check} className={menuStyles.check ?? ""} />
+                  </div>
+                  <div
+                    className={menuStyles.item}
+                    role="menuitemradio"
+                    aria-checked="false"
+                    data-focused="true"
+                  >
+                    <span className={menuStyles.itemLabel}>Tank farm</span>
+                    <span className={menuStyles.detail}>1 snapshot</span>
+                  </div>
+                </div>
+                <div className={menuStyles.separator} />
+                <div className={menuStyles.item} data-focus-visible="true">
+                  <span className={menuStyles.itemLabel}>Rename</span>
+                </div>
+                <div className={menuStyles.item} data-disabled="true">
+                  <span className={menuStyles.itemLabel}>Show in folder</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Specimen>
+      </Row>
+    </Section>
+  );
+}
+
+const matches = [
+  { value: "is", label: "Is" },
+  { value: "is-not", label: "Is not" },
+];
+
+const targets = [
+  {
+    value: "keep",
+    label: "Keep both",
+    description: "The workspace then has two snapshots of 14 Oct 2026.",
+  },
+  {
+    value: "replace",
+    label: "Replace the snapshot of 08:00",
+    description: "Its holds are removed. This cannot be undone.",
+  },
+  { value: "other", label: "Import into another workspace" },
+];
+
+function Choices() {
+  const [match, setMatch] = useState("is");
+  const [target, setTarget] = useState("keep");
+  const still = () => undefined;
+  return (
+    <Section
+      title="Choice group"
+      note="One choice out of a few that are all worth seeing. The first two are real: Tab reaches the chosen option, the arrow keys move the choice. Then hover, pressed, and focus (forced) on an unchosen and on a chosen option, and the disabled group."
+    >
+      <div className={styles.twoColumns}>
+        <ChoiceGroup
+          label="Snapshots of the same day"
+          value={target}
+          onChange={setTarget}
+          options={targets}
+        />
+        <ChoiceGroup
+          label="Holds whose discipline"
+          orientation="horizontal"
+          value={match}
+          onChange={setMatch}
+          options={matches}
+        />
+      </div>
+      <Row>
+        <Specimen name="Hover, unchosen">
+          <Forced state="hovered" target="label:nth-of-type(1)">
+            <ChoiceGroup
+              label="Match"
+              value="x"
+              onChange={still}
+              options={[{ value: "is", label: "Is" }]}
+            />
+          </Forced>
+        </Specimen>
+        <Specimen name="Pressed, unchosen">
+          <Forced state="pressed" target="label:nth-of-type(1)">
+            <ChoiceGroup
+              label="Match"
+              value="x"
+              onChange={still}
+              options={[{ value: "is", label: "Is" }]}
+            />
+          </Forced>
+        </Specimen>
+        <Specimen name="Chosen">
+          <ChoiceGroup
+            label="Match"
+            value="is"
+            onChange={still}
+            options={[{ value: "is", label: "Is" }]}
+          />
+        </Specimen>
+        <Specimen name="Hover, chosen">
+          <Forced state="hovered" target="label:nth-of-type(1)">
+            <ChoiceGroup
+              label="Match"
+              value="is"
+              onChange={still}
+              options={[{ value: "is", label: "Is" }]}
+            />
+          </Forced>
+        </Specimen>
+        <Specimen name="Pressed, chosen">
+          <Forced state="pressed" target="label:nth-of-type(1)">
+            <ChoiceGroup
+              label="Match"
+              value="is"
+              onChange={still}
+              options={[{ value: "is", label: "Is" }]}
+            />
+          </Forced>
+        </Specimen>
+        <Specimen name="Focus">
+          <Forced state="focus-visible" target="label:nth-of-type(1)">
+            <ChoiceGroup
+              label="Match"
+              value="is"
+              onChange={still}
+              options={[{ value: "is", label: "Is" }]}
+            />
+          </Forced>
+        </Specimen>
+        <Specimen name="Disabled">
+          <ChoiceGroup
+            label="Match"
+            orientation="horizontal"
+            value="is"
+            onChange={still}
+            options={matches}
+            isDisabled
+          />
+        </Specimen>
+      </Row>
+    </Section>
+  );
+}
+
+function Tags() {
+  return (
+    <Section
+      title="Tag"
+      note="A small label on a row or an item. Neutral for a plain fact; a state tone always with its icon. It is not interactive and has no states."
+    >
+      <Row>
+        <Specimen name="Neutral">
+          <Tag>Soon</Tag>
+        </Specimen>
+        <Specimen name="Neutral, another fact">
+          <Tag>Limited</Tag>
+        </Specimen>
+        <Specimen name="Neutral, with an icon">
+          <Tag icon={Info}>Read now</Tag>
+        </Specimen>
+        <Specimen name="Info">
+          <Tag tone="info" icon={Info}>
+            Older snapshot
+          </Tag>
+        </Specimen>
+        <Specimen name="Warning">
+          <Tag tone="warning" icon={TriangleAlert}>
+            Size mismatch
+          </Tag>
+        </Specimen>
+        <Specimen name="Danger">
+          <Tag tone="danger" icon={OctagonAlert}>
+            Overdue
+          </Tag>
+        </Specimen>
+        <Specimen name="Success">
+          <Tag tone="success" icon={CircleCheck}>
+            Released
+          </Tag>
+        </Specimen>
+      </Row>
+    </Section>
+  );
+}
+
+function Chips() {
+  const still = () => undefined;
+  const [chips, setChips] = useState(["Discipline", "Hold type", "Role"]);
+  return (
+    <Section
+      title="Filter chip"
+      note="The only pills: round means a filter that can be removed. A chip is two controls, the filter and its X. Hover, pressed, and focus are forced on the first of them; the row at the end is real: Tab, Backspace or Delete, and the X all work, and the X shows its tooltip."
+    >
+      <Row label="active filter">
+        <Specimen name="Default">
+          <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+        </Specimen>
+        <Specimen name="Hover">
+          <Forced state="hovered" target="button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Pressed, or its picker is open">
+          <Forced state="pressed" target="button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Focus">
+          <Forced state="focus-visible" target="button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Is not">
+          <FilterChip field="Hold type" value="Vendor" isNegated onPress={still} onRemove={still} />
+        </Specimen>
+        <Specimen name="Several values">
+          <FilterChip field="Discipline" value="Civil +3" onPress={still} onRemove={still} />
+        </Specimen>
+        <Specimen name="Disabled">
+          <FilterChip
+            field="Discipline"
+            value="Civil"
+            isDisabled
+            onPress={still}
+            onRemove={still}
+          />
+        </Specimen>
+      </Row>
+      <Row label="a long value">
+        <Specimen name="Cut at the end, at the widest a chip gets">
+          <FilterChip
+            field="Blocker"
+            value="Instrumentation / INSTRUMENT TAG 577-FT-4401A to be confirmed by vendor data sheet"
+            onPress={still}
+            onRemove={still}
+          />
+        </Specimen>
+      </Row>
+      <Row label="add filter">
+        <Specimen name="Default">
+          <AddFilterChip onPress={still} />
+        </Specimen>
+        <Specimen name="Hover">
+          <Forced state="hovered">
+            <AddFilterChip onPress={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Pressed, or its picker is open">
+          <Forced state="pressed">
+            <AddFilterChip onPress={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Focus">
+          <Forced state="focus-visible">
+            <AddFilterChip onPress={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Disabled">
+          <AddFilterChip onPress={still} isDisabled />
+        </Specimen>
+      </Row>
+      <h3 className={styles.subTitle}>A filter bar, real: on the panel surface</h3>
+      <div className={styles.filterBar}>
+        {chips.map((field) => (
+          <FilterChip
+            key={field}
+            field={field}
+            value={field === "Discipline" ? "Civil, Piping" : field === "Role" ? "Lead" : "Vendor"}
+            isNegated={field === "Hold type"}
+            onPress={still}
+            onRemove={() => {
+              setChips((current) => current.filter((chip) => chip !== field));
+            }}
+          />
+        ))}
+        <AddFilterChip
+          onPress={() => {
+            setChips(["Discipline", "Hold type", "Role"]);
+          }}
+        />
+        {chips.length === 0 ? null : (
+          <Button
+            variant="quiet"
+            onPress={() => {
+              setChips([]);
+            }}
+          >
+            Clear all
+          </Button>
+        )}
+      </div>
+      <h3 className={styles.subTitle}>Disabled, with the line that says why</h3>
+      <div className={styles.filterBar}>
+        <FilterChip
+          field="Discipline"
+          value="Civil, Piping"
+          isDisabled
+          onPress={still}
+          onRemove={still}
+        />
+        <FilterChip
+          field="Hold type"
+          value="Vendor"
+          isNegated
+          isDisabled
+          onPress={still}
+          onRemove={still}
+        />
+        <AddFilterChip onPress={still} isDisabled />
+        <span className={styles.caption}>
+          Filters can be changed again when the snapshot of 30 Sep 2026 has opened.
+        </span>
+      </div>
+    </Section>
+  );
+}
+
+const fileFacts = [
+  { label: "File", value: "Holds_2026-10-14.xlsx", kind: "identifier" as const },
+  {
+    label: "Sheet",
+    value: "data",
+    action: <Button variant="quiet">Choose another sheet</Button>,
+  },
+  { label: "Project number", value: "No project number in the file", isAbsent: true },
+  {
+    label: "Remark",
+    value:
+      "Instrument tag 577-FT-4401A to be confirmed by the vendor data sheet before the line can be issued for construction; see transmittal T-2231.",
+  },
+];
+
+function Facts() {
+  return (
+    <Section
+      title="Section title and fact list"
+      note="A level 2 title heads a section and a level 3 title a part inside it. A fact list rules pairs of a label and a value: an identifier in the monospace, a row with an action, an absent value in words, and a long value that wraps. On a first load the labels show and each value is a still block."
+    >
+      <div className={styles.twoColumns}>
+        <div className={styles.stack}>
+          <SectionTitle level={2}>File</SectionTitle>
+          <FactList aria-label="File facts" items={fileFacts} />
+        </div>
+        <div className={styles.stack}>
+          <SectionTitle level={3}>Sizes</SectionTitle>
+          <FactList
+            aria-label="Line sizes, loading"
+            isLoading
+            items={[
+              { label: "Model size", value: "" },
+              { label: "LDT size", value: "" },
+              { label: "Stress calculation", value: "" },
+            ]}
+          />
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function Disclosures() {
+  return (
+    <Section
+      title="Disclosure row"
+      note="A row that opens in place. The group is real: Enter or Space opens and closes a row. A statement stands where there is nothing to open; then a closed row with its count and its summary, a row that starts open, and a row with an action. Below it: hover, pressed, and focus (forced)."
+    >
+      <div className={styles.stack}>
+        <DisclosureGroup>
+          <DisclosureStatement>No rows were skipped.</DisclosureStatement>
+          <Disclosure
+            level={3}
+            title="Release dates that cannot be read"
+            count="37 times"
+            summary="The hold is kept, without a release date."
+          >
+            <p>Row 612: the release date &quot;soon&quot; could not be read as a date.</p>
+          </Disclosure>
+          <Disclosure
+            level={3}
+            title="Cells with a spreadsheet error"
+            count="1 time"
+            summary="A cell that holds an error such as #N/A was read as blank."
+            defaultExpanded
+          >
+            <p>4 cells hold a spreadsheet error such as #N/A and were read as blank.</p>
+            <p className={styles.caption}>Showing 1 of 1.</p>
+          </Disclosure>
+          <Disclosure
+            level={3}
+            title="Column mapping"
+            action={<Button variant="quiet">Change mapping</Button>}
+          >
+            <FactList
+              aria-label="Columns in use"
+              items={[
+                { label: "Line ID", value: "line_id" },
+                { label: "Hold remark", value: "hold_remark" },
+                { label: "Model size", value: "No column", isAbsent: true },
+              ]}
+            />
+          </Disclosure>
+        </DisclosureGroup>
+        <div className={styles.gap} />
+        <DisclosureGroup>
+          <Forced state="hovered" target="button">
+            <Disclosure title="Hover" count="12 rows">
+              The rows
+            </Disclosure>
+          </Forced>
+          <Forced state="pressed" target="button">
+            <Disclosure title="Pressed" count="12 rows">
+              The rows
+            </Disclosure>
+          </Forced>
+          <Forced state="focus-visible" target="button">
+            <Disclosure title="Focus" count="12 rows">
+              The rows
+            </Disclosure>
+          </Forced>
+        </DisclosureGroup>
+      </div>
+    </Section>
+  );
+}
+
+const disciplineValues = [
+  { key: "civil", label: "Civil", count: 1515 },
+  { key: "piping", label: "Piping", count: 1285 },
+  { key: "process", label: "Process", count: 846 },
+  { key: "instrumentation", label: "Instrumentation", count: 512 },
+  { key: "structural", label: "Structural", count: 377 },
+  { key: "vendor", label: "Vendor", count: 0 },
+  {
+    key: "long",
+    label: "Instrumentation / INSTRUMENT TAG 577-FT-4401A to be confirmed by vendor data sheet",
+    count: 12,
+  },
+  { key: "electrical", label: "Electrical", count: 241 },
+  { key: "hvac", label: "HVAC", count: 88 },
+  { key: "telecom", label: "Telecom", count: 9 },
+];
+
+/** The filter picker as DESIGN.md composes it: a field, a choice in a row, the list, its footer. */
+function Picker({ isLoading = false }: { isLoading?: boolean }) {
+  const [match, setMatch] = useState("is");
+  const [ticked, setTicked] = useState<readonly string[]>(["civil", "vendor"]);
+  const [typed, setTyped] = useState("");
+  const shown = disciplineValues.filter((value) =>
+    value.label.toLowerCase().includes(typed.trim().toLowerCase()),
+  );
+  return (
+    <>
+      <TextField
+        label="Discipline"
+        placeholder="Type to narrow"
+        value={typed}
+        onChange={setTyped}
+      />
+      <ChoiceGroup
+        label="Keep holds whose discipline"
+        orientation="horizontal"
+        value={match}
+        onChange={setMatch}
+        options={matches}
+      />
+      <OptionList
+        aria-label="Discipline values"
+        selectionMode="multiple"
+        options={shown}
+        selectedKeys={ticked}
+        onSelectionChange={setTicked}
+        isLoading={isLoading}
+        emptyText="No value matches."
+        footer="3 more values. Type to narrow."
+      />
+    </>
+  );
+}
+
+/** A popover drawn in the page: the surface of the real one, without its place over the page. */
+function StillPopover({ children }: { children: ReactNode }) {
+  return (
+    <div className={popoverStyles.popover}>
+      <div className={popoverStyles.dialog}>
+        <div className={popoverStyles.body}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Pickers() {
+  const [one, setOne] = useState<readonly string[]>(["yes"]);
+  const [several, setSeveral] = useState<readonly string[]>(["civil"]);
+  const still = () => undefined;
+  return (
+    <Section
+      title="Popover and option list"
+      note="A popover is the surface of a menu for anything that is more than a list. The first is real: it takes the focus into its field, Tab stays inside, Escape closes it and gives the focus back. The stills beside it are the same surface drawn in the page. An option list ticks several values or holds one; its mark says which."
+    >
+      <Row label="real">
+        <Specimen name="Opened from Add filter">
+          <Popover trigger={<AddFilterChip onPress={still} />} aria-label="Filter by discipline">
+            <Picker />
+          </Popover>
+        </Specimen>
+        <Specimen name="Opened from a chip: the X does not open it">
+          <Popover
+            trigger={
+              <FilterChip
+                field="Discipline"
+                value="Civil, Vendor"
+                onPress={still}
+                onRemove={still}
+              />
+            }
+            aria-label="Filter by discipline"
+          >
+            <Picker />
+          </Popover>
+        </Specimen>
+        <Specimen name="Lined up with the trailing edge">
+          <Popover
+            trigger={<Button>Filter by text</Button>}
+            aria-label="Filter by text"
+            placement="bottom end"
+          >
+            {(close) => (
+              <>
+                <TextField label="Text in any column" placeholder="577-PR-400" />
+                <Button variant="quiet" onPress={close}>
+                  Close
+                </Button>
+              </>
+            )}
+          </Popover>
+        </Specimen>
+      </Row>
+      <h3 className={styles.subTitle}>
+        The filter picker, composed, and the same while its counts are read again
+      </h3>
+      <div className={styles.pickers}>
+        <Forced state="hovered" target='[role="option"]:nth-of-type(3)'>
+          <Forced state={["focused", "focus-visible"]} target='[role="option"]:nth-of-type(4)'>
+            <StillPopover>
+              <Picker />
+            </StillPopover>
+          </Forced>
+        </Forced>
+        <StillPopover>
+          <Picker isLoading />
+        </StillPopover>
+      </div>
+      <h3 className={styles.subTitle}>
+        Option list alone: several values, one value, a first read, and nothing to list
+      </h3>
+      <div className={styles.pickers}>
+        <StillPopover>
+          <OptionList
+            aria-label="Hold types"
+            selectionMode="multiple"
+            options={disciplineValues.slice(0, 4)}
+            selectedKeys={several}
+            onSelectionChange={setSeveral}
+            emptyText="No value matches."
+          />
+        </StillPopover>
+        <StillPopover>
+          <OptionList
+            aria-label="Size mismatch"
+            selectionMode="single"
+            options={[
+              { key: "yes", label: "Yes", count: 214 },
+              { key: "no", label: "No", count: 4828 },
+            ]}
+            selectedKeys={one}
+            onSelectionChange={setOne}
+            emptyText="No value matches."
+          />
+        </StillPopover>
+        <StillPopover>
+          <OptionList
+            aria-label="Values, first read"
+            selectionMode="multiple"
+            options={[]}
+            selectedKeys={[]}
+            onSelectionChange={still}
+            isLoading
+            emptyText="No value matches."
+          />
+        </StillPopover>
+        <StillPopover>
+          <OptionList
+            aria-label="Values, none"
+            selectionMode="multiple"
+            options={[]}
+            selectedKeys={[]}
+            onSelectionChange={still}
+            emptyText="No value matches. Type less, or clear the field."
+          />
+        </StillPopover>
+      </div>
+      <h3 className={styles.subTitle}>
+        On the panel surface, outside an overlay: the hover fill of a row
+      </h3>
+      <div className={styles.onPanel}>
+        <Forced state="hovered" target='[role="option"]:nth-of-type(2)'>
+          <OptionList
+            aria-label="Age bands"
+            selectionMode="multiple"
+            options={[
+              { key: "a", label: "0 to 13 days", count: 412 },
+              { key: "b", label: "14 to 29 days", count: 688 },
+              { key: "c", label: "30 to 59 days", count: 1322 },
+            ]}
+            selectedKeys={["c"]}
+            onSelectionChange={still}
+            emptyText="No value matches."
+          />
+        </Forced>
       </div>
     </Section>
   );
@@ -687,12 +1423,12 @@ function Bars() {
   return (
     <Section
       title="Bar row"
-      note="Plain data is neutral gray. Piping is hovered, Instrumentation pressed, Structural has focus (forced). The row in the active filter takes the teal tint and the strongest neutral bar; press a row to move the filter."
+      note="Plain data is neutral gray. Piping is hovered, Instrumentation pressed, Structural has focus (forced). The row in the active filter takes the teal tint and the strongest neutral bar; press a row to move the filter. A group is a list to assistive technology, and each row an item of it."
     >
       <h3 className={styles.subTitle}>Holds by discipline</h3>
-      <Forced state="hovered" target="button:nth-of-type(2)">
-        <Forced state="pressed" target="button:nth-of-type(4)">
-          <Forced state="focus-visible" target="button:nth-of-type(5)">
+      <Forced state="hovered" target='[role="listitem"]:nth-of-type(2) button'>
+        <Forced state="pressed" target='[role="listitem"]:nth-of-type(4) button'>
+          <Forced state="focus-visible" target='[role="listitem"]:nth-of-type(5) button'>
             <BarRowGroup aria-label="Holds by discipline">
               {(
                 [
@@ -723,13 +1459,27 @@ function Bars() {
       <h3 className={styles.subTitle}>
         Holds by age band: the one group with a color, in band order
       </h3>
-      <Forced state="hovered" target="button:nth-of-type(2)">
+      <Forced state="hovered" target='[role="listitem"]:nth-of-type(2) button'>
         <BarRowGroup aria-label="Holds by age band">
-          <BarRow label="0 to 13 days" value="412" fraction={0.31} ordinalStep={1} />
-          <BarRow label="14 to 29 days" value="688" fraction={0.52} ordinalStep={2} />
-          <BarRow label="30 to 59 days" value="1,322" fraction={1} ordinalStep={3} />
-          <BarRow label="60 to 89 days" value="1,010" fraction={0.76} ordinalStep={4} isSelected />
-          <BarRow label="90 days and over" value="610" fraction={0.46} ordinalStep={5} />
+          {(
+            [
+              ["0 to 13 days", "412", 0.31, 1],
+              ["14 to 29 days", "688", 0.52, 2],
+              ["30 to 59 days", "1,322", 1, 3],
+              ["60 to 89 days", "1,010", 0.76, 4],
+              ["90 days and over", "610", 0.46, 5],
+            ] as const
+          ).map(([label, value, fraction, step]) => (
+            <BarRow
+              key={label}
+              label={label}
+              value={value}
+              fraction={fraction}
+              ordinalStep={step}
+              isSelected={step === 4}
+              onPress={() => undefined}
+            />
+          ))}
         </BarRowGroup>
       </Forced>
       <h3 className={styles.subTitle}>
@@ -744,9 +1494,9 @@ function Bars() {
       <div className={styles.twoColumns}>
         <BarRowGroup aria-label="Holds by hold type, loading" isLoading skeletonRows={4} />
         <BarRowGroup aria-label="Holds by hold type, refetching" isStale>
-          <BarRow label="Design" value="2,410" fraction={1} />
-          <BarRow label="Vendor" value="1,102" fraction={0.457} />
-          <BarRow label="Site" value="640" fraction={0.266} />
+          <BarRow label="Design" value="2,410" fraction={1} onPress={() => undefined} />
+          <BarRow label="Vendor" value="1,102" fraction={0.457} onPress={() => undefined} />
+          <BarRow label="Site" value="640" fraction={0.266} onPress={() => undefined} />
         </BarRowGroup>
       </div>
     </Section>
@@ -1081,12 +1831,19 @@ function Page({ theme }: { theme: ThemeName }) {
           <Buttons />
           <Fields />
           <Selects />
+          <Menus />
           <Checkboxes />
+          <Choices />
           <Tables />
           <TabsDemo />
           <Tiles />
           <Bars />
           <Notices />
+          <Tags />
+          <Chips />
+          <Pickers />
+          <Facts />
+          <Disclosures />
           <Toasts />
           <Skeletons />
           <Pages />

@@ -5,7 +5,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { IMPORT_PATH } from "../../app/destinations";
 import { Page } from "../../app/shell/Page";
-import { Button, Notice } from "../../components";
+import { Button, Notice, Tag } from "../../components";
 import { t } from "../../text/i18n";
 import { openDraft, useImportDraft } from "./draft";
 import styles from "./Import.module.css";
@@ -74,11 +74,12 @@ export function ImportSheetPage() {
                         <span className={styles.count}>
                           {t("import.sheet.rows", { count: file.row_count })}
                         </span>
-                        <span className={styles.tag}>{t("import.sheet.inUse")}</span>
+                        <Tag>{t("import.sheet.inUse")}</Tag>
                       </>
                     ) : (
                       <Button
                         aria-label={t("import.sheet.useNamed", { sheet })}
+                        reservesPendingSpace
                         isPending={choose.isPending && choose.variables === sheet}
                         isDisabled={choose.isPending && choose.variables !== sheet}
                         onPress={() => {
@@ -115,6 +116,7 @@ export function ImportSheetPage() {
           </Button>
           <Button
             variant="quiet"
+            reservesPendingSpace
             isPending={cancel.isPending}
             onPress={() => {
               cancel.mutate(from);

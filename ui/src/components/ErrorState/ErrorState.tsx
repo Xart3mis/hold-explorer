@@ -29,7 +29,12 @@ export function ErrorState({ error, title, onRetry, isRetrying, className }: Err
           ? {}
           : {
               actions: (
-                <Button variant="quiet" onPress={onRetry} isPending={isRetrying === true}>
+                <Button
+                  variant="quiet"
+                  onPress={onRetry}
+                  reservesPendingSpace
+                  isPending={isRetrying === true}
+                >
                   {t("common.retry")}
                 </Button>
               ),

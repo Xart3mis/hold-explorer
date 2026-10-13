@@ -80,7 +80,12 @@ export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps)
         </Notice>
       ) : null}
       <div className={styles.actions}>
-        <Button type="submit" isPending={createWorkspace.isPending} isInert={isBusy}>
+        <Button
+          type="submit"
+          reservesPendingSpace
+          isPending={createWorkspace.isPending}
+          isInert={isBusy}
+        >
           {t("workspaces.create")}
         </Button>
         <Button variant="quiet" onPress={onCancel}>

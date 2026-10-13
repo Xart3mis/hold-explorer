@@ -17,6 +17,7 @@ import {
   DropZone,
   Notice,
   Progress,
+  Tag,
   type DataTableColumn,
 } from "../../components";
 import { formatCount, formatDate, formatList } from "../../text/format";
@@ -93,7 +94,7 @@ export function WelcomePage() {
           {workspace.id === start.open?.workspace.id ? (
             <>
               {" "}
-              <span className={styles.tag}>{t("workspaces.openTag")}</span>
+              <Tag>{t("workspaces.openTag")}</Tag>
             </>
           ) : null}
         </span>
@@ -160,6 +161,7 @@ export function WelcomePage() {
                 <>
                   <Button
                     variant="quiet"
+                    reservesPendingSpace
                     isPending={refreshWorkspaces.isPending}
                     onPress={() => {
                       refreshWorkspaces.mutate();
@@ -216,6 +218,7 @@ export function WelcomePage() {
                 <Button
                   variant="quiet"
                   // The spinner is on the row that is being opened; the others wait without one.
+                  reservesPendingSpace
                   isPending={openWorkspace.isPending && opening === workspace.id}
                   isInert={isBusy}
                   onPress={() => {
@@ -238,6 +241,7 @@ export function WelcomePage() {
           <p className={styles.text}>{t("welcome.demoText")}</p>
           <div>
             <Button
+              reservesPendingSpace
               isPending={openDemo.isPending}
               isInert={isBusy}
               onPress={() => {

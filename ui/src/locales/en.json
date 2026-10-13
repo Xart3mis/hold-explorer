@@ -37,6 +37,12 @@
   "toast": {
     "region": "Notifications"
   },
+  "filterChip": {
+    "is": "{{field}} {{value}}",
+    "isNot": "{{field}} is not {{value}}",
+    "add": "Add filter",
+    "remove": "Remove the filter {{field}}"
+  },
   "errorState": {
     "title": "This could not be loaded"
   },

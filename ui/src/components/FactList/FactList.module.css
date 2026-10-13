@@ -1,0 +1,92 @@
+/*
+ * Rows of one height with a hairline under each, and one above the first, like the rows of a
+ * table. The list has no border and no fill of its own.
+ */
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+  list-style: none;
+}
+
+/*
+ * A row is as tall as a row of a table and grows with its value. Its parts stand on one
+ * baseline, so the label of a value that runs over several lines stays beside its first line,
+ * and a row of one line is centered in its height.
+ */
+.row {
+  display: grid;
+  grid-template-columns: var(--size-bar-label-width) minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: baseline;
+  min-block-size: var(--density-row-height);
+  padding-block: var(--space-0-5);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The name of a fact, in a column of its own so the values line up. */
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/*
+ * A value is never cut: it wraps, and the row grows. The value keeps the room above and below
+ * that a single line has in a row (what the height of a row leaves of it, less the hairline and
+ * the padding of the row), so a value of several lines does not run up to the hairlines.
+ */
+.value {
+  min-inline-size: 0;
+  margin-inline-start: var(--space-3);
+  padding-block: calc(
+    (var(--density-row-height) - var(--border-width-thin) - var(--line-height-body)) / 2 -
+      var(--space-0-5)
+  );
+  overflow-wrap: anywhere;
+}
+
+/* Written as the source wrote it, and there to be copied. */
+.value[data-kind="identifier"] {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-body);
+  user-select: text;
+}
+
+.value[data-absent] {
+  color: var(--color-text-muted);
+}
+
+.action {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-inline-start: var(--space-3);
+}
+
+/* A first load: blocks of varied length, as values are. */
+.row .skeleton {
+  inline-size: 14ch;
+}
+
+.row:nth-child(3n + 2) .skeleton {
+  inline-size: 9ch;
+}
+
+.row:nth-child(3n) .skeleton {
+  inline-size: 20ch;
+}
+
+/* What says that the list is loading takes no room and draws no rule. */
+.status {
+  display: contents;
+}

@@ -111,7 +111,7 @@ function tile(label: string): HTMLElement {
 
 /** The bar rows of a group, each as the text it shows: label, holds, lines. */
 function barRows(name: string): string[] {
-  const bars = screen.getByRole("group", { name });
+  const bars = screen.getByRole("list", { name });
   return [...bars.querySelectorAll("[data-part='bar-row']")].map((row) =>
     row.textContent.replace(/\s+/g, " ").trim(),
   );
@@ -119,7 +119,7 @@ function barRows(name: string): string[] {
 
 /** The lengths of the bars of a group, in the order of its rows. */
 function barLengths(name: string): string[] {
-  const bars = screen.getByRole("group", { name });
+  const bars = screen.getByRole("list", { name });
   return [...bars.querySelectorAll<HTMLElement>("[data-part='bar']")].map(
     (bar) => bar.style.inlineSize,
   );
@@ -311,7 +311,7 @@ describe("the Overview with a snapshot", () => {
       ]);
       expect(barLengths(text.byDiscipline)).toEqual(["100%", "10%"]);
       // A count is one piece of text in its own cell of the row, whatever its length.
-      const bars = screen.getByRole("group", { name: text.byDiscipline });
+      const bars = screen.getByRole("list", { name: text.byDiscipline });
       const [first] = bars.querySelectorAll("[data-part='bar-row']");
       expect([...must(first, "the first row").children].map((part) => part.textContent)).toEqual([
         "Piping",
@@ -330,7 +330,7 @@ describe("the Overview with a snapshot", () => {
   it("draws the bars as plain data: one neutral bar a row, and nothing to press", async () => {
     const { overview } = renderOverview();
     await loaded(overview);
-    const bars = screen.getByRole("group", { name: text.byDiscipline });
+    const bars = screen.getByRole("list", { name: text.byDiscipline });
     expect(bars.querySelectorAll("[data-part='bar']")).toHaveLength(7);
     expect(bars.querySelector("[data-ordinal]")).toBeNull();
     // Filtering by a bar comes with the filter bar. Until then a row is not a control.
@@ -387,8 +387,8 @@ describe("the Overview with a snapshot", () => {
     await user.click(must(firstRow, "the first row"));
     expect(must(firstRow, "the first row")).not.toHaveAttribute("aria-selected");
     // The table stands in for the bars of its group; the other group keeps its bars.
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: text.byHoldType })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: text.byHoldType })).toBeInTheDocument();
     expect(holdTypeSwitch()).not.toBeChecked();
 
     // The switch is worked by the keyboard as well, and brings the bars back.
@@ -495,7 +495,7 @@ describe("the Overview while it changes", () => {
     // Both groups have their titles and rows of blocks with bars.
     for (const title of [text.byDiscipline, text.byHoldType]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
-      const bars = screen.getByRole("group", { name: title });
+      const bars = screen.getByRole("list", { name: title });
       expect(bars).toHaveAttribute("aria-busy", "true");
       const rows = bars.querySelectorAll("[data-part='skeleton-row']");
       expect(rows.length).toBeGreaterThan(2);
@@ -534,7 +534,7 @@ describe("the Overview while it changes", () => {
     );
     // The error stands in place of the figures and the bars, and is the one thing that is said.
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
     expect(status(main)).toBeEmptyDOMElement();
     expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
       snapshotOnly(NEWEST),
@@ -716,7 +716,7 @@ describe("the Overview of a workspace without snapshots", () => {
     expect(overview).toHaveBeenCalledWith(asked(null));
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
     // One action, no snapshot to name under the title, and nothing being read.
     expect(within(main).getAllByRole("button")).toHaveLength(1);
     expect(must(main.querySelector("header"), "the page header").querySelector("p")).toBeNull();

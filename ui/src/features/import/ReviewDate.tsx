@@ -1,7 +1,7 @@
 import { useImperativeHandle, useState, type Ref } from "react";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotSource } from "../../bindings/SnapshotSource";
-import { Button, Checkbox, Notice, TextField } from "../../components";
+import { Button, Checkbox, Notice, SectionTitle, TextField } from "../../components";
 import { formatDateTime, formatLongDate } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 import type { ImportChoices } from "./draft";
@@ -90,7 +90,7 @@ export function ReviewDate({
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>{t("import.review.date.title")}</h2>
+      <SectionTitle level={2}>{t("import.review.date.title")}</SectionTitle>
 
       {detected === null ? (
         <Notice tone="warning" title={t("import.review.date.noneTitle")}>

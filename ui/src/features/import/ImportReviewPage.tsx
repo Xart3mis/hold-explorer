@@ -15,8 +15,11 @@ import type { ImportPhase } from "../../bindings/ImportPhase";
 import type { ImportReview } from "../../bindings/ImportReview";
 import {
   Button,
+  Disclosure,
+  FactList,
   Notice,
   Progress,
+  SectionTitle,
   StatTile,
   StatTileGroup,
   useToast,
@@ -25,7 +28,6 @@ import {
 import { cx } from "../../components/cx";
 import { formatCount, formatDateTime } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { Details } from "./Details";
 import { clearImport, useImportDraft, type ImportChoices } from "./draft";
 import { columnLabel, fieldLabel, orderFields } from "./fields";
 import styles from "./Import.module.css";
@@ -272,41 +274,41 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
       </StatTileGroup>
 
       <div>
-        <ul aria-label={t("import.review.facts")} className={styles.ruled}>
-          <li className={styles.ruledRow}>
-            <span className={styles.ruledLabel}>{t("import.review.file")}</span>
-            <span className={cx(styles.ruledValue, styles.fileName)}>{review.file_name}</span>
-          </li>
-          {file.sheets.length === 0 ? null : (
-            <li className={styles.ruledRow}>
-              <span className={styles.ruledLabel}>{t("import.review.sheet")}</span>
-              <span className={styles.ruledValue}>{file.sheet_name}</span>
-              {file.sheets.length > 1 ? (
-                <span className={styles.ruledEnd}>
-                  <Button
-                    variant="quiet"
-                    isDisabled={committing}
-                    onPress={() => {
-                      void navigate(IMPORT_SHEET_PATH, { state: { from } });
-                    }}
-                  >
-                    {t("import.chooseSheet")}
-                  </Button>
-                </span>
-              ) : null}
-            </li>
-          )}
-          <li className={styles.ruledRow}>
-            <span className={styles.ruledLabel}>{t("import.review.project")}</span>
-            <span
-              className={styles.ruledValue}
-              data-absent={review.project_no === null ? "" : undefined}
-            >
-              {review.project_no ?? t("import.review.projectNone")}
-            </span>
-          </li>
-        </ul>
-        <Details
+        <FactList
+          aria-label={t("import.review.facts")}
+          items={[
+            { label: t("import.review.file"), value: review.file_name, kind: "identifier" },
+            ...(file.sheets.length === 0
+              ? []
+              : [
+                  {
+                    label: t("import.review.sheet"),
+                    value: file.sheet_name,
+                    ...(file.sheets.length > 1
+                      ? {
+                          action: (
+                            <Button
+                              variant="quiet"
+                              isDisabled={committing}
+                              onPress={() => {
+                                void navigate(IMPORT_SHEET_PATH, { state: { from } });
+                              }}
+                            >
+                              {t("import.chooseSheet")}
+                            </Button>
+                          ),
+                        }
+                      : {}),
+                  },
+                ]),
+            {
+              label: t("import.review.project"),
+              value: review.project_no ?? t("import.review.projectNone"),
+              isAbsent: review.project_no === null,
+            },
+          ]}
+        />
+        <Disclosure
           level={2}
           title={t("import.review.columnsShow")}
           action={
@@ -321,29 +323,25 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </Button>
           }
         >
-          <ul aria-label={t("import.review.columnsList")} className={styles.ruled}>
-            {orderFields(draft.required).all.map((field) => {
+          <FactList
+            aria-label={t("import.review.columnsList")}
+            items={orderFields(draft.required).all.map((field) => {
               const column = review.mapping.fields[field];
-              return (
-                <li key={field} className={styles.ruledRow}>
-                  <span className={styles.ruledLabel}>{fieldLabel(field)}</span>
-                  <span
-                    className={styles.ruledValue}
-                    data-absent={column === undefined ? "" : undefined}
-                  >
-                    {column === undefined
-                      ? t("import.review.columnsNone")
-                      : columnLabel(file.headers, column)}
-                  </span>
-                </li>
-              );
+              return {
+                label: fieldLabel(field),
+                value:
+                  column === undefined
+                    ? t("import.review.columnsNone")
+                    : columnLabel(file.headers, column),
+                isAbsent: column === undefined,
+              };
             })}
-          </ul>
-        </Details>
+          />
+        </Disclosure>
       </div>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>{t("import.review.findings")}</h2>
+        <SectionTitle level={2}>{t("import.review.findings")}</SectionTitle>
         <ReviewFindings review={review} />
       </section>
 
@@ -420,6 +418,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </Button>
             <Button
               variant="quiet"
+              reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
                 cancel.mutate(from);
@@ -559,6 +558,7 @@ export function ImportReviewPage() {
             )}
             <Button
               variant={failure === null ? "secondary" : "quiet"}
+              reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
                 cancel.mutate(from);

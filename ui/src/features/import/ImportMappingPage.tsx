@@ -11,6 +11,7 @@ import {
   Button,
   DataTable,
   Notice,
+  SectionTitle,
   Select,
   type DataTableColumn,
   type SelectOption,
@@ -250,14 +251,14 @@ export function ImportMappingPage() {
           ) : null}
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>{t("import.mapping.required")}</h2>
+            <SectionTitle level={2}>{t("import.mapping.required")}</SectionTitle>
             <div className={styles.fields}>
               {ordered.required.map((field) => select(field, true))}
             </div>
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>{t("import.mapping.optional")}</h2>
+            <SectionTitle level={2}>{t("import.mapping.optional")}</SectionTitle>
             <p className={styles.text}>{t("import.mapping.optionalHelp")}</p>
             <div className={styles.fields}>
               {ordered.optional.map((field) => select(field, false))}
@@ -280,6 +281,7 @@ export function ImportMappingPage() {
               <Button
                 variant="primary"
                 isDisabled={missing.length > 0}
+                reservesPendingSpace
                 isPending={review.isPending}
                 {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
                 onPress={() => {
@@ -300,6 +302,7 @@ export function ImportMappingPage() {
               </Button>
               <Button
                 variant="quiet"
+                reservesPendingSpace
                 isPending={cancel.isPending}
                 isDisabled={review.isPending}
                 onPress={() => {
@@ -322,7 +325,7 @@ export function ImportMappingPage() {
         </div>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t("import.mapping.preview")}</h2>
+          <SectionTitle level={2}>{t("import.mapping.preview")}</SectionTitle>
           <p className={styles.text}>
             {rows.length === 0
               ? t("import.mapping.previewEmpty")

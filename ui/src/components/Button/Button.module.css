@@ -33,9 +33,9 @@
 }
 
 /*
- * A button that can become pending and has no icon keeps the room of the spinner free, half on
- * each side of its label, so the spinner arrives without changing the width. A button that waits
- * for another control shows no spinner, so it keeps that room as it does at rest.
+ * A button without an icon that was asked to keeps the room of the spinner free, half on each
+ * side of its label, so the spinner arrives without changing the width. A button that waits for
+ * another control shows no spinner, so it keeps that room as it does at rest.
  */
 .button[data-reserve]:not([data-pending]) .label,
 .button[data-reserve][data-inert] .label {

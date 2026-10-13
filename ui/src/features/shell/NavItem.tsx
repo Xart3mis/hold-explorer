@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-aria-components";
-import { Icon, Tooltip } from "../../components";
+import { Icon, Tag, Tooltip } from "../../components";
 import { cx } from "../../components/cx";
 import { ariaKeyShortcuts, formatShortcut } from "./shortcuts";
 import styles from "./Shell.module.css";
@@ -56,7 +56,7 @@ export function NavItem({
       {tag === undefined ? null : (
         <>
           {/* A space, so the name reads "Lines Soon" and not as one word. It takes no room. */}{" "}
-          <span className={styles.tag}>{tag}</span>
+          <Tag className={styles.tag}>{tag}</Tag>
         </>
       )}
     </Link>

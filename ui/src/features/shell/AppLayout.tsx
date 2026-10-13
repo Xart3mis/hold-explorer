@@ -292,6 +292,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
                   actions={
                     <Button
                       variant="quiet"
+                      reservesPendingSpace
                       isPending={selectSnapshot.isPending}
                       isInert={isBusy}
                       onPress={() => {

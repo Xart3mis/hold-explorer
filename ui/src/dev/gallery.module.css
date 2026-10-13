@@ -227,3 +227,36 @@
 .scrollBox {
   block-size: var(--size-dropzone-min-height);
 }
+
+.gapSmall {
+  block-size: var(--space-1);
+}
+
+/* A filter bar as the shell draws it: chips in a row on the panel surface. */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--layout-filterbar-height);
+  padding: 0 var(--space-4);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-panel);
+}
+
+/* Stills of a popover, side by side. */
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  align-items: flex-start;
+}
+
+.onPanel {
+  inline-size: var(--size-popover-width);
+  padding: var(--space-3);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-panel);
+}

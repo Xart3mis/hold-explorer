@@ -3,10 +3,15 @@ import type { ImportReview } from "../../bindings/ImportReview";
 import type { SkipKind } from "../../bindings/SkipKind";
 import type { SkippedRow } from "../../bindings/SkippedRow";
 import type { WarningKind } from "../../bindings/WarningKind";
-import { DataTable, type DataTableColumn } from "../../components";
+import {
+  DataTable,
+  Disclosure,
+  DisclosureGroup,
+  DisclosureStatement,
+  type DataTableColumn,
+} from "../../components";
 import { formatCount } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { Details } from "./Details";
 import styles from "./Import.module.css";
 
 /** Why a row was skipped, by its kind. */
@@ -98,14 +103,14 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
     return <p className={styles.text}>{t("import.review.clean")}</p>;
   }
   return (
-    <div className={styles.detailsList}>
+    <DisclosureGroup>
       {skippedCount === 0 ? (
-        <p className={styles.detailsNone}>{t("import.review.skippedNone")}</p>
+        <DisclosureStatement>{t("import.review.skippedNone")}</DisclosureStatement>
       ) : (
-        <Details
+        <Disclosure
           level={3}
           title={t("import.review.skipped", { count: skippedCount })}
-          text={t("import.review.skippedHelp")}
+          summary={t("import.review.skippedHelp")}
         >
           <div className={styles.tableBox}>
             <DataTable
@@ -123,21 +128,21 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
               })}
             </p>
           ) : null}
-        </Details>
+        </Disclosure>
       )}
 
       {groups.length === 0 ? (
-        <p className={styles.detailsNone}>{t("import.review.warningsNone")}</p>
+        <DisclosureStatement>{t("import.review.warningsNone")}</DisclosureStatement>
       ) : (
         groups.map((group) => {
           const title = t(warnings[group.kind].title);
           return (
-            <Details
+            <Disclosure
               key={group.kind}
               level={3}
               title={title}
               count={t("import.review.times", { count: group.count })}
-              text={t(warnings[group.kind].text)}
+              summary={t(warnings[group.kind].text)}
             >
               <ul
                 aria-label={t("import.review.examplesOf", { kind: title })}
@@ -156,10 +161,10 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
                   })}
                 </p>
               ) : null}
-            </Details>
+            </Disclosure>
           );
         })
       )}
-    </div>
+    </DisclosureGroup>
   );
 });
