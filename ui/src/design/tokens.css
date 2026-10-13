@@ -73,6 +73,8 @@
   --size-progress-height: 4px;
   --size-progress-segment: 33.333%;
   --size-bar-label-width: 180px;
+  --size-menu-min-width: 180px;
+  --size-menu-max-width: 480px;
   --size-stat-tile-min-width: 160px;
   --size-dropzone-min-height: 200px;
   --size-toast-min-width: 280px;

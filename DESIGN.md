@@ -35,13 +35,13 @@ This system rejects what `PRODUCT.md` lists as anti-references: the startup anal
 - Neutrals tinted toward the accent hue. No pure black, no pure white, no untinted gray.
 - Four type sizes, each at least 1.25 times the one below. Hierarchy inside a size comes from weight and ink.
 - Hairlines and surface steps before boxes. Flat at rest; shadows only on what floats.
-- Round means filter, square means action: filter chips are pills, everything else has a 4 px corner. The one other round shape is the circle of a radio, which is round so that it cannot be taken for a checkbox.
+- Round means filter, square means action: a filter chip is a pill, and every other control has a 4 px corner. Nothing else is a pill. Four small things are round without being one, each for a reason of its own: the circle of a radio and of the single-choice mark of an option list, so that neither can be taken for a checkbox; the remove circle of a filter chip, which is the end of its pill; the progress track, which is a line with round ends and not a control; and the spinner, which is a ring because it turns.
 - Every state is specified: default, hover, focus, active, disabled, loading, error.
 - Motion marks a state change, lasts 150 to 250 ms, and disappears under reduced motion.
 
 ## 2. Colors
 
-A cool, low-chroma neutral scale carries the interface; a petrol teal marks action, selection, and focus; four state colors and a chart palette appear only where they carry meaning.
+A cool, low-chroma neutral scale carries the interface; a petrol teal marks action, selection, focus, and the progress of an action the user started; four state colors and a chart palette appear only where they carry meaning.
 
 All colors are OKLCH: `oklch(lightness chroma hue)`, lightness from 0 to 1. Every value lies inside the sRGB gamut, so every screen paints the same color the checker measured.
 
@@ -606,7 +606,7 @@ Every component a screen of the first desktop version needs is specified here wi
 | `--radius-sm` | `4px` | Controls: buttons, fields, selects, tags, sidebar items, menu items. |
 | `--radius-md` | `6px` | Containers: stat tile group, notice, menu, drop zone. |
 | `--radius-lg` | `8px` | Floating surfaces: toast, command palette. |
-| `--radius-full` | `999px` | Filter chips, the progress track, and the circle of a radio. |
+| `--radius-full` | `999px` | Filter chips and the remove circle inside one, the progress track, the circle of a radio and of a single-choice mark, and the spinner. |
 
 **Borders and focus.**
 
@@ -634,6 +634,8 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | `--size-progress-height` | `4px` | Thickness of the progress track. |
 | `--size-progress-segment` | `33.333%` | Width of the travelling segment of an indeterminate progress bar, as a share of the track. |
 | `--size-bar-label-width` | `180px` | Width of the label column of a bar row group and of a fact list. |
+| `--size-menu-min-width` | `180px` | Narrowest menu, when its button is narrower still. |
+| `--size-menu-max-width` | `480px` | Widest menu; a longer item is cut at the end with an ellipsis. |
 | `--size-stat-tile-min-width` | `160px` | Narrowest stat tile before the row wraps. |
 | `--size-dropzone-min-height` | `200px` | Least height of a drop zone. |
 | `--size-toast-min-width` | `280px` | Narrowest toast. |
@@ -719,7 +721,8 @@ Plain and rectangular. A button names its action with a verb.
 - **Danger:** as secondary, with text and border in `--color-danger-text`. Hover and active fill `--color-danger-subtle`. Used only where the action destroys something and cannot be placed behind an undo.
 - **Focus:** the focus ring, on every variant.
 - **Disabled:** fill `--color-surface-disabled`, text `--color-text-disabled`, border `--color-border-default` where the variant has one. Not focusable. A disabled button says why in text beside it. A tooltip may repeat the reason for pointer users, but is never the only place it is given.
-- **The reasons line:** the primary button of a page that waits for something has its reasons directly under the row of buttons, `--space-1` apart when there are several: one sentence per reason in `--text-body` and `--color-text-secondary`, at most `--layout-prose-max-width` wide, each naming what is missing and where ("Choose a column for Line ID."). The line is not an error: nothing is wrong yet, so it has no icon and no state color. It sits in a region that is always on the page and is announced politely when what it holds changes, because a disabled button cannot be reached by Tab; the button is described by that region. When the last reason goes, the line goes and the button is enabled in the same moment.
+- **The reasons line:** the form that "says why in text beside it" takes for the primary button of a page, which can wait for several things at once and is the one button the user came to press. Its reasons stand directly under the row of buttons, `--density-stack-gap` below it, one sentence per reason, `--space-1` apart when there are several: `--text-body` in `--color-text-secondary`, at most `--layout-prose-max-width` wide, each naming what is missing and where ("Choose a column for Line ID."). The line is not an error: nothing is wrong yet, so it has no icon and no state color. It sits in a region that is always on the page and is announced politely when what it holds changes, because a disabled button cannot be reached by Tab; the button is described by that region. When the last reason goes, the line goes and the button is enabled in the same moment.
+- **Which line says why.** Three cases, one rule each. The primary button of a page that waits for the user to do something has the reasons line above: body text, because it is what to do next. A control that is disabled only until something that is running has ended, such as the chips of the filter bar during a snapshot switch, has one sentence of `--text-caption` in `--color-text-muted` after the controls: it reports a state that will pass and asks for nothing. A control that waits for another control (the state below) has no line at all, because the control with the spinner says what is running.
 - **Loading:** the label stays, the leading icon becomes the spinner (`--size-icon`, one turn per `--motion-loop-period`), the button keeps its colors, ignores presses, and has `aria-busy`. The width does not change: a button without an icon that can become pending keeps the room of the spinner free at rest, half on each side of its label. That room is asked for where the button is built and is not a side effect of anything else, so a button that never waits is no wider than its label needs.
 - **Waiting for another control:** an action shows its spinner on the control that started it, and on no other. While it runs, a control that would start a conflicting action, such as the snapshot selector while another workspace is being opened, is inert: it keeps its colors, its icon, its width, and its place in the Tab order, takes no hover or pressed fill, ignores presses, and has `aria-busy`. It shows no spinner and keeps the look of an enabled control. To assistive technology it is announced as unavailable and busy (`aria-disabled` and `aria-busy`), which is what it is for the moment. It needs no reason beside it: the one control with the spinner says what is running. A button that opens a menu follows the same rule and keeps its chevron.
 - **Error:** a button has no error state of its own. A failed action shows an inline danger notice beside or under the button.
@@ -739,7 +742,7 @@ Plain and rectangular. A button names its action with a verb.
 
 - **Trigger:** the same box as a text field, with the chosen value in `--color-text-primary` and a chevron icon in `--color-text-secondary` at the trailing edge. Hover, focus, disabled, and error are those of the text field. Loading shows the spinner in place of the chevron.
 - **Open:** while the list is open the trigger keeps the focused look, border `--color-accent-text` and the focus ring, whether it was opened by key or by pointer. The chevron points up and the trigger has `aria-expanded="true"`. Its fill does not change.
-- **List:** a menu on `--color-surface-overlay` with a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens over `--duration-base`.
+- **List:** a menu on `--color-surface-overlay` with a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens as a menu does: it fades in and moves `--space-1` toward its place over `--duration-base`, and leaves by fading over `--duration-fast`, without moving.
 - **Option:** height `--density-row-height`, horizontal padding `--space-2`, corner `--radius-sm`, text `--text-body`. Highlighted by pointer or arrow keys: fill `--color-surface-overlay-hover`. Chosen: text in `--font-weight-medium` with a check icon in `--color-accent-text` at the trailing edge. Disabled: `--color-text-disabled`.
 - **Behavior:** a listbox, not the system control, so it looks the same on Windows and Linux. Arrow keys move, Enter chooses, Esc closes, typing jumps to a match.
 
@@ -754,8 +757,8 @@ A button that opens a short list of actions, or of choices, under itself: the wo
 - **Loading:** while the action the menu started runs, the spinner takes the place of the chevron, the button keeps its colors and its width, opens nothing, and has `aria-busy`.
 - **Waiting for another control:** as for a button: no spinner, the chevron kept, no hover or pressed fill, opens nothing, `aria-disabled` and `aria-busy`.
 - **Disabled:** a menu button is never disabled. A menu with nothing to offer is not shown, and one that has to wait is in one of the two states above.
-- **Menu:** fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens under the button, `--space-1` away, lined up with the leading edge of the button, or with its trailing edge for a button at the trailing side of the window, and above the button where there is no room below. It is as wide as its longest item, never narrower than its button or than `--size-bar-label-width`, and never wider than `--size-toast-max-width`. A menu that is taller than the room it has scrolls inside itself.
-- **Opening:** it fades in and moves `--space-1` toward its place over `--duration-base`, and leaves by fading over `--duration-fast`. Under reduced motion it fades in place.
+- **Menu:** fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens under the button, `--space-1` away, lined up with the leading edge of the button, or with its trailing edge for a button at the trailing side of the window, and above the button where there is no room below. It is as wide as its longest item, never narrower than its button or than `--size-menu-min-width`, and never wider than `--size-menu-max-width`. A menu that is taller than the room it has scrolls inside itself.
+- **Opening:** it fades in and moves `--space-1` toward its place over `--duration-base`, and leaves by fading over `--duration-fast`: nothing moves while it goes. Under reduced motion it fades in place.
 - **Item:** at least `--density-row-height` tall, horizontal padding `--space-2`, corner `--radius-sm`, the label in `--text-body` and `--color-text-primary`, on one line. An item may carry a detail after its label, `--space-4` away at the trailing side: `--text-caption` in `--color-text-muted`, with tabular figures ("9,241 holds"). The detail describes the item to assistive technology; it is not part of its name. An action is named by a verb, a choice by its name.
 - **Highlighted:** by the pointer or by the arrow keys, fill `--color-surface-overlay-hover`. The item the keyboard is on also shows the focus ring, inset. An item the pointer is on shows the fill only, so the ring does not follow the pointer down the menu.
 - **Active (pressed):** the highlighted fill stays; the menu closes on release.
@@ -861,6 +864,18 @@ A message that belongs to a place on the page and stays until it no longer appli
 - **Danger:** fill `--color-danger-subtle`, border `--color-danger-border`, icon `--color-danger-text`.
 - **Text:** title and message are `--color-text-primary` in every tone; supporting detail is `--color-text-secondary`. The tone is carried by the icon, the tint, and the words.
 - **States:** the notice itself is not interactive. Its buttons and links have their own states and the focus ring. Danger notices are announced at once (`role="alert"`); the others politely (`role="status"`).
+
+### Shell notice
+
+What the shell has to say about the app as a whole, or about something that started on a page the user has left. It is the inline notice, unchanged, in a fixed place.
+
+- **Place:** at the top of the content area, directly under the top bar and above the page, as wide as the page's content: `--space-3` below the top bar, with the page padding `--layout-page-padding-x` at its sides. It is not part of the page and does not scroll with it. The page starts under it.
+- **Several at once:** one under the other, `--space-2` apart, in a fixed order: what failed, what the shell has to report, why a file cannot be dropped on the window, a warning about the workspace, and last the notice that an older snapshot is in view.
+- **Tones:** danger for an action that failed (announced at once), warning for something the user should know before going on, info for a standing fact. Success is never a shell notice: a confirmation is a toast.
+- **Staying:** it stays across pages. Opening another destination does not remove it, because the user may not have read it yet and the page it is about may be gone.
+- **Leaving:** each has a close button and goes when that is pressed. The notice that an older snapshot is in view has none: it is a state, not a message, and goes when the newest snapshot is selected, which its one action, a quiet button, does.
+- **What belongs here** is set by "Where an error goes": what outlives the page it started on. A failure the page can still show stays on the page, beside what failed.
+- **States:** those of the inline notice. Its buttons have their own states; the action of a shell notice follows the pending rule of every button.
 
 ### Toast
 
@@ -1007,18 +1022,18 @@ A small, non-interactive label on a row or an item.
 
 ### Filter chip
 
-- **Shape:** height `--size-chip-height`, horizontal padding `--space-2`, corner `--radius-full`, text `--text-label`. Chips are the only pills in the interface: round means a filter that can be removed.
+- **Shape:** height `--size-chip-height`, horizontal padding `--space-2`, corner `--radius-full`, text `--text-label`. Chips are the only pills in the interface: round means a filter that can be removed. A chip that carries a remove button has no padding at its trailing side: the circle of the button ends the pill, and stands `--space-1` after the value. A disabled chip, which has no remove button, and the add-filter chip have `--space-2` at both sides.
 - **Active filter:** fill `--color-accent-subtle`, `--border-width-thin` border in `--color-accent-border`, the field name in `--color-text-secondary` and the value in `--color-text-primary`, and a remove button at the trailing edge. Hover `--color-accent-subtle-hover`.
 - **Two controls in one pill.** The field name and the value are one button, which opens the filter to change it. The remove button is a second one: a circle as tall as the chip inside its border, with an X at `--size-icon` in `--color-text-secondary`, `--space-1` after the value. Its accessible name says which filter it removes, and it has a tooltip, as every icon-only button has.
 - **A negated filter** reads the field name, then "is not" and the value. "Is not" is written in the ink of the value, `--color-text-primary`, so the negation is read with the value it turns around and cannot be skipped as part of the label.
 - **A long value** is cut at the end with an ellipsis: a chip is at most `--size-chip-max-width` wide. The accessible name of the chip is always the full text, and the picker it opens lists every value.
 - **Active (pressed):** fill `--color-accent-subtle-hover`, as on hover. The chip keeps that fill for as long as its picker is open.
-- **Remove button:** hover and pressed give the circle the fill `--color-accent-subtle-hover` and the X the ink `--color-text-primary`, while the rest of the chip keeps its fill at rest, so it is clear which of the two controls the pointer is on.
+- **Remove button:** hover and pressed give the circle the fill `--color-accent-subtle-hover`, a `--border-width-thin` hairline in `--color-accent-border` around it, and the X the ink `--color-text-primary`, while the rest of the chip keeps its fill at rest, so it is clear which of the two controls the pointer is on. The hairline is what still reads when the chip already has that fill, as it has for as long as its picker is open: the fill then changes nothing, and the hairline and the ink mark the circle. Its focus ring is inset, so it is not taken for the ring of the chip.
 - **Add filter:** a quiet button in the same pill shape with a `--border-width-thin` border in `--color-border-strong`. A plus icon at `--size-icon`, a `--space-1` gap, and its label, in `--color-text-secondary`. Hover: fill `--color-surface-hover`, text `--color-text-primary`. Active, and while its picker is open: fill `--color-surface-pressed`.
 - **Disabled:** while the filters cannot be changed (an import is running, or the snapshot is being switched), every chip has fill `--color-surface-disabled`, a border in `--color-border-default`, text in `--color-text-disabled`, and no remove button. Disabled chips are not focusable, and a line of `--text-caption` in `--color-text-muted` after the chips says why.
 - **Loading:** a chip has no loading state of its own. A filter applies at once: the chip appears in its final look, and the content it filters keeps its previous render at `--opacity-stale` until the new rows arrive. While the add-filter picker reads its values, the picker shows the spinner (`--size-icon`) beside a label in `--text-caption`.
 - **Error:** a chip has no error state. A filter that could not be applied is said by an inline notice above the content it filters.
-- **Focus:** the focus ring on the chip and on its remove button separately. Backspace on a focused chip removes it, and so does Delete.
+- **Focus:** the focus ring on the chip and on its remove button separately. Backspace on a focused chip removes it, and so does Delete, whichever of its two controls has the focus.
 - **Clear all:** a quiet button at the end of the row, always visible while any filter is active.
 - **Transitions:** fill, border, and text color over `--duration-fast` with `--ease-out`.
 
@@ -1032,7 +1047,7 @@ A small surface that opens from a control and holds controls of its own: the fil
 - **Opening:** as a menu: it fades in and moves `--space-1` toward its place over `--duration-base`, leaves by fading over `--duration-fast`, and fades in place under reduced motion.
 - **The control that opened it** keeps its pressed look and has `aria-expanded="true"` for as long as the popover is open.
 - **Focus:** opening moves the focus into the popover: to the first field it holds, such as a search field, because a popover with a field is opened to type in it, and otherwise to the popover itself, which then shows the inset focus ring. Tab moves through the controls inside and stays inside. Esc, or a press outside, closes it, and closing gives the focus back to the control that opened it.
-- **Not a modal:** there is no scrim. The page behind stays as it is, undimmed, and what the popover changes shows there at once.
+- **No scrim:** nothing is laid over the page. It stays as it is behind the popover, undimmed, and what the popover changes shows there at once. The page cannot be reached while the popover is open (Tab stays inside, and a press outside closes it), which is what a menu does as well.
 - **What it may hold:** fields, a choice group, an option list, quiet buttons, and text. A quiet button inside takes the hover fill `--color-surface-overlay-hover`. It never holds a primary button: an overlay does not carry one (the Two Surfaces Rule), and a popover has nothing to confirm, because what is chosen in it applies at once.
 - **Name:** it is a dialog to assistive technology and has an accessible name that says what it is for ("Filter by discipline").
 - **Disabled:** a popover is not disabled; the control that opens it is.
@@ -1043,8 +1058,8 @@ A small surface that opens from a control and holds controls of its own: the fil
 A list of values to choose from, one or several, each with the count of what it would keep. It is the body of the filter picker.
 
 - **Shape:** options one under the other, with no gap between them. At most `--size-option-list-rows` rows show; a longer list scrolls inside itself. The list has no border and no fill of its own: it lies on the surface of what holds it.
-- **Option:** at least `--density-row-height` tall, horizontal padding `--space-2`, `--space-1` of padding above and below so that a label on several lines keeps clear of its neighbours, corner `--radius-sm`, and `--space-2` between its parts: the mark, the label, and the count.
-- **Label:** `--text-body` in `--color-text-primary`. A label that does not fit wraps and the option grows; it is not cut, because two long values often differ only at the end.
+- **Option:** at least `--density-row-height` tall, horizontal padding `--space-2`, corner `--radius-sm`, and `--space-2` between its parts: the mark, the label, and the count. The room above and below its text is what one line has in a row, so an option of one line is exactly as tall as a row and one of several lines keeps clear of its neighbours.
+- **Label:** `--text-body` in `--color-text-primary`. A label that does not fit wraps and the option grows; it is not cut, because two long values often differ only at the end. The mark and the count stay beside its first line: the mark in the middle of that line, the count on its baseline.
 - **Count:** at the trailing edge, formatted with its thousands separated, in `--text-table` and `--color-text-secondary`, right-aligned on tabular figures so the counts of a list form a column. The count describes the option to assistive technology; the label alone is its name.
 - **Mark, several values:** the box of a checkbox at the leading edge, with every look of that box: unticked, fill `--color-surface-field` and border `--color-border-strong`; ticked, fill `--color-accent`, border `--color-accent-text`, and the check mark in `--color-text-on-accent`.
 - **Mark, one value:** the circle of a choice group, with its dot when chosen. The mark is what says whether choosing another value adds to the choice or replaces it, so it is always shown.
@@ -1053,9 +1068,9 @@ A list of values to choose from, one or several, each with the count of what it 
 - **Chosen:** the mark is ticked. The label keeps its weight, so ticking a value never changes where a line breaks.
 - **Focus:** the list is one stop in the Tab order. The arrow keys move through the options, Home and End jump to the ends, typing jumps to a match, and Space or Enter ticks and unticks the option the keyboard is on. That option shows the inset focus ring; an option the pointer is on shows the fill only.
 - **A count of zero:** label and count in `--color-text-muted`. The option can still be chosen, so a value that was ticked before and no longer matches anything can be unticked.
-- **Empty:** one line in `--text-caption` and `--color-text-muted`, as tall as an option, that says what is absent ("No value matches"). It is never left blank.
-- **Loading, first read:** the spinner at `--size-icon` and a label in `--text-caption` and `--color-text-muted` beside it, in place of the options. The list is marked as busy.
-- **Loading, a re-read:** the options stay at `--opacity-stale` and can still be ticked; the new counts replace them when they arrive. The list is marked as busy meanwhile.
+- **Empty:** one line in `--text-caption` and `--color-text-muted`, as tall as an option, that says what is absent ("No value matches"). It is never left blank. With no option to carry the focus, the list itself is the stop for Tab, and shows the inset focus ring while the keyboard is on it.
+- **Loading, first read:** the spinner at `--size-icon` and a label in `--text-caption` and `--color-text-muted` beside it, in place of the options. The list is marked as busy. As when it is empty, the list is the stop for Tab and shows the inset focus ring itself.
+- **Loading, a re-read:** the counts stay at `--opacity-stale` until the new ones arrive, and the list is marked as busy meanwhile. Only the counts are dimmed, because only they are being read again: labels and marks keep their ink, so every option, one written in the muted ink included, stays readable for as long as it can be ticked.
 - **Disabled:** not applicable. A value that cannot be chosen is not listed, and while nothing can be changed the control that opens the list is disabled.
 - **Error:** an inline danger notice in the place of the list, shown by the screen that reads the values.
 - **Footer:** an optional line under the list that does not scroll with it, in `--text-caption` and `--color-text-muted`, with the horizontal padding of an option. It says what the list leaves out: "1,300 more values. Type to narrow."
@@ -1068,7 +1083,7 @@ A list of values to choose from, one or several, each with the count of what it 
 3. The option list of the values, with several values to choose and the count each would keep. The list is pulled out by `--space-2` at both sides, so the fill of a highlighted option stops `--space-1` from the edge of the popover, as an item of a menu does, and the labels of the options start on the same line as the field above.
 4. The footer of the list, when more values exist than are listed.
 
-A ticked value applies at once and the popover stays open. The counts are then read again: the list is in its re-read state until they arrive. Nothing in the picker is a button to confirm.
+A ticked value applies at once and the popover stays open. The counts are then read again: they are dimmed until the new ones arrive, and the options stay as they are. Nothing in the picker is a button to confirm.
 
 ### Drop zone
 
