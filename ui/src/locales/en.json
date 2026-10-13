@@ -31,7 +31,9 @@
   "table": {
     "rowCount_one": "{{count, number}} row",
     "rowCount_other": "{{count, number}} rows",
+    "rowCountOf": "{{shown, number}} of {{total, number}} rows",
     "loading": "Loading rows",
+    "loadingMore": "Loading more rows",
     "actions": "Actions"
   },
   "toast": {

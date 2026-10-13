@@ -14,6 +14,7 @@ import {
   SectionTitle,
   Select,
   type DataTableColumn,
+  textChars,
   type SelectOption,
 } from "../../components";
 import { formatCount, formatList } from "../../text/format";
@@ -49,6 +50,28 @@ function fieldOf(fields: Fields, column: number): Field | undefined {
 interface PreviewRow {
   key: string;
   cells: readonly string[];
+}
+
+/** The most room a value of the preview is given, in characters: a line that is read at a glance. */
+const VALUE_CHARS = 64;
+
+/** How many rows of the preview show before it scrolls. */
+const PREVIEW_ROWS = { maxRows: 8 } as const;
+
+/**
+ * The room a column of the preview needs, in characters: its longest value among the rows shown.
+ * A line ID is written in the monospace and given all of its room; any other value is counted
+ * as text, and cut past a line that is read at a glance. The table itself keeps a column as wide
+ * as its header.
+ */
+function roomOf(
+  preview: readonly (readonly string[])[],
+  column: number,
+  isLineId: boolean,
+): number {
+  const room = (value: string) => (isLineId ? value.length : textChars(value));
+  const longest = Math.max(1, ...preview.map((row) => room(row[column] ?? "")));
+  return isLineId ? longest : Math.min(longest, VALUE_CHARS);
 }
 
 /**
@@ -189,9 +212,13 @@ export function ImportMappingPage() {
       isRowHeader: column === 0,
       // A column that supplies no field is written in the quieter ink.
       isSupporting: owner === undefined,
-      // As wide as its header and its values need: the table scrolls sideways, nothing is
-      // squeezed. The last column takes what is left of the line, so the rules run its length.
-      width: column === headers.length - 1 ? "minmax(max-content, 1fr)" : "max-content",
+      // As wide as the longest of its values that are shown needs: the table scrolls sideways,
+      // nothing is squeezed. A line ID is given all of its room; any other value at most a line
+      // that can be read at a glance. The last column takes what is left of the line as well.
+      size:
+        column === headers.length - 1
+          ? { flex: 1, minChars: roomOf(preview, column, owner === "LineId") }
+          : { chars: roomOf(preview, column, owner === "LineId") },
     };
   });
   const rows = preview.map((cells, index): PreviewRow => ({ key: `row-${String(index)}`, cells }));
@@ -335,14 +362,13 @@ export function ImportMappingPage() {
                 })}
           </p>
           {rows.length === 0 ? null : (
-            <div className={styles.tableBox}>
-              <DataTable
-                aria-label={t("import.mapping.preview")}
-                columns={columns}
-                rows={rows}
-                rowKey={(row) => row.key}
-              />
-            </div>
+            <DataTable
+              aria-label={t("import.mapping.preview")}
+              columns={columns}
+              rows={rows}
+              rowKey={(row) => row.key}
+              height={PREVIEW_ROWS}
+            />
           )}
         </section>
       </div>

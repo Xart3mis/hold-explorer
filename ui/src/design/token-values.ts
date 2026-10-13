@@ -50,3 +50,37 @@ export function lengthToken(name: `--${string}`): number | null {
   if (!match) return unusable(name, value, "a length in pixels");
   return Number(match[1]);
 }
+
+/** The two densities of DESIGN.md. */
+export type Density = "comfortable" | "compact";
+
+/** The density of the app: the `data-density` attribute of the root element, comfortable without it. */
+export function rootDensity(): Density {
+  return document.documentElement.getAttribute("data-density") === "compact"
+    ? "compact"
+    : "comfortable";
+}
+
+/**
+ * A density token in pixels at one density, whatever the density of the app. A table may carry
+ * a density of its own, and its layout is worked out in script, which needs the heights of that
+ * density. The value is read from an element that carries the density for a moment, so it is
+ * the value the stylesheet gives everything under `data-density`. `null` only in a production
+ * build that cannot read it.
+ */
+export function densityToken(name: `--density-${string}`, density: Density): number | null {
+  const key = `at ${density}/${name}`;
+  let value = remembered.get(key);
+  if (value === undefined) {
+    const probe = document.createElement("div");
+    probe.setAttribute("data-density", density);
+    probe.hidden = true;
+    document.documentElement.append(probe);
+    value = getComputedStyle(probe).getPropertyValue(name).trim();
+    probe.remove();
+    if (value !== "") remembered.set(key, value);
+  }
+  const match = /^(\d+(?:\.\d+)?)px$/.exec(value);
+  if (!match) return unusable(name, value, "a length in pixels");
+  return Number(match[1]);
+}

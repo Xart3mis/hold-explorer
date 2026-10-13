@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { durationToken, lengthToken } from "./token-values";
+import { densityToken, durationToken, lengthToken, rootDensity } from "./token-values";
 
 const root = document.documentElement;
 
@@ -81,5 +81,41 @@ describe("reading a token", () => {
     expect(() => lengthToken("--test-late")).toThrow();
     root.style.setProperty("--test-late", "12px");
     expect(lengthToken("--test-late")).toBe(12);
+  });
+});
+
+describe("densityToken", () => {
+  it("reads a density token at the density asked for, whatever the density of the app", () => {
+    expect(densityToken("--density-row-height", "comfortable")).toBe(36);
+    expect(densityToken("--density-row-height", "compact")).toBe(28);
+    expect(densityToken("--density-cell-padding-x", "compact")).toBe(8);
+    root.setAttribute("data-density", "compact");
+    expect(densityToken("--density-row-height", "comfortable")).toBe(36);
+    expect(densityToken("--density-header-height", "compact")).toBe(28);
+  });
+
+  it("leaves nothing in the document, and asks the stylesheet once for each value", () => {
+    const before = document.documentElement.childElementCount;
+    const computed = vi.spyOn(window, "getComputedStyle");
+    expect(densityToken("--density-control-height", "compact")).toBe(28);
+    expect(densityToken("--density-control-height", "compact")).toBe(28);
+    expect(computed).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.childElementCount).toBe(before);
+  });
+
+  it("fails loudly in development when the token is not defined", () => {
+    expect(() => densityToken("--density-test-missing", "compact")).toThrow(
+      /--density-test-missing.*not defined/s,
+    );
+  });
+});
+
+describe("rootDensity", () => {
+  it("is the density attribute of the root element, and comfortable without it", () => {
+    expect(rootDensity()).toBe("comfortable");
+    root.setAttribute("data-density", "compact");
+    expect(rootDensity()).toBe("compact");
+    root.setAttribute("data-density", "comfortable");
+    expect(rootDensity()).toBe("comfortable");
   });
 });

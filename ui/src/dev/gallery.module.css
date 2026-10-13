@@ -224,10 +224,6 @@
   align-items: start;
 }
 
-.scrollBox {
-  block-size: var(--size-dropzone-min-height);
-}
-
 .gapSmall {
   block-size: var(--space-1);
 }
@@ -259,4 +255,37 @@
   border: var(--border-width-thin) solid var(--color-border-default);
   border-radius: var(--radius-md);
   background-color: var(--color-surface-panel);
+}
+
+/* A box narrower than the columns of the table in it. */
+.narrow {
+  max-inline-size: var(--layout-search-max-width);
+}
+
+/* The table with a long list: a page as tall as the window, the table filling what is left. */
+.tablePage {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  block-size: 100vh;
+  padding: var(--layout-page-padding-y) var(--layout-page-padding-x) 0;
+}
+
+.tableHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block-end: var(--space-4);
+}
+
+.tableControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.tableBody {
+  flex: 1 1 auto;
+  min-block-size: 0;
 }

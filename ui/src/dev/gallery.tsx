@@ -4,6 +4,7 @@
 //   /gallery.html                              both themes side by side, with a density switch
 //   /gallery.html?frame=1&theme=light          one theme alone, as a page of its own
 //   /gallery.html?frame=1&theme=dark&density=compact
+//   /gallery.html?view=table&theme=dark            the table with 30,000 lines, as a page
 import {
   Check,
   ChevronDown,
@@ -74,8 +75,10 @@ import selectStyles from "../components/Select/Select.module.css";
 import { Toast } from "../components/ToastRegion/ToastRegion";
 import tooltipStyles from "../components/Tooltip/Tooltip.module.css";
 import { applyTheme } from "../design/theme";
+import { formatCount } from "../text/format";
 import { locale } from "../text/i18n";
 import styles from "./gallery.module.css";
+import { TablePage } from "./table";
 
 type ThemeName = "dark" | "light";
 type Density = "comfortable" | "compact";
@@ -1346,13 +1349,28 @@ const lines: Line[] = [
 ];
 
 const lineColumns: DataTableColumn<Line>[] = [
-  { id: "id", header: "Line ID", kind: "identifier", isRowHeader: true, cell: (line) => line.id },
-  { id: "holds", header: "Holds", kind: "number", allowsSorting: true, cell: (line) => line.holds },
+  {
+    id: "id",
+    header: "Line ID",
+    kind: "identifier",
+    isRowHeader: true,
+    size: { chars: 21 },
+    cell: (line) => line.id,
+  },
+  {
+    id: "holds",
+    header: "Holds",
+    kind: "number",
+    allowsSorting: true,
+    size: { chars: 4 },
+    cell: (line) => line.holds,
+  },
   {
     id: "disciplines",
     header: "Disciplines",
     kind: "number",
     allowsSorting: true,
+    size: { chars: 4 },
     cell: (line) => line.disciplines,
   },
   {
@@ -1360,9 +1378,16 @@ const lineColumns: DataTableColumn<Line>[] = [
     header: "Oldest",
     kind: "number",
     allowsSorting: true,
+    size: { chars: 6 },
     cell: (line) => line.oldest,
   },
-  { id: "blocker", header: "First blocker", isSupporting: true, cell: (line) => line.blocker },
+  {
+    id: "blocker",
+    header: "First blocker",
+    isSupporting: true,
+    size: { flex: 1, minChars: 24 },
+    cell: (line) => line.blocker,
+  },
 ];
 
 function Tables() {
@@ -1374,11 +1399,11 @@ function Tables() {
   return (
     <Section
       title="Table"
-      note="Row 2 is selected, row 3 hovered, row 5 has keyboard focus (forced). Line IDs are monospace; numbers are right-aligned on tabular figures. The table is real: arrow keys move, Enter selects, headers sort."
+      note="Row 2 is selected, row 3 hovered, row 5 has keyboard focus (forced). Line IDs are monospace; numbers are right-aligned on tabular figures. The table is real: arrow keys move, Enter selects, headers sort. Only the rows near the visible part are in the document; the table with 30,000 lines is a page of its own, at ?view=table."
     >
       <h3 className={styles.subTitle}>At the density of the page</h3>
-      <Forced state="hovered" target="tbody tr:nth-of-type(3)">
-        <Forced state="focus-visible" target="tbody tr:nth-of-type(5)">
+      <Forced state="hovered" target='[role="row"][aria-rowindex="4"]'>
+        <Forced state="focus-visible" target='[role="row"][aria-rowindex="6"]'>
           <DataTable
             aria-label="Lines on hold"
             columns={lineColumns}
@@ -1403,7 +1428,26 @@ function Tables() {
         rowActions={() => <Button variant="quiet">Show holds</Button>}
       />
       <h3 className={styles.subTitle}>Scrolled: the header stays, with its shadow</h3>
-      <ScrolledTable />
+      <ScrolledTable top />
+      <h3 className={styles.subTitle}>
+        Narrower than its columns: it scrolls sideways, and the line ID stays with a hairline at its
+        edge
+      </h3>
+      <div className={styles.narrow}>
+        <ScrolledTable />
+      </div>
+      <h3 className={styles.subTitle}>
+        A part of a longer result: the count line, and a row of skeletons while more rows load
+      </h3>
+      <DataTable
+        aria-label="Lines on hold, more loading"
+        columns={lineColumns}
+        rows={lines.slice(0, 4)}
+        rowKey={(line) => line.id}
+        totalRows={3612}
+        countText={(shown, total) => `${formatCount(shown)} of ${formatCount(total)} lines`}
+        isLoadingMore
+      />
       <h3 className={styles.subTitle}>First load: skeleton rows</h3>
       <DataTable
         aria-label="Lines on hold, loading"
@@ -1442,31 +1486,35 @@ function Tables() {
   );
 }
 
-/** A table in a box shorter than its rows, scrolled a little so the sticky header shows. */
-function ScrolledTable() {
+/**
+ * A table scrolled a little, so what stays in place shows: down (`top`), where the header gains
+ * its shadow, or sideways, where the pinned column gains its hairline.
+ */
+function ScrolledTable({ top = false }: { top?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const scroller = box.current?.firstElementChild;
-    const table = scroller?.querySelector("table");
-    if (!scroller || !table) return;
+    const grid = box.current?.querySelector('[role="grid"]');
+    if (!grid) return;
     // The rows arrive after the first render, so the scroll waits until there is something to scroll.
     const sizes = new ResizeObserver(() => {
-      if (scroller.scrollHeight <= scroller.clientHeight) return;
-      scroller.scrollTop = scroller.scrollHeight / 4;
+      if (top && grid.scrollHeight > grid.clientHeight) grid.scrollTop = grid.scrollHeight / 4;
+      else if (!top && grid.scrollWidth > grid.clientWidth) grid.scrollLeft = grid.scrollWidth / 6;
+      else return;
       sizes.disconnect();
     });
-    sizes.observe(table);
+    sizes.observe(grid);
     return () => {
       sizes.disconnect();
     };
-  }, []);
+  }, [top]);
   return (
-    <div ref={box} className={styles.scrollBox}>
+    <div ref={box}>
       <DataTable
-        aria-label="Lines on hold, scrolled"
+        aria-label={top ? "Lines on hold, scrolled" : "Lines on hold, scrolled sideways"}
         columns={lineColumns}
         rows={lines}
         rowKey={(line) => line.id}
+        height={{ maxRows: 5 }}
       />
     </div>
   );
@@ -2082,8 +2130,29 @@ if (!container) {
   throw new Error("The page has no element with the id root, so the gallery cannot start.");
 }
 const framed = params.get("frame") !== null;
+const asked: ThemeName = params.get("theme") === "light" ? "light" : "dark";
+
+/** The table with a long list, as a page of its own: see ui/src/dev/table.tsx. */
+function TableView({ theme }: { theme: ThemeName }) {
+  useEffect(() => {
+    applyTheme(theme === "light" ? "Light" : "Dark");
+    document.documentElement.dataset.density = density;
+  }, [theme]);
+  return (
+    <I18nProvider locale={locale}>
+      <TablePage />
+    </I18nProvider>
+  );
+}
+
 createRoot(container).render(
   <StrictMode>
-    {framed ? <Page theme={params.get("theme") === "light" ? "light" : "dark"} /> : <Shell />}
+    {params.get("view") === "table" ? (
+      <TableView theme={asked} />
+    ) : framed ? (
+      <Page theme={asked} />
+    ) : (
+      <Shell />
+    )}
   </StrictMode>,
 );

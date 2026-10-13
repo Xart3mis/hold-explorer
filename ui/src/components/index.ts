@@ -12,6 +12,8 @@ export { Checkbox, type CheckboxProps } from "./Checkbox/Checkbox";
 export { ChoiceGroup, type Choice, type ChoiceGroupProps } from "./ChoiceGroup/ChoiceGroup";
 export {
   DataTable,
+  textChars,
+  type ColumnSize,
   type DataTableColumn,
   type DataTableColumnKind,
   type DataTableProps,

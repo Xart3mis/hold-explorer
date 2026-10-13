@@ -106,6 +106,14 @@ interface GroupSectionProps {
   onAsTableChange: (asTable: boolean) => void;
 }
 
+/** The room of a count in the table of a group: five figures and their separator. */
+const COUNT_CHARS = 6;
+
+/** The least room of the name of a group before its table scrolls sideways. */
+const LABEL_CHARS = 16;
+
+const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
+
 /**
  * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
  * The rows are shown largest first. That is the order the command sends; a copy is put in that
@@ -126,12 +134,19 @@ function GroupSection({
   const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
   const largest = rows[0]?.holds ?? 0;
   const columns: DataTableColumn<Group>[] = [
-    { id: "label", header: column, cell: (group) => group.label, isRowHeader: true },
+    {
+      id: "label",
+      header: column,
+      cell: (group) => group.label,
+      isRowHeader: true,
+      size: { flex: 1, minChars: LABEL_CHARS },
+    },
     {
       id: "holds",
       header: t("overview.columnHolds"),
       cell: (group) => formatCount(group.holds),
       kind: "number",
+      size: { chars: COUNT_CHARS },
     },
     {
       id: "lines",
@@ -139,6 +154,7 @@ function GroupSection({
       cell: (group) => formatCount(group.lines),
       kind: "number",
       isSupporting: true,
+      size: { chars: COUNT_CHARS },
     },
   ];
 
@@ -165,6 +181,8 @@ function GroupSection({
           rows={rows}
           // A blank value has the empty key, and a row needs a key that is not empty.
           rowKey={(group) => `group:${group.key}`}
+          // A group is read whole, as its bars are: the page scrolls, the table does not.
+          height={ALL_ROWS}
         />
       ) : (
         <BarRowGroup aria-labelledby={titleId}>

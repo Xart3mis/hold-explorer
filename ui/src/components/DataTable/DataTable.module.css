@@ -1,56 +1,89 @@
 /*
- * The table sits directly on the content area: no card, no outer border, no zebra stripes. The
- * columns belong to the table and every row takes them over, so the cells line up like a ruled
- * page and a column of numbers or line IDs is exactly as wide as its widest value.
+ * The table sits directly on the content area: no card, no outer border, no zebra stripes. Only
+ * the rows near the visible part are in the document; the component library places each row,
+ * and each cell in it, by the heights of the density and the widths the columns declare. This
+ * stylesheet fills those places and draws the rules, so the cells line up like a ruled page.
  */
-.scroller {
-  max-block-size: 100%;
-  overflow: auto;
+.root {
+  /* The surface the table lies on. The pinned column is filled with it, over what scrolls. */
+  --table-surface: var(--color-surface-app);
+
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
 }
 
 .table {
-  display: grid;
-  grid-template-columns: var(--table-columns);
-  inline-size: 100%;
-  border-spacing: 0;
+  overflow: auto;
+
+  /*
+   * A row or a cell that takes the focus is scrolled into view. The header and the pinned
+   * column lie over the rows, so in view means past them.
+   */
+  scroll-padding-block-start: var(--density-header-height);
+  scroll-padding-inline-start: var(--table-pinned-width);
   color: var(--color-text-primary);
   font: var(--text-table);
   font-variant-numeric: var(--font-numeric-tabular);
   letter-spacing: var(--letter-spacing-normal);
 }
 
-.head,
-.head tr,
-.body,
-.row {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
+/* A table in the flow of a page: as tall as its rows, up to a number of them, then it scrolls. */
+.root[data-height="rows"] .table {
+  max-block-size: calc(
+    var(--density-header-height) + var(--table-max-rows) * var(--density-row-height)
+  );
+}
+
+/* A table that is the page: the height it is given, and it scrolls inside it. */
+.root[data-height="fill"] {
+  block-size: 100%;
+  min-block-size: 0;
+}
+
+.root[data-height="fill"] .table {
+  flex: 1 1 0;
+  min-block-size: 0;
+}
+
+/* Without a row the table is its header, and the empty state stands under it. */
+.root[data-height="fill"][data-empty] .table {
+  flex: none;
+}
+
+/*
+ * What stays in place while the rest scrolls, the header and the pinned column, is placed by the
+ * component library as an inline box. It stands at the top of its line, so the room a line keeps
+ * under its text adds nothing to the height of the header or of a row.
+ */
+.table [role="presentation"]:has(> .head),
+.table [role="presentation"]:has(> [data-pinned]) {
+  vertical-align: top;
 }
 
 /* The header row: a raised plane that stays while the rows scroll under it. */
 .head {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: var(--z-sticky);
-}
-
-.scroller[data-scrolled] .head {
-  box-shadow: var(--shadow-raised);
-}
-
-.head tr {
-  block-size: var(--density-header-height);
+  box-sizing: border-box;
+  block-size: 100%;
   border-block-end: var(--border-width-thin) solid var(--color-border-default);
   background-color: var(--color-surface-raised);
+}
+
+.root[data-scrolled] .head {
+  box-shadow: var(--shadow-raised);
 }
 
 .column {
   display: flex;
   gap: var(--space-1);
   align-items: center;
+  box-sizing: border-box;
+  block-size: 100%;
   min-inline-size: 0;
   padding: 0 var(--density-cell-padding-x);
+  overflow: hidden;
+  border-block-end: var(--border-width-thin) solid var(--color-border-default);
+  background-color: var(--color-surface-raised);
   color: var(--color-text-secondary);
   font: var(--text-label);
   font-variant-numeric: var(--font-numeric-proportional);
@@ -65,6 +98,13 @@
 
 .column[data-kind="number"] {
   justify-content: flex-end;
+}
+
+/* A column is never narrower than its header, so this cuts nothing; it is the safe side. */
+.label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A sortable header is a button. The sorted one is written in the primary ink, with an arrow. */
@@ -83,11 +123,18 @@
   color: var(--color-text-primary);
 }
 
-/* A row: one line, one height, a hairline under it. */
+/*
+ * A row: one line, one height, a hairline under it. Its fill is a property of its own, because
+ * the pinned cell lies over the cells that scroll beneath it and has to carry the same fill.
+ */
 .row {
-  align-items: center;
-  block-size: var(--density-row-height);
+  --row-fill: var(--table-surface);
+
+  position: relative;
+  box-sizing: border-box;
+  block-size: 100%;
   border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+  background-color: var(--row-fill);
   cursor: default;
   transition: background-color var(--duration-fast) var(--ease-out);
 }
@@ -97,28 +144,40 @@
  * such as a preview or a group of Overview shown as a table, keeps its rows as they are.
  */
 .table[data-selectable] .row[data-hovered] {
-  background-color: var(--color-surface-hover);
+  --row-fill: var(--color-surface-hover);
 }
 
 .table[data-selectable] .row[data-pressed] {
-  background-color: var(--color-surface-pressed);
+  --row-fill: var(--color-surface-pressed);
 }
 
 /* Selection is a tint across the whole row. */
 .table[data-selectable] .row[data-selected] {
-  background-color: var(--color-accent-subtle);
+  --row-fill: var(--color-accent-subtle);
 }
 
 .table[data-selectable] .row[data-selected][data-hovered],
 .table[data-selectable] .row[data-selected][data-pressed] {
-  background-color: var(--color-accent-subtle-hover);
+  --row-fill: var(--color-accent-subtle-hover);
 }
 
 .cell {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  block-size: 100%;
   min-inline-size: 0;
   padding: 0 var(--density-cell-padding-x);
   overflow: hidden;
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
   text-align: start;
+}
+
+/* What a cell shows: one line, cut at the end with an ellipsis when it does not fit. */
+.value {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -128,7 +187,7 @@
   text-align: end;
 }
 
-/* An identifier is copied as the exact source text, and is never wrapped or cut in the middle. */
+/* An identifier is copied as the exact source text. Its column is sized so it is never cut. */
 .cell[data-kind="identifier"] {
   font: var(--text-mono);
   font-variant-numeric: var(--font-numeric-tabular);
@@ -141,13 +200,47 @@
 
 /* Row actions keep their own focus rings, so the cell does not clip them. */
 .cell[data-kind="actions"] {
-  display: flex;
   gap: var(--space-1);
   justify-content: flex-end;
   overflow: visible;
 }
 
+/*
+ * The column that names the row is pinned: it stays while the others scroll sideways beneath
+ * it. Its cell carries the fill of its row, and once the table is scrolled sideways a hairline
+ * marks its edge. The hairline is drawn over the cell, so it takes no room from what the cell
+ * holds.
+ */
+.cell[data-pinned],
+.column[data-pinned] {
+  position: relative;
+}
+
+.cell[data-pinned] {
+  background-color: var(--row-fill);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.cell[data-pinned]::after,
+.column[data-pinned]::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: var(--border-width-thin);
+  background-color: var(--color-border-default);
+  content: "";
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.root[data-scrolled-x] .cell[data-pinned]::after,
+.root[data-scrolled-x] .column[data-pinned]::after {
+  opacity: 1;
+}
+
 /* Inside a table an outer ring would be clipped, so the ring is inset. */
+.table:focus-visible,
+.table[data-focus-visible],
 .row:focus-visible,
 .row[data-focus-visible],
 .cell:focus-visible,
@@ -158,49 +251,52 @@
   outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
+/*
+ * The pinned cell lies over its row, and would cover the start of the row's ring. So the ring
+ * is drawn once more over the cells, in the same place.
+ */
+.row:focus-visible::after,
+.row[data-focus-visible]::after {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-sticky);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+  content: "";
+  pointer-events: none;
+}
+
 /* A refetch keeps the previous rows, dimmed. */
 .body {
   transition: opacity var(--duration-fast) var(--ease-out);
 }
 
-.scroller[data-stale] .body {
+.root[data-stale] .body {
   opacity: var(--opacity-stale);
 }
 
-/* The empty state sits in the table area, under the header row, where the rows would be. */
-.body[data-empty],
-.body[data-empty] tr,
-.body[data-empty] td {
-  display: block;
-}
-
 /*
- * A first load. The body is empty and holds placeholders in the shape of rows, on the columns of
- * the table. The one row the body has is only the carrier of what assistive technology reads, so
- * it and its cell leave no box of their own.
+ * A placeholder in the shape of a row: on a first load in place of the rows, and under the last
+ * row while more are loading. Each of its cells is as wide as its column is laid out.
  */
-.scroller[aria-busy="true"] .body[data-empty] {
-  display: grid;
-}
-
-.scroller[aria-busy="true"] .body[data-empty] tr,
-.scroller[aria-busy="true"] .body[data-empty] td,
-.placeholders {
-  display: contents;
+.loadMore {
+  block-size: 100%;
 }
 
 .placeholder {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
+  display: flex;
   align-items: center;
+  box-sizing: border-box;
+  min-inline-size: 100%;
   block-size: var(--density-row-height);
   border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
 }
 
 .placeholderCell {
+  box-sizing: border-box;
   min-inline-size: 0;
   padding: 0 var(--density-cell-padding-x);
+  overflow: hidden;
   text-align: start;
 }
 
@@ -238,9 +334,62 @@
   inline-size: 16ch;
 }
 
+.placeholderLine {
+  max-inline-size: 100%;
+}
+
+/* The empty state sits in the table area, under the header row, where the rows would be. */
 .empty {
   padding: 0 var(--density-cell-padding-x);
   font: var(--text-body);
   font-variant-numeric: var(--font-numeric-proportional);
-  white-space: normal;
+}
+
+/*
+ * The count line: how many rows are loaded and how many there are. It stands under the scroller
+ * and stays while the rows scroll. Under a table that fills its page a hairline closes the
+ * scroller off, as the header does at its top.
+ */
+.count {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--density-cell-padding-x);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.root[data-height="fill"] .count {
+  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+}
+
+/*
+ * The text that is measured for the width of a character: a line of zeros in each of the two
+ * faces of the table, out of sight and out of the flow. See measure.ts.
+ */
+.probe {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.probeText,
+.probeMono {
+  display: inline-block;
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.probeText {
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
+.probeMono {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
 }

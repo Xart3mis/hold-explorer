@@ -135,17 +135,6 @@
   font-variant-numeric: var(--font-numeric-tabular);
 }
 
-/* A table inside a page of text: a few rows show, and the rest scroll under its header. */
-.tableBox {
-  display: flex;
-  flex-direction: column;
-  max-block-size: calc(var(--density-header-height) + 8 * var(--density-row-height));
-}
-
-.tableBox > * {
-  min-block-size: 0;
-}
-
 /* A value of the preview: one line, cut at the end past the width of a line of text. */
 .previewValue {
   display: block;

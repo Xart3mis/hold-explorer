@@ -19,6 +19,7 @@ import {
   Progress,
   Tag,
   type DataTableColumn,
+  textChars,
 } from "../../components";
 import { formatCount, formatDate, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -28,6 +29,24 @@ import styles from "./WelcomePage.module.css";
 
 /** Where "Show in folder" was pressed, so its error shows beside what was pressed. */
 type FolderError = { at: "folder" | "files"; error: CommandError } | null;
+
+/** The least room of the name of a workspace before the table scrolls sideways. */
+const NAME_CHARS = 20;
+
+/** The room of a count of snapshots. */
+const COUNT_CHARS = 5;
+
+/** What a quiet button needs around its label, counted in characters: its padding and the room of its spinner. */
+const BUTTON_CHARS = 5;
+
+const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
+
+/** When the newest snapshot of a workspace was taken, as its row writes it. */
+function latest(workspace: WorkspaceView): string {
+  return workspace.latest_taken_at === null
+    ? t("common.noValue")
+    : formatDate(workspace.latest_taken_at);
+}
 
 /**
  * The welcome page: where the app opens while no workspace is open, and where the workspaces are
@@ -88,6 +107,7 @@ export function WelcomePage() {
       id: "name",
       header: t("workspaces.columnName"),
       isRowHeader: true,
+      size: { flex: 1, minChars: NAME_CHARS },
       cell: (workspace) => (
         <span className={styles.name}>
           <span className={styles.nameText}>{workspace.name}</span>
@@ -104,17 +124,16 @@ export function WelcomePage() {
       id: "snapshots",
       header: t("workspaces.columnSnapshots"),
       kind: "number",
+      size: { chars: COUNT_CHARS },
       cell: (workspace) => formatCount(workspace.snapshot_count),
     },
     {
       id: "latest",
       header: t("workspaces.columnLatest"),
       isSupporting: true,
-      width: "max-content",
-      cell: (workspace) =>
-        workspace.latest_taken_at === null
-          ? t("common.noValue")
-          : formatDate(workspace.latest_taken_at),
+      // As wide as the longest date that is shown, in whatever way the locale writes one.
+      size: { chars: Math.max(...workspaces.map((workspace) => textChars(latest(workspace)))) },
+      cell: latest,
     },
   ];
 
@@ -214,6 +233,9 @@ export function WelcomePage() {
               rowKey={(workspace) => workspace.id}
               selectedKey={openWorkspace.isPending ? opening : null}
               onSelectionChange={open}
+              // Every workspace is listed: the page scrolls, the table does not.
+              height={ALL_ROWS}
+              rowActionsSize={{ chars: textChars(t("workspaces.open")) + BUTTON_CHARS }}
               rowActions={(workspace) => (
                 <Button
                   variant="quiet"
