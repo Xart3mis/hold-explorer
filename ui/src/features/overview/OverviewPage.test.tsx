@@ -522,8 +522,9 @@ describe("the Overview while it changes", () => {
       }
     }
     // Nothing can be switched or pressed while nothing is there, and nothing is said to be wrong.
-    expect(within(main).queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(within(main).queryByRole("button")).not.toBeInTheDocument();
+    // The filter bar above what is loading is not part of it: its controls are there already.
+    expect(within(content(main)).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(content(main)).queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     // The snapshot is known before its numbers are: the line names it and gives no number.
     expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(

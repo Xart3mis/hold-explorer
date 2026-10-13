@@ -106,6 +106,32 @@ export function formatDays(days: number): string {
   return t("units.days", { value: formatCount(days) });
 }
 
+/**
+ * A band of ages in words: `0 to 13 days`, `90 days or more`. A bound that is `null` is open. The
+ * word takes its form from the number that stands beside it.
+ */
+export function formatAgeBand(band: { min_days: number | null; max_days: number | null }): string {
+  const { min_days: min, max_days: max } = band;
+  if (min === null && max === null) return t("ageBand.any");
+  if (max === null) return t("ageBand.from", { count: min ?? 0 });
+  if (min === null) return t("ageBand.upTo", { count: max });
+  if (min === max) return t("ageBand.exact", { count: max });
+  return t("ageBand.between", { min: formatCount(min), count: max });
+}
+
+/**
+ * A range of days in words: `1 Sept 2026 to 30 Sept 2026`, and `from 1 Sept 2026` or
+ * `until 30 Sept 2026` for a range that is open at one end. Empty for a range without days.
+ */
+export function formatDateRange(range: { from: string | null; to: string | null }): string {
+  const { from, to } = range;
+  if (from === null && to === null) return "";
+  if (to === null) return t("dateRange.from", { from: formatDate(from ?? "") });
+  if (from === null) return t("dateRange.until", { to: formatDate(to) });
+  if (from === to) return formatDate(from);
+  return t("dateRange.between", { from: formatDate(from), to: formatDate(to) });
+}
+
 /** A date with its weekday and its month in full, to read back a date that was typed: `Wednesday, 7 October 2026`. */
 export function formatLongDate(value: string): string {
   const moment = parse(value);

@@ -1,16 +1,39 @@
-/* A page: its header, then its content, left-aligned. Forms and prose keep a readable width. */
+/*
+ * A page: its header, then its content, left-aligned. Forms and prose keep a readable width. The
+ * width is kept by each part of the page and not by the page itself, so that the one part that
+ * is as wide as the content area, the bar, can be.
+ */
 .page {
+  --page-max-width: none;
+
   display: flex;
   flex-direction: column;
   min-block-size: 100%;
 }
 
 .page[data-width="form"] {
-  max-inline-size: var(--layout-form-max-width);
+  --page-max-width: var(--layout-form-max-width);
 }
 
 .page[data-width="content"] {
-  max-inline-size: var(--layout-content-max-width);
+  --page-max-width: var(--layout-content-max-width);
+}
+
+/* Without weight of its own, so a part that sets a narrower width keeps it. */
+:where(.page > *) {
+  max-inline-size: var(--page-max-width);
+}
+
+/*
+ * The bar of a data screen runs from edge to edge of the content area, through the padding the
+ * shell gives the page. What it holds keeps the width of the page: the bar reads
+ * `--page-max-width` for that. A header's gap separates it from the content.
+ */
+.page > .bar {
+  flex: none;
+  max-inline-size: none;
+  margin-block-end: var(--space-4);
+  margin-inline: calc(-1 * var(--layout-page-padding-x));
 }
 
 /* The title takes the focus when its page opens; the ring shows where a keyboard user is. */

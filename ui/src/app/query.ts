@@ -1,4 +1,11 @@
-import { keepPreviousData, QueryClient, queryOptions } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  notifyManager,
+  QueryClient,
+  queryOptions,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
 import { keys } from "../api/keys";
 import { workspaceApi } from "../api/workspace-commands";
 
@@ -56,3 +63,20 @@ queryClient.setQueryDefaults(keys.importDraft, { staleTime: Infinity, gcTime: In
 // way: both belong to the draft and go when it goes.
 queryClient.setQueryDefaults(keys.importReview, { staleTime: Infinity, gcTime: Infinity });
 queryClient.setQueryDefaults(keys.importChoices, { staleTime: Infinity, gcTime: Infinity });
+// The filters the user has set are kept by workspace for the session. Nothing reads them from
+// anywhere else, so they are never stale and never dropped while the app runs.
+queryClient.setQueryDefaults(keys.filters, { staleTime: Infinity, gcTime: Infinity });
+
+/**
+ * What a reader finds in the cache, read again whenever the cache changes. The cache also changes
+ * while a component renders, when a query is first asked for, so a change is passed on after the
+ * render that caused it, the way the query library passes its own changes on.
+ */
+export function useCached<Data>(read: (client: QueryClient) => Data | undefined): Data | undefined {
+  const client = useQueryClient();
+  const subscribe = useCallback(
+    (changed: () => void) => client.getQueryCache().subscribe(notifyManager.batchCalls(changed)),
+    [client],
+  );
+  return useSyncExternalStore(subscribe, () => read(client));
+}

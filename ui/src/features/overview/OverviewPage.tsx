@@ -2,12 +2,13 @@ import { Upload } from "lucide-react";
 import { useId, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { openHoldsFilter } from "../../api/filter";
+import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
+import type { Status } from "../../bindings/Status";
 import type { Summary } from "../../bindings/Summary";
 import {
   BarRow,
@@ -25,27 +26,15 @@ import {
   textChars,
 } from "../../components";
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
-import { t } from "../../text/i18n";
+import { t, type MessageKey } from "../../text/i18n";
+import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import styles from "./OverviewPage.module.css";
 
-/** The page shows the open holds, and sends the whole filter that says so. */
-const OPEN_HOLDS = openHoldsFilter();
-
-/** The two groups of the page: what each is by, in the words of its title and of its table. */
+/** The two groups of the page: what each is by, in the words of the first column of its table. */
 const DIMENSIONS = [
-  {
-    id: "discipline",
-    title: "overview.byDiscipline",
-    column: "overview.columnDiscipline",
-    toTable: "overview.showDisciplineAsTable",
-  },
-  {
-    id: "holdType",
-    title: "overview.byHoldType",
-    column: "overview.columnHoldType",
-    toTable: "overview.showHoldTypeAsTable",
-  },
+  { id: "discipline", column: "overview.columnDiscipline" },
+  { id: "holdType", column: "overview.columnHoldType" },
 ] as const;
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
@@ -57,32 +46,95 @@ type DimensionId = (typeof DIMENSIONS)[number]["id"];
  */
 const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4 };
 
+/** What the page calls its figures and its groups, in the text catalog. */
+interface Words {
+  figures: MessageKey;
+  holds: MessageKey;
+  lines: MessageKey;
+  /** The fourth figure: which median of the summary it is, its label, and why it may be absent. */
+  median: "median_age_days" | "median_duration_days";
+  medianLabel: MessageKey;
+  medianMissing: MessageKey;
+  title: Record<DimensionId, MessageKey>;
+  toTable: Record<DimensionId, MessageKey>;
+}
+
+/**
+ * The page shows the holds the status of the filters keeps, and names them after it: nothing on
+ * it calls a released hold open. The open holds have an age and the released ones a duration;
+ * among all holds the median age is that of the open ones, and its label says so.
+ */
+const WORDS: Record<Status, Words> = {
+  Open: {
+    figures: "overview.figures",
+    holds: "overview.openHolds",
+    lines: "overview.linesOnHold",
+    median: "median_age_days",
+    medianLabel: "overview.medianAge",
+    medianMissing: "overview.medianAgeMissing",
+    title: { discipline: "overview.byDiscipline", holdType: "overview.byHoldType" },
+    toTable: {
+      discipline: "overview.showDisciplineAsTable",
+      holdType: "overview.showHoldTypeAsTable",
+    },
+  },
+  Released: {
+    figures: "overview.releasedFigures",
+    holds: "overview.releasedHolds",
+    lines: "overview.releasedLines",
+    median: "median_duration_days",
+    medianLabel: "overview.releasedMedianDuration",
+    medianMissing: "overview.releasedMedianDurationMissing",
+    title: {
+      discipline: "overview.releasedByDiscipline",
+      holdType: "overview.releasedByHoldType",
+    },
+    toTable: {
+      discipline: "overview.releasedShowDisciplineAsTable",
+      holdType: "overview.releasedShowHoldTypeAsTable",
+    },
+  },
+  All: {
+    figures: "overview.allFigures",
+    holds: "overview.allHolds",
+    lines: "overview.allLines",
+    median: "median_age_days",
+    medianLabel: "overview.allMedianAge",
+    medianMissing: "overview.medianAgeMissing",
+    title: { discipline: "overview.allByDiscipline", holdType: "overview.allByHoldType" },
+    toTable: {
+      discipline: "overview.allShowDisciplineAsTable",
+      holdType: "overview.allShowHoldTypeAsTable",
+    },
+  },
+};
+
 /** The four figures of the snapshot: one container, its cells divided by hairlines. */
-function Figures({ summary }: { summary?: Summary }) {
+function Figures({ summary, words }: { summary?: Summary; words: Words }) {
   const loading = summary === undefined;
-  const age = summary?.median_age_days;
+  const median = summary?.[words.median];
   return (
-    <StatTileGroup aria-label={t("overview.figures")}>
+    <StatTileGroup aria-label={t(words.figures)}>
       <StatTile
-        label={t("overview.openHolds")}
+        label={t(words.holds)}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.holds) })}
       />
       <StatTile
-        label={t("overview.linesOnHold")}
+        label={t(words.lines)}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.lines) })}
       />
       <StatTile
         label={t("overview.singleHoldLines")}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.single_hold_lines) })}
       />
-      {/* An age needs a creation date. Without one the tile says so; it never shows a zero. */}
+      {/* An age or a duration needs dates. Without them the tile says so; it never shows a zero. */}
       <StatTile
-        label={t("overview.medianAge")}
+        label={t(words.medianLabel)}
         {...(loading
           ? { isLoading: true }
-          : age === null || age === undefined
-            ? { unavailable: t("overview.medianAgeMissing") }
-            : { value: formatDays(age) })}
+          : median === null || median === undefined
+            ? { unavailable: t(words.medianMissing) }
+            : { value: formatDays(median) })}
       />
     </StatTileGroup>
   );
@@ -99,6 +151,8 @@ interface GroupSectionProps {
    * the words that are shown, so that the switch can also be asked for by them.
    */
   toTable: string;
+  /** What the group says when the command sent it no row. */
+  none: string;
   /** The groups as the command sent them. Absent on a first load. */
   groups?: readonly Group[];
   skeletonRows: number;
@@ -128,6 +182,7 @@ function GroupSection({
   title,
   column,
   toTable,
+  none,
   groups,
   skeletonRows,
   asTable,
@@ -176,7 +231,7 @@ function GroupSection({
       {groups === undefined ? (
         <BarRowGroup isLoading skeletonRows={skeletonRows} aria-labelledby={titleId} />
       ) : rows.length === 0 ? (
-        <p className={styles.none}>{t("overview.noOpenHolds")}</p>
+        <p className={styles.none}>{none}</p>
       ) : asTable ? (
         <DataTable
           aria-label={title}
@@ -206,10 +261,11 @@ function GroupSection({
 }
 
 /**
- * Overview: the headline figures of the snapshot in view, and its open holds by discipline and
- * by hold type. It shows what the `overview` command returns for the open workspace and the
- * selected snapshot, and reads it again when either changes; the numbers of before stay on
- * screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
+ * Overview: the headline figures of the snapshot in view, and its holds by discipline and by
+ * hold type, for the filters every data screen shares: the open holds unless the filter bar
+ * under its header says otherwise. It shows what the `overview` command returns for the open
+ * workspace, the selected snapshot, and those filters, and reads it again when any of them
+ * changes; the numbers of before stay on screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
  * state that starts an import. A snapshot whose file lacked the hold ID or the released column
  * is said to be limited, above its figures.
  *
@@ -225,10 +281,12 @@ export function OverviewPage() {
     discipline: false,
     holdType: false,
   });
+  const { filters, spec, isDefault } = useFilters();
+  const words = WORDS[filters.status];
   const query = useSnapshotQuery({
     name: "overview",
-    params: [OPEN_HOLDS],
-    read: (view, spec) => api.overview(spec, view),
+    params: [spec],
+    read: (view, asked) => api.overview(asked, view),
   });
   // What was read for the snapshot or the workspace of before is shown until the new reading is
   // there, with one exception: that the workspace of before had no snapshot says nothing about
@@ -236,7 +294,8 @@ export function OverviewPage() {
   const view: OverviewView | null | undefined =
     query.isError || (query.isPlaceholderData && query.data === null) ? undefined : query.data;
   const isLoading = view === undefined && !query.isError;
-  // The numbers on screen belong to another snapshot or workspace, and the new ones are on their way.
+  // The numbers on screen belong to another snapshot, workspace, or filter, and the new ones are
+  // on their way.
   const isUpdating = view !== undefined && view !== null && query.isPlaceholderData;
   // Whether the numbers on screen took the place of such numbers: said once they are there.
   const [change, setChange] = useState({ isUpdating: false, isUpdated: false });
@@ -284,6 +343,8 @@ export function OverviewPage() {
       title={t("destinations.name.overview")}
       width="content"
       {...(description === undefined ? {} : { description })}
+      // A workspace without snapshots has nothing to filter; its empty state says what to do.
+      {...(open?.selected == null ? {} : { bar: <FilterBar /> })}
     >
       <VisuallyHidden role="status">{status}</VisuallyHidden>
       {about?.limited === true ? (
@@ -322,14 +383,16 @@ export function OverviewPage() {
           data-stale={isUpdating ? "" : undefined}
           className={styles.overview}
         >
-          <Figures {...(view === undefined ? {} : { summary: view.summary })} />
+          <Figures words={words} {...(view === undefined ? {} : { summary: view.summary })} />
           <div className={styles.groups}>
-            {DIMENSIONS.map(({ id, title, column, toTable }) => (
+            {DIMENSIONS.map(({ id, column }) => (
               <GroupSection
                 key={id}
-                title={t(title)}
+                title={t(words.title[id])}
                 column={t(column)}
-                toTable={t(toTable)}
+                toTable={t(words.toTable[id])}
+                // Without filters the snapshot has no open hold; with them, none that they keep.
+                none={t(isDefault ? "overview.noOpenHolds" : "overview.noneMatch")}
                 skeletonRows={SKELETON_ROWS[id]}
                 {...(view === undefined ? {} : { groups: groupsOf(id, view) })}
                 asTable={asTable[id]}

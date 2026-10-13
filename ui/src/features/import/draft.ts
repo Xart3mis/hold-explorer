@@ -1,11 +1,12 @@
 // What the pages of the import flow share: the file that is open, what its review found, and what
 // the user has chosen so far. All three are kept in the query cache, beside the draft the import
 // page puts there, so they outlive the page that made them and go together.
-import { notifyManager, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useCallback, useSyncExternalStore } from "react";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import { useLocation } from "react-router";
 import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
+import { useCached } from "../../app/query";
 import { useShell } from "../../app/shell/context";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportReview } from "../../bindings/ImportReview";
@@ -42,20 +43,6 @@ const PROPOSED: ImportChoices = {
   newName: null,
   replace: null,
 };
-
-/**
- * What a reader finds in the cache, read again whenever the cache changes. The cache also changes
- * while a component renders, when a query is first asked for, so a change is passed on after the
- * render that caused it, the way the query library passes its own changes on.
- */
-function useCached<Data>(read: (client: QueryClient) => Data | undefined): Data | undefined {
-  const client = useQueryClient();
-  const subscribe = useCallback(
-    (changed: () => void) => client.getQueryCache().subscribe(notifyManager.batchCalls(changed)),
-    [client],
-  );
-  return useSyncExternalStore(subscribe, () => read(client));
-}
 
 /** Forgets the file that is open for import, with its review, its checks, and the choices. */
 export function clearImport(client: QueryClient): void {

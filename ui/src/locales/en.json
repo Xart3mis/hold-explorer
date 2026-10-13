@@ -46,6 +46,60 @@
     "add": "Add filter",
     "remove": "Remove the filter {{field}}"
   },
+  "ageBand": {
+    "between_one": "{{min}} to {{count, number}} day",
+    "between_other": "{{min}} to {{count, number}} days",
+    "from_one": "{{count, number}} day or more",
+    "from_other": "{{count, number}} days or more",
+    "upTo_one": "up to {{count, number}} day",
+    "upTo_other": "up to {{count, number}} days",
+    "exact_one": "{{count, number}} day",
+    "exact_other": "{{count, number}} days",
+    "any": "any age"
+  },
+  "dateRange": {
+    "between": "{{from}} to {{to}}",
+    "from": "from {{from}}",
+    "until": "until {{to}}"
+  },
+  "filters": {
+    "bar": "Filters",
+    "status": {
+      "menu": "Status",
+      "list": "Holds to show",
+      "name": "Status: {{status}}",
+      "Open": "Open holds",
+      "Released": "Released holds",
+      "All": "All holds"
+    },
+    "dim": {
+      "BlockerType": "Blocker type",
+      "Blocker": "Blocker"
+    },
+    "field": {
+      "age": "Age",
+      "sizeMismatch": "Model and LDT sizes",
+      "text": "Text"
+    },
+    "sizeMismatch": {
+      "differ": "differ",
+      "match": "match"
+    },
+    "textValue": "“{{text}}”",
+    "more": "{{first}} +{{more, number}}",
+    "clear": "Clear all",
+    "total_one": "{{count, number}} hold",
+    "total_other": "{{count, number}} holds",
+    "busySwitching": "Filters cannot be changed while another workspace or snapshot is being opened.",
+    "busyChanging": "Filters cannot be changed while the workspace is being updated.",
+    "absent_one": "This snapshot has no value in the export column {{columns}}. Filters and columns that need it are not shown.",
+    "absent_other": "This snapshot has no values in the export columns {{columns}}. Filters and columns that need them are not shown.",
+    "error": "The counts of the filters could not be read",
+    "picker": {
+      "filterBy": "Filter by {{field}}",
+      "add": "Add filter"
+    }
+  },
   "errorState": {
     "title": "This could not be loaded"
   },
@@ -450,6 +504,24 @@
     "lines_one": "{{count, number}} line",
     "lines_other": "{{count, number}} lines",
     "noOpenHolds": "This snapshot has no open holds.",
+    "noneMatch": "No hold matches the filters.",
+    "releasedFigures": "Figures of the released holds",
+    "releasedHolds": "Released holds",
+    "releasedLines": "Lines with released holds",
+    "releasedMedianDuration": "Median duration",
+    "releasedMedianDurationMissing": "No released hold has both a creation date and a release date.",
+    "releasedByDiscipline": "Released holds by discipline",
+    "releasedByHoldType": "Released holds by hold type",
+    "releasedShowDisciplineAsTable": "Show as table, released holds by discipline",
+    "releasedShowHoldTypeAsTable": "Show as table, released holds by hold type",
+    "allFigures": "Figures of the holds",
+    "allHolds": "Holds",
+    "allLines": "Lines",
+    "allMedianAge": "Median age of open holds",
+    "allByDiscipline": "Holds by discipline",
+    "allByHoldType": "Holds by hold type",
+    "allShowDisciplineAsTable": "Show as table, holds by discipline",
+    "allShowHoldTypeAsTable": "Show as table, holds by hold type",
     "emptyTitle": "This workspace has no snapshots",
     "emptyText": "Import a holds export to add the first snapshot. Overview then shows its open holds by discipline and by hold type.",
     "emptyAction": "Import"

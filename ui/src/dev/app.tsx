@@ -7,11 +7,16 @@
 // open, so its pages can be opened by their address:
 //
 //   http://localhost:1420/dev.html?state=import-findings#/import/review
-// This page is for development only: the build
-// has one entry, index.html, and `pnpm check:dist` fails on this page or on its marker.
+//
+// A state of the filter bar starts with filters set, on the Overview:
+//
+//   http://localhost:1420/dev.html?state=filters#/overview
+//
+// This page is for development only: the build has one entry, index.html, and `pnpm check:dist`
+// fails on this page or on its marker.
 import { keys } from "../api/keys";
 import { queryClient } from "../app/query";
-import { DEV_STATES, devDraft, installDevCommands, isDevState } from "./commands";
+import { DEV_STATES, devDraft, devFilters, installDevCommands, isDevState } from "./commands";
 
 const params = new URLSearchParams(window.location.search);
 const asked = params.get("state") ?? "";
@@ -24,5 +29,8 @@ window.localStorage.removeItem("hold-explorer.theme");
 // A state of the import flow has its file open, as the import page leaves it.
 const draft = devDraft(state);
 if (draft !== null) queryClient.setQueryData(keys.importDraft, draft);
+// A state of the filter bar starts with filters set, as the user of this session left them.
+const set = devFilters(state);
+if (set !== null) queryClient.setQueryData(keys.workspaceFilters(set.workspaceId), set.filters);
 // The app starts once the commands can answer.
 await import("../main");

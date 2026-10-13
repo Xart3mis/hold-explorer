@@ -1,0 +1,102 @@
+/*
+ * The filter bar: a region of the shell, on the panel surface, between two hairlines. It runs
+ * the width of the content area; what it holds keeps the width of the page it is on, which the
+ * page hands down (see ui/src/app/shell/Page.module.css), and the padding of the page, so it
+ * starts where the title starts and ends where the content ends.
+ */
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  justify-content: center;
+  min-block-size: var(--layout-filterbar-height);
+  padding: var(--space-1) var(--layout-page-padding-x);
+  border-block: var(--border-width-thin) solid var(--color-border-default);
+  background-color: var(--color-surface-panel);
+}
+
+.bar > * {
+  inline-size: 100%;
+  max-inline-size: var(--page-max-width, none);
+}
+
+/* The controls, and the total at the trailing edge of their first line. */
+.row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+/* Chips that do not fit wrap to a next line, and the bar grows. */
+.controls {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--space-1-5) var(--space-2);
+  align-items: center;
+  min-inline-size: 0;
+  min-block-size: var(--density-control-height);
+}
+
+/*
+ * The label of the status control starts where the page title starts: the button is moved out by
+ * its own padding and border, so its hover fill reaches into the padding of the page.
+ */
+.status {
+  margin-inline-start: calc(-1 * (var(--space-3) + var(--border-width-thin)));
+}
+
+/*
+ * Why nothing can be changed, for the moment. Empty, it is taken out of the line, so it takes no
+ * room and no gap; it stays in the document, where what it comes to say is announced.
+ */
+.reason {
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.reason:empty {
+  position: absolute;
+}
+
+/* How many holds the filters keep. It stays on the first line, level with the controls. */
+.total {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--density-control-height);
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.total[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+/* Which columns of the export the snapshot lacks: one line of running text under the controls. */
+.absent {
+  max-inline-size: min(var(--layout-prose-max-width), var(--page-max-width, 100%));
+  padding-block-end: var(--space-1);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.error {
+  padding-block-end: var(--space-1);
+}
+
+/* The name of the field a picker was opened for. */
+.pickerTitle {
+  color: var(--color-text-primary);
+  font: var(--text-body-strong);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}

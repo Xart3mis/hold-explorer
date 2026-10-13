@@ -55,6 +55,13 @@ export const keys = {
       { pages: true },
       ...params,
     ] as const,
+  /** The filters of every workspace, as the user has set them in this session: the prefix of those keys. */
+  filters: ["filters"] as const,
+  /**
+   * The filters of one workspace. They are not what a command returned: the user set them, and
+   * they are kept here for the session so that every data screen shows the same ones.
+   */
+  workspaceFilters: (workspaceId: string) => ["filters", workspaceId] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

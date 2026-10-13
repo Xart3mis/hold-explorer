@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatAgeBand,
   formatCount,
   formatDate,
+  formatDateRange,
   formatDateTime,
   formatDays,
   formatList,
@@ -171,5 +173,48 @@ describe("yearOf and isSameSecond", () => {
     expect(isSameSecond("2026-10-07T08:00:00", "2026-10-07 08:00")).toBe(true);
     expect(isSameSecond("2026-10-07T08:00:00", "2026-10-07T08:00:01")).toBe(false);
     expect(isSameSecond("soon", "soon")).toBe(false);
+  });
+});
+
+describe("formatAgeBand", () => {
+  it("writes a band with both ends as a range of days", () => {
+    expect(formatAgeBand({ min_days: 0, max_days: 13 })).toBe("0 to 13 days");
+    expect(formatAgeBand({ min_days: 14, max_days: 29 })).toBe("14 to 29 days");
+    expect(formatAgeBand({ min_days: 1000, max_days: 1999 })).toBe("1,000 to 1,999 days");
+  });
+
+  it("writes a band that is open at one end by the end it has", () => {
+    expect(formatAgeBand({ min_days: 90, max_days: null })).toBe("90 days or more");
+    expect(formatAgeBand({ min_days: null, max_days: 13 })).toBe("up to 13 days");
+  });
+
+  it("takes the form of the word from the number beside it", () => {
+    expect(formatAgeBand({ min_days: 0, max_days: 1 })).toBe("0 to 1 day");
+    expect(formatAgeBand({ min_days: 1, max_days: null })).toBe("1 day or more");
+    expect(formatAgeBand({ min_days: null, max_days: 1 })).toBe("up to 1 day");
+  });
+
+  it("writes a band of one age as that age, and a band without ends as any age", () => {
+    expect(formatAgeBand({ min_days: 7, max_days: 7 })).toBe("7 days");
+    expect(formatAgeBand({ min_days: 1, max_days: 1 })).toBe("1 day");
+    expect(formatAgeBand({ min_days: null, max_days: null })).toBe("any age");
+  });
+});
+
+describe("formatDateRange", () => {
+  it("writes both days of a range that has both", () => {
+    expect(formatDateRange({ from: "2026-09-01", to: "2026-09-30" })).toBe(
+      "1 Sept 2026 to 30 Sept 2026",
+    );
+  });
+
+  it("writes a range that is open at one end by the day it has", () => {
+    expect(formatDateRange({ from: "2026-09-01", to: null })).toBe("from 1 Sept 2026");
+    expect(formatDateRange({ from: null, to: "2026-09-30" })).toBe("until 30 Sept 2026");
+  });
+
+  it("writes one day once, and nothing for a range without days", () => {
+    expect(formatDateRange({ from: "2026-09-01", to: "2026-09-01" })).toBe("1 Sept 2026");
+    expect(formatDateRange({ from: null, to: null })).toBe("");
   });
 });
