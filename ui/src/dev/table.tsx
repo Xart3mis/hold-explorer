@@ -11,7 +11,15 @@
 //
 // Every time the rows change, what that change cost is written beside the filter and kept in
 // `window.hxTableRenders`, newest last.
-import { Profiler, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Profiler,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button, DataTable, EmptyState, TextField, type DataTableColumn } from "../components";
 import { formatCount } from "../text/format";
 import styles from "./gallery.module.css";
@@ -144,7 +152,8 @@ function useLines(filter: string) {
   const [isLoadingMore, setLoadingMore] = useState(false);
   const timer = useRef<number | null>(null);
   const state = useRef({ matching, filter, loaded });
-  useEffect(() => {
+  // Before the table looks for the end of its rows, which it does after it has rendered.
+  useLayoutEffect(() => {
     state.current = { matching, filter, loaded };
   });
 
@@ -185,6 +194,8 @@ function useLines(filter: string) {
 
   return {
     rows: loaded.rows,
+    /** The filter the rows match: what they are a result of. */
+    resultKey: loaded.filter,
     total: loaded.total,
     hasMore: loaded.filter === filter && loaded.rows.length < loaded.total,
     isFirstLoad: loaded.filter === "\u0000",
@@ -267,6 +278,7 @@ export function TablePage() {
             columns={columns}
             rows={lines.rows}
             rowKey={(line) => line.id}
+            resultKey={lines.resultKey}
             selectedKey={selected}
             onSelectionChange={setSelected}
             height="fill"

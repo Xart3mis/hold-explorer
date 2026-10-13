@@ -69,6 +69,13 @@ function table(props: Partial<Parameters<typeof DataTable<Line>>[0]> = {}) {
   );
 }
 
+/** The element around the grid, which carries what the stylesheet is told. */
+function tableRoot(): HTMLElement {
+  const root = screen.getByRole("grid").parentElement;
+  if (!root) throw new Error("The grid has no parent.");
+  return root;
+}
+
 function dataRows() {
   return within(screen.getByRole("grid")).getAllByRole("row").slice(1);
 }
@@ -487,17 +494,23 @@ describe("DataTable in a viewport", () => {
     expect(screen.getByRole("grid")).not.toContainElement(status);
 
     rerender(table({ totalRows: 3612, countText, isLoadingMore: true }));
-    expect(status).toHaveTextContent(en.table.loadingMore);
-    expect(status).toHaveTextContent("4 of 3612 lines");
+    // Two sentences, read as two: the count, then what is on its way.
+    expect(status).toHaveTextContent(`4 of 3612 lines. ${en.table.loadingMore}`);
+    expect(screen.getByRole("grid")).toHaveAccessibleDescription(
+      `4 of 3612 lines. ${en.table.loadingMore}`,
+    );
 
     rerender(table({ totalRows: 3612, countText }));
     expect(status).not.toHaveTextContent(en.table.loadingMore);
   });
 
   it("counts the rows it was given where the total is not known", () => {
-    render(table());
+    const { rerender } = render(table());
     expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "5");
     expect(screen.getByRole("status")).toHaveTextContent("4 rows");
+    // The line that is only heard reads as two sentences as well.
+    rerender(table({ isLoadingMore: true }));
+    expect(screen.getByRole("status").textContent).toBe(`4 rows. ${en.table.loadingMore}`);
   });
 
   it(
@@ -564,30 +577,162 @@ describe("DataTable in a viewport", () => {
   );
 
   it(
-    "returns to its top when the rows are replaced by others, and stays where it is when more arrive",
+    "returns to its top when the caller says the rows are another result, also one that starts with the same row",
     SLOW,
     () => {
       const onLoadMore = vi.fn();
-      const { rerender } = render(table({ rows: many.slice(0, 200), onLoadMore }));
+      const page = many.slice(0, 200);
+      const { rerender } = render(table({ rows: page, onLoadMore, resultKey: "all" }));
       const grid = screen.getByRole("grid");
       scrollTable(grid, 190 * ROW);
       expect(onLoadMore).toHaveBeenCalledTimes(1);
 
-      rerender(table({ rows: many.slice(0, 400), onLoadMore }));
-      expect(grid.scrollTop).toBe(190 * ROW);
-
-      // Another result, as after another filter: its rows start at the top, and its end is
-      // another end.
-      rerender(table({ rows: many.slice(1000, 1200), onLoadMore }));
+      // Another filter that keeps the same first row and as many rows: nothing of the rows says
+      // that they are another result. The key does.
+      rerender(table({ rows: [...page], onLoadMore, resultKey: "civil" }));
       expect(grid.scrollTop).toBe(0);
       // A browser tells of a scroll that a script made; jsdom has to be told.
       scrollTable(grid, 0);
-      expect(screen.getByRole("rowheader", { name: lineId(1001) })).toBeInTheDocument();
+      expect(screen.getByRole("rowheader", { name: lineId(1) })).toBeInTheDocument();
+      // The end of the other result is another end: coming to it asks again.
       expect(onLoadMore).toHaveBeenCalledTimes(1);
       scrollTable(grid, 190 * ROW);
       expect(onLoadMore).toHaveBeenCalledTimes(2);
     },
   );
+
+  it("asks for more again under another result whose end is in view where the last one's was", () => {
+    const onLoadMore = vi.fn();
+    const { rerender } = render(table({ onLoadMore, resultKey: "all" }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    rerender(table({ rows: [...lines], onLoadMore, resultKey: "all" }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    rerender(table({ rows: [...lines], onLoadMore, resultKey: "civil" }));
+    expect(onLoadMore).toHaveBeenCalledTimes(2);
+  });
+
+  it(
+    "stays where it is while the result is the same: with more rows, with one row fewer, with another first row",
+    SLOW,
+    () => {
+      const { rerender } = render(table({ rows: many.slice(0, 200), resultKey: "all" }));
+      const grid = screen.getByRole("grid");
+      scrollTable(grid, 100 * ROW);
+
+      rerender(table({ rows: many.slice(0, 400), resultKey: "all" }));
+      expect(grid.scrollTop).toBe(100 * ROW);
+      // The same result read again, in which a row is gone, and then its first row.
+      rerender(table({ rows: many.slice(0, 399), resultKey: "all" }));
+      expect(grid.scrollTop).toBe(100 * ROW);
+      rerender(table({ rows: many.slice(1, 399), resultKey: "all" }));
+      expect(grid.scrollTop).toBe(100 * ROW);
+    },
+  );
+
+  it("never takes its rows for another result without a key that says so", SLOW, () => {
+    const { rerender } = render(table({ rows: many.slice(0, 200) }));
+    const grid = screen.getByRole("grid");
+    scrollTable(grid, 100 * ROW);
+    rerender(table({ rows: many.slice(1000, 1200) }));
+    expect(grid.scrollTop).toBe(100 * ROW);
+  });
+
+  it(
+    "asks for no rows when it is as tall as its rows, and says in development why not",
+    SLOW,
+    () => {
+      const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const onLoadMore = vi.fn();
+      const all = { maxRows: Number.POSITIVE_INFINITY };
+      const { rerender } = render(table({ onLoadMore, height: all }));
+      rerender(table({ rows: many.slice(0, 200), onLoadMore, height: all }));
+      scrollTable(screen.getByRole("grid"), 190 * ROW);
+      // Its end is always in view: every page would ask for the next.
+      expect(onLoadMore).not.toHaveBeenCalled();
+      expect(said).toHaveBeenCalledTimes(1);
+      expect(said.mock.calls[0]?.[0]).toMatch(/onLoadMore.*height/s);
+      said.mockRestore();
+    },
+  );
+
+  it("lets nothing between a pinned cell and the scroller clip: the header and the body show what overflows", () => {
+    render(table());
+    const groups = within(screen.getByRole("grid")).getAllByRole("rowgroup");
+    expect(groups).toHaveLength(2);
+    // A box that clips would be what the pinned column sticks to, and it does not scroll.
+    for (const group of groups) expect(group.parentElement).toHaveStyle({ overflow: "visible" });
+  });
+
+  it("is as tall as its header and its skeleton rows on a first load, and as its header alone without a row", () => {
+    const { rerender } = render(table({ rows: [], isLoading: true, skeletonRows: 5 }));
+    const grid = screen.getByRole("grid");
+    // The box the library sizes to what the table holds; the grid scrolls it.
+    const content = () => grid.firstElementChild;
+    const body = () => within(grid).getAllByRole("rowgroup")[1]?.parentElement;
+    // The header and five rows of 36 px, whatever the height of the scroller is.
+    expect(content()).toHaveStyle({ height: "216px" });
+    expect(body()).toHaveStyle({ height: "180px" });
+
+    rerender(table({ rows: [], emptyState: <p>No holds match these filters.</p> }));
+    expect(content()).toHaveStyle({ height: "36px" });
+    expect(body()).toHaveStyle({ height: "0px" });
+  });
+
+  it("runs its rows the width of the table also where no column takes a share", () => {
+    const fixed = columns.map((column) =>
+      "flex" in column.size ? { ...column, size: { chars: 16 } } : column,
+    );
+    render(table({ columns: fixed }));
+    // The columns need 192, 74, 80, and 136 px of 1024.
+    expect(screen.getByRole("columnheader", { name: "First blocker" }).parentElement).toHaveStyle({
+      width: "136px",
+    });
+    const [head, body] = within(screen.getByRole("grid")).getAllByRole("rowgroup");
+    expect(head?.parentElement).toHaveStyle({ width: "1024px" });
+    expect(body?.parentElement).toHaveStyle({ width: "1024px" });
+    expect(dataRow(0).parentElement).toHaveStyle({ width: "1024px" });
+  });
+
+  it("keeps a focused row clear of the pinned column at the width the layout gave it", () => {
+    // The column that names the row takes a share here, as on Overview: it is far wider than
+    // the least it declares.
+    const shared: DataTableColumn<Line>[] = [
+      {
+        id: "blocker",
+        header: "First blocker",
+        isRowHeader: true,
+        size: { flex: 1, minChars: 16 },
+        cell: (line) => line.blocker,
+      },
+      {
+        id: "holds",
+        header: "Holds",
+        kind: "number",
+        size: { chars: 6 },
+        cell: (line) => line.holds,
+      },
+    ];
+    const { rerender } = render(table({ columns: shared }));
+    const pinned = screen.getByRole("columnheader", { name: "First blocker" }).parentElement;
+    expect(pinned).toHaveStyle({ width: "958px" });
+    // A browser tells the table when its scroller has been sized; here its next render does.
+    rerender(table({ columns: shared }));
+    const root = tableRoot();
+    expect(root.style.getPropertyValue("--table-pinned-width")).toBe("958px");
+  });
+
+  it("makes room for a sideways scrollbar, so it takes nothing from the last row", () => {
+    // The scroller is 15 px taller than what it shows: a scrollbar lies along its lower edge.
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(400 + ROW + 15);
+    const across = vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(1400);
+    const { rerender } = render(table());
+    expect(tableRoot().style.getPropertyValue("--table-scrollbar-size")).toBe("15px");
+    // A table that does not scroll sideways has no such scrollbar, whatever its height is.
+    across.mockReturnValue(1024);
+    rerender(table());
+    expect(tableRoot().style.getPropertyValue("--table-scrollbar-size")).toBe("0px");
+    vi.restoreAllMocks();
+  });
 
   it(
     "marks the place of the rows that are loading with a row of skeletons, which is no row to go to",
@@ -683,6 +828,7 @@ describe("DataTable in a viewport", () => {
     SLOW,
     () => {
       const cell = vi.fn((line: Line) => line.id);
+      const rowKey = vi.fn((line: Line) => line.id);
       const [first, ...rest] = columns;
       if (!first) throw new Error("The table has no column.");
       const counted: DataTableColumn<Line>[] = [{ ...first, cell }, ...rest];
@@ -694,7 +840,8 @@ describe("DataTable in a viewport", () => {
               // A caller that writes its columns where it renders hands over new ones each time.
               columns={inline === true ? [...counted] : counted}
               rows={many}
-              rowKey={(line) => line.id}
+              // And a function for the key of a row that is a new one each time as well.
+              rowKey={(line) => rowKey(line)}
             />
           </section>
         );
@@ -704,14 +851,20 @@ describe("DataTable in a viewport", () => {
       expect(visible).toBeLessThan(100);
       // Five thousand rows were given, and only the rows in the document asked for a cell.
       expect(cell.mock.calls.length).toBeLessThanOrEqual(visible);
+      // Every row was built once, which asks for its key once.
+      expect(rowKey).toHaveBeenCalledTimes(many.length);
 
       cell.mockClear();
+      rowKey.mockClear();
       rerender(<Page title="Lines on hold" />);
       expect(screen.getByRole("region", { name: "Lines on hold" })).toBeInTheDocument();
       expect(cell).not.toHaveBeenCalled();
+      // No row was built again: a rebuild would ask every one of them for its key.
+      expect(rowKey).not.toHaveBeenCalled();
 
       rerender(<Page title="Lines on hold" inline />);
       expect(cell.mock.calls.length).toBeLessThanOrEqual(visible);
+      expect(rowKey).not.toHaveBeenCalled();
     },
   );
 
@@ -775,5 +928,54 @@ describe("DataTable narrower than its columns", () => {
       scrollTable(grid, 0);
     });
     expect(grid.closest("[data-scrolled-x]")).not.toBeNull();
+  });
+});
+
+describe("DataTable taller than the window", () => {
+  // No window is this tall: a table that is, is not kept to a height and shows all it has.
+  tableViewport({ width: 1024, height: 5000 });
+
+  it(
+    "asks for no rows: it does not scroll inside itself, so its end is always in view",
+    SLOW,
+    () => {
+      const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const onLoadMore = vi.fn();
+      render(table({ rows: many.slice(0, 200), onLoadMore, height: "fill" }));
+      expect(onLoadMore).not.toHaveBeenCalled();
+      said.mockRestore();
+    },
+  );
+});
+
+describe("DataTable in a scroller that grows", () => {
+  const size = { width: 1024, height: 100 };
+  tableViewport(size);
+
+  it("looks for the end of its rows again when it is resized", () => {
+    // jsdom observes no sizes; this stand-in keeps what would be told, to tell it by hand.
+    const told: ResizeObserverCallback[] = [];
+    class Sizes implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        told.push(callback);
+      }
+      readonly observe = () => undefined;
+      readonly unobserve = () => undefined;
+      readonly disconnect = () => undefined;
+    }
+    vi.stubGlobal("ResizeObserver", Sizes);
+    const onLoadMore = vi.fn();
+    render(table({ rows: many.slice(0, 20), onLoadMore }));
+    // Twenty rows end 756 px down, and two heights of 100 px do not reach them.
+    expect(onLoadMore).not.toHaveBeenCalled();
+
+    size.height = 400;
+    const observer = new Sizes(() => undefined);
+    act(() => {
+      for (const callback of [...told]) callback([{} as ResizeObserverEntry], observer);
+    });
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    size.height = 100;
+    vi.unstubAllGlobals();
   });
 });

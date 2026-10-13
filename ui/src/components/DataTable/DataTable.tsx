@@ -116,9 +116,21 @@ export interface DataTableProps<Item> {
   totalRows?: number;
   /** The count line, written by the caller from the catalog: "200 of 3,612 lines". */
   countText?: (shown: number, total: number) => string;
-  /** Called when the end of the loaded rows comes into view. */
+  /**
+   * Called when the end of the loaded rows comes into view. Only a table that scrolls inside
+   * itself asks: a table as tall as its rows (`maxRows: Infinity`, or `fill` in a container
+   * without a height) has its end in view at all times and would ask for every page at once, so
+   * it asks for none, and says so on the console in a development build.
+   */
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  /**
+   * What the rows are a result of: the filter, the sort. When it changes, the rows are another
+   * result: the table returns to its top and forgets that it asked for more. The table compares
+   * this and nothing else, so rows that only grow, shrink, or are read again under the same key
+   * keep their place, and without a key the table never takes its rows for another result.
+   */
+  resultKey?: string;
   className?: string | undefined;
 }
 
@@ -157,6 +169,13 @@ interface ColumnPart {
  * width of the table also where the columns need less. A body without rows is as tall as it is
  * told: the library would give it the height of the scroller, which here follows from the
  * rows. And where nothing is laid out, the columns get widths that can be counted with.
+ *
+ * It builds on parts of the library's layout that are not all meant for us, so `package.json`
+ * names `react-aria-components` by its exact version. On an upgrade, check again that the
+ * header and the body nodes take `allowOverflow`, that a row takes its width from the header's,
+ * that `layoutOptions.columnWidths` is still used as given, and that a `Column` outside a
+ * `ResizableTableContainer` still has its `width` and `minWidth` read by the layout. The tests
+ * of the pinned column, the widths, the empty height, and the row width fail if one of them goes.
  */
 class DataTableLayout<T> extends TableLayout<T, LayoutOptions> {
   private emptyHeight = 0;
@@ -303,6 +322,19 @@ function PlaceholderRow({
   );
 }
 
+let warnedOfUnboundedHeight = false;
+
+/** Said once, in a development build, so a caller notices: see `onLoadMore`. */
+function warnOfUnboundedHeight(): void {
+  if (!import.meta.env.DEV || warnedOfUnboundedHeight) return;
+  warnedOfUnboundedHeight = true;
+  console.error(
+    "DataTable was given onLoadMore, but its height is not bounded: it is as tall as its rows, " +
+      "so the end of its rows is always in view and it would ask for every page at once. It asks " +
+      'for none. Give it height="fill" inside a container that has a height, or a maxRows.',
+  );
+}
+
 /**
  * The table of the app: a ruled page that behaves like a grid. Arrow keys, Home, End, Page Up,
  * and Page Down move the focused row; in a table with a selection handler Enter selects it; a
@@ -313,7 +345,7 @@ function PlaceholderRow({
  * thousands of rows, and the columns are as wide as they declare. The focused row stays in the
  * document while it is scrolled away. When the end of the rows comes near the visible part the
  * table asks for more, once for each time it arrives there and again only when rows were added.
- * When the rows are replaced by others, it returns to its top.
+ * When the caller says the rows are another result (`resultKey`), it returns to its top.
  *
  * On a first load the body holds placeholders in the shape of rows. They are a picture, not
  * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
@@ -338,6 +370,7 @@ export function DataTable<Item>({
   countText,
   onLoadMore,
   isLoadingMore,
+  resultKey,
   className,
   ...props
 }: DataTableProps<Item>) {
@@ -345,6 +378,9 @@ export function DataTable<Item>({
   const scroller = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [scrolledAcross, setScrolledAcross] = useState(false);
+  // What the scroller itself has to be asked: how much of its height a sideways scrollbar takes,
+  // and how wide the layout made the pinned column.
+  const [measured, setMeasured] = useState({ scrollbar: 0, pinned: 0 });
   const metrics = useTableMetrics(density);
   const chars = useCharWidths();
   const loading = isLoading === true;
@@ -370,14 +406,6 @@ export function DataTable<Item>({
   });
   const actionsWidth = columnWidth(rowActionsSize, "text", chars, metrics.paddingX);
   const placeholderWidths = hasActions ? [...widths, actionsWidth] : widths;
-  // What the pinned column covers of the rows that scroll beneath it. A pinned column that
-  // takes a share is counted at its least width.
-  const pinnedWidth = columns.reduce((sum, column, index) => {
-    const width = column.isRowHeader === true ? widths[index] : undefined;
-    if (width === undefined) return sum;
-    return sum + (typeof width.width === "number" ? width.width : width.minWidth);
-  }, 0);
-
   // The rows are built again only when what a row is made of changes: which columns, of which
   // kind, and whether there are actions. What a cell shows is not part of that.
   const shape = JSON.stringify(
@@ -460,6 +488,7 @@ export function DataTable<Item>({
     [metrics, loading, skeletonRows],
   );
 
+  const maxRows = height === "fill" ? null : height.maxRows;
   // The end of the rows is near once less than the height of the visible part is left below it.
   // `asked` holds how many rows there were at the last request of this stay at the end.
   const asked = useRef<number | null>(null);
@@ -474,25 +503,70 @@ export function DataTable<Item>({
       return;
     }
     if (onLoadMore === undefined || isLoadingMore === true) return;
+    // A table that is as tall as its rows does not scroll inside itself: no height keeps it, or
+    // it has grown past the window. Its end is always near, and each page would ask for the next.
+    if (maxRows === Number.POSITIVE_INFINITY || element.clientHeight > window.innerHeight) {
+      warnOfUnboundedHeight();
+      return;
+    }
     if (asked.current !== null && rows.length <= asked.current) return;
     asked.current = rows.length;
     onLoadMore();
   };
-  // After every render: rows that arrived, a page that ended, or a table that starts with its
-  // end in view. It reads two numbers of the scroller and asks for nothing twice.
-  useEffect(lookForEnd);
+  /** Asks the scroller what only it knows, and keeps it when it is another answer than before. */
+  const measureScroller = () => {
+    const element = scroller.current;
+    if (element === null) return;
+    // The layout writes the width it gave a column on the box around its header.
+    let pinned = 0;
+    for (const header of element.querySelectorAll('[role="columnheader"][data-pinned]')) {
+      pinned += Number.parseFloat(header.parentElement?.style.width ?? "") || 0;
+    }
+    // A scrollbar along the lower edge is the part of the height that shows no rows.
+    const scrollbar =
+      element.scrollWidth > element.clientWidth
+        ? Math.max(0, element.offsetHeight - element.clientHeight)
+        : 0;
+    setMeasured((before) =>
+      before.pinned === pinned && before.scrollbar === scrollbar ? before : { pinned, scrollbar },
+    );
+  };
+  const afterLayout = useRef<() => void>(() => undefined);
+  // After every render: rows that arrived, a page that ended, columns of another width, or a
+  // table that starts with its end in view. It reads a few numbers of the scroller, asks for
+  // nothing twice, and renders again only when a number is another one.
+  useEffect(() => {
+    afterLayout.current = () => {
+      measureScroller();
+      lookForEnd();
+    };
+    afterLayout.current();
+  });
+  // And whenever the scroller is resized: a window that grows may bring the end into view, and
+  // gives the columns other widths.
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null || typeof ResizeObserver === "undefined") return;
+    const sizes = new ResizeObserver(() => {
+      afterLayout.current();
+    });
+    sizes.observe(element);
+    // What the scroller holds changes size as well: with the rows, and with the columns.
+    if (element.firstElementChild !== null) sizes.observe(element.firstElementChild);
+    return () => {
+      sizes.disconnect();
+    };
+  }, []);
 
-  // Other rows than before, and not more of the same: the table starts at its top again.
-  const first = rows[0] === undefined ? null : rowKey(rows[0]);
-  const before = useRef({ first, length: rows.length });
+  // The rows are another result when the caller says so, and only then: the table starts at its
+  // top again, and the end of the other result is another end.
+  const lastResult = useRef(resultKey);
   useLayoutEffect(() => {
-    const isReplaced = first !== before.current.first || rows.length < before.current.length;
-    before.current = { first, length: rows.length };
-    if (!isReplaced) return;
-    // The end of other rows is another end: coming near it asks again.
+    if (lastResult.current === resultKey) return;
+    lastResult.current = resultKey;
     asked.current = null;
     if (scroller.current !== null && scroller.current.scrollTop > 0) scroller.current.scrollTop = 0;
-  }, [first, rows.length]);
+  }, [resultKey]);
 
   const count = loading
     ? t("table.loading")
@@ -501,14 +575,10 @@ export function DataTable<Item>({
       : totalRows === undefined
         ? t("table.rowCount", { count: rows.length })
         : t("table.rowCountOf", { shown: rows.length, total });
-  const status = (
-    <>
-      <span>{count}</span>
-      {loadingMore ? <span>{t("table.loadingMore")}</span> : null}
-    </>
-  );
+  // While more rows are on their way the line is two sentences, the count first, written as
+  // two: read aloud, and as the description of the grid, it must not run together.
+  const status = loadingMore ? t("table.countLoadingMore", { count }) : count;
   const isEmpty = !loading && rows.length === 0;
-  const maxRows = height === "fill" ? null : height.maxRows;
 
   return (
     <div
@@ -522,7 +592,8 @@ export function DataTable<Item>({
       className={cx(styles.root, className)}
       style={
         {
-          "--table-pinned-width": `${String(pinnedWidth)}px`,
+          "--table-pinned-width": `${String(measured.pinned)}px`,
+          "--table-scrollbar-size": `${String(measured.scrollbar)}px`,
           ...(maxRows !== null && Number.isFinite(maxRows) ? { "--table-max-rows": maxRows } : {}),
         } as CSSProperties
       }

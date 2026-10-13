@@ -1,7 +1,7 @@
 // What the table has to know in pixels. Its rows are placed by script, which cannot read a
 // stylesheet: the width of a character of each typeface and the heights of the density come from
 // here, and both are measured or read from the tokens, never written down.
-import { useMemo, useSyncExternalStore } from "react";
+import { useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { densityToken, lengthToken, rootDensity, type Density } from "../../design/token-values";
 import styles from "./DataTable.module.css";
 
@@ -74,12 +74,19 @@ function watch(): () => void {
   };
 }
 
-function subscribe(listener: () => void): () => void {
+/**
+ * Follows the measurement for as long as something uses it. The first to come puts the measured
+ * text into the document and measures at once.
+ */
+function follow(listener: () => void): () => void {
   listeners.add(listener);
   if (stopWatching === null) {
     stopWatching = watch();
     measure();
   }
+  // What is measured may be newer than what the follower was rendered with: another table of
+  // the same page may have measured a moment ago.
+  listener();
   return () => {
     listeners.delete(listener);
     if (listeners.size === 0) {
@@ -91,7 +98,15 @@ function subscribe(listener: () => void): () => void {
 
 /** The width of the digit zero in the table face and in the monospace face, measured once the fonts are ready, and again when they change. */
 export function useCharWidths(): CharWidths {
-  return useSyncExternalStore(subscribe, () => current);
+  const [widths, setWidths] = useState(current);
+  // In a layout effect, so the first table of a session is measured, and laid out again with
+  // what was measured, before anything is painted: no frame shows the stand-in widths.
+  useLayoutEffect(() => {
+    return follow(() => {
+      setWidths(current);
+    });
+  }, []);
+  return widths;
 }
 
 function subscribeDensity(listener: () => void): () => void {

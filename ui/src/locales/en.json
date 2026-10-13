@@ -34,6 +34,7 @@
     "rowCountOf": "{{shown, number}} of {{total, number}} rows",
     "loading": "Loading rows",
     "loadingMore": "Loading more rows",
+    "countLoadingMore": "{{count}}. Loading more rows",
     "actions": "Actions"
   },
   "toast": {

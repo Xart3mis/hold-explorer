@@ -28,10 +28,14 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-/* A table in the flow of a page: as tall as its rows, up to a number of them, then it scrolls. */
+/*
+ * A table in the flow of a page: as tall as its rows, up to a number of them, then it scrolls.
+ * A scrollbar along its lower edge is given its own room, so it takes none from the last row.
+ */
 .root[data-height="rows"] .table {
   max-block-size: calc(
-    var(--density-header-height) + var(--table-max-rows) * var(--density-row-height)
+    var(--density-header-height) + var(--table-max-rows) * var(--density-row-height) +
+      var(--table-scrollbar-size)
   );
 }
 
@@ -351,8 +355,6 @@
  * scroller off, as the header does at its top.
  */
 .count {
-  display: flex;
-  gap: var(--space-2);
   margin: 0;
   padding: var(--space-2) var(--density-cell-padding-x);
   color: var(--color-text-muted);

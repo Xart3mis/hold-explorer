@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { STAND_IN_CHAR_WIDTHS, useCharWidths, useTableMetrics } from "./measure";
 
@@ -59,6 +60,21 @@ describe("useCharWidths", () => {
     act(() => {
       fonts.dispatchEvent(new Event("loadingdone"));
     });
+    expect(screen.getByRole("status")).toHaveTextContent("7.25 7.8");
+  });
+
+  it("has measured before anything is painted: by the time the layout effects have run", () => {
+    layOut(7.25, 7.8);
+    const seen: (string | null)[] = [];
+    function Page() {
+      // A layout effect of the parent runs after those of its children, and before the paint.
+      useLayoutEffect(() => {
+        seen.push(document.querySelector("[data-part='char-probe']") === null ? null : "measured");
+      }, []);
+      return <Widths />;
+    }
+    render(<Page />);
+    expect(seen).toEqual(["measured"]);
     expect(screen.getByRole("status")).toHaveTextContent("7.25 7.8");
   });
 
