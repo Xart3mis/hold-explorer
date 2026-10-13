@@ -5,6 +5,8 @@ import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { Button } from "../Button/Button";
+import { Checkbox } from "../Checkbox/Checkbox";
+import { ChoiceGroup } from "../ChoiceGroup/ChoiceGroup";
 import { AddFilterChip, FilterChip } from "../FilterChip/FilterChip";
 import { TextField } from "../TextField/TextField";
 import { Popover } from "./Popover";
@@ -89,6 +91,52 @@ describe("Popover", () => {
     render(<Sample />);
     await user.click(screen.getByRole("button", { name: "Filter" }));
     const dialog = screen.getByRole("dialog", { name: "Filter by discipline" });
+    await waitFor(() => {
+      expect(dialog).toHaveFocus();
+    });
+  });
+
+  it("takes a field to be where text is typed: a choice or a checkbox before it does not take the focus", async () => {
+    const user = userEvent.setup();
+    render(
+      <Popover trigger={<Button>Filter</Button>} aria-label="Filter by discipline">
+        <ChoiceGroup
+          label="Match"
+          value="is"
+          onChange={() => undefined}
+          options={[
+            { value: "is", label: "Is" },
+            { value: "is-not", label: "Is not" },
+          ]}
+        />
+        <Checkbox>Only open holds</Checkbox>
+        <input type="hidden" name="field" value="discipline" />
+        <TextField label="Search discipline" />
+      </Popover>,
+    );
+    await user.click(screen.getByRole("button", { name: "Filter" }));
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Search discipline" })).toHaveFocus();
+    });
+  });
+
+  it("keeps the focus on itself when it holds controls and no field to type in", async () => {
+    const user = userEvent.setup();
+    render(
+      <Popover trigger={<Button>Filter</Button>} aria-label="Filter by match">
+        <ChoiceGroup
+          label="Match"
+          value="is"
+          onChange={() => undefined}
+          options={[
+            { value: "is", label: "Is" },
+            { value: "is-not", label: "Is not" },
+          ]}
+        />
+      </Popover>,
+    );
+    await user.click(screen.getByRole("button", { name: "Filter" }));
+    const dialog = screen.getByRole("dialog", { name: "Filter by match" });
     await waitFor(() => {
       expect(dialog).toHaveFocus();
     });

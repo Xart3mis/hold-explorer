@@ -55,8 +55,8 @@
 .popover {
   display: flex;
   flex-direction: column;
-  min-inline-size: max(var(--trigger-width), var(--size-bar-label-width));
-  max-inline-size: var(--size-toast-max-width);
+  min-inline-size: max(var(--trigger-width), var(--size-menu-min-width));
+  max-inline-size: var(--size-menu-max-width);
   border: var(--border-width-thin) solid var(--color-border-default);
   border-radius: var(--radius-md);
   background-color: var(--color-surface-overlay);
@@ -66,19 +66,19 @@
     transform var(--duration-base) var(--ease-out);
 }
 
-.popover[data-entering],
-.popover[data-exiting] {
+/* It arrives with a short move toward its place, and leaves by a fade alone. */
+.popover[data-entering] {
   opacity: 0;
   transform: translateY(calc(-1 * var(--space-1)));
 }
 
-.popover[data-placement="top"][data-entering],
-.popover[data-placement="top"][data-exiting] {
+.popover[data-placement="top"][data-entering] {
   transform: translateY(var(--space-1));
 }
 
 .popover[data-exiting] {
-  transition-duration: var(--duration-fast);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 .menu {
@@ -202,9 +202,7 @@
   }
 
   .popover[data-entering],
-  .popover[data-exiting],
-  .popover[data-placement="top"][data-entering],
-  .popover[data-placement="top"][data-exiting] {
+  .popover[data-placement="top"][data-entering] {
     transform: none;
   }
 }

@@ -23,15 +23,39 @@ export interface PopoverProps {
   className?: string | undefined;
 }
 
+/** The kinds of `input` that text is not typed into: marks, buttons, and what is not shown. */
+const NOT_TEXT = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
+/** Whether text is typed into the element: a text area, or an input of a kind that takes text. */
+function takesText(element: HTMLInputElement | HTMLTextAreaElement): boolean {
+  if (element.disabled) return false;
+  return element instanceof HTMLTextAreaElement || !NOT_TEXT.has(element.type);
+}
+
 /**
  * What a popover holds. When it opens, the first field in it takes the focus: a popover with a
- * field is opened to type in it. Without a field the component library gives the focus to the
- * popover itself.
+ * field is opened to type in it. A field is where text is typed; the hidden input of a checkbox
+ * or of a radio is not one. Without a field the component library gives the focus to the popover
+ * itself.
  */
 function Body({ children }: { children: ReactNode }) {
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    body.current?.querySelector<HTMLElement>("input:not([disabled]), textarea")?.focus();
+    const entries = body.current?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      "input, textarea",
+    );
+    [...(entries ?? [])].find(takesText)?.focus();
   }, []);
   return (
     <div ref={body} className={styles.body}>

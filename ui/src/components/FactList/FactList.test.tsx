@@ -20,6 +20,9 @@ describe("FactList", () => {
     );
     const list = screen.getByRole("list", { name: "File facts" });
     const items = within(list).getAllByRole("listitem");
+    // The roles are written out: a list drawn without its markers loses them in some engines.
+    expect(list).toHaveAttribute("role", "list");
+    for (const item of items) expect(item).toHaveAttribute("role", "listitem");
     // The label first, then the value, each in a part of its own.
     expect(items.map((item) => [...item.children].map((part) => part.textContent))).toEqual([
       ["File", "Holds_2026-10-14.xlsx"],

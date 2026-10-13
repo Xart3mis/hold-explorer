@@ -217,8 +217,8 @@ export function WelcomePage() {
               rowActions={(workspace) => (
                 <Button
                   variant="quiet"
-                  // The spinner is on the row that is being opened; the others wait without one.
                   reservesPendingSpace
+                  // The spinner is on the row that is being opened; the others wait without one.
                   isPending={openWorkspace.isPending && opening === workspace.id}
                   isInert={isBusy}
                   onPress={() => {

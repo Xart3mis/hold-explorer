@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import i18n from "../../text/i18n";
 import { AddFilterChip, FilterChip } from "./FilterChip";
 
 const removeDiscipline = en.filterChip.remove.replace("{{field}}", "Discipline");
@@ -93,11 +94,44 @@ describe("FilterChip", () => {
     await user.tab();
     expect(document.body).toHaveFocus();
     await user.click(chip);
-    chip.focus();
-    await user.keyboard("{Backspace}");
-    await user.keyboard("{Delete}");
+    // A disabled button cannot be focused, so the keys are sent to it directly.
+    for (const key of ["Backspace", "Delete", "Enter", " "]) {
+      fireEvent.keyDown(chip, { key });
+      fireEvent.keyUp(chip, { key });
+    }
     expect(onPress).not.toHaveBeenCalled();
     expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it("is removed by Backspace and by Delete while its remove button has the focus as well", async () => {
+    const { onPress, onRemove, user } = setup();
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole("button", { name: removeDiscipline })).toHaveFocus();
+    await user.keyboard("{Backspace}");
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Delete}");
+    expect(onRemove).toHaveBeenCalledTimes(2);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it("reads the sentence of the catalog in the order the catalog gives it", () => {
+    // A translation may put the value, or the words that negate it, before the field.
+    const sentence = en.filterChip.isNot;
+    i18n.addResource("en", "translation", "filterChip.isNot", "not {{value}} in {{field}}");
+    try {
+      setup({ isNegated: true });
+      const chip = screen.getByRole("button", { name: "not Civil in Discipline" });
+      // The field keeps its own ink wherever it stands, and the rest reads as the value.
+      const field = screen.getByText("Discipline");
+      expect(chip).toContainElement(field);
+      expect(field.tagName).toBe("SPAN");
+      expect(field.className).toContain("field");
+      expect(field.parentElement?.textContent).toBe("not Civil in Discipline");
+      expect(field.parentElement?.childNodes).toHaveLength(4);
+    } finally {
+      i18n.addResource("en", "translation", "filterChip.isNot", sentence);
+    }
   });
 
   it("has no accessibility violation at rest, negated, and disabled", async () => {

@@ -34,7 +34,8 @@
   align-items: center;
   inline-size: 100%;
   min-block-size: var(--density-row-height);
-  padding: 0 var(--space-2) 0 var(--space-1);
+  padding-block: 0;
+  padding-inline: var(--space-1) var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
   background-color: transparent;

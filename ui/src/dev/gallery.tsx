@@ -193,7 +193,7 @@ function Buttons() {
             </Button>
           </Specimen>
           <Specimen name="Pending">
-            <Button variant={variant} isPending>
+            <Button variant={variant} reservesPendingSpace isPending>
               Import
             </Button>
           </Specimen>
@@ -706,6 +706,30 @@ function Chips() {
           />
         </Specimen>
       </Row>
+      <Row label="the X">
+        <Specimen name="Hover">
+          <Forced state="hovered" target="button + button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Pressed">
+          <Forced state="pressed" target="button + button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+        <Specimen name="Hover, while the picker of the chip is open">
+          <Forced state="pressed" target="button">
+            <Forced state="hovered" target="button + button">
+              <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+            </Forced>
+          </Forced>
+        </Specimen>
+        <Specimen name="Focus">
+          <Forced state="focus-visible" target="button + button">
+            <FilterChip field="Discipline" value="Civil" onPress={still} onRemove={still} />
+          </Forced>
+        </Specimen>
+      </Row>
       <Row label="a long value">
         <Specimen name="Cut at the end, at the widest a chip gets">
           <FilterChip
@@ -998,6 +1022,20 @@ function Pickers() {
             <Picker />
           </Popover>
         </Specimen>
+        <Specimen name="Without a field: the popover holds the focus">
+          <Popover trigger={<Button>Size mismatch</Button>} aria-label="Filter by size mismatch">
+            <ChoiceGroup
+              label="Keep holds whose sizes"
+              orientation="horizontal"
+              value="differ"
+              onChange={still}
+              options={[
+                { value: "differ", label: "Differ" },
+                { value: "agree", label: "Agree" },
+              ]}
+            />
+          </Popover>
+        </Specimen>
         <Specimen name="Lined up with the trailing edge">
           <Popover
             trigger={<Button>Filter by text</Button>}
@@ -1078,6 +1116,95 @@ function Pickers() {
             emptyText="No value matches. Type less, or clear the field."
           />
         </StillPopover>
+      </div>
+      <h3 className={styles.subTitle}>
+        Pressed: an unticked and a ticked option, each with the pressed step of its mark; and an
+        option that would keep nothing, not ticked
+      </h3>
+      <div className={styles.pickers}>
+        <Forced state={["hovered", "pressed"]} target='[role="option"]:nth-of-type(2)'>
+          <Forced state={["hovered", "pressed"]} target='[role="option"]:nth-of-type(3)'>
+            <StillPopover>
+              <OptionList
+                aria-label="Disciplines, pressed"
+                selectionMode="multiple"
+                options={[
+                  { key: "civil", label: "Civil", count: 1515 },
+                  { key: "piping", label: "Piping, pressed", count: 1285 },
+                  { key: "process", label: "Process, ticked and pressed", count: 846 },
+                  { key: "vendor", label: "Vendor", count: 0 },
+                  { key: "telecom", label: "Telecom, ticked", count: 0 },
+                ]}
+                selectedKeys={["process", "telecom"]}
+                onSelectionChange={still}
+                emptyText="No value matches."
+              />
+            </StillPopover>
+          </Forced>
+        </Forced>
+        <Forced state={["hovered", "pressed"]} target='[role="option"]:nth-of-type(2)'>
+          <Forced state={["hovered", "pressed"]} target='[role="option"]:nth-of-type(1)'>
+            <StillPopover>
+              <OptionList
+                aria-label="Size mismatch, pressed"
+                selectionMode="single"
+                options={[
+                  { key: "yes", label: "Yes, chosen and pressed", count: 214 },
+                  { key: "no", label: "No, pressed", count: 4828 },
+                  { key: "unknown", label: "Not known", count: 0 },
+                ]}
+                selectedKeys={["yes"]}
+                onSelectionChange={still}
+                emptyText="No value matches."
+              />
+            </StillPopover>
+          </Forced>
+        </Forced>
+      </div>
+      <h3 className={styles.subTitle}>
+        Focus where there is no option to carry it: an empty list and a first read are the stop for
+        Tab themselves; and a popover without a field holds the focus itself
+      </h3>
+      <div className={styles.pickers}>
+        <Forced state="focus-visible" target='[role="listbox"]'>
+          <StillPopover>
+            <OptionList
+              aria-label="Values, none, focused"
+              selectionMode="multiple"
+              options={[]}
+              selectedKeys={[]}
+              onSelectionChange={still}
+              emptyText="No value matches."
+            />
+          </StillPopover>
+        </Forced>
+        <Forced state="focus-visible" target='[role="listbox"]'>
+          <StillPopover>
+            <OptionList
+              aria-label="Values, first read, focused"
+              selectionMode="multiple"
+              options={[]}
+              selectedKeys={[]}
+              onSelectionChange={still}
+              isLoading
+              emptyText="No value matches."
+            />
+          </StillPopover>
+        </Forced>
+        <Forced state="focus-visible" target={`.${popoverStyles.dialog ?? ""}`}>
+          <StillPopover>
+            <ChoiceGroup
+              label="Keep holds whose sizes"
+              orientation="horizontal"
+              value="differ"
+              onChange={still}
+              options={[
+                { value: "differ", label: "Differ" },
+                { value: "agree", label: "Agree" },
+              ]}
+            />
+          </StillPopover>
+        </Forced>
       </div>
       <h3 className={styles.subTitle}>
         On the panel surface, outside an overlay: the hover fill of a row

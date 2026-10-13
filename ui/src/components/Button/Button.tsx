@@ -11,29 +11,13 @@ export type ButtonVariant = "primary" | "secondary" | "quiet" | "danger";
 
 type Base = Omit<RacButtonProps, "children" | "className" | "style" | "isPending">;
 
-export interface ButtonProps extends Base {
+interface ButtonBase extends Base {
   /**
    * `primary` for the one main action of a region, on the app or the panel surface only;
    * `secondary` (the default) for the others; `quiet` for actions inside a notice, a toast, or a
    * row; `danger` only where the action destroys something and cannot be undone.
    */
   variant?: ButtonVariant;
-  /** An icon before the label. */
-  icon?: LucideIcon;
-  /**
-   * While true the button shows the spinner in place of its icon, keeps its label and its colors,
-   * ignores presses, and is announced as busy. A button without an icon that can become pending
-   * also takes `reservesPendingSpace`, or the spinner would make it wider when it arrives.
-   */
-  isPending?: boolean;
-  /**
-   * Keeps the room of the spinner free at rest, half on each side of the label, so the spinner
-   * arrives without changing the width. Give it to every button without an icon that can become
-   * pending. Such a button is wider at rest than its label needs, which is why the room is asked
-   * for by name and is not a side effect of `isPending`. A button with an icon needs none: the
-   * spinner takes the place of the icon, and the property does nothing.
-   */
-  reservesPendingSpace?: boolean;
   /**
    * While true the button waits for an action that another control started and that this one
    * would conflict with. It shows no spinner and keeps its icon, its colors, its width, and its
@@ -46,6 +30,56 @@ export interface ButtonProps extends Base {
   children: ReactNode;
   className?: string | undefined;
 }
+
+/** A button that never waits for its own action. */
+interface NeverPending {
+  /** An icon before the label. */
+  icon?: LucideIcon;
+  isPending?: never;
+  /** The room of the spinner, for a button that only ever waits for another control. */
+  reservesPendingSpace?: boolean;
+}
+
+/** A button with an icon that can become pending: the spinner takes the place of the icon. */
+interface PendingWithIcon {
+  /** An icon before the label. While the button is pending the spinner stands in its place. */
+  icon: LucideIcon;
+  /**
+   * While true the button shows the spinner in place of its icon, keeps its label, its colors,
+   * and its width, ignores presses, and is announced as busy.
+   */
+  isPending: boolean;
+  /** Not needed beside an icon, and without effect there. */
+  reservesPendingSpace?: boolean;
+}
+
+/**
+ * A button without an icon that can become pending. It has to say whether it keeps the room of
+ * the spinner free, because its width changes when the spinner arrives otherwise.
+ */
+interface PendingWithoutIcon {
+  icon?: never;
+  /**
+   * While true the button shows the spinner before its label, keeps its label and its colors,
+   * ignores presses, and is announced as busy.
+   */
+  isPending: boolean;
+  /**
+   * `true` keeps the room of the spinner free at rest, half on each side of the label, so the
+   * spinner arrives without changing the width. The button is then wider at rest than its label
+   * needs, which is why the room is asked for by name and is not a side effect of `isPending`.
+   * `false` says that the button may grow when it becomes pending: only where nothing beside it
+   * moves when it does.
+   */
+  reservesPendingSpace: boolean;
+}
+
+/**
+ * A button never waits, or waits with an icon, or waits without one and says whether it keeps
+ * room for the spinner. Passing `isPending` to a button without an icon and leaving
+ * `reservesPendingSpace` out is a type error.
+ */
+export type ButtonProps = ButtonBase & (NeverPending | PendingWithIcon | PendingWithoutIcon);
 
 /** A button. It names its action with a verb. */
 export function Button({

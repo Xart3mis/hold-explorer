@@ -55,8 +55,8 @@ export interface FilterChipProps {
 
 /**
  * One active filter: a pill that holds two controls. The field and the value are a button that
- * opens the filter; the X after them removes it. Backspace or Delete on the chip removes it as
- * well. It can be the trigger of a `Popover`: only its first button opens the popover.
+ * opens the filter; the X after them removes it. Backspace or Delete removes it as well, from
+ * either of the two. It can be the trigger of a `Popover`: only its first button opens the popover.
  */
 export function FilterChip({
   field,
@@ -93,7 +93,16 @@ export function FilterChip({
             beside. This one hears its own click and nothing else.
           */}
           <Focusable>
-            <button type="button" aria-label={remove} onClick={onRemove} className={styles.remove}>
+            <button
+              type="button"
+              aria-label={remove}
+              onClick={onRemove}
+              // The keys that remove the chip do so from either of its two controls.
+              onKeyDown={(event) => {
+                if (event.key === "Backspace" || event.key === "Delete") onRemove();
+              }}
+              className={styles.remove}
+            >
               <Icon icon={X} />
             </button>
           </Focusable>

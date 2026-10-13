@@ -39,9 +39,16 @@ export interface FactListProps {
 export function FactList({ items, isLoading, className, ...props }: FactListProps) {
   const loading = isLoading === true;
   return (
-    <ul {...props} aria-busy={loading ? "true" : undefined} className={cx(styles.list, className)}>
+    // The roles are written out. A list that is drawn without its markers is not told as a list
+    // by every engine, and the web view of the Linux build is one that drops it.
+    <div
+      role="list"
+      {...props}
+      aria-busy={loading ? "true" : undefined}
+      className={cx(styles.list, className)}
+    >
       {items.map((item) => (
-        <li key={item.label} className={styles.row}>
+        <div key={item.label} role="listitem" className={styles.row}>
           <span className={styles.label}>{item.label}</span>
           {loading ? (
             <span className={styles.value}>
@@ -61,13 +68,13 @@ export function FactList({ items, isLoading, className, ...props }: FactListProp
               )}
             </>
           )}
-        </li>
+        </div>
       ))}
       {loading ? (
-        <li className={styles.status}>
+        <div role="listitem" className={styles.status}>
           <VisuallyHidden>{t("common.loading")}</VisuallyHidden>
-        </li>
+        </div>
       ) : null}
-    </ul>
+    </div>
   );
 }

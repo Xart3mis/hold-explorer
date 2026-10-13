@@ -26,19 +26,19 @@
     transform var(--duration-base) var(--ease-out);
 }
 
-.popover[data-entering],
-.popover[data-exiting] {
+/* It arrives with a short move toward its place, and leaves by a fade alone. */
+.popover[data-entering] {
   opacity: 0;
   transform: translateY(calc(-1 * var(--space-1)));
 }
 
-.popover[data-placement="top"][data-entering],
-.popover[data-placement="top"][data-exiting] {
+.popover[data-placement="top"][data-entering] {
   transform: translateY(var(--space-1));
 }
 
 .popover[data-exiting] {
-  transition-duration: var(--duration-fast);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
 
 /*
@@ -60,8 +60,12 @@
   padding: var(--space-3);
 }
 
-/* The popover itself has the focus until the first Tab; the ring, inset, says so. */
-.dialog:focus-visible {
+/*
+ * The popover itself has the focus until the first Tab; the ring, inset, says so. The browser
+ * says when that is; the attribute is how the gallery shows the state without the focus.
+ */
+.dialog:focus-visible,
+.dialog[data-focus-visible] {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: calc(-1 * var(--focus-ring-width));
 }
@@ -73,9 +77,7 @@
   }
 
   .popover[data-entering],
-  .popover[data-exiting],
-  .popover[data-placement="top"][data-entering],
-  .popover[data-placement="top"][data-exiting] {
+  .popover[data-placement="top"][data-entering] {
     transform: none;
   }
 }

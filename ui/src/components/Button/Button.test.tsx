@@ -73,7 +73,7 @@ describe("Button", () => {
     const onPress = vi.fn();
     const user = userEvent.setup();
     render(
-      <Button isPending onPress={onPress}>
+      <Button reservesPendingSpace isPending onPress={onPress}>
         Import
       </Button>,
     );
@@ -179,21 +179,22 @@ describe("Button", () => {
     expect(button).not.toHaveAttribute("data-reserve");
   });
 
-  it("reserves no room because it is told whether it is pending: the room is asked for by name", () => {
-    const { rerender } = render(<Button isPending={false}>Import</Button>);
+  it("reserves no room when it says that it keeps none, pending or not", () => {
+    const { rerender } = render(
+      <Button reservesPendingSpace={false} isPending={false}>
+        Import
+      </Button>,
+    );
     const button = screen.getByRole("button", { name: "Import" });
     expect(button).not.toHaveAttribute("data-reserve");
 
-    rerender(<Button isPending>Import</Button>);
-    expect(button).not.toHaveAttribute("data-reserve");
-    expect(button.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
-
     rerender(
-      <Button isPending={false} reservesPendingSpace={false}>
+      <Button reservesPendingSpace={false} isPending>
         Import
       </Button>,
     );
     expect(button).not.toHaveAttribute("data-reserve");
+    expect(button.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
   });
 
   it("reserves no room when it has an icon: the spinner takes the place of the icon", () => {
@@ -247,7 +248,7 @@ describe("Button", () => {
           <Button variant={variant} isDisabled>
             Disabled
           </Button>
-          <Button variant={variant} isPending>
+          <Button variant={variant} reservesPendingSpace isPending>
             Pending
           </Button>
         </>,

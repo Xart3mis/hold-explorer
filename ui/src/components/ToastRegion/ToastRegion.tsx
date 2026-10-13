@@ -276,6 +276,8 @@ export function ToastRegion({ children }: { children: ReactNode }) {
       next.tabIndex = -1;
       next.focus();
     } else if (cameFrom.current?.isConnected === true) cameFrom.current.focus();
+    // No toast stays and where the focus came from is gone: the focus falls to the page, as it
+    // does whenever what held it leaves, and the next Tab starts from the top.
   }, []);
 
   const dismiss = useCallback(

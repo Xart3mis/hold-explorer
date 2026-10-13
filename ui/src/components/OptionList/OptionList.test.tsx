@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -186,6 +188,52 @@ describe("OptionList", () => {
     expect(list.querySelector('[data-part="spinner"]')).toBeNull();
     await user.click(screen.getByRole("option", { name: "Civil" }));
     expect(onSelectionChange).toHaveBeenLastCalledWith(["civil"]);
+  });
+
+  it("shows the focus ring on the list itself when it has no option to carry it", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Held options={[]} />);
+    const list = screen.getByRole("listbox", { name: "Discipline values" });
+    // Without an option the list is the stop for Tab, so the ring has to be its own.
+    await user.tab();
+    expect(list).toHaveFocus();
+    expect(list).toHaveAttribute("data-empty");
+    expect(list).toHaveAttribute("data-focus-visible");
+    expect(list.className).toContain("list");
+
+    // The same on a first read, where the list holds only the line that says it is loading.
+    rerender(<Held options={[]} isLoading />);
+    expect(list).toHaveFocus();
+    expect(list).toHaveAttribute("data-empty");
+    expect(list).toHaveAttribute("data-focus-visible");
+
+    const stylesheet = readFileSync(join(import.meta.dirname, "OptionList.module.css"), "utf8");
+    // The ring is drawn for exactly that state, inset, and nothing takes it away again.
+    expect(stylesheet).toMatch(
+      /\.list\[data-empty\]\[data-focus-visible\]\s*\{[^}]*outline:\s*var\(--focus-ring-width\) solid var\(--color-focus-ring\);[^}]*outline-offset:\s*calc\(-1 \* var\(--focus-ring-width\)\);/,
+    );
+    // A list with options hands the ring to the option the keyboard is on.
+    expect(stylesheet).toMatch(
+      /\.list:focus-visible:not\(\[data-empty\]\)\s*\{[^}]*outline-color: transparent;/,
+    );
+    expect(stylesheet).not.toMatch(/\.list:focus-visible\s*\{/);
+  });
+
+  it("with options, gives the ring to the option the keyboard is on, not to the list", async () => {
+    const user = userEvent.setup();
+    render(<Held />);
+    await user.tab();
+    const list = screen.getByRole("listbox", { name: "Discipline values" });
+    expect(list).not.toHaveAttribute("data-empty");
+    expect(screen.getByRole("option", { name: "Civil" })).toHaveAttribute("data-focus-visible");
+  });
+
+  it("on a re-read dims the counts only, so every label stays readable while it can be ticked", () => {
+    const stylesheet = readFileSync(join(import.meta.dirname, "OptionList.module.css"), "utf8");
+    expect(stylesheet).toMatch(
+      /\.list\[data-stale\] \.count\s*\{[^}]*opacity: var\(--opacity-stale\);/,
+    );
+    expect(stylesheet).not.toMatch(/\.list\[data-stale\]\s*\{/);
   });
 
   it("shows its footer under the list, outside the listbox", () => {

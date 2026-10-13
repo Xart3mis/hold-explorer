@@ -16,28 +16,38 @@
   min-block-size: 0;
   max-block-size: calc(var(--size-option-list-rows) * var(--density-row-height));
   overflow: auto;
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-
-/* A re-read: the options of before, dimmed until the new ones arrive. */
-.list[data-stale] {
-  opacity: var(--opacity-stale);
 }
 
 /*
- * The list itself holds the focus only while the pointer is in charge. The keyboard always puts
- * the focus on an option, and the option shows the ring.
+ * A list with options holds the focus itself only while the pointer is in charge. The keyboard
+ * always puts the focus on an option, and the option shows the ring.
  */
-.list:focus-visible {
+.list:focus-visible:not([data-empty]) {
   outline-color: transparent;
 }
 
+/*
+ * A list without options is the stop for Tab itself: while it is empty, and on a first read.
+ * The ring is then its own, inset, because what holds the list may clip a ring outside it.
+ */
+.list[data-empty][data-focus-visible] {
+  border-radius: var(--radius-sm);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/*
+ * The parts of an option start at its top, each in the line box of body text, so the mark and
+ * the count stay beside the first line of a label that wraps. The room above and below is what
+ * one line has in a row, so an option of one line is as tall as a row.
+ */
 .option {
   display: flex;
   gap: var(--space-2);
-  align-items: center;
+  align-items: flex-start;
   min-block-size: var(--density-row-height);
-  padding: var(--space-1) var(--space-2);
+  padding-block: calc((var(--density-row-height) - var(--line-height-body)) / 2);
+  padding-inline: var(--space-2);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
   font: var(--text-body);
@@ -60,7 +70,17 @@
   font: var(--text-table);
   font-variant-numeric: var(--font-numeric-tabular);
   letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--line-height-body);
   text-align: end;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/*
+ * A re-read: the counts of before, dimmed until the new ones arrive. The labels and the marks
+ * are not what is being read again, and stay as they are: an option can be ticked meanwhile.
+ */
+.list[data-stale] .count {
+  opacity: var(--opacity-stale);
 }
 
 /* Nothing would be kept: quieter, and still there to be chosen or unticked. */
@@ -77,6 +97,9 @@
   justify-content: center;
   inline-size: var(--size-checkbox);
   block-size: var(--size-checkbox);
+
+  /* In the middle of the first line of the label. */
+  margin-block-start: calc((var(--line-height-body) - var(--size-checkbox)) / 2);
   border: var(--border-width-thin) solid var(--color-border-strong);
   border-radius: var(--radius-xs);
   background-color: var(--color-surface-field);
