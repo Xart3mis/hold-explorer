@@ -1,7 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { SLOW } from "../../test/slow";
@@ -67,6 +67,48 @@ function table(props: Partial<Parameters<typeof DataTable<Line>>[0]> = {}) {
       {...props}
     />
   );
+}
+
+// A test that watches the console, an element's size, or a global puts none of them back
+// itself: it may fail before it gets there, and the next test would start with what it left.
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+/**
+ * jsdom observes no sizes. This stand-in for `ResizeObserver` keeps what was asked to be
+ * watched and what would be told, so a test can look and can tell it by hand.
+ */
+function observeSizes() {
+  const observers: { callback: ResizeObserverCallback; targets: Set<Element> }[] = [];
+  class Sizes implements ResizeObserver {
+    private readonly targets = new Set<Element>();
+    constructor(callback: ResizeObserverCallback) {
+      observers.push({ callback, targets: this.targets });
+    }
+    readonly observe = (target: Element) => {
+      this.targets.add(target);
+    };
+    readonly unobserve = (target: Element) => {
+      this.targets.delete(target);
+    };
+    readonly disconnect = () => {
+      this.targets.clear();
+    };
+  }
+  vi.stubGlobal("ResizeObserver", Sizes);
+  return {
+    isWatched: (element: Element) => observers.some(({ targets }) => targets.has(element)),
+    /** Tells every observer that what it watches has another size. */
+    resize: () => {
+      const all = [...observers];
+      const observer = new Sizes(() => undefined);
+      act(() => {
+        for (const { callback } of all) callback([{} as ResizeObserverEntry], observer);
+      });
+    },
+  };
 }
 
 /** The element around the grid, which carries what the stylesheet is told. */
@@ -649,9 +691,9 @@ describe("DataTable in a viewport", () => {
       scrollTable(screen.getByRole("grid"), 190 * ROW);
       // Its end is always in view: every page would ask for the next.
       expect(onLoadMore).not.toHaveBeenCalled();
+      // Said once for this table, however often it looks for its end.
       expect(said).toHaveBeenCalledTimes(1);
       expect(said.mock.calls[0]?.[0]).toMatch(/onLoadMore.*height/s);
-      said.mockRestore();
     },
   );
 
@@ -731,7 +773,23 @@ describe("DataTable in a viewport", () => {
     across.mockReturnValue(1024);
     rerender(table());
     expect(tableRoot().style.getPropertyValue("--table-scrollbar-size")).toBe("0px");
-    vi.restoreAllMocks();
+  });
+
+  it("follows the pinned column when the layout gives it another width and nothing else is resized", () => {
+    const sizes = observeSizes();
+    const { rerender } = render(table());
+    rerender(table());
+    const box = screen.getByRole("columnheader", { name: "Line ID" }).parentElement;
+    if (!box) throw new Error("The pinned header has no box around it.");
+    expect(tableRoot().style.getPropertyValue("--table-pinned-width")).toBe("192px");
+    // The table watches the box the layout sizes for the pinned column, besides its scroller.
+    expect(sizes.isWatched(box)).toBe(true);
+
+    // The pinned column grows and the column that takes a share gives the room: neither the
+    // scroller nor what it holds has another size, and the table has not rendered.
+    box.style.width = "240px";
+    sizes.resize();
+    expect(tableRoot().style.getPropertyValue("--table-pinned-width")).toBe("240px");
   });
 
   it(
@@ -932,18 +990,33 @@ describe("DataTable narrower than its columns", () => {
 });
 
 describe("DataTable taller than the window", () => {
-  // No window is this tall: a table that is, is not kept to a height and shows all it has.
+  // No window is this tall.
   tableViewport({ width: 1024, height: 5000 });
 
   it(
-    "asks for no rows: it does not scroll inside itself, so its end is always in view",
+    "asks for no rows where it fills a container without a height: its end is always in view",
     SLOW,
     () => {
       const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const onLoadMore = vi.fn();
+      // A table that fills its container and is taller than the window is not kept to a
+      // height: it has grown with its rows.
       render(table({ rows: many.slice(0, 200), onLoadMore, height: "fill" }));
       expect(onLoadMore).not.toHaveBeenCalled();
-      said.mockRestore();
+      expect(said).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it(
+    "still asks for rows where it is kept to a number of rows, however short the window is",
+    SLOW,
+    () => {
+      const said = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const onLoadMore = vi.fn();
+      // Twenty rows are taller than a short or a zoomed window, and still a height that is kept.
+      render(table({ rows: many.slice(0, 200), onLoadMore, height: { maxRows: 20 } }));
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+      expect(said).not.toHaveBeenCalled();
     },
   );
 });
@@ -951,31 +1024,19 @@ describe("DataTable taller than the window", () => {
 describe("DataTable in a scroller that grows", () => {
   const size = { width: 1024, height: 100 };
   tableViewport(size);
+  afterEach(() => {
+    size.height = 100;
+  });
 
   it("looks for the end of its rows again when it is resized", () => {
-    // jsdom observes no sizes; this stand-in keeps what would be told, to tell it by hand.
-    const told: ResizeObserverCallback[] = [];
-    class Sizes implements ResizeObserver {
-      constructor(callback: ResizeObserverCallback) {
-        told.push(callback);
-      }
-      readonly observe = () => undefined;
-      readonly unobserve = () => undefined;
-      readonly disconnect = () => undefined;
-    }
-    vi.stubGlobal("ResizeObserver", Sizes);
+    const sizes = observeSizes();
     const onLoadMore = vi.fn();
     render(table({ rows: many.slice(0, 20), onLoadMore }));
     // Twenty rows end 756 px down, and two heights of 100 px do not reach them.
     expect(onLoadMore).not.toHaveBeenCalled();
 
     size.height = 400;
-    const observer = new Sizes(() => undefined);
-    act(() => {
-      for (const callback of [...told]) callback([{} as ResizeObserverEntry], observer);
-    });
+    sizes.resize();
     expect(onLoadMore).toHaveBeenCalledTimes(1);
-    size.height = 100;
-    vi.unstubAllGlobals();
   });
 });

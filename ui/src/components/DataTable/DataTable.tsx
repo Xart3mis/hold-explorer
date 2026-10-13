@@ -322,12 +322,9 @@ function PlaceholderRow({
   );
 }
 
-let warnedOfUnboundedHeight = false;
-
-/** Said once, in a development build, so a caller notices: see `onLoadMore`. */
+/** Said in a development build, once by each table it is true of, so a caller notices: see `onLoadMore`. */
 function warnOfUnboundedHeight(): void {
-  if (!import.meta.env.DEV || warnedOfUnboundedHeight) return;
-  warnedOfUnboundedHeight = true;
+  if (!import.meta.env.DEV) return;
   console.error(
     "DataTable was given onLoadMore, but its height is not bounded: it is as tall as its rows, " +
       "so the end of its rows is always in view and it would ask for every page at once. It asks " +
@@ -492,6 +489,7 @@ export function DataTable<Item>({
   // The end of the rows is near once less than the height of the visible part is left below it.
   // `asked` holds how many rows there were at the last request of this stay at the end.
   const asked = useRef<number | null>(null);
+  const warned = useRef(false);
   const lookForEnd = () => {
     const element = scroller.current;
     if (element === null) return;
@@ -503,10 +501,18 @@ export function DataTable<Item>({
       return;
     }
     if (onLoadMore === undefined || isLoadingMore === true) return;
-    // A table that is as tall as its rows does not scroll inside itself: no height keeps it, or
-    // it has grown past the window. Its end is always near, and each page would ask for the next.
-    if (maxRows === Number.POSITIVE_INFINITY || element.clientHeight > window.innerHeight) {
-      warnOfUnboundedHeight();
+    // A table that is as tall as its rows does not scroll inside itself, so its end is always
+    // near and each page would ask for the next. That is a table without a number of rows to
+    // stop at, and a table that fills a container which has no height: it has grown with its
+    // rows, past the window. A table kept to a number of rows is kept to a height, also where
+    // the window is shorter than that.
+    const isUnbounded =
+      height === "fill"
+        ? element.clientHeight > window.innerHeight
+        : maxRows === Number.POSITIVE_INFINITY;
+    if (isUnbounded) {
+      if (!warned.current) warnOfUnboundedHeight();
+      warned.current = true;
       return;
     }
     if (asked.current !== null && rows.length <= asked.current) return;
@@ -517,10 +523,18 @@ export function DataTable<Item>({
   const measureScroller = () => {
     const element = scroller.current;
     if (element === null) return;
-    // The layout writes the width it gave a column on the box around its header.
+    // The layout writes the width it gave a column on the box around its header. That box is
+    // watched as well: a pinned column may get another width while the scroller and what it
+    // holds keep their size, when a column that takes a share gives the room.
     let pinned = 0;
     for (const header of element.querySelectorAll('[role="columnheader"][data-pinned]')) {
-      pinned += Number.parseFloat(header.parentElement?.style.width ?? "") || 0;
+      const box = header.parentElement;
+      if (box === null) continue;
+      pinned += Number.parseFloat(box.style.width) || 0;
+      if (sizes.current !== null && !watched.current.has(box)) {
+        watched.current.add(box);
+        sizes.current.observe(box);
+      }
     }
     // A scrollbar along the lower edge is the part of the height that shows no rows.
     const scrollbar =
@@ -532,6 +546,9 @@ export function DataTable<Item>({
     );
   };
   const afterLayout = useRef<() => void>(() => undefined);
+  // What tells of a resize, where there is such a thing, and the boxes it was asked to watch.
+  const sizes = useRef<ResizeObserver | null>(null);
+  const watched = useRef(new WeakSet<Element>());
   // After every render: rows that arrived, a page that ended, columns of another width, or a
   // table that starts with its end in view. It reads a few numbers of the scroller, asks for
   // nothing twice, and renders again only when a number is another one.
@@ -540,23 +557,27 @@ export function DataTable<Item>({
       measureScroller();
       lookForEnd();
     };
+    // And whenever the scroller is resized, or the box it scrolls, which has another size with
+    // other rows and other columns: a window that grows may bring the end into view, and gives
+    // the columns other widths. It is watched from the first render on.
+    const element = scroller.current;
+    if (sizes.current === null && element !== null && typeof ResizeObserver !== "undefined") {
+      sizes.current = new ResizeObserver(() => {
+        afterLayout.current();
+      });
+      watched.current = new WeakSet();
+      sizes.current.observe(element);
+      if (element.firstElementChild !== null) sizes.current.observe(element.firstElementChild);
+    }
     afterLayout.current();
   });
-  // And whenever the scroller is resized: a window that grows may bring the end into view, and
-  // gives the columns other widths.
-  useEffect(() => {
-    const element = scroller.current;
-    if (element === null || typeof ResizeObserver === "undefined") return;
-    const sizes = new ResizeObserver(() => {
-      afterLayout.current();
-    });
-    sizes.observe(element);
-    // What the scroller holds changes size as well: with the rows, and with the columns.
-    if (element.firstElementChild !== null) sizes.observe(element.firstElementChild);
-    return () => {
-      sizes.disconnect();
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      sizes.current?.disconnect();
+      sizes.current = null;
+    },
+    [],
+  );
 
   // The rows are another result when the caller says so, and only then: the table starts at its
   // top again, and the end of the other result is another end.
@@ -577,7 +598,7 @@ export function DataTable<Item>({
         : t("table.rowCountOf", { shown: rows.length, total });
   // While more rows are on their way the line is two sentences, the count first, written as
   // two: read aloud, and as the description of the grid, it must not run together.
-  const status = loadingMore ? t("table.countLoadingMore", { count }) : count;
+  const status = loadingMore ? t("table.countLoadingMore", { line: count }) : count;
   const isEmpty = !loading && rows.length === 0;
 
   return (
