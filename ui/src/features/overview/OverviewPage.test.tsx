@@ -357,6 +357,24 @@ describe("the Overview with a snapshot", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
   });
 
+  it(
+    "gives the counts of a group's table the room of its widest count, and its name the rest",
+    SLOW,
+    async () => {
+      const { user, overview } = renderOverview();
+      await loaded(overview);
+      await user.click(disciplineSwitch());
+      const grid = screen.getByRole("grid", { name: text.byDiscipline });
+      const width = (name: string) =>
+        within(grid).getByRole("columnheader", { name }).parentElement?.style.width;
+      // Where nothing is laid out a figure is 7 px wide and the padding 12 px: the widest count,
+      // "1,515", is four figures and a separator. Six characters for every count would be 66 px.
+      expect(width(text.columnHolds)).toBe("58px");
+      // "Lines" needs more than three figures do, so the header decides.
+      expect(width(text.columnLines)).toBe("54px");
+    },
+  );
+
   it("shows a group as a table with the same rows in the same order", SLOW, async () => {
     const { user, overview } = renderOverview();
     await loaded(overview);

@@ -132,7 +132,9 @@ export function WelcomePage() {
       header: t("workspaces.columnLatest"),
       isSupporting: true,
       // As wide as the longest date that is shown, in whatever way the locale writes one.
-      size: { chars: Math.max(...workspaces.map((workspace) => textChars(latest(workspace)))) },
+      size: {
+        chars: Math.max(1, ...workspaces.map((workspace) => textChars(latest(workspace)))),
+      },
       cell: latest,
     },
   ];

@@ -22,6 +22,7 @@ import {
   StatTileGroup,
   VisuallyHidden,
   type DataTableColumn,
+  textChars,
 } from "../../components";
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -106,8 +107,10 @@ interface GroupSectionProps {
   onAsTableChange: (asTable: boolean) => void;
 }
 
-/** The room of a count in the table of a group: five figures and their separator. */
-const COUNT_CHARS = 6;
+/** The room the widest of the counts shown needs, so the name of the group gets the rest. */
+function countChars(counts: readonly number[]): number {
+  return Math.max(1, ...counts.map((count) => textChars(formatCount(count))));
+}
 
 /** The least room of the name of a group before its table scrolls sideways. */
 const LABEL_CHARS = 16;
@@ -146,7 +149,7 @@ function GroupSection({
       header: t("overview.columnHolds"),
       cell: (group) => formatCount(group.holds),
       kind: "number",
-      size: { chars: COUNT_CHARS },
+      size: { chars: countChars(rows.map((group) => group.holds)) },
     },
     {
       id: "lines",
@@ -154,7 +157,7 @@ function GroupSection({
       cell: (group) => formatCount(group.lines),
       kind: "number",
       isSupporting: true,
-      size: { chars: COUNT_CHARS },
+      size: { chars: countChars(rows.map((group) => group.lines)) },
     },
   ];
 

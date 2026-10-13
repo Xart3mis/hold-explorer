@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { memo, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -73,6 +73,77 @@ function roomOf(
   const longest = Math.max(1, ...preview.map((row) => room(row[column] ?? "")));
   return isLineId ? longest : Math.min(longest, VALUE_CHARS);
 }
+
+/** The key of a row of the preview. */
+function previewKey(row: PreviewRow): string {
+  return row.key;
+}
+
+/**
+ * The first rows of the file as a table, each column under its header and the field it
+ * supplies. It depends on the file and the mapping alone and is rendered again only for another
+ * of either: the page above it renders at every choice and while the review is on its way, and
+ * none of that changes a row.
+ */
+const Preview = memo(function Preview({
+  headers,
+  preview,
+  fields,
+}: {
+  headers: readonly string[];
+  preview: readonly (readonly string[])[];
+  fields: Fields;
+}) {
+  const columns = useMemo(
+    () =>
+      headers.map((_, column): DataTableColumn<PreviewRow> => {
+        const owner = fieldOf(fields, column);
+        const header = columnLabel(headers, column);
+        return {
+          // The table keeps its columns and its rows by one set of keys, so each kind has its own.
+          id: `column-${String(column)}`,
+          header:
+            owner === undefined
+              ? header
+              : t("import.mapping.previewMapped", { header, field: fieldLabel(owner) }),
+          // A line ID is written whole, as an identifier is. Any other value is cut at the end
+          // once it is longer than a line that can be read at a glance.
+          ...(owner === "LineId"
+            ? { kind: "identifier" as const, cell: (row: PreviewRow) => row.cells[column] ?? "" }
+            : {
+                cell: (row: PreviewRow) => (
+                  <span className={styles.previewValue}>{row.cells[column] ?? ""}</span>
+                ),
+              }),
+          isRowHeader: column === 0,
+          // A column that supplies no field is written in the quieter ink.
+          isSupporting: owner === undefined,
+          // As wide as the longest of its values that are shown needs: the table scrolls
+          // sideways, nothing is squeezed. A line ID is given all of its room; any other value
+          // at most a line that can be read at a glance. The last column takes what is left of
+          // the line as well.
+          size:
+            column === headers.length - 1
+              ? { flex: 1, minChars: roomOf(preview, column, owner === "LineId") }
+              : { chars: roomOf(preview, column, owner === "LineId") },
+        };
+      }),
+    [headers, preview, fields],
+  );
+  const rows = useMemo(
+    () => preview.map((cells, index): PreviewRow => ({ key: `row-${String(index)}`, cells })),
+    [preview],
+  );
+  return (
+    <DataTable
+      aria-label={t("import.mapping.preview")}
+      columns={columns}
+      rows={rows}
+      rowKey={previewKey}
+      height={PREVIEW_ROWS}
+    />
+  );
+});
 
 /**
  * The mapping step: one select per field, the required ones first, each offering the columns of
@@ -189,39 +260,6 @@ export function ImportMappingPage() {
   // once that mapping was changed and every required field has a column.
   const sentBack =
     sentWith?.kind === "MissingColumns" && (missing.length > 0 || !isChanged) ? sentWith : null;
-
-  const columns = headers.map((_, column): DataTableColumn<PreviewRow> => {
-    const owner = fieldOf(fields, column);
-    const header = columnLabel(headers, column);
-    return {
-      // The table keeps its columns and its rows by one set of keys, so each kind has its own.
-      id: `column-${String(column)}`,
-      header:
-        owner === undefined
-          ? header
-          : t("import.mapping.previewMapped", { header, field: fieldLabel(owner) }),
-      // A line ID is written whole, as an identifier is. Any other value is cut at the end
-      // once it is longer than a line that can be read at a glance.
-      ...(owner === "LineId"
-        ? { kind: "identifier" as const, cell: (row: PreviewRow) => row.cells[column] ?? "" }
-        : {
-            cell: (row: PreviewRow) => (
-              <span className={styles.previewValue}>{row.cells[column] ?? ""}</span>
-            ),
-          }),
-      isRowHeader: column === 0,
-      // A column that supplies no field is written in the quieter ink.
-      isSupporting: owner === undefined,
-      // As wide as the longest of its values that are shown needs: the table scrolls sideways,
-      // nothing is squeezed. A line ID is given all of its room; any other value at most a line
-      // that can be read at a glance. The last column takes what is left of the line as well.
-      size:
-        column === headers.length - 1
-          ? { flex: 1, minChars: roomOf(preview, column, owner === "LineId") }
-          : { chars: roomOf(preview, column, owner === "LineId") },
-    };
-  });
-  const rows = preview.map((cells, index): PreviewRow => ({ key: `row-${String(index)}`, cells }));
 
   return (
     <Page
@@ -354,21 +392,15 @@ export function ImportMappingPage() {
         <section className={styles.section}>
           <SectionTitle level={2}>{t("import.mapping.preview")}</SectionTitle>
           <p className={styles.text}>
-            {rows.length === 0
+            {preview.length === 0
               ? t("import.mapping.previewEmpty")
               : t("import.mapping.previewCaption", {
                   count: file.row_count,
-                  shown: formatCount(rows.length),
+                  shown: formatCount(preview.length),
                 })}
           </p>
-          {rows.length === 0 ? null : (
-            <DataTable
-              aria-label={t("import.mapping.preview")}
-              columns={columns}
-              rows={rows}
-              rowKey={(row) => row.key}
-              height={PREVIEW_ROWS}
-            />
+          {preview.length === 0 ? null : (
+            <Preview headers={headers} preview={preview} fields={fields} />
           )}
         </section>
       </div>
