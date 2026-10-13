@@ -48,7 +48,10 @@
  *    action that left the view as it was, and not when the screen comes back. The data of a
  *    snapshot cannot change under its key, which names the view and the params, and a snapshot
  *    that is replaced gets another id. They are read again only after `keys.snapshots` was
- *    invalidated, and `isRefetching` is true meanwhile.
+ *    invalidated, and `isRefetching` is true meanwhile. There is one exception. After a page
+ *    failed and was not retried, the pages that are loaded are read once more when an action
+ *    ends with the view as it was or when the screen comes back; that clears `error`, so the
+ *    next `loadMore` tries the page that failed again, once.
  * 3. Send a command that changes the open workspace or the selected snapshot, or that may, only
  *    as an action made with `workspaceAction()`. The actions that exist are the hooks of
  *    ui/src/app/actions/; a new one is added there. Those commands are in
@@ -56,8 +59,8 @@
  *    feature cannot send one, and the lint rules refuse the import.
  * 4. A command that changes the data of a snapshot without changing the view (there is none yet;
  *    the first is the edit of a snapshot's date) invalidates `keys.snapshots` once it has
- *    answered, so every reading of every screen is read again. It must: nothing else makes a
- *    paged reading read its pages again.
+ *    answered, so every reading of every screen is read again. It must: apart from the
+ *    exception of rule 2, nothing else makes a paged reading read its pages again.
  *
  * What the three functions do with that:
  *
@@ -418,7 +421,8 @@ export function useSnapshotPages<
     // workspace has ended, and not when the screen comes back. The data of a snapshot cannot
     // change under this key: the key names the view and the params, and a snapshot that is
     // replaced gets another id. So a command that does change the data of a snapshot must
-    // invalidate `keys.snapshots`; nothing else reads these pages again.
+    // invalidate `keys.snapshots`. The one other thing that reads these pages again is a page
+    // that failed: the query library then takes the reading for invalid, whatever is set here.
     staleTime: Infinity,
     enabled: isReadable,
   });

@@ -298,6 +298,8 @@ export default tseslint.config(
   },
   {
     // The bindings are generated: of all the rules, only the one about their imports binds them.
+    // A rule that is added later for all of ui/src/** would bind them as well, and nobody can fix
+    // a generated file by hand: turn such a rule off here, as the rules below are.
     files: ["ui/src/bindings/**/*.ts"],
     rules: {
       ...presetRulesOff,

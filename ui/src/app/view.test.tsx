@@ -1205,6 +1205,86 @@ describe("useSnapshotPages", () => {
     expect(result.current.lines.error).toBeNull();
   });
 
+  /**
+   * A table whose second page failed and was not tried again. The reading fails for every page
+   * after the first until the test says otherwise.
+   */
+  async function afterFailedPage() {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      offset > 0
+        ? Promise.reject(commandFailure("Io", "The workspace file could not be read."))
+        : Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const table = tableWith(read);
+    await waitFor(() => {
+      expect(table.result.current.lines.rows).toHaveLength(2);
+    });
+    act(() => {
+      table.result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(table.result.current.lines.error).toMatchObject({ kind: "Io" });
+    });
+    expect(read.mock.calls.map(([, offset]) => offset)).toEqual([0, 2]);
+    return { ...table, read };
+  }
+
+  // The one state in which loaded pages are read again without an invalidation. The query
+  // library marks a reading whose last fetch failed as invalid, whatever its stale time. These
+  // two cases say what follows from that, so that a new version of the library that does it
+  // otherwise is noticed, and the rule at the top of view.ts is changed with it.
+  it("reads the loaded pages once more when an action ends with the view as it was after a page failed, and then tries that page again when asked", async () => {
+    const { result, finish, read } = await afterFailedPage();
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    await finish(null);
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(3);
+    });
+    await waitFor(() => {
+      expect(result.current.lines.error).toBeNull();
+    });
+    // The page that was loaded is read again, once, and not the page that failed.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(read.mock.calls.map(([, offset]) => offset)).toEqual([0, 2, 0]);
+    expect(result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+    expect(result.current.lines.hasMore).toBe(true);
+
+    // With the error gone, a table that asks for more sends the page that failed one more time.
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.error).toMatchObject({ kind: "Io" });
+    });
+    expect(read.mock.calls.map(([, offset]) => offset)).toEqual([0, 2, 0, 2]);
+    // And only once: the error is set again.
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(4);
+  });
+
+  it("reads the loaded pages once more when the screen comes back after a page failed", async () => {
+    const { unmount, read } = await afterFailedPage();
+    unmount();
+    const back = tableWith(read);
+    await waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(3);
+    });
+    await waitFor(() => {
+      expect(back.result.current.lines.error).toBeNull();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(read.mock.calls.map(([, offset]) => offset)).toEqual([0, 2, 0]);
+    expect(back.result.current.lines.rows).toEqual(["oldest 2:0", "oldest 2:1"]);
+  });
+
   it("ends the loading when a page comes without rows, though the total says there are more", async () => {
     const read = vi.fn<ReadPage>((view, offset, sort) =>
       Promise.resolve(

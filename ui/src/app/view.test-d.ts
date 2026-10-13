@@ -11,7 +11,12 @@ import type { LineRow } from "../bindings/LineRow";
 import type { ValuePage } from "../bindings/ValuePage";
 import { useSnapshotPages, useSnapshotQuery } from "./view";
 
-export function useReadings(spec: FilterSpec, dim: Dim, query: LineQuery, order: HoldQuery) {
+export function useReadings(
+  spec: FilterSpec,
+  dim: Dim,
+  query: LineQuery,
+  order: Omit<HoldQuery, "offset">,
+) {
   // The reading is handed the params in their order, each with the type it has in `params`.
   const values = useSnapshotQuery({
     name: "filterValues",
@@ -33,7 +38,8 @@ export function useReadings(spec: FilterSpec, dim: Dim, query: LineQuery, order:
   // @ts-expect-error the rows of `api.lines` are lines
   const notHolds: readonly HoldRef[] = lines.rows;
 
-  // The holds take their offset inside the query.
+  // The holds take their offset inside the query. The offset comes from the hook, page by page,
+  // so it is no part of the params, which are the key: `read` builds the query from the two.
   const holds = useSnapshotPages({
     name: "holds",
     params: [spec, order],
