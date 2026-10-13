@@ -65,8 +65,10 @@
   --size-icon: 16px;
   --size-icon-stroke: 1.5px;
   --size-checkbox: 16px;
+  --size-radio-dot: 6px;
   --size-tag-height: 20px;
   --size-chip-height: 24px;
+  --size-chip-max-width: 320px;
   --size-bar-height: 8px;
   --size-progress-height: 4px;
   --size-progress-segment: 33.333%;
@@ -76,6 +78,8 @@
   --size-toast-min-width: 280px;
   --size-toast-max-width: 480px;
   --size-tooltip-max-width: 280px;
+  --size-popover-width: 320px;
+  --size-option-list-rows: 8;
   --opacity-stale: 0.6;
   --duration-fast: 150ms;
   --duration-base: 200ms;

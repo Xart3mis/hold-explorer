@@ -15,7 +15,7 @@ This file is the visual specification of Hold Explorer. `PRODUCT.md` says who us
 
 **Creative North Star: "The Ruled Register"**
 
-Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, and focus. Everything else is tinted neutral, the plain single-series bars included.
+Engineering projects run on registers: the line list, the hold register, the document register. A good register is ruled, aligned, and quiet. Figures sit in columns, every row has the same height, and one ink marks what matters today. Hold Explorer is that register on a screen. Rows are separated by hairlines, numbers align on tabular figures, line IDs sit in a monospace column, and a single teal marks the primary action, the current selection, focus, and the progress of something the user started. Everything else is tinted neutral, the plain single-series bars included.
 
 The register is **product**, the color strategy is **Restrained**, and density is **hybrid**: Overview and History are roomy enough to read from across a meeting room; Lines, Breakdown, and Blockers are tables first, as dense as the user chooses.
 
@@ -31,11 +31,11 @@ This system rejects what `PRODUCT.md` lists as anti-references: the startup anal
 **Key Characteristics:**
 
 - One accent, teal, on at most a tenth of any screen. Its rarity is what makes a selection visible.
-- Teal means interactive: the primary action, the selection, focus, a link. Plain data is neutral gray, and a ramp is blue.
+- Teal means interactive: the primary action, the selection, focus, a link, and the progress of an action the user started. Plain data is neutral gray, and a ramp is blue.
 - Neutrals tinted toward the accent hue. No pure black, no pure white, no untinted gray.
 - Four type sizes, each at least 1.25 times the one below. Hierarchy inside a size comes from weight and ink.
 - Hairlines and surface steps before boxes. Flat at rest; shadows only on what floats.
-- Round means filter, square means action: filter chips are pills, everything else has a 4 px corner.
+- Round means filter, square means action: filter chips are pills, everything else has a 4 px corner. The one other round shape is the circle of a radio, which is round so that it cannot be taken for a checkbox.
 - Every state is specified: default, hover, focus, active, disabled, loading, error.
 - Motion marks a state change, lasts 150 to 250 ms, and disappears under reduced motion.
 
@@ -146,7 +146,7 @@ Each state has a text step (text, icon, and control border; at least 4.5:1 on ev
 
 Charts are the only place a fuller palette appears, and every color in a chart does one job. Who wears what:
 
-- **Teal is interaction, never data.** Teal belongs to the accent tokens: the primary action, the current selection, focus, and links. No chart mark, ramp step, or status mark is teal. A bar row that is in the active filter gets the teal selection tint because it is selected; its bar stays neutral.
+- **Teal is interaction, never data.** Teal belongs to the accent tokens: the primary action, the current selection, focus, links, and progress. No chart mark, ramp step, or status mark is teal. A bar row that is in the active filter gets the teal selection tint because it is selected; its bar stays neutral.
 - **Neutral gray is plain data.** A chart with one series has nothing to tell apart, so it uses no hue. Bars by discipline, by hold type, by role, the top blockers, and the open-holds trend are drawn in `--color-chart-neutral`. Length carries the value and the label carries the name.
 - **Blue is magnitude and order.** The heatmap (sequential) and the age bands (ordinal) are ramps of one blue, `--hue-ramp`. A lighter or darker blue means more or older, never a name.
 - **The categorical set is identity.** Six hues, used only when one chart shows several named series at once and the reader has to tell them apart: a stacked trend by discipline, the nodes and legend of the blocker graph. It never decorates a single series.
@@ -301,11 +301,11 @@ Three things are deliberately not in the table:
 | `--color-text-primary` | `--color-surface-app` | 4.5 | text | Content area: tables, bar rows, page headers, empty states. |
 | `--color-text-primary` | `--color-surface-panel` | 4.5 | text | Top bar, sidebar, detail panel, filter bar. |
 | `--color-text-primary` | `--color-surface-raised` | 4.5 | text | Table header, stat tiles. |
-| `--color-text-primary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, tooltips, command palette. |
+| `--color-text-primary` | `--color-surface-overlay` | 4.5 | text | Menus, popovers, option lists, toasts, tooltips, command palette. |
 | `--color-text-primary` | `--color-surface-field` | 4.5 | text | Typed text in fields and selects. |
 | `--color-text-primary` | `--color-surface-hover` | 4.5 | text | Hovered rows, sidebar items, tiles, buttons. |
 | `--color-text-primary` | `--color-surface-pressed` | 4.5 | text | Pressed rows, sidebar items, buttons. |
-| `--color-text-primary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item. |
+| `--color-text-primary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item and option. |
 | `--color-text-primary` | `--color-accent-subtle` | 4.5 | text | Selected row, current sidebar item, active filter chip. |
 | `--color-text-primary` | `--color-accent-subtle-hover` | 4.5 | text | Hover over a selected element. |
 | `--color-text-primary` | `--color-danger-subtle` | 4.5 | text | Danger notice and tag. |
@@ -315,11 +315,11 @@ Three things are deliberately not in the table:
 | `--color-text-secondary` | `--color-surface-app` | 4.5 | text | Content area: tables, bar rows, page headers, empty states. Also the border of a hovered drop zone. |
 | `--color-text-secondary` | `--color-surface-panel` | 4.5 | text | Top bar, sidebar, detail panel, filter bar. |
 | `--color-text-secondary` | `--color-surface-raised` | 4.5 | text | Table header, stat tiles. |
-| `--color-text-secondary` | `--color-surface-overlay` | 4.5 | text | Menus, toasts, tooltips, command palette. |
+| `--color-text-secondary` | `--color-surface-overlay` | 4.5 | text | Menus, popovers, option lists, toasts, tooltips, command palette. |
 | `--color-text-secondary` | `--color-surface-field` | 4.5 | text | Typed text in fields and selects. |
 | `--color-text-secondary` | `--color-surface-hover` | 4.5 | text | Hovered rows, sidebar items, tiles, buttons. |
 | `--color-text-secondary` | `--color-surface-pressed` | 4.5 | text | Pressed rows, sidebar items, buttons. |
-| `--color-text-secondary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item. |
+| `--color-text-secondary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item and option; the count of a highlighted option, and the border of its unticked mark. |
 | `--color-text-secondary` | `--color-accent-subtle` | 4.5 | text | Selected row, current sidebar item, active filter chip. |
 | `--color-text-secondary` | `--color-accent-subtle-hover` | 4.5 | text | Hover over a selected element. |
 | `--color-text-secondary` | `--color-danger-subtle` | 4.5 | text | Danger notice and tag. |
@@ -349,9 +349,9 @@ Three things are deliberately not in the table:
 | `--color-accent-text` | `--color-warning-subtle` | 4.5 | text | A link inside a warning notice. |
 | `--color-accent-text` | `--color-success-subtle` | 4.5 | text | A link inside a success notice. |
 | `--color-accent-text` | `--color-info-subtle` | 4.5 | text | A link inside a info notice. |
-| `--color-text-on-accent` | `--color-accent` | 4.5 | text | Primary button label, check mark. |
-| `--color-text-on-accent` | `--color-accent-hover` | 4.5 | text | Primary button label, hover. |
-| `--color-text-on-accent` | `--color-accent-active` | 4.5 | text | Primary button label, pressed. |
+| `--color-text-on-accent` | `--color-accent` | 4.5 | text | Primary button label, check mark, the dot of a chosen radio. |
+| `--color-text-on-accent` | `--color-accent-hover` | 4.5 | text | Primary button label, check mark, and radio dot, hover. |
+| `--color-text-on-accent` | `--color-accent-active` | 4.5 | text | Primary button label, check mark, and radio dot, pressed. |
 | `--color-danger-text` | `--color-danger-subtle` | 4.5 | text | Danger icon and state tag text on its own tint. |
 | `--color-danger-text` | `--color-surface-app` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-surface-panel` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
@@ -399,20 +399,20 @@ Three things are deliberately not in the table:
 | `--color-chart-text-inverse` | `--color-chart-seq-5` | 4.5 | text | Heatmap cell label, steps 5 to 7. |
 | `--color-chart-text-inverse` | `--color-chart-seq-6` | 4.5 | text | Heatmap cell label, steps 5 to 7. |
 | `--color-chart-text-inverse` | `--color-chart-seq-7` | 4.5 | text | Heatmap cell label, steps 5 to 7. |
-| `--color-border-strong` | `--color-surface-app` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-panel` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-raised` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-overlay` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-field` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-hover` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-border-strong` | `--color-surface-pressed` | 3 | control-border | Border of a field, select, unchecked checkbox, secondary button, add-filter chip, drop zone. |
-| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-panel` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-raised` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-border-strong` | `--color-surface-app` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-panel` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-raised` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-overlay` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-field` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-hover` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-border-strong` | `--color-surface-pressed` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
+| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-panel` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-raised` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-danger-text` | `--color-surface-app` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-panel` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-field` | 3 | control-border | Border of a field in error and of a danger button. |
@@ -434,7 +434,7 @@ Three things are deliberately not in the table:
 
 ### Named Rules
 
-**The One Ink Rule.** Teal is used for the primary action, the current selection, focus, and links, on at most a tenth of a screen. Anything teal can be acted on or is selected. It is never used for decoration, for headings, for icons that are not interactive, or for data: plain data is neutral gray (`--color-chart-neutral`), ramps are blue, and no chart color lies within 25 degrees of the accent hue.
+**The One Ink Rule.** Teal is used for the primary action, the current selection, focus, links, and progress, on at most a tenth of a screen. Anything teal can be acted on, is selected, or is the progress of an action the user started: the fill of a progress bar is the answer of the interface to a press, so it wears the ink of the press. It is never used for decoration, for headings, for icons that are not interactive, or for data: plain data is neutral gray (`--color-chart-neutral`), ramps are blue, and no chart color lies within 25 degrees of the accent hue.
 
 **The Every Mark Rule.** A chart mark clears 3:1 on every fill that carries marks, in both themes. There is no list of approved combinations to keep up to date and no exception to remember: the checker runs all of them.
 
@@ -606,7 +606,7 @@ Every component a screen of the first desktop version needs is specified here wi
 | `--radius-sm` | `4px` | Controls: buttons, fields, selects, tags, sidebar items, menu items. |
 | `--radius-md` | `6px` | Containers: stat tile group, notice, menu, drop zone. |
 | `--radius-lg` | `8px` | Floating surfaces: toast, command palette. |
-| `--radius-full` | `999px` | Filter chips and the progress track. |
+| `--radius-full` | `999px` | Filter chips, the progress track, and the circle of a radio. |
 
 **Borders and focus.**
 
@@ -625,18 +625,22 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 |---|---|---|
 | `--size-icon` | `16px` | Every icon, and the spinner. |
 | `--size-icon-stroke` | `1.5px` | Stroke width of every icon. |
-| `--size-checkbox` | `16px` | The checkbox box. |
+| `--size-checkbox` | `16px` | The checkbox box and the circle of a radio. |
+| `--size-radio-dot` | `6px` | The dot inside a chosen radio. |
 | `--size-tag-height` | `20px` | Height of a tag. |
 | `--size-chip-height` | `24px` | Height of a filter chip. |
+| `--size-chip-max-width` | `320px` | Widest filter chip. A longer value is cut at the end with an ellipsis. |
 | `--size-bar-height` | `8px` | Thickness of the bar in a bar row. |
 | `--size-progress-height` | `4px` | Thickness of the progress track. |
 | `--size-progress-segment` | `33.333%` | Width of the travelling segment of an indeterminate progress bar, as a share of the track. |
-| `--size-bar-label-width` | `180px` | Width of the label column of a bar row group. |
+| `--size-bar-label-width` | `180px` | Width of the label column of a bar row group and of a fact list. |
 | `--size-stat-tile-min-width` | `160px` | Narrowest stat tile before the row wraps. |
 | `--size-dropzone-min-height` | `200px` | Least height of a drop zone. |
 | `--size-toast-min-width` | `280px` | Narrowest toast. |
 | `--size-toast-max-width` | `480px` | Widest toast. |
 | `--size-tooltip-max-width` | `280px` | Widest tooltip; longer text wraps. |
+| `--size-popover-width` | `320px` | Width of a popover. It does not change with what the popover holds. |
+| `--size-option-list-rows` | `8` | How many rows of an option list show before the list scrolls. |
 | `--opacity-stale` | `0.6` | Opacity of the previous render while a refetch is in flight. |
 
 Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name. The one exception is the separator of a breadcrumb, which stands between two labels and is decoration.
@@ -690,6 +694,20 @@ Only `opacity`, `transform`, `color`, `background-color`, `border-color`, and `o
 
 Regions and their surfaces: top bar, sidebar, filter bar, and detail panel are `--color-surface-panel`; the content area is `--color-surface-app`. Regions are separated by a `--border-width-thin` hairline in `--color-border-default`, never by a shadow. The sidebar and the detail panel scroll on their own; the top bar never scrolls. Content is left-aligned; Overview does not center itself in a wide window.
 
+**Page widths.** A page has one of three widths, and what the page is for decides which. A page never picks a width of its own.
+
+- **Form width**, at most `--layout-form-max-width`: a page that is filled in or read from top to bottom. Settings, the welcome page, the import page, the sheet step, the import review, a coming soon screen, and the page for an address that does not exist. Running text inside it is still at most `--layout-prose-max-width` wide.
+- **Content width**, at most `--layout-content-max-width`: a page of figures and charts that is read across. Overview and History. Wider than this, bars and tiles stretch until a value sits too far from its label.
+- **Full width**, the whole content area: a page whose table is the page. Lines, Breakdown, and Blockers, and any later page that is a table first. A table is never capped: more width shows more columns.
+- **A form above a table** is a full-width page whose form part keeps the form width, so the fields stay readable and the table after them takes the content area. The mapping step is the one such page: its fields, then the preview of the file.
+
+**Where an error goes.** An error is shown where the user will look for what went wrong, and in one place only. Whatever the place, the text says what happened, why, and how to fix it.
+
+- **The field**, for what the user typed or chose. A date that cannot be read, a name that is taken, a column that is missing: the message replaces the helper line of that field, and the field is marked as in error. Nothing else on the page repeats it.
+- **An inline notice beside what failed**, for an action or a reading that belongs to a place on the page. A button whose action failed has a danger notice directly under or beside it; a table, a bar group, or a panel that could not be read has the notice above it or in its place, with "Try again". The notice stays until the action is tried again or no longer applies, and what was on screen before stays with it.
+- **The shell notice**, above the page, for what outlives the page it started on. An import that fails after the user has moved on, a view that was brought back in step, a folder that cannot be shown: the user is no longer where it started, so the shell says it on whatever page is shown, names what it is about, and can be dismissed.
+- **Never a toast and never a modal.** A toast leaves by itself, and an error must not. A failure does not stop the rest of the page from being used.
+
 ### Buttons
 
 Plain and rectangular. A button names its action with a verb.
@@ -701,7 +719,8 @@ Plain and rectangular. A button names its action with a verb.
 - **Danger:** as secondary, with text and border in `--color-danger-text`. Hover and active fill `--color-danger-subtle`. Used only where the action destroys something and cannot be placed behind an undo.
 - **Focus:** the focus ring, on every variant.
 - **Disabled:** fill `--color-surface-disabled`, text `--color-text-disabled`, border `--color-border-default` where the variant has one. Not focusable. A disabled button says why in text beside it. A tooltip may repeat the reason for pointer users, but is never the only place it is given.
-- **Loading:** the label stays, the leading icon becomes the spinner (`--size-icon`, one turn per `--motion-loop-period`), the button keeps its colors, ignores presses, and has `aria-busy`. The width does not change.
+- **The reasons line:** the primary button of a page that waits for something has its reasons directly under the row of buttons, `--space-1` apart when there are several: one sentence per reason in `--text-body` and `--color-text-secondary`, at most `--layout-prose-max-width` wide, each naming what is missing and where ("Choose a column for Line ID."). The line is not an error: nothing is wrong yet, so it has no icon and no state color. It sits in a region that is always on the page and is announced politely when what it holds changes, because a disabled button cannot be reached by Tab; the button is described by that region. When the last reason goes, the line goes and the button is enabled in the same moment.
+- **Loading:** the label stays, the leading icon becomes the spinner (`--size-icon`, one turn per `--motion-loop-period`), the button keeps its colors, ignores presses, and has `aria-busy`. The width does not change: a button without an icon that can become pending keeps the room of the spinner free at rest, half on each side of its label. That room is asked for where the button is built and is not a side effect of anything else, so a button that never waits is no wider than its label needs.
 - **Waiting for another control:** an action shows its spinner on the control that started it, and on no other. While it runs, a control that would start a conflicting action, such as the snapshot selector while another workspace is being opened, is inert: it keeps its colors, its icon, its width, and its place in the Tab order, takes no hover or pressed fill, ignores presses, and has `aria-busy`. It shows no spinner and keeps the look of an enabled control. To assistive technology it is announced as unavailable and busy (`aria-disabled` and `aria-busy`), which is what it is for the moment. It needs no reason beside it: the one control with the spinner says what is running. A button that opens a menu follows the same rule and keeps its chevron.
 - **Error:** a button has no error state of its own. A failed action shows an inline danger notice beside or under the button.
 - **Transitions:** background, border, and text color over `--duration-fast` with `--ease-out`.
@@ -724,6 +743,29 @@ Plain and rectangular. A button names its action with a verb.
 - **Option:** height `--density-row-height`, horizontal padding `--space-2`, corner `--radius-sm`, text `--text-body`. Highlighted by pointer or arrow keys: fill `--color-surface-overlay-hover`. Chosen: text in `--font-weight-medium` with a check icon in `--color-accent-text` at the trailing edge. Disabled: `--color-text-disabled`.
 - **Behavior:** a listbox, not the system control, so it looks the same on Windows and Linux. Arrow keys move, Enter chooses, Esc closes, typing jumps to a match.
 
+### Menu
+
+A button that opens a short list of actions, or of choices, under itself: the workspace switcher, the snapshot selector. A menu holds things to do or to switch to. A value that belongs to a form is a select.
+
+- **Button:** a quiet button with a chevron. Height `--density-control-height`, padding `--space-3` at the leading side and `--space-2` at the trailing side, corner `--radius-sm`, text `--text-label` in `--color-text-secondary`. An optional leading icon, the label, and a chevron at `--size-icon` in `--color-text-muted`, `--space-1-5` apart. The label is the current value ("Unit 573 piping") or the name of what the menu holds. A long label is cut at the end with an ellipsis; the button never grows past the room it is given, and its accessible name is always the full label.
+- **Hover:** fill `--color-surface-hover`, text `--color-text-primary`.
+- **Active and open:** fill `--color-surface-pressed` and text `--color-text-primary`, while the button is pressed and for as long as its menu is open. The button has `aria-expanded="true"` while it is open.
+- **Focus:** the focus ring.
+- **Loading:** while the action the menu started runs, the spinner takes the place of the chevron, the button keeps its colors and its width, opens nothing, and has `aria-busy`.
+- **Waiting for another control:** as for a button: no spinner, the chevron kept, no hover or pressed fill, opens nothing, `aria-disabled` and `aria-busy`.
+- **Disabled:** a menu button is never disabled. A menu with nothing to offer is not shown, and one that has to wait is in one of the two states above.
+- **Menu:** fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens under the button, `--space-1` away, lined up with the leading edge of the button, or with its trailing edge for a button at the trailing side of the window, and above the button where there is no room below. It is as wide as its longest item, never narrower than its button or than `--size-bar-label-width`, and never wider than `--size-toast-max-width`. A menu that is taller than the room it has scrolls inside itself.
+- **Opening:** it fades in and moves `--space-1` toward its place over `--duration-base`, and leaves by fading over `--duration-fast`. Under reduced motion it fades in place.
+- **Item:** at least `--density-row-height` tall, horizontal padding `--space-2`, corner `--radius-sm`, the label in `--text-body` and `--color-text-primary`, on one line. An item may carry a detail after its label, `--space-4` away at the trailing side: `--text-caption` in `--color-text-muted`, with tabular figures ("9,241 holds"). The detail describes the item to assistive technology; it is not part of its name. An action is named by a verb, a choice by its name.
+- **Highlighted:** by the pointer or by the arrow keys, fill `--color-surface-overlay-hover`. The item the keyboard is on also shows the focus ring, inset. An item the pointer is on shows the fill only, so the ring does not follow the pointer down the menu.
+- **Active (pressed):** the highlighted fill stays; the menu closes on release.
+- **Chosen:** in a section that holds a choice, the chosen item is written in `--font-weight-medium` and carries a check icon in `--color-accent-text` at its trailing edge. Every item of that section keeps the room of the check, so the details line up. The items are announced as a set of which one is checked.
+- **Disabled item:** label and detail in `--color-text-disabled`; the arrow keys pass it by.
+- **Section:** a group of items under its name. The name is a line of `--text-caption` in `--color-text-muted`, as tall as an item and lined up with the labels.
+- **Separator:** a `--border-width-thin` line in `--color-border-default` from edge to edge of the menu, with `--space-1` above and below. It is the default border and not the subtle one, which has the lightness of the overlay surface itself in the dark theme.
+- **Behavior:** Enter, Space, or the down arrow opens the menu. The arrow keys move, Home and End jump to the ends, typing jumps to a match, Enter or Space chooses and closes. Esc, or a press outside, closes without choosing. Closing gives the focus back to the button.
+- **Error:** a menu has no error state of its own. What an item started and failed is shown where the error rule of "Where an error goes" puts it.
+
 ### Checkbox
 
 - **Anatomy:** a box of `--size-checkbox` with corner `--radius-xs`, a `--space-2` gap, and a label in `--text-body`. The whole row is the target and is at least `--density-control-height` tall.
@@ -734,6 +776,19 @@ Plain and rectangular. A button names its action with a verb.
 - **Disabled:** fill `--color-surface-disabled`, border `--color-border-default`, mark and label in `--color-text-disabled`.
 - **Loading:** not applicable; a checkbox applies at once.
 - **Error:** border `--color-danger-text` and a message under the group in `--color-danger-text` with an icon.
+
+### Choice group
+
+One choice out of a few that are all worth seeing at once: "Is" or "Is not" in the filter picker. With more than five options, or where room is short, the choice is a select.
+
+- **Anatomy:** a label for the group above (`--text-label`, `--color-text-secondary`), a `--space-1` gap, then the options. An option is a circle of `--size-checkbox` with corner `--radius-full`, a `--space-2` gap, and a label in `--text-body` and `--color-text-primary`. The whole row is the target and is at least `--density-control-height` tall. An option may carry one line of description under its label, starting where the label starts: `--text-caption` in `--color-text-muted`.
+- **Layout:** the options stand one under the other. Two or three options with short labels and no description may stand in a row instead, `--space-4` apart; they wrap as whole options when the row is too narrow.
+- **Unchosen:** fill `--color-surface-field`, `--border-width-thin` border in `--color-border-strong`. Hover: border `--color-text-secondary`. Active (pressed): fill `--color-surface-pressed`, border `--color-text-secondary`.
+- **Chosen:** fill `--color-accent`, border `--color-accent-text`, and a dot of `--size-radio-dot` in `--color-text-on-accent` in the middle. Hover: fill `--color-accent-hover`. Active: fill `--color-accent-active`. These are the steps of a checked checkbox, so the two marks read as one family; the shape tells them apart.
+- **Focus:** the focus ring around the circle. The group is one stop in the Tab order: Tab reaches the chosen option, the arrow keys move to the next or the previous option and choose it, and the choice wraps at both ends.
+- **Disabled:** the whole group. Circles take fill `--color-surface-disabled` and border `--color-border-default`; dot, labels, and descriptions take `--color-text-disabled`. Not focusable. The reason is given in text beside the group.
+- **Loading:** not applicable; a choice applies at once.
+- **Error:** not applicable; one option is always chosen, so the group cannot be left in a state that is wrong.
 
 ### Table
 
@@ -784,6 +839,8 @@ A horizontal bar per category: bars by discipline, hold type, role; top blockers
 - **Age bands:** the one group with a color. Its categories have an order, so each bar takes the ordinal step of its band (`--color-chart-ord-1` to `--color-chart-ord-5`) and the rows stay in band order. An ordinal bar keeps its step in every state; only the row fill changes.
 - **Group:** rows are separated by space, not hairlines, and sorted by value unless the dimension has an order of its own.
 - **Interaction:** the whole row is a button that filters by its category, with `aria-pressed`.
+- **Static:** on a screen that cannot filter by a category, a row only shows it. It is then not a button: it takes no focus and has no hover, pressed, or selected look, so nothing on it says that it can be pressed. A row is one or the other for good: a row that can be pressed always has an action, and a static row never has one.
+- **To assistive technology** a group is a named list, and each row is an item of it that reads its label and then its values. A pressable row is a button inside its item.
 - **Hover:** row fill `--color-surface-hover`, bar `--color-chart-neutral-hover`.
 - **Active (pressed):** row fill `--color-surface-pressed`, bar `--color-chart-neutral-hover`.
 - **In the active filter:** row fill `--color-accent-subtle`, bar `--color-chart-neutral-selected`. The teal tint says the row is selected; the bar stays neutral and takes its strongest step. Hover on such a row: fill `--color-accent-subtle-hover`, bar unchanged.
@@ -810,11 +867,13 @@ A message that belongs to a place on the page and stays until it no longer appli
 A short confirmation that floats, then leaves. The home of Undo.
 
 - **Position:** the bottom left of the content area, `--space-6` from its edges, at `--z-toast`. At most three are stacked, newest at the bottom, `--space-2` apart.
+- **A fourth toast** pushes out the oldest toast that offers no action. A toast that carries Undo is never pushed out: it leaves when its time is up, when it is closed, or when its action is taken. When every toast on screen carries one, nothing is pushed out and the stack is taller than three for the seconds that takes; an undo that disappears early cannot be had back, and a stack of four can.
 - **Shape:** fill `--color-surface-overlay`, `--border-width-thin` border in `--color-border-default`, corner `--radius-lg`, `--shadow-overlay`, padding `--space-3`, between `--size-toast-min-width` and `--size-toast-max-width` wide.
 - **Anatomy:** an optional state icon, the message (`--text-body`, `--color-text-primary`) saying what was done, an action, and a close button. The action is a quiet button whose label is `--color-accent-text`, for example "Undo". Hover fill `--color-surface-overlay-hover`.
 - **Undo:** a destructive action is carried out at once and its toast offers "Undo". `Ctrl+Z` triggers the Undo of the newest toast. There is no confirmation prompt.
 - **Timing:** stays for `--timeout-toast`; the timer pauses while the toast is hovered or holds focus. It enters by fading in and rising `--space-2` over `--duration-base` and leaves by fading over `--duration-fast`.
-- **Focus:** a toast never takes focus. It is announced politely, and its buttons are reachable by Tab and show the focus ring.
+- **Focus:** a toast never takes focus when it appears. It is announced politely, and its buttons are reachable by Tab and show the focus ring. Toasts are reached in the order they appeared, oldest first, after the page.
+- **When a toast that holds the focus goes**, the focus is not dropped. It moves to the toast that came after it, or, when that was the last one, to the toast before it. The toast itself takes it, and shows the focus ring, not one of its buttons: a second press of the same key must not trigger the Undo of another toast. When no toast is left, the focus goes back to where it was before it entered the toasts.
 - **Error:** a failure that needs reading is an inline notice, not a toast.
 
 ### Tooltip
@@ -880,6 +939,49 @@ The way back up from a page that lies below a destination. It is part of the pag
 - **Narrow window:** the trail stays on one line and never wraps. When it does not fit, the ancestors give way first: each is cut at the end with an ellipsis, all of them together, and no item is removed from the trail. An ancestor is never narrower than `--space-6`, which is room for the ellipsis. An ancestor that is cut shows its full label in a tooltip, and its accessible name is always the full label. The current page is never dropped. It keeps its full label as long as any ancestor can still give way, and is cut at the end with an ellipsis only when the ancestors, each at its least width, still leave it too little of the line.
 - **Transitions:** the fill over `--duration-fast` with `--ease-out`.
 
+### Section title
+
+The heading of a part of a page or of a panel.
+
+- **Level 2:** `--text-section-title` in `--color-text-primary`. The sections of a page ("Snapshot date", "Workspace") and the title of the detail panel.
+- **Level 3:** `--text-body-strong` in `--color-text-primary`. A part inside a section, and the parts of the detail panel ("Blockers to clear", "Open holds"). It is told from body text by its weight and its ink, not by a size between two steps.
+- **The level is the heading level** that assistive technology reads. Levels follow the page title, which is level 1, without skipping one.
+- **Shape:** one line of text and nothing else: no icon, no rule under it, no accent color, no count in another ink. Sentence case. It has no margin of its own; what follows it in its section starts `--density-stack-gap` under it, and sections are `--space-6` apart on a dense page and `--space-8` apart on Overview.
+- **States:** none. A section title is not interactive and takes no focus. A title that opens something is a disclosure row.
+
+### Fact list
+
+Pairs of a label and a value, ruled like the rows of a register: the facts of a file on the import review, the mapping in use, the facts of a line or a hold in the detail panel.
+
+- **Container:** none. The list sits on its surface with a hairline in `--color-border-subtle` above its first row. No outer border, no fill, no zebra stripes.
+- **Row:** at least `--density-row-height` tall, `--space-0-5` of padding above and below, a bottom hairline in `--color-border-subtle`, and `--space-3` between its parts. The parts of a row stand on one baseline. A row of one line is therefore centered in its height, and in a row that has grown the label stays beside the first line of its value. A value of several lines keeps the room above and below it that a single line has in a row, so it never runs up to the hairlines.
+- **Label:** a column `--size-bar-label-width` wide, in `--text-label` and `--color-text-secondary`, so the values of a list start on one line.
+- **Value:** `--text-body` in `--color-text-primary`, taking the rest of the row. A value is never cut: a fact list is where the full text is read, so a long value wraps and the row grows.
+- **Identifier:** a line ID, a tag, a blocker item, or a file name is in `--text-mono` and can be selected and copied as the exact source text. A line ID fits on one line in every place the list is used. A file name can have any length, so it breaks where the row ends instead of being cut.
+- **Absent value:** words in `--color-text-muted` that say what is absent ("No project number in the file"). Never an empty cell and never a dash alone.
+- **Action:** a row may end with one quiet button that acts on its fact ("Choose another sheet"), at the trailing edge.
+- **Loading:** on a first load the labels show, because they are known before the values are, and each value is a skeleton line. A re-read dims the page or the panel that holds the list, not the list by itself.
+- **Other states:** none. The list is not interactive: it has no hover, focus, active, or disabled state. A row that leads somewhere does so through its action button. An error belongs to the section that holds the list.
+- **To assistive technology** it is a named list, and each row reads its label and then its value.
+
+### Disclosure row
+
+A row that opens in place: its title and what it counts are on the page at once, and the detail is one press away, on the same page. The skipped rows and the warnings of the import review, and the groups of holds in the detail panel.
+
+- **Row:** the whole first line is one button: at least `--density-row-height` tall, padding `--space-1` at the leading side and `--space-2` at the trailing side, corner `--radius-sm`. It holds a chevron at `--size-icon` in `--color-text-secondary`, a `--space-2` gap, and the title in `--text-label` and `--color-text-primary`. A count may follow at the trailing edge, in `--text-table` and `--color-text-secondary` with tabular figures ("37 times"). Title and count together are the name of the button. The title may be a heading, at the level its place on the page asks for.
+- **Summary:** an optional sentence under the title that is always shown, open or closed: what the row means or what the app did. `--text-body` in `--color-text-secondary`, at most `--layout-prose-max-width` wide, starting where the title starts, past the chevron, with `--space-2` under it.
+- **Action:** a row may carry one quiet button at the trailing edge of its first line. It is outside the button that opens the row, and has its own place in the Tab order.
+- **Detail:** starts where the title starts, with `--space-2` between its parts and `--space-3` under it. It appears at once: nothing is resized over time. It is not on the page while the row is closed, so a closed row costs nothing however much it holds.
+- **Closed:** the chevron points to the trailing side; `aria-expanded="false"`.
+- **Open:** the chevron points down; `aria-expanded="true"`. The row keeps its fill; what shows that it is open is the chevron and the detail.
+- **Hover:** fill `--color-surface-hover` on the button.
+- **Active (pressed):** fill `--color-surface-pressed`.
+- **Focus:** the inset focus ring on the button, because the row runs to the edge of its column. Enter or Space opens and closes it.
+- **Group:** rows follow each other like the rows of a fact list: each has a bottom hairline in `--color-border-subtle`, and the group has the same hairline above its first row.
+- **Disabled:** never. Where there is nothing to open, the row is replaced by a statement in its place: one line of `--text-body` in `--color-text-secondary`, as tall as a row, starting where the titles start ("No rows were skipped"). A row that cannot be opened and does not say why would be a dead control.
+- **Loading and error:** belong to the detail. A detail that is read when the row opens shows its own skeleton, and its failure is an inline notice inside the detail.
+- **Transitions:** the fill over `--duration-fast` with `--ease-out`.
+
 ### Sidebar item
 
 The sidebar lists all nine destinations in two groups: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then, set apart at the bottom of the sidebar above a hairline in `--color-border-subtle`, Rules and Settings.
@@ -897,19 +999,76 @@ The sidebar lists all nine destinations in two groups: Overview, Breakdown, Line
 
 A small, non-interactive label on a row or an item.
 
-- **Shape:** height `--size-tag-height`, horizontal padding `--space-1-5`, corner `--radius-sm`, text `--text-caption`.
+- **Shape:** height `--size-tag-height`, horizontal padding `--space-1-5`, corner `--radius-sm`, text `--text-caption`. One line, never wrapped and never cut: a tag holds a word or two.
 - **Neutral:** text `--color-text-muted`, `--border-width-thin` border in `--color-border-default`, no fill. Used for "Soon" and for plain facts such as "Limited".
-- **State:** fill, border, and text from one state (for example `--color-warning-subtle`, `--color-warning-border`, `--color-warning-text`), always with an icon at the leading edge.
+- **State:** fill, border, and text from one state (for example `--color-warning-subtle`, `--color-warning-border`, `--color-warning-text`), always with an icon at the leading edge. The four states are info, warning, danger, and success.
+- **Icon:** at `--size-icon`, in the color of the text, `--space-1` before it. A state tag cannot be built without one; a neutral tag may have one and usually has none. The icon is decoration to assistive technology: the text of the tag says what it means.
+- **States:** none. A tag is not interactive: it takes no focus and has no hover, active, disabled, loading, or error state, and it keeps its look in every state of the row or the item it sits on. Its text is part of what that row or item reads to assistive technology.
 
 ### Filter chip
 
 - **Shape:** height `--size-chip-height`, horizontal padding `--space-2`, corner `--radius-full`, text `--text-label`. Chips are the only pills in the interface: round means a filter that can be removed.
 - **Active filter:** fill `--color-accent-subtle`, `--border-width-thin` border in `--color-accent-border`, the field name in `--color-text-secondary` and the value in `--color-text-primary`, and a remove button at the trailing edge. Hover `--color-accent-subtle-hover`.
-- **Add filter:** a quiet button in the same pill shape with a `--border-width-thin` border in `--color-border-strong`.
+- **Two controls in one pill.** The field name and the value are one button, which opens the filter to change it. The remove button is a second one: a circle as tall as the chip inside its border, with an X at `--size-icon` in `--color-text-secondary`, `--space-1` after the value. Its accessible name says which filter it removes, and it has a tooltip, as every icon-only button has.
+- **A negated filter** reads the field name, then "is not" and the value. "Is not" is written in the ink of the value, `--color-text-primary`, so the negation is read with the value it turns around and cannot be skipped as part of the label.
+- **A long value** is cut at the end with an ellipsis: a chip is at most `--size-chip-max-width` wide. The accessible name of the chip is always the full text, and the picker it opens lists every value.
+- **Active (pressed):** fill `--color-accent-subtle-hover`, as on hover. The chip keeps that fill for as long as its picker is open.
+- **Remove button:** hover and pressed give the circle the fill `--color-accent-subtle-hover` and the X the ink `--color-text-primary`, while the rest of the chip keeps its fill at rest, so it is clear which of the two controls the pointer is on.
+- **Add filter:** a quiet button in the same pill shape with a `--border-width-thin` border in `--color-border-strong`. A plus icon at `--size-icon`, a `--space-1` gap, and its label, in `--color-text-secondary`. Hover: fill `--color-surface-hover`, text `--color-text-primary`. Active, and while its picker is open: fill `--color-surface-pressed`.
 - **Disabled:** while the filters cannot be changed (an import is running, or the snapshot is being switched), every chip has fill `--color-surface-disabled`, a border in `--color-border-default`, text in `--color-text-disabled`, and no remove button. Disabled chips are not focusable, and a line of `--text-caption` in `--color-text-muted` after the chips says why.
 - **Loading:** a chip has no loading state of its own. A filter applies at once: the chip appears in its final look, and the content it filters keeps its previous render at `--opacity-stale` until the new rows arrive. While the add-filter picker reads its values, the picker shows the spinner (`--size-icon`) beside a label in `--text-caption`.
-- **Focus:** the focus ring on the chip and on its remove button separately. Backspace on a focused chip removes it.
+- **Error:** a chip has no error state. A filter that could not be applied is said by an inline notice above the content it filters.
+- **Focus:** the focus ring on the chip and on its remove button separately. Backspace on a focused chip removes it, and so does Delete.
 - **Clear all:** a quiet button at the end of the row, always visible while any filter is active.
+- **Transitions:** fill, border, and text color over `--duration-fast` with `--ease-out`.
+
+### Popover
+
+A small surface that opens from a control and holds controls of its own: the filter picker. It is what a menu is for a list of items, for anything that is more than a list.
+
+- **Surface:** that of a menu: fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, at `--z-dropdown`. Padding `--space-3`; its parts are `--density-stack-gap` apart.
+- **Size:** `--size-popover-width` wide, whatever it holds, so it does not change width while a list inside it is read again. It is never taller than the room between its control and the edge of the window. When it holds more than fits, the list inside it scrolls and the popover does not.
+- **Placement:** under the control that opened it, `--space-1` away, leading edges lined up. Where there is no room below it opens above, and where there is none at the trailing side it lines up with the trailing edge.
+- **Opening:** as a menu: it fades in and moves `--space-1` toward its place over `--duration-base`, leaves by fading over `--duration-fast`, and fades in place under reduced motion.
+- **The control that opened it** keeps its pressed look and has `aria-expanded="true"` for as long as the popover is open.
+- **Focus:** opening moves the focus into the popover: to the first field it holds, such as a search field, because a popover with a field is opened to type in it, and otherwise to the popover itself, which then shows the inset focus ring. Tab moves through the controls inside and stays inside. Esc, or a press outside, closes it, and closing gives the focus back to the control that opened it.
+- **Not a modal:** there is no scrim. The page behind stays as it is, undimmed, and what the popover changes shows there at once.
+- **What it may hold:** fields, a choice group, an option list, quiet buttons, and text. A quiet button inside takes the hover fill `--color-surface-overlay-hover`. It never holds a primary button: an overlay does not carry one (the Two Surfaces Rule), and a popover has nothing to confirm, because what is chosen in it applies at once.
+- **Name:** it is a dialog to assistive technology and has an accessible name that says what it is for ("Filter by discipline").
+- **Disabled:** a popover is not disabled; the control that opens it is.
+- **Loading and error:** belong to what it holds. A list inside shows its own loading state, and a reading that failed is an inline danger notice inside the popover with "Try again".
+
+### Option list
+
+A list of values to choose from, one or several, each with the count of what it would keep. It is the body of the filter picker.
+
+- **Shape:** options one under the other, with no gap between them. At most `--size-option-list-rows` rows show; a longer list scrolls inside itself. The list has no border and no fill of its own: it lies on the surface of what holds it.
+- **Option:** at least `--density-row-height` tall, horizontal padding `--space-2`, `--space-1` of padding above and below so that a label on several lines keeps clear of its neighbours, corner `--radius-sm`, and `--space-2` between its parts: the mark, the label, and the count.
+- **Label:** `--text-body` in `--color-text-primary`. A label that does not fit wraps and the option grows; it is not cut, because two long values often differ only at the end.
+- **Count:** at the trailing edge, formatted with its thousands separated, in `--text-table` and `--color-text-secondary`, right-aligned on tabular figures so the counts of a list form a column. The count describes the option to assistive technology; the label alone is its name.
+- **Mark, several values:** the box of a checkbox at the leading edge, with every look of that box: unticked, fill `--color-surface-field` and border `--color-border-strong`; ticked, fill `--color-accent`, border `--color-accent-text`, and the check mark in `--color-text-on-accent`.
+- **Mark, one value:** the circle of a choice group, with its dot when chosen. The mark is what says whether choosing another value adds to the choice or replaces it, so it is always shown.
+- **Highlighted:** by the pointer or by the arrow keys, fill `--color-surface-overlay-hover` inside an overlay and `--color-surface-hover` elsewhere, and the border of an unticked mark becomes `--color-text-secondary`, as a checkbox does on hover.
+- **Active (pressed):** the highlighted fill stays, and the mark takes its pressed step.
+- **Chosen:** the mark is ticked. The label keeps its weight, so ticking a value never changes where a line breaks.
+- **Focus:** the list is one stop in the Tab order. The arrow keys move through the options, Home and End jump to the ends, typing jumps to a match, and Space or Enter ticks and unticks the option the keyboard is on. That option shows the inset focus ring; an option the pointer is on shows the fill only.
+- **A count of zero:** label and count in `--color-text-muted`. The option can still be chosen, so a value that was ticked before and no longer matches anything can be unticked.
+- **Empty:** one line in `--text-caption` and `--color-text-muted`, as tall as an option, that says what is absent ("No value matches"). It is never left blank.
+- **Loading, first read:** the spinner at `--size-icon` and a label in `--text-caption` and `--color-text-muted` beside it, in place of the options. The list is marked as busy.
+- **Loading, a re-read:** the options stay at `--opacity-stale` and can still be ticked; the new counts replace them when they arrive. The list is marked as busy meanwhile.
+- **Disabled:** not applicable. A value that cannot be chosen is not listed, and while nothing can be changed the control that opens the list is disabled.
+- **Error:** an inline danger notice in the place of the list, shown by the screen that reads the values.
+- **Footer:** an optional line under the list that does not scroll with it, in `--text-caption` and `--color-text-muted`, with the horizontal padding of an option. It says what the list leaves out: "1,300 more values. Type to narrow."
+- **No search field of its own.** Where a list can be longer than what is shown, a text field above it narrows it. The field is a part of what holds the list, not of the list.
+
+**The filter picker, composed.** A popover that holds, from top to bottom and in Tab order:
+
+1. A text field that narrows the values, with a visible label that names the field being filtered. It takes the focus when the popover opens.
+2. A choice group in a row: "Is" and "Is not". It applies to the whole field.
+3. The option list of the values, with several values to choose and the count each would keep. The list is pulled out by `--space-2` at both sides, so the fill of a highlighted option stops `--space-1` from the edge of the popover, as an item of a menu does, and the labels of the options start on the same line as the field above.
+4. The footer of the list, when more values exist than are listed.
+
+A ticked value applies at once and the popover stays open. The counts are then read again: the list is in its re-read state until they arrive. Nothing in the picker is a button to confirm.
 
 ### Drop zone
 
@@ -936,7 +1095,7 @@ A small, non-interactive label on a row or an item.
 ### Do:
 
 - **Do** take every color, size, radius, and duration from a token in this file. If a value is missing, add a token here first, then use it.
-- **Do** keep teal to the primary action, the current selection, focus, and links. Use `--color-accent-subtle` for selection and `--color-accent` for the one primary button of a region.
+- **Do** keep teal to the primary action, the current selection, focus, links, and progress. Use `--color-accent-subtle` for selection and `--color-accent` for the one primary button of a region.
 - **Do** draw plain data in `--color-chart-neutral`, ramps in the blue of `--hue-ramp`, and several named series in the categorical slots, in slot order.
 - **Do** pair every state color with an icon and a label, and every chart series with a text label and a table view.
 - **Do** combine only foreground and background tokens that appear together in the contrast pairs table, put a chart mark only on a fill that the fills table says carries marks, and run `node tools/design/check-tokens.mjs` after any change to a token.
