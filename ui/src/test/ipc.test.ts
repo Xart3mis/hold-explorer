@@ -96,7 +96,7 @@ describe("a command the test has no handler for", () => {
 
   it("says in its failure what to do about it", async () => {
     mockCommands({});
-    await api.importCancel().catch(() => undefined);
+    await api.importCancel(null).catch(() => undefined);
     let said = "";
     try {
       checkUnhandledCommands();
@@ -119,7 +119,7 @@ describe("a command the test has no handler for", () => {
     expect(checkUnhandledCommands).toThrow(/workspace_list/);
 
     expectUnhandled("workspace_list");
-    await api.importCancel().catch(() => undefined);
+    await api.importCancel(null).catch(() => undefined);
     expect(checkUnhandledCommands).toThrow(/import_cancel/);
   });
 

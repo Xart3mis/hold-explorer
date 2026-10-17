@@ -47,7 +47,7 @@ interface CommandMap {
   import_review: { args: { fields: Fields | null }; result: ImportReview };
   import_check_target: { args: { target: TargetChoice; takenAt: string }; result: TargetCheck };
   import_commit: { args: { request: ImportCommit; onProgress: Progress }; result: ImportDone };
-  import_cancel: { args: Record<string, never>; result: null };
+  import_cancel: { args: { contentHash: string | null }; result: null };
   snapshot_select: { args: { id: number }; result: WorkspaceOpen };
   overview: { args: { spec: FilterSpec; view: ViewRef }; result: OverviewView | null };
   demo_create: { args: Record<string, never>; result: WorkspaceOpen };
@@ -103,7 +103,11 @@ export const api = {
   importReview: (fields: Fields | null) => call("import_review", { fields }),
   importCheckTarget: (target: TargetChoice, takenAt: string) =>
     call("import_check_target", { target, takenAt }),
-  importCancel: () => call("import_cancel", {}),
+  /**
+   * Drops the draft of the file with this content hash; another file's draft stays. `null` drops
+   * the draft of whatever file is open, for a cancel pressed while a file is still being read.
+   */
+  importCancel: (contentHash: string | null) => call("import_cancel", { contentHash }),
   /**
    * The Overview of the snapshot in view; `null` when the workspace has no snapshot. `view` names
    * the workspace and the snapshot the interface shows; when the state holds another, the command

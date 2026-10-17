@@ -163,11 +163,14 @@ pub async fn import_commit<R: Runtime>(
     .await
 }
 
-/// Drops the draft.
+/// Drops the draft of the file with this content hash, or of any file with `None`.
 #[tauri::command]
-pub async fn import_cancel<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    blocking(app, |state| {
-        state.import_cancel();
+pub async fn import_cancel<R: Runtime>(
+    app: AppHandle<R>,
+    content_hash: Option<String>,
+) -> Result<(), CommandError> {
+    blocking(app, move |state| {
+        state.import_cancel(content_hash.as_deref());
         Ok(())
     })
     .await

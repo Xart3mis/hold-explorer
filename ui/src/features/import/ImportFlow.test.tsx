@@ -198,6 +198,50 @@ describe("leaving the import flow", () => {
     await gone(cancel);
   });
 
+  it("lets a late Cancel end only the file it was pressed for", async () => {
+    // The Rust side as far as the draft goes: the file opened last, dropped by a cancel for it.
+    let held: string | null = exportDraft().file.content_hash;
+    let answer: (value: null) => void = () => undefined;
+    const cancel = vi.fn(
+      ({ contentHash }: ArgsOf<"import_cancel">) =>
+        new Promise<null>((resolve) => {
+          answer = (value) => {
+            if (contentHash === null || contentHash === held) held = null;
+            resolve(value);
+          };
+        }),
+    );
+    const other = unmappedDraft();
+    const { user, router } = openFlow("/import/review", {
+      draft: exportDraft(),
+      handlers: {
+        import_review: () => review(),
+        import_check_target: () => freeTarget,
+        import_cancel: cancel,
+        import_open: () => {
+          held = other.file.content_hash;
+          return other;
+        },
+      },
+    });
+    const main = await pageTitled(reviewing.title);
+    await user.click(within(main).getByRole("button", { name: en.common.cancel }));
+    expect(cancel).toHaveBeenCalledWith({ contentHash: exportDraft().file.content_hash });
+
+    // Another file is opened before the cancel is answered.
+    fileDrag.drop([FILE]);
+    await pageTitled(mapping.title);
+    answer(null);
+    // The cancel has been answered, and what its page does with the answer is done.
+    await waitFor(() => {
+      expect(queryClient.isMutating()).toBe(0);
+    });
+
+    expect(held).toBe(other.file.content_hash);
+    expect(queryClient.getQueryData(keys.importDraft)).toEqual(other);
+    expect(router.state.location.pathname).toBe("/import/mapping");
+  });
+
   it("does not cancel anything while the flow moves between its own pages", async () => {
     const { user, router, cancel } = atReview();
     const main = await pageTitled(reviewing.title);

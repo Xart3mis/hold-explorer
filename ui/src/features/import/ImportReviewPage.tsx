@@ -240,7 +240,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
 
   const openIt = (id: string) => {
     if (start.open?.workspace.id === id) {
-      cancel.mutate(OVERVIEW_PATH);
+      cancel.mutate({ to: OVERVIEW_PATH, file: file.content_hash });
       return;
     }
     // Opening a workspace drops the draft on the Rust side as well.
@@ -421,7 +421,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
               reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
-                cancel.mutate(from);
+                cancel.mutate({ to: from, file: draft.file.content_hash });
               }}
             >
               {t("common.cancel")}
@@ -561,7 +561,7 @@ export function ImportReviewPage() {
               reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
-                cancel.mutate(from);
+                cancel.mutate({ to: from, file: draft.file.content_hash });
               }}
             >
               {t("common.cancel")}

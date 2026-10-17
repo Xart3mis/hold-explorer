@@ -371,7 +371,7 @@ export function ImportMappingPage() {
                 isPending={cancel.isPending}
                 isDisabled={review.isPending}
                 onPress={() => {
-                  cancel.mutate(from);
+                  cancel.mutate({ to: from, file: draft.file.content_hash });
                 }}
               >
                 {t("common.cancel")}

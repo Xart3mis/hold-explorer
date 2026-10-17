@@ -156,12 +156,18 @@ export function ImportEntryPage() {
             isPending={cancel.isPending}
             onPress={() => {
               setCancelRequested(true);
-              cancel.mutate(from, {
-                // The import goes on as if Cancel had not been pressed, and the page says why.
-                onError: () => {
-                  setCancelRequested(false);
+              // A file that is being read has no hash yet: the cancel is for whatever it opens.
+              const file =
+                readingPath === undefined ? (stillOpen?.file.content_hash ?? null) : null;
+              cancel.mutate(
+                { to: from, file },
+                {
+                  // The import goes on as if Cancel had not been pressed, and the page says why.
+                  onError: () => {
+                    setCancelRequested(false);
+                  },
                 },
-              });
+              );
             }}
           >
             {t("common.cancel")}

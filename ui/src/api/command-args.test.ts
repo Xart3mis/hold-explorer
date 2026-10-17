@@ -44,7 +44,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   import_check_target: () =>
     api.importCheckTarget(fixture.import_check_target.target, fixture.import_check_target.takenAt),
   import_commit: () => workspaceApi.importCommit(fixture.import_commit.request, () => undefined),
-  import_cancel: () => api.importCancel(),
+  import_cancel: () => api.importCancel(fixture.import_cancel.contentHash),
   snapshot_select: () => workspaceApi.snapshotSelect(fixture.snapshot_select.id),
   overview: () => api.overview(fixture.overview.spec, fixture.overview.view),
   demo_create: () => workspaceApi.demoCreate(),
