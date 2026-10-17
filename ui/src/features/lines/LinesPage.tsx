@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
@@ -161,11 +161,10 @@ function PresetRow({
   onChoose: (query: LineQuery) => void;
 }) {
   const marked = presetOf(query);
-  const group = useRef<HTMLDivElement>(null);
-  useEnterChooses(group);
+  const enterChooses = useEnterChooses();
   return (
     <RadioGroup
-      ref={group}
+      ref={enterChooses}
       aria-label={t("lines.presets.label")}
       orientation="horizontal"
       value={marked}

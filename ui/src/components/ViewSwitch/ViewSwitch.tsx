@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { cx } from "../cx";
 import { useEnterChooses } from "../enterChooses";
@@ -31,12 +30,11 @@ export interface ViewSwitchProps {
  * and choose it, as they do in any radio group; Space and Enter choose the view that has the focus.
  */
 export function ViewSwitch({ views, value, onChange, className, ...props }: ViewSwitchProps) {
-  const group = useRef<HTMLDivElement>(null);
-  useEnterChooses(group);
+  const enterChooses = useEnterChooses();
   return (
     <div className={cx(styles.row, className)}>
       <RadioGroup
-        ref={group}
+        ref={enterChooses}
         aria-label={props["aria-label"]}
         orientation="horizontal"
         value={value}

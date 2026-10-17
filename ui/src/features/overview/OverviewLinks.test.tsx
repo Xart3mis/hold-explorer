@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import en from "../../locales/en.json";
 import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
+import { overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 
 const text = en.overview;
@@ -99,20 +100,25 @@ describe("the Overview leads to Lines", () => {
     expect(within(figures).getByText(text.medianAge).closest("button")).toBeNull();
     // Tab from the title of the page walks the bar, the two tiles, and then every bar of each
     // group after its switch; the figures without a screen are not stops.
+    const disciplineBars = within(
+      screen.getByRole("list", { name: text.byDiscipline }),
+    ).getAllByRole("button");
+    expect(disciplineBars).toHaveLength(overviewView().by_discipline.length);
     const bars = [
-      ...within(screen.getByRole("list", { name: text.byDiscipline })).getAllByRole("button"),
+      ...disciplineBars,
       ...within(screen.getByRole("list", { name: text.byHoldType })).getAllByRole("button"),
     ];
     const reached: Element[] = [];
     screen.getByRole("heading", { level: 1, name: en.destinations.name.overview }).focus();
-    for (let presses = 0; presses < 40; presses += 1) {
+    // Enough presses to pass every stop of the page once: the bar, the tiles, the switches, the bars.
+    for (let presses = 0; presses < bars.length + 12; presses += 1) {
       await user.tab();
       if (document.activeElement !== null) reached.push(document.activeElement);
     }
     const at = (element: Element) => reached.indexOf(element);
     expect(at(must(tiles[0]))).toBeGreaterThan(-1);
     expect(at(must(tiles[1]))).toBe(at(must(tiles[0])) + 1);
-    for (const bar of bars.slice(0, 13)) expect(at(bar)).toBeGreaterThan(at(must(tiles[1])));
+    for (const bar of bars) expect(at(bar)).toBeGreaterThan(at(must(tiles[1])));
     expect(
       reached.some(
         (element) => figures.contains(element) && !tiles.includes(element as HTMLElement),
@@ -121,7 +127,10 @@ describe("the Overview leads to Lines", () => {
 
     // Enter on a tile reached by Tab opens Lines.
     screen.getByRole("heading", { level: 1, name: en.destinations.name.overview }).focus();
-    while (document.activeElement !== tiles[0]) await user.tab();
+    for (let presses = 0; presses < 40 && document.activeElement !== tiles[0]; presses += 1) {
+      await user.tab();
+    }
+    expect(tiles[0]).toHaveFocus();
     await user.keyboard("{Enter}");
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/lines");
