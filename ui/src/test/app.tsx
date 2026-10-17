@@ -8,6 +8,7 @@ import { appRoutes, type DestinationPages } from "../app/router";
 import type { AppStart } from "../bindings/AppStart";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
+import { breakdownGroups, groupDetail } from "./breakdown";
 import { filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { commandFailure, mockCommands, type Handlers } from "./ipc";
@@ -38,8 +39,9 @@ export interface RenderAppOptions {
  * `overview` with the overview of the snapshot the mock holds, `filter_options` with the
  * options of the default filter, `filter_values` with three values whatever the dimension, and
  * `lines` and `holds` with the three lines and the three holds of a small snapshot, and
- * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, unless the
- * test gives its own. Those answers are for the view the mocked Rust side holds, which is the one
+ * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, `breakdown`
+ * with three groups whatever the dimension, and `group_detail` with three lines of the group asked
+ * for, unless the test gives its own. Those answers are for the view the mocked Rust side holds, which is the one
  * `start` opens and then the one the test's own `workspace_open`, `workspace_create`,
  * `workspace_current`, `snapshot_select`, `demo_create`, or `import_commit` answered with: for
  * any other view they fail with the kind `ViewChanged`, as the Rust side does.
@@ -103,6 +105,8 @@ export function renderApp(options: RenderAppOptions = {}) {
     holds: inView(() => holdsView()),
     line_detail: inView(({ lineId }) => lineDetail(lineId)),
     hold_detail: inView(({ position }) => holdRef(position)),
+    breakdown: inView(() => breakdownGroups()),
+    group_detail: inView(({ key }) => groupDetail(key)),
     ...given,
     ...tracked,
   });

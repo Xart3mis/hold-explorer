@@ -1,0 +1,75 @@
+/*
+ * The page is as tall as the content area. Its content takes the height under the bar: the
+ * group-by select, a notice when a reading failed, and the table, which takes the rest and
+ * scrolls inside it.
+ */
+.content {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-block-size: 0;
+}
+
+/* The group-by select, at the leading edge above the table. */
+.controls {
+  display: flex;
+  flex: none;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+
+.groupBy {
+  inline-size: var(--size-menu-min-width);
+}
+
+.table {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+/*
+ * The bar of a group: neutral gray, as plain data is, growing from the leading edge of its track,
+ * with no track drawn behind it. Its length is the group's holds against the largest group's.
+ */
+.track {
+  display: flex;
+  align-items: center;
+  inline-size: 100%;
+  block-size: 100%;
+}
+
+.bar {
+  display: block;
+  block-size: var(--size-bar-height);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-chart-neutral);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+[role="row"][data-hovered] .bar,
+[role="row"][data-pressed] .bar {
+  background-color: var(--color-chart-neutral-hover);
+}
+
+/* A line under its group: its disciplines, and the age of its oldest hold at the trailing end. */
+.lineFacts {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.disciplines {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oldest {
+  flex: none;
+  font-variant-numeric: var(--font-numeric-tabular);
+}

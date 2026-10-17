@@ -422,6 +422,31 @@ describe("DataTable with rows that expand, in a viewport", () => {
     },
   );
 
+  it("makes a track as wide as a child column says its values need", () => {
+    const width = () =>
+      screen.getByRole("columnheader", { name: "Holds" }).parentElement?.style.width;
+    const { rerender } = render(<Tree />);
+    // The stand-in widths of a test: 7 px for a character, 12 px of padding at each side.
+    expect(width()).toBe("66px");
+    const wide: DataTableChildColumn<Member>[] = childColumns.map((column) =>
+      column.column === "holds" ? { ...column, chars: 12 } : column,
+    );
+    rerender(
+      <DataTable
+        aria-label="Holds by discipline"
+        columns={columns}
+        rows={groups}
+        rowKey={(group) => group.key}
+        childRows={readChildren}
+        childKey={(member) => member.id}
+        childColumns={wide}
+        expandedKeys={new Set()}
+        onExpandedChange={() => undefined}
+      />,
+    );
+    expect(width()).toBe("108px");
+  });
+
   it("counts the child rows in where it looks for the end of its rows", SLOW, () => {
     const onLoadMore = vi.fn();
     render(

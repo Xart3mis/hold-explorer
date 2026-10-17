@@ -1,9 +1,11 @@
-// What the development page answers for the `lines` and `holds` commands: holds made up by a
+// What the development page answers for the `lines`, `holds`, `breakdown`, and `group_detail` commands: holds made up by a
 // seeded generator, the same at every start, filtered, grouped into lines, sorted, and cut into
 // pages as the commands do it, closely enough to see the Lines destination work. For development
 // only; see ui/src/dev/app.tsx.
 import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { Group } from "../bindings/Group";
+import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { HoldRef } from "../bindings/HoldRef";
 import type { ChainLink } from "../bindings/ChainLink";
@@ -550,4 +552,78 @@ export function devHoldDetail(
   matchingSizes = false,
 ): HoldRef | null {
   return holdsOf(snapshot, matchingSizes)[position] ?? null;
+}
+
+/** The groups of a dimension among the holds a filter keeps, most holds first, as the core counts them. */
+function groupsOf(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  matchingSizes: boolean,
+): { group: Group; holds: HoldRef[] }[] {
+  return remembered(
+    `groups:${String(snapshot.id)}:${String(matchingSizes)}:${JSON.stringify(spec)}:${JSON.stringify(dim)}`,
+    () => {
+      const byKey = new Map<string, { group: Group; holds: HoldRef[]; lines: Set<string> }>();
+      for (const held of kept(snapshot, spec, matchingSizes)) {
+        const key = valueOf(held, dim);
+        let entry = byKey.get(key);
+        if (entry === undefined) {
+          const label = key === "" ? "(blank)" : dim === "Remark" ? held.row.hold.remark : key;
+          entry = { group: { key, label, holds: 0, lines: 0 }, holds: [], lines: new Set() };
+          byKey.set(key, entry);
+        }
+        entry.holds.push(held);
+        entry.lines.add(held.row.hold.line_id);
+        entry.group.holds += 1;
+        entry.group.lines = entry.lines.size;
+      }
+      return [...byKey.values()]
+        .sort((a, b) => b.group.holds - a.group.holds || ascending(a.group.label, b.group.label))
+        .map(({ group, holds }) => ({ group, holds }));
+    },
+  );
+}
+
+/** What `breakdown` answers on the development page, at most `limit` groups of it. */
+export function devBreakdown(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  matchingSizes = false,
+  limit = Number.POSITIVE_INFINITY,
+): Group[] {
+  return groupsOf(snapshot, spec, dim, matchingSizes)
+    .slice(0, limit)
+    .map(({ group }) => group);
+}
+
+/**
+ * What `group_detail` answers on the development page: the group and its first lines, most holds
+ * first, with how many there are; `null` for a group the filter does not keep.
+ */
+export function devGroupDetail(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  key: string,
+  matchingSizes = false,
+): GroupDetail | null {
+  const found = groupsOf(snapshot, spec, dim, matchingSizes).find(({ group }) => group.key === key);
+  if (found === undefined) return null;
+  const lines = orderBy(
+    linesOf(found.holds),
+    (line) => line.holds,
+    descending,
+    false,
+    (a, b) => ascending(a.line_id, b.line_id),
+  );
+  return {
+    group: found.group,
+    lines: {
+      total: lines.length,
+      widest_line_id: widest(lines.map((line) => line.line_id)),
+      rows: lines.slice(0, PAGE),
+    },
+  };
 }

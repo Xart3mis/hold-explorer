@@ -25,6 +25,8 @@ export {
   DataTable,
   textChars,
   type ColumnSize,
+  type DataTableChildColumn,
+  type DataTableChildren,
   type DataTableColumn,
   type DataTableColumnKind,
   type DataTableProps,

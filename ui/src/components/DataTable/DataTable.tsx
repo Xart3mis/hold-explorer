@@ -17,6 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactElement,
   type ReactNode,
@@ -206,6 +207,11 @@ export interface DataTableChildColumn<Child> {
   /** As a column's own kind: the child's value may be of another kind than its parent's. */
   kind?: DataTableColumnKind;
   isSupporting?: boolean;
+  /**
+   * The room the child's value needs, in characters of the face of its kind: the track is never
+   * narrower. For an identifier, which is never cut: the widest of the children that are shown.
+   */
+  chars?: number;
 }
 
 /**
@@ -327,16 +333,64 @@ function childEntries(
   return entries;
 }
 
+function isSameShape(one: ChildRowsShape, other: ChildRowsShape): boolean {
+  return (
+    one.rows === other.rows &&
+    one.isLoading === other.isLoading &&
+    one.error === other.error &&
+    one.more === other.more
+  );
+}
+
+/**
+ * What the table says of the children of each expanded row, for the rows to read. Each row hears
+ * of its own children only: turning one row, or reading its children, renders no other row,
+ * which counts in a table of a thousand rows.
+ */
+class ChildStore {
+  private shapes = new Map<string, ChildRowsShape>();
+  private readonly listeners = new Set<() => void>();
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  readonly get = (key: string): ChildRowsShape | undefined => this.shapes.get(key);
+
+  /** Takes what is said of the children now, and tells the rows when any of it changed. */
+  publish(next: ReadonlyMap<string, ChildRowsShape>): void {
+    let changed = next.size !== this.shapes.size;
+    const kept = new Map<string, ChildRowsShape>();
+    for (const [key, shape] of next) {
+      const old = this.shapes.get(key);
+      if (old !== undefined && isSameShape(old, shape)) {
+        kept.set(key, old);
+      } else {
+        kept.set(key, shape);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    this.shapes = kept;
+    for (const listener of this.listeners) listener();
+  }
+}
+
 /** What the rows of a table whose rows expand are told of their children. */
 interface Tree {
-  /** The children of the rows that are expanded, by the key of their row. */
-  children: ReadonlyMap<string, ChildRowsShape>;
+  store: ChildStore;
   childKey: (child: unknown) => string;
   /** The row of a child, or of what is said of the children, under its row. */
   childRow: (parent: string, child: ChildEntry) => ReactElement;
 }
 
 const TreeContext = createContext<Tree | null>(null);
+
+const NO_STORE = new ChildStore();
+const noShape = (): undefined => undefined;
 
 /**
  * The child rows under a row, while it is expanded. A row of the table is built once for its
@@ -345,22 +399,15 @@ const TreeContext = createContext<Tree | null>(null);
  */
 function TreeChildren({ parent }: { parent: string }) {
   const tree = useContext(TreeContext);
-  const shape = tree?.children.get(parent);
+  const store = tree?.store ?? NO_STORE;
+  const shape = useSyncExternalStore(store.subscribe, () => store.get(parent), noShape);
   const childKey = tree?.childKey;
-  const rows = shape?.rows;
-  const isLoading = shape?.isLoading;
-  const error = shape?.error;
-  const more = shape?.more;
   const entries = useMemo(
     () =>
-      rows === undefined || childKey === undefined
+      shape === undefined || childKey === undefined
         ? NO_CHILDREN
-        : childEntries(
-            parent,
-            { rows, isLoading: isLoading === true, error: error ?? null, more: more ?? null },
-            childKey,
-          ),
-    [parent, rows, isLoading, error, more, childKey],
+        : childEntries(parent, shape, childKey),
+    [parent, shape, childKey],
   );
   if (tree === null || entries.length === 0) return null;
   return (
@@ -685,9 +732,18 @@ export function DataTable<Item, Child = never>({
     // chevron, and the cells of child rows are indented as far: the column takes that room on top
     // of what it declares, so an identifier under a row is not cut.
     const chevron = expandable && column.isRowHeader === true ? metrics.arrow : 0;
+    const child = childColumns?.find((candidate) => candidate.column === column.id);
+    const childLeast =
+      child?.chars === undefined
+        ? 0
+        : columnWidth({ chars: child.chars }, child.kind ?? "text", chars, metrics.paddingX)
+            .minWidth + chevron;
     return {
-      width: typeof sized.width === "number" ? Math.max(sized.width + chevron, least) : sized.width,
-      minWidth: Math.max(sized.minWidth + chevron, least),
+      width:
+        typeof sized.width === "number"
+          ? Math.max(sized.width + chevron, least, childLeast)
+          : sized.width,
+      minWidth: Math.max(sized.minWidth + chevron, least, childLeast),
     };
   };
   const actionsWidth = columnWidth(rowActionsSize, "text", chars, metrics.paddingX);
@@ -879,7 +935,7 @@ export function DataTable<Item, Child = never>({
           className={cx(styles.cell)}
         >
           {cell.isPinned ? <VisuallyHidden>{t("table.childLoading")}</VisuallyHidden> : null}
-          <Skeleton className={styles.placeholderLine} />
+          {cell.hasValue ? <Skeleton className={styles.placeholderLine} /> : null}
         </Cell>
       )),
       ...(hasActions
@@ -1037,8 +1093,15 @@ export function DataTable<Item, Child = never>({
     },
     [childCells, loadingCells, cellCount, childSelectable, retry, leadOn],
   );
-  // Read by the rows at every render of the table: each keeps its children while they are the same.
-  const tree: Tree = { children: childShapes, childKey: keyOfChild, childRow };
+  // Told to the rows after every render: each hears of its own children, when they changed.
+  const [store] = useState(() => new ChildStore());
+  useLayoutEffect(() => {
+    store.publish(childShapes);
+  });
+  const tree = useMemo(
+    (): Tree => ({ store, childKey: keyOfChild, childRow }),
+    [store, keyOfChild, childRow],
+  );
 
   // The rows of a table whose rows expand, as the library takes them: built once for each item,
   // as the rows of any table are, with their children under them.

@@ -43,7 +43,7 @@ describe("the sidebar", () => {
         .map((link) => link.textContent),
     ).toEqual([
       names.overview,
-      `${names.breakdown} ${soon}`,
+      names.breakdown,
       names.lines,
       `${names.blockers} ${soon}`,
       `${names.history} ${soon}`,
@@ -57,23 +57,17 @@ describe("the sidebar", () => {
     ).toEqual([`${names.rules} ${soon}`, names.settings]);
   });
 
-  it("puts the Soon tag in the accessible name of the six that are not built, and of no other", async () => {
+  it("puts the Soon tag in the accessible name of the five that are not built, and of no other", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
-    for (const id of [
-      "breakdown",
-      "blockers",
-      "history",
-      "people",
-      "follow-up",
-      "rules",
-    ] as const) {
+    for (const id of ["blockers", "history", "people", "follow-up", "rules"] as const) {
       expect(within(nav).getByRole("link", { name: `${names[id]} ${soon}` })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: names.overview })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.breakdown })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.lines })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.settings })).toBeInTheDocument();
-    expect(within(nav).getAllByText(soon)).toHaveLength(6);
+    expect(within(nav).getAllByText(soon)).toHaveLength(5);
   });
 
   it("marks the current destination, and only it", async () => {
@@ -124,7 +118,7 @@ describe("the sidebar", () => {
     await user.tab();
     await user.tab();
     await user.tab();
-    expect(screen.getByRole("link", { name: `${names.breakdown} ${soon}` })).toHaveFocus();
+    expect(screen.getByRole("link", { name: names.breakdown })).toHaveFocus();
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(names.breakdown);
     expect(tooltip).toHaveTextContent("Ctrl+2");
@@ -206,7 +200,7 @@ describe("the sidebar's rail", () => {
       "page",
     );
     expect(
-      within(nav).getByRole("link", { name: `${names.breakdown} ${soon}` }),
+      within(nav).getByRole("link", { name: `${names.blockers} ${soon}` }),
     ).toBeInTheDocument();
     expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("rail");
     expect(document.documentElement).toHaveAttribute("data-sidebar", "rail");
@@ -231,14 +225,14 @@ describe("the sidebar's rail", () => {
       const { user } = renderApp({ start: openStart(), path: "/overview" });
       const nav = await sidebar();
       (document.activeElement as HTMLElement | null)?.blur();
-      const breakdown = within(nav).getByRole("link", { name: `${names.breakdown} ${soon}` });
-      for (let presses = 0; presses < 10 && document.activeElement !== breakdown; presses += 1) {
+      const blockers = within(nav).getByRole("link", { name: `${names.blockers} ${soon}` });
+      for (let presses = 0; presses < 10 && document.activeElement !== blockers; presses += 1) {
         await user.tab();
       }
-      expect(breakdown).toHaveFocus();
+      expect(blockers).toHaveFocus();
       const tip = await screen.findByRole("tooltip");
-      expect(tip).toHaveTextContent(`${names.breakdown}, ${soon}`);
-      expect(tip).toHaveTextContent("Ctrl+2");
+      expect(tip).toHaveTextContent(`${names.blockers}, ${soon}`);
+      expect(tip).toHaveTextContent("Ctrl+4");
     },
   );
 

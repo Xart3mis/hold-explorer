@@ -62,7 +62,12 @@ function renderBar(answer: Answer = () => filterOptions(), handlers: Handlers = 
   const app = renderApp({
     start: openStart(),
     path: "/overview",
-    pages: { overview: <Screen />, lines: <Screen />, settings: <SettingsPage /> },
+    pages: {
+      overview: <Screen />,
+      breakdown: <Screen />,
+      lines: <Screen />,
+      settings: <SettingsPage />,
+    },
     handlers: { ...handlers, filter_options: options },
   });
   return { ...app, options };

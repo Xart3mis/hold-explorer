@@ -18,7 +18,7 @@ describe("renderApp's own answers", () => {
   it("answer for the view the mocked Rust side holds, and refuse another as it does", async () => {
     renderApp({
       start: openStart(),
-      pages: { overview: <p />, lines: <p />, settings: <p /> },
+      pages: { overview: <p />, breakdown: <p />, lines: <p />, settings: <p /> },
       handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
     });
     const at = (snapshot: number) => ({ workspace_id: workspace().id, snapshot_id: snapshot });

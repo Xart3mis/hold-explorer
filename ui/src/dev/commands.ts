@@ -30,7 +30,15 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
-import { devHoldCount, devHoldDetail, devHolds, devLineDetail, devLines } from "./lines";
+import {
+  devBreakdown,
+  devGroupDetail,
+  devHoldCount,
+  devHoldDetail,
+  devHolds,
+  devLineDetail,
+  devLines,
+} from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
 
@@ -95,6 +103,15 @@ export const DEV_STATES = [
   "detail-limited",
   "detail-slow",
   "detail-error",
+  // Breakdown: every state answers the groups and their lines from the same made-up holds. These
+  // add a snapshot of 30,000 holds grouped by blocker, its first 1,500 groups, the largest with
+  // more than 900 lines; lines of a group that are never read (a skeleton row stays); and lines
+  // of a group that cannot be read (an error row with a retry). Open them on the page:
+  //   dev.html?state=breakdown-many#/breakdown?mode=list&by=Blocker
+  //   dev.html?state=breakdown-group-loading#/breakdown?mode=list&by=Discipline&open=Piping
+  "breakdown-many",
+  "breakdown-group-loading",
+  "breakdown-group-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -369,7 +386,8 @@ function world(state: DevState, theme: Theme): World {
       start.open = { ...opened(4, null), snapshots: held };
       break;
     }
-    case "lines-many": {
+    case "lines-many":
+    case "breakdown-many": {
       // The newest export holds thirty thousand holds, six thousand of them released.
       const held = fourSnapshots.map((taken) =>
         taken.id === 4 ? { ...taken, row_count: 30_000, open_count: 24_000 } : taken,
@@ -412,6 +430,8 @@ function world(state: DevState, theme: Theme): World {
     case "lines-matching-sizes":
     case "lines-error":
     case "lines-loading":
+    case "breakdown-group-loading":
+    case "breakdown-group-error":
     case "detail-slow":
     case "detail-error":
     case "import-clean":
@@ -721,7 +741,10 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(120, () => {
         // Each count is the filter with that one part replaced, as the command counts them. The
         // states of Lines count the made-up holds their tables show, so the two agree.
-        const isLines = state.startsWith("lines-") || state.startsWith("detail-");
+        const isLines =
+          state.startsWith("lines-") ||
+          state.startsWith("detail-") ||
+          state.startsWith("breakdown-");
         const kept = (part: Partial<FilterSpec>) =>
           selected === undefined
             ? 0
@@ -799,6 +822,23 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       const matching = state === "lines-matching-sizes";
       return later(state === "detail-slow" ? 2000 : 120, () =>
         selected === undefined ? null : devHoldDetail(selected, position, matching),
+      );
+    },
+    breakdown: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { dim } = payload as { dim: Dim };
+      const limit = state === "breakdown-many" ? 1500 : Number.POSITIVE_INFINITY;
+      return later(150, () =>
+        selected === undefined ? [] : devBreakdown(selected, spec, dim, false, limit),
+      );
+    },
+    group_detail: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { dim, key } = payload as { dim: Dim; key: string };
+      if (state === "breakdown-group-loading") return new Promise(() => undefined);
+      if (state === "breakdown-group-error") throw failure("Io", LOCKED);
+      return later(250, () =>
+        selected === undefined ? null : devGroupDetail(selected, spec, dim, key),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

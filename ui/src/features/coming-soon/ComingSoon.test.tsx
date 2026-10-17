@@ -8,7 +8,7 @@ import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import { SLOW } from "../../test/slow";
 
-const notBuilt = ["breakdown", "blockers", "history", "people", "follow-up", "rules"] as const;
+const notBuilt = ["blockers", "history", "people", "follow-up", "rules"] as const;
 const names = en.destinations.name;
 
 describe("ComingSoon", () => {
@@ -103,22 +103,22 @@ describe("ComingSoon", () => {
 
   it("gives way to the real page, and the sidebar tag goes, when a copy of the list marks a destination as built", async () => {
     const copy = destinations.map((destination) =>
-      destination.id === "breakdown" ? { ...destination, available: true } : destination,
+      destination.id === "blockers" ? { ...destination, available: true } : destination,
     );
     renderApp({
       start: openStart(),
-      path: "/breakdown",
+      path: "/blockers",
       destinations: copy,
-      pages: { ...destinationPages, breakdown: <p>The real Breakdown page</p> },
+      pages: { ...destinationPages, blockers: <p>The real Blockers page</p> },
     });
-    expect(await screen.findByText("The real Breakdown page")).toBeInTheDocument();
+    expect(await screen.findByText("The real Blockers page")).toBeInTheDocument();
     expect(screen.queryByText(en.comingSoon.title)).not.toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: en.destinations.label });
-    expect(within(nav).getByRole("link", { name: names.breakdown })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.blockers })).toBeInTheDocument();
     expect(within(nav).getAllByText(en.destinations.soon)).toHaveLength(notBuilt.length - 1);
     // The others are untouched.
     expect(
-      within(nav).getByRole("link", { name: `${names.blockers} ${en.destinations.soon}` }),
+      within(nav).getByRole("link", { name: `${names.history} ${en.destinations.soon}` }),
     ).toBeInTheDocument();
   });
 

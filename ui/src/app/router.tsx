@@ -1,5 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { createHashRouter, Navigate, RouterProvider, type RouteObject } from "react-router";
+import { BreakdownPage } from "../features/breakdown/BreakdownPage";
 import { ComingSoon } from "../features/coming-soon/ComingSoon";
 import { ImportEntryPage } from "../features/import/ImportEntryPage";
 import { ImportMappingPage } from "../features/import/ImportMappingPage";
@@ -33,6 +34,7 @@ export type DestinationPages = Partial<Record<DestinationId, ReactElement>>;
 
 export const destinationPages: DestinationPages = {
   overview: <OverviewPage />,
+  breakdown: <BreakdownPage />,
   lines: <LinesPage />,
   settings: <SettingsPage />,
 };

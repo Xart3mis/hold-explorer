@@ -9,7 +9,6 @@ import { t, type MessageKey } from "../../text/i18n";
  * has no entry: its screen is never shown, and a text nobody reads goes stale.
  */
 const descriptions: Partial<Record<DestinationId, MessageKey>> = {
-  breakdown: "comingSoon.description.breakdown",
   blockers: "comingSoon.description.blockers",
   history: "comingSoon.description.history",
   people: "comingSoon.description.people",

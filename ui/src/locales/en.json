@@ -180,7 +180,6 @@
     "title": "Not available in this version",
     "action": "Go to Overview",
     "description": {
-      "breakdown": "Breakdown will group the holds by discipline, hold type, role, blocker, or another field, as bars or as a matrix of two fields. A row or a cell will open its lines.",
       "blockers": "Blockers will show what the holds wait for and how the blockers depend on each other. It will rank them by the number of lines each one frees when it is solved.",
       "history": "History will compare two snapshots and list the holds that were added, released, changed, or reopened. It will also show the trend of open holds and the list of snapshots.",
       "people": "People will list, for each name on the export, the holds raised, open, and released, the oldest open hold, and the median age.",
@@ -644,6 +643,31 @@
     "errorHolds": "The holds could not be loaded",
     "leftOutLines": "Not shown at this width: {{columns}}. Open a line to read them.",
     "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them."
+  },
+  "breakdown": {
+    "groupBy": "Group by",
+    "table": "Holds by {{dim}}",
+    "column": {
+      "share": "Share of holds",
+      "holds": "Holds",
+      "lines": "Lines"
+    },
+    "count_one": "{{count, number}} group",
+    "count_other": "{{count, number}} groups",
+    "oldest": "Oldest {{age}}",
+    "openAll_one": "Open the {{count, number}} line in Lines",
+    "openAll_other": "Open all {{count, number}} lines in Lines",
+    "linesError": "The lines of this group could not be loaded.",
+    "error": "The groups could not be loaded",
+    "emptyTitle": "This workspace has no snapshots",
+    "emptyText": "Import a holds export to add the first snapshot. Breakdown then groups its holds by discipline, hold type, blocker, or another field.",
+    "emptyAction": "Import",
+    "noneTitle": "No hold matches the filters",
+    "noneText": "Change a filter in the bar above, or clear them all to group the open holds of the snapshot again.",
+    "noneAction": "Clear all",
+    "noOpenTitle": "This snapshot has no open holds",
+    "noOpenText": "Every hold of this snapshot is released. Show all holds to group them.",
+    "noOpenAction": "Show all holds"
   },
   "detail": {
     "closePanel": "Close panel",
