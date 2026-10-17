@@ -4,6 +4,7 @@ import type { Status } from "../../bindings/Status";
 import { Tag, textChars } from "../../components";
 import { formatDate, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
+import { isBlank } from "../detail/parts";
 import { missing, present, type NeedingColumn } from "./lineColumns";
 import { HOLD_SORTS } from "./sorts";
 
@@ -16,6 +17,8 @@ const DAYS_CHARS = textChars(formatDays(9999));
 
 const date = (value: string | null) => (value === null ? missing() : formatDate(value));
 const days = (value: number | null) => (value === null ? missing() : formatDays(value));
+/** A text the export left blank reads as every other value a hold does not have. */
+const given = (value: string) => (isBlank(value) ? missing() : value);
 
 /**
  * The column of days, by the status the holds were read with: the age of an open hold, the
@@ -56,7 +59,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
     {
       id: "holdType",
       header: t("lines.column.holdType"),
-      cell: ({ row }) => row.hold.hold_type,
+      cell: ({ row }) => given(row.hold.hold_type),
       size: { chars: 14 },
       needs: ["HoldType"],
     },
@@ -86,14 +89,14 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
     {
       id: "name",
       header: t("lines.column.name"),
-      cell: ({ row }) => row.hold.name,
+      cell: ({ row }) => given(row.hold.name),
       size: { chars: 16 },
       needs: ["Name"],
     },
     {
       id: "role",
       header: t("lines.column.role"),
-      cell: ({ row }) => row.hold.role,
+      cell: ({ row }) => given(row.hold.role),
       isSupporting: true,
       size: { chars: 14 },
       needs: ["Role"],
