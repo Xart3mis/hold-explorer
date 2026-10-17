@@ -809,7 +809,7 @@ fn every_method_without_a_draft_gives_no_draft() {
             .kind,
     ];
     assert!(kinds.iter().all(|kind| kind == "NoDraft"), "{kinds:?}");
-    state.import_cancel();
+    state.import_cancel(None);
     assert_eq!(fx.workspace_files(), 0);
 }
 
@@ -819,9 +819,9 @@ fn cancel_clears_the_draft_and_opening_a_workspace_does_too() {
     let mut state = fx.state();
     let file = fx.synth("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
-    state.import_cancel();
+    state.import_cancel(None);
     assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
-    state.import_cancel();
+    state.import_cancel(None);
 
     state.import_open(&file).unwrap();
     let id = state.create_workspace("A").unwrap().workspace.id;
@@ -829,6 +829,49 @@ fn cancel_clears_the_draft_and_opening_a_workspace_does_too() {
     state.import_open(&file).unwrap();
     state.open_workspace(&id).unwrap();
     assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+}
+
+#[test]
+fn a_cancel_for_the_file_that_is_open_drops_its_draft() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let hash = state
+        .import_open(&fx.synth("one.xlsx", 1, "P-1"))
+        .unwrap()
+        .file
+        .content_hash;
+    state.import_cancel(Some(&hash));
+    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+}
+
+#[test]
+fn a_cancel_for_another_file_leaves_the_draft_that_is_open() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let first = state
+        .import_open(&fx.synth("one.xlsx", 1, "P-1"))
+        .unwrap()
+        .file
+        .content_hash;
+    let second = state
+        .import_open(&fx.synth("two.xlsx", 2, "P-1"))
+        .unwrap()
+        .file
+        .content_hash;
+    assert_ne!(first, second);
+    // The cancel was pressed for the first file and reaches the state after the second opened.
+    state.import_cancel(Some(&first));
+    assert_eq!(state.import_review(None).unwrap().file_name, "two.xlsx");
+}
+
+#[test]
+fn a_cancel_without_a_draft_changes_nothing() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.import_cancel(Some("0123456789abcdef"));
+    state.import_cancel(None);
+    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(fx.workspace_files(), 0);
 }
 
 #[test]

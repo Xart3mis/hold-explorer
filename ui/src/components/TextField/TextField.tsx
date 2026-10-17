@@ -7,7 +7,7 @@ import {
   TextField as RacTextField,
   type TextFieldProps as RacTextFieldProps,
 } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Spinner } from "../Spinner/Spinner";

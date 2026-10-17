@@ -80,6 +80,14 @@ describe("queryClient", () => {
     expect(queryClient.getQueryDefaults(keys.start).staleTime).toBe(Infinity);
   });
 
+  it("keeps the filters of every workspace for as long as the app runs", () => {
+    // Nothing observes them while another page or another workspace is shown. Without these
+    // defaults the query client would drop them five minutes after they were set.
+    const defaults = queryClient.getQueryDefaults(keys.workspaceFilters("a1b2c3d4e5f60718"));
+    expect(defaults.gcTime).toBe(Infinity);
+    expect(defaults.staleTime).toBe(Infinity);
+  });
+
   it("never retries a mutation, and runs without a network connection", () => {
     const options = queryClient.getDefaultOptions();
     expect(options.mutations?.retry).toBe(false);

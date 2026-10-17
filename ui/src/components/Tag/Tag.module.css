@@ -1,0 +1,41 @@
+/* One line, as tall as a tag is, whatever the row around it does. */
+.tag {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1);
+  align-items: center;
+  block-size: var(--size-tag-height);
+  padding: 0 var(--space-1-5);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+}
+
+/* A state: fill, border, and text from that one state. The icon wears the color of the text. */
+.tag[data-tone="info"] {
+  border-color: var(--color-info-border);
+  background-color: var(--color-info-subtle);
+  color: var(--color-info-text);
+}
+
+.tag[data-tone="warning"] {
+  border-color: var(--color-warning-border);
+  background-color: var(--color-warning-subtle);
+  color: var(--color-warning-text);
+}
+
+.tag[data-tone="danger"] {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-subtle);
+  color: var(--color-danger-text);
+}
+
+.tag[data-tone="success"] {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-subtle);
+  color: var(--color-success-text);
+}

@@ -132,6 +132,37 @@ describe("Select", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("when inert, waits for another control: busy, deaf to presses and keys, its look and place kept", async () => {
+    const onSelectionChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Select
+        label="Group by"
+        options={options}
+        defaultSelectedKey="discipline"
+        onSelectionChange={onSelectionChange}
+        isInert
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /Group by/ });
+    expect(trigger).toHaveAttribute("aria-busy", "true");
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).toHaveAttribute("data-inert");
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).not.toHaveAttribute("data-disabled");
+    expect(trigger.querySelector('[data-part="spinner"]')).toBeNull();
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard(" ");
+    await user.click(trigger);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(trigger).toHaveTextContent("Discipline");
+  });
+
   it("in error, links the message to the trigger", () => {
     render(
       <Select

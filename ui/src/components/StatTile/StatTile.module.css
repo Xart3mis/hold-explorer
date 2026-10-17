@@ -53,6 +53,29 @@
   white-space: nowrap;
 }
 
+/* The label of a tile that opens a screen: the ink of what can be acted on, and a chevron after it. */
+.tile[data-pressable] .label {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  color: var(--color-accent-text);
+}
+
+/*
+ * The text of a label. In a tile that opens a screen the label is a row of the text and the
+ * chevron, and an ellipsis applies only to an element that may shrink, so the text carries it.
+ */
+.labelText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile[data-pressable] .label > :not(.labelText) {
+  flex: none;
+}
+
 .value {
   color: var(--color-text-primary);
   font: var(--text-stat);

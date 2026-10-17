@@ -32,13 +32,6 @@
   min-inline-size: 0;
 }
 
-.sectionTitle {
-  color: var(--color-text-primary);
-  font: var(--text-section-title);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
 /* Running text of a page: what a section means, why a button waits. */
 .text {
   max-inline-size: var(--layout-prose-max-width);
@@ -97,8 +90,9 @@
 }
 
 /*
- * A ruled list: rows of one height with a hairline under each, like the rows of a table. The
- * facts of a file, the sheets of a workbook, and the mapping in use are such lists.
+ * The sheets of a workbook: rows of one height with a hairline under each, like the rows of the
+ * fact list of the review page. A row holds the name of a sheet and, at its end, what can be done
+ * with it; it has no label, so it is not a fact list.
  */
 .ruled {
   display: flex;
@@ -122,24 +116,10 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-/* The name of what a row holds, in a column of its own so the values line up. */
-.ruledLabel {
-  flex: none;
-  inline-size: var(--size-bar-label-width);
-  color: var(--color-text-secondary);
-  font: var(--text-label);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
 .ruledValue {
   flex: 1;
   min-inline-size: 0;
   overflow-wrap: anywhere;
-}
-
-.ruledValue[data-absent] {
-  color: var(--color-text-muted);
 }
 
 .ruledEnd {
@@ -150,166 +130,9 @@
   margin-inline-start: auto;
 }
 
-/* The name of a file is written as the system gives it. */
-.fileName {
-  font: var(--text-mono);
-  font-variant-numeric: var(--font-numeric-tabular);
-  letter-spacing: var(--letter-spacing-normal);
-  line-height: var(--line-height-body);
-  user-select: text;
-}
-
 .count {
   color: var(--color-text-secondary);
   font-variant-numeric: var(--font-numeric-tabular);
-}
-
-/* The neutral tag. */
-.tag {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  block-size: var(--size-tag-height);
-  padding: 0 var(--space-1-5);
-  border: var(--border-width-thin) solid var(--color-border-default);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font: var(--text-caption);
-  font-variant-numeric: var(--font-numeric-tabular);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
-/*
- * A row that opens: its title with what it counts, a sentence under it, and, once opened, the
- * detail under that. The whole first line is the button. Rows follow each other like the rows of
- * a ruled list, and what opens appears at once: nothing is resized over time.
- */
-.details {
-  display: flex;
-  flex-direction: column;
-  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
-}
-
-.detailsList {
-  display: flex;
-  flex-direction: column;
-  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
-}
-
-.detailsHead {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.detailsHeading {
-  flex: 1;
-  min-inline-size: 0;
-  margin: 0;
-  font: inherit;
-}
-
-.detailsTrigger {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  inline-size: 100%;
-  min-block-size: var(--density-row-height);
-  padding: 0 var(--space-2) 0 var(--space-1);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background-color: transparent;
-  color: var(--color-text-primary);
-  font: var(--text-label);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-  text-align: start;
-  cursor: default;
-  transition: background-color var(--duration-fast) var(--ease-out);
-}
-
-.detailsTrigger[data-hovered] {
-  background-color: var(--color-surface-hover);
-}
-
-.detailsTrigger[data-pressed] {
-  background-color: var(--color-surface-pressed);
-}
-
-/* Inset: the row runs to the edge of the page, where a ring outside it would be cut. */
-.detailsTrigger[data-focus-visible] {
-  outline: var(--focus-ring-width) solid var(--color-focus-ring);
-  outline-offset: calc(-1 * var(--focus-ring-width));
-}
-
-.detailsChevron {
-  flex: none;
-  color: var(--color-text-secondary);
-}
-
-.detailsTitle {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.detailsCount {
-  flex: none;
-  color: var(--color-text-secondary);
-  font: var(--text-table);
-  font-variant-numeric: var(--font-numeric-tabular);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
-/* The sentence and the detail start under the title, past the chevron. */
-.detailsText,
-.detailsPanel {
-  padding-inline-start: calc(var(--space-1) + var(--size-icon) + var(--space-2));
-}
-
-.detailsText {
-  max-inline-size: calc(
-    var(--layout-prose-max-width) + var(--space-1) + var(--size-icon) + var(--space-2)
-  );
-  padding-block-end: var(--space-2);
-  color: var(--color-text-secondary);
-  font: var(--text-body);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
-.detailsPanel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-block-end: var(--space-3);
-}
-
-.detailsPanel[hidden] {
-  display: none;
-}
-
-/* A statement in the place of a row that opens: there is nothing to open. */
-.detailsNone {
-  display: flex;
-  align-items: center;
-  min-block-size: var(--density-row-height);
-  padding-inline-start: calc(var(--space-1) + var(--size-icon) + var(--space-2));
-  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
-  color: var(--color-text-secondary);
-  font: var(--text-body);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
-}
-
-/* A table inside a page of text: a few rows show, and the rest scroll under its header. */
-.tableBox {
-  display: flex;
-  flex-direction: column;
-  max-block-size: calc(var(--density-header-height) + 8 * var(--density-row-height));
-}
-
-.tableBox > * {
-  min-block-size: 0;
 }
 
 /* A value of the preview: one line, cut at the end past the width of a line of text. */

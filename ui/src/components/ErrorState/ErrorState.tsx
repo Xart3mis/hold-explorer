@@ -1,5 +1,5 @@
-import { t } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
+import { t } from "../../text/i18n";
 import { Button } from "../Button/Button";
 import { Notice } from "../Notice/Notice";
 
@@ -29,7 +29,12 @@ export function ErrorState({ error, title, onRetry, isRetrying, className }: Err
           ? {}
           : {
               actions: (
-                <Button variant="quiet" onPress={onRetry} isPending={isRetrying === true}>
+                <Button
+                  variant="quiet"
+                  onPress={onRetry}
+                  reservesPendingSpace
+                  isPending={isRetrying === true}
+                >
                   {t("common.retry")}
                 </Button>
               ),

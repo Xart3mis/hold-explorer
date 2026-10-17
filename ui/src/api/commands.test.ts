@@ -8,6 +8,7 @@ import { mockCommands } from "../test/ipc";
 import { api } from "./commands";
 import { openHoldsFilter } from "./filter";
 import openHolds from "./open-holds-filter.json";
+import { workspaceApi } from "./workspace-commands";
 
 const workspace: WorkspaceView = {
   id: "0123456789abcdef",
@@ -87,7 +88,7 @@ describe("the import commands", () => {
         return done;
       },
     });
-    const result = await api.importCommit(
+    const result = await workspaceApi.importCommit(
       {
         target: { kind: "New", name: "A" },
         taken_at: "2026-10-07T08:00:00",
@@ -139,8 +140,8 @@ describe("the snapshot commands", () => {
       },
       demo_create: () => done.open,
     });
-    expect(await api.snapshotSelect(3)).toEqual(done.open);
+    expect(await workspaceApi.snapshotSelect(3)).toEqual(done.open);
     expect(sent).toEqual({ id: 3 });
-    expect(await api.demoCreate()).toEqual(done.open);
+    expect(await workspaceApi.demoCreate()).toEqual(done.open);
   });
 });

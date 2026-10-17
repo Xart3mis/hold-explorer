@@ -164,6 +164,20 @@ describe("MenuButton", () => {
     expect(trigger.querySelector("svg")).toBeNull();
   });
 
+  it("says when it is flush with what stands around it, and only then", () => {
+    const { unmount } = render(
+      <MenuButton label="Open holds" menuLabel="Status" isFlush>
+        <MenuItem id="open">Open holds</MenuItem>
+      </MenuButton>,
+    );
+    // The stylesheet moves a flush button out by the padding it gives it, from one place.
+    expect(screen.getByRole("button", { name: "Open holds" })).toHaveAttribute("data-flush");
+    unmount();
+
+    render(<Sample />);
+    expect(screen.getByRole("button", { name: "Export" })).not.toHaveAttribute("data-flush");
+  });
+
   it("when inert, waits for another control: its chevron and no spinner, busy, and its menu stays closed", async () => {
     const user = userEvent.setup();
     render(<Sample isInert />);

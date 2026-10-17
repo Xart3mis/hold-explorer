@@ -6,9 +6,11 @@ use std::time::{Duration, Instant};
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::Status;
-use hx_core::filter::{Dim, FilterSpec};
+use hx_core::filter::{default_age_bands, Dim, FilterSpec};
 use hx_core::load::load_file;
-use hx_core::query::{group_by, holds, lines, summary, HoldQuery, LineQuery};
+use hx_core::query::{
+    facet_counts, group_by, holds, line_page, lines, summary, value_page, HoldQuery, LineQuery,
+};
 use hx_core::rules::RuleSet;
 use hx_core::solve::solve_plan;
 use hx_store::{ImportOptions, Workspace};
@@ -71,6 +73,17 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     );
 
     let started = Instant::now();
+    let counts = facet_counts(&ds, &spec, &default_age_bands());
+    let values = value_page(&ds, &spec, &Dim::Blocker, "", 50);
+    let first_lines = line_page(&ds, &spec, &LineQuery::default(), 0, Some(200));
+    let pickers = started.elapsed();
+    assert!(counts.open > 0 && values.total > 0 && !first_lines.rows.is_empty());
+    assert!(
+        pickers < Duration::from_millis(100),
+        "filter counts, blocker values, and a page of lines took {pickers:?}"
+    );
+
+    let started = Instant::now();
     let plan = solve_plan(&ds, &FilterSpec::default(), None);
     let solve = started.elapsed();
     assert!(!plan.steps.is_empty());
@@ -80,7 +93,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
     );
 
     eprintln!(
-        "perf: import {import:?}, filtered views {views:?}, hold page {paging:?}, full solve order {solve:?}"
+        "perf: import {import:?}, filtered views {views:?}, filter counts and pages {pickers:?}, hold page {paging:?}, full solve order {solve:?}"
     );
 }
 

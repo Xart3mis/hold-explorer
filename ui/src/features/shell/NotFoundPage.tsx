@@ -1,9 +1,9 @@
 import { useLocation, useNavigate } from "react-router";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
-import { t } from "../../app/i18n";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { Button, EmptyState } from "../../components";
-import { useShell } from "./context";
-import { Page } from "./Page";
+import { t } from "../../text/i18n";
 
 /**
  * What an address shows that no page has. It says so, names the address, and leads back: to

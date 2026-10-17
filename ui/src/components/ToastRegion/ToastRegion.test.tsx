@@ -132,6 +132,132 @@ describe("ToastRegion", () => {
     expect(live.lastElementChild).toHaveTextContent("Fourth.");
   });
 
+  it("never drops a toast that carries an undo for a fourth toast", () => {
+    setup();
+    const undo = { label: "Undo", onAction: () => undefined };
+    show({ message: "Snapshot deleted.", action: undo });
+    show({ message: "Snapshot imported." });
+    show({ message: "Workspace renamed.", action: undo });
+    show({ message: "Mapping saved." });
+    const live = screen.getByRole("status");
+    // The oldest toast without an action went, not the oldest toast.
+    expect(live.querySelectorAll('[data-part="toast"]')).toHaveLength(3);
+    expect(live).toHaveTextContent("Snapshot deleted.");
+    expect(live).not.toHaveTextContent("Snapshot imported.");
+    expect(live).toHaveTextContent("Workspace renamed.");
+    expect(live.lastElementChild).toHaveTextContent("Mapping saved.");
+
+    // With an undo on each of three, a fourth drops none of them: the stack is taller for a while.
+    show({ message: "Theme changed.", action: undo });
+    show({ message: "Density changed.", action: undo });
+    expect(live).not.toHaveTextContent("Mapping saved.");
+    expect(
+      [...live.querySelectorAll('[data-part="toast"]')].map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining("Snapshot deleted."),
+      expect.stringContaining("Workspace renamed."),
+      expect.stringContaining("Theme changed."),
+      expect.stringContaining("Density changed."),
+    ]);
+    expect(screen.getAllByRole("button", { name: "Undo" })).toHaveLength(4);
+  });
+
+  it("moves the focus to the next toast when the focused one goes, and to the one before it at the end", async () => {
+    const user = userEvent.setup();
+    setup();
+    show({ message: "First." });
+    show({ message: "Second." });
+    show({ message: "Third." });
+    const toastOf = (message: string) => {
+      const found = screen.getByText(message).closest('[data-part="toast"]');
+      if (!(found instanceof HTMLElement)) throw new Error(`No toast says ${message}`);
+      return found;
+    };
+    const closeOf = (message: string) =>
+      within(toastOf(message)).getByRole("button", { name: en.common.dismiss });
+
+    await user.click(screen.getByRole("textbox", { name: "Workspace name" }));
+    await user.tab();
+    expect(closeOf("First.")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByText("First.")).not.toBeInTheDocument();
+    // The toast itself has the focus, not a button of it: Enter again closes nothing.
+    expect(toastOf("Second.")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByText("Second.")).toBeInTheDocument();
+    // It was made focusable for that moment only, and a toast that was not is not.
+    expect(toastOf("Third.")).not.toHaveAttribute("tabindex");
+
+    // The last toast goes: the one before it takes the focus.
+    await user.tab();
+    await user.tab();
+    expect(closeOf("Third.")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByText("Third.")).not.toBeInTheDocument();
+    expect(toastOf("Second.")).toHaveFocus();
+
+    // Once the focus has left it, a click on its text does not bring the focus back.
+    await user.tab();
+    expect(closeOf("Second.")).toHaveFocus();
+    expect(toastOf("Second.")).not.toHaveAttribute("tabindex");
+  });
+
+  it("gives the focus back to where it was before the toasts took it, when the last toast goes", async () => {
+    const user = userEvent.setup();
+    setup();
+    const field = screen.getByRole("textbox", { name: "Workspace name" });
+    await user.click(field);
+    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: () => undefined } });
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByText("Snapshot deleted.")).not.toBeInTheDocument();
+    expect(field).toHaveFocus();
+  });
+
+  it("leaves the focus alone when a toast goes that does not hold it", async () => {
+    const user = userEvent.setup();
+    setup();
+    const field = screen.getByRole("textbox", { name: "Workspace name" });
+    await user.click(field);
+    const id = show({ message: "Snapshot imported." });
+    show({ message: "Mapping saved." });
+    act(() => {
+      toast.dismiss(id);
+    });
+    expect(screen.queryByText("Snapshot imported.")).not.toBeInTheDocument();
+    expect(field).toHaveFocus();
+  });
+
+  it("is reached by Tab in the order the toasts appeared, after the page", async () => {
+    const user = userEvent.setup();
+    setup();
+    const undo = { label: "Undo", onAction: () => undefined };
+    show({ message: "First.", action: undo });
+    show({ message: "Second." });
+    show({ message: "Third.", action: undo });
+    await user.tab();
+    expect(screen.getByRole("textbox", { name: "Workspace name" })).toHaveFocus();
+    // Each stop: the toast it is in, by its message, and the button it is.
+    const stops: string[] = [];
+    for (let stop = 0; stop < 5; stop += 1) {
+      await user.tab();
+      const active = document.activeElement;
+      const owner = active?.closest('[role="group"]');
+      const message = document.getElementById(owner?.getAttribute("aria-labelledby") ?? "");
+      stops.push(
+        `${message?.textContent ?? ""} ${active?.getAttribute("aria-label") ?? active?.textContent ?? ""}`,
+      );
+    }
+    expect(stops).toEqual([
+      "First. Undo",
+      `First. ${en.common.dismiss}`,
+      `Second. ${en.common.dismiss}`,
+      "Third. Undo",
+      `Third. ${en.common.dismiss}`,
+    ]);
+  });
+
   it("leaves after the toast timeout", () => {
     vi.useFakeTimers();
     setup();

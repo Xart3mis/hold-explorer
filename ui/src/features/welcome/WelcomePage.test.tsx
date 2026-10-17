@@ -1,7 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { IMPORT_EXTENSIONS } from "../../api/files";
-import { formatCount, formatDate, formatList } from "../../app/format";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
@@ -16,6 +15,7 @@ import {
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
+import { formatCount, formatDate, formatList } from "../../text/format";
 
 const names = en.destinations.name;
 

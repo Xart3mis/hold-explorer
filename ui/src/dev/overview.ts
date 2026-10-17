@@ -1,9 +1,11 @@
 // What the development page answers for the `overview` command: made-up numbers of a plausible
 // size, so the Overview can be looked at with thirteen disciplines, with three, and with
 // twenty-five. For development only; see ui/src/dev/app.tsx.
+import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
+import type { Status } from "../bindings/Status";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 
 /** How many open holds the numbers below add up to. A snapshot with another count scales them. */
@@ -14,7 +16,7 @@ const SINGLE_HOLD_LINES = 2548;
 type Row = readonly [label: string, holds: number, lines: number];
 
 /** Thirteen disciplines, the blank one among them under the label the core gives it. */
-const DISCIPLINES: readonly Row[] = [
+export const DISCIPLINES: readonly Row[] = [
   ["Piping", 1186, 880],
   ["Process", 913, 690],
   ["Civil", 702, 418],
@@ -30,7 +32,7 @@ const DISCIPLINES: readonly Row[] = [
   ["Unspecified", 30, 26],
 ];
 
-const HOLD_TYPES: readonly Row[] = [
+export const HOLD_TYPES: readonly Row[] = [
   ["Vendor data", 1322, 968],
   ["Process data", 1041, 803],
   ["Client decision", 742, 561],
@@ -104,8 +106,10 @@ function overviewOfSnapshot(
   snapshot: SnapshotInfo,
   isLatest: boolean,
   shape: DevOverview,
+  holds: number,
+  status: Status,
 ): OverviewView {
-  const share = snapshot.open_count / OPEN_HOLDS;
+  const share = holds / OPEN_HOLDS;
   const disciplines =
     shape === "many" ? MANY : shape === "few" ? DISCIPLINES.slice(0, 3) : DISCIPLINES;
   const holdTypes =
@@ -114,21 +118,57 @@ function overviewOfSnapshot(
     snapshot,
     is_latest: isLatest,
     summary: {
-      holds: snapshot.open_count,
+      holds,
       lines: Math.round(LINES * share),
       single_hold_lines: Math.round(SINGLE_HOLD_LINES * share),
-      // An older snapshot is a week younger for each step back.
-      median_age_days: shape === "no-dates" ? null : 41 - 2 * (4 - Math.min(snapshot.id, 4)),
-      median_duration_days: 18,
+      // An older snapshot is a week younger for each step back. Released holds have no age.
+      median_age_days:
+        shape === "no-dates" || status === "Released"
+          ? null
+          : 41 - 2 * (4 - Math.min(snapshot.id, 4)),
+      median_duration_days: status === "Open" ? null : 18,
     },
-    by_discipline: scaled(disciplines, snapshot.open_count),
-    by_hold_type: scaled(holdTypes, snapshot.open_count),
+    by_discipline: scaled(disciplines, holds),
+    by_hold_type: scaled(holdTypes, holds),
   };
 }
 
-/** What `overview` answers for the open workspace: `null` when it has no snapshot. */
-export function devOverview(open: WorkspaceOpen | null, shape: DevOverview): OverviewView | null {
+/**
+ * How many holds of a snapshot a filter keeps on the development page. The status is counted
+ * from the snapshot; every other part that is set keeps a fixed share of what is left, so the
+ * numbers move when a filter is set. Nothing is filtered: there are no holds here to filter.
+ */
+export function devKept(snapshot: SnapshotInfo, spec: FilterSpec): number {
+  const released = snapshot.row_count - snapshot.open_count;
+  const base =
+    spec.status === "Open"
+      ? snapshot.open_count
+      : spec.status === "Released"
+        ? released
+        : snapshot.row_count;
+  const parts =
+    spec.fields.filter((field) => field.values.length > 0).length +
+    (spec.text === "" ? 0 : 1) +
+    (spec.age_bands.length === 0 ? 0 : 1) +
+    (spec.created.from === null && spec.created.to === null ? 0 : 1) +
+    (spec.released.from === null && spec.released.to === null ? 0 : 1) +
+    (spec.size_mismatch === null ? 0 : 1);
+  return Math.round(base * 0.62 ** parts);
+}
+
+/** What `overview` answers for the open workspace and a filter: `null` when it has no snapshot. */
+export function devOverview(
+  open: WorkspaceOpen | null,
+  shape: DevOverview,
+  spec: FilterSpec,
+): OverviewView | null {
   const selected = open?.snapshots.find(({ id }) => id === open.selected);
   if (selected === undefined) return null;
-  return overviewOfSnapshot(selected, selected.id === open?.snapshots.at(-1)?.id, shape);
+  return overviewOfSnapshot(
+    selected,
+    selected.id === open?.snapshots.at(-1)?.id,
+    shape,
+    devKept(selected, spec),
+    spec.status,
+  );
 }

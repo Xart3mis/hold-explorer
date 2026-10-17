@@ -1,12 +1,19 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import { formatDate, formatDateTime, formatTime } from "../../app/format";
-import { t } from "../../app/i18n";
 import type { CommandError } from "../../bindings/CommandError";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotInfo } from "../../bindings/SnapshotInfo";
 import type { TargetCheck } from "../../bindings/TargetCheck";
-import { Button, Notice, Select, TextField, type SelectOption } from "../../components";
+import {
+  Button,
+  Notice,
+  SectionTitle,
+  Select,
+  TextField,
+  type SelectOption,
+} from "../../components";
 import { cx } from "../../components/cx";
+import { formatDate, formatDateTime, formatTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import { NEW_WORKSPACE, type ImportChoices } from "./draft";
 import styles from "./Import.module.css";
 import { ImportProblem } from "./ImportProblem";
@@ -136,7 +143,7 @@ export function ReviewTarget({
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>{t("import.review.target.title")}</h2>
+      <SectionTitle level={2}>{t("import.review.target.title")}</SectionTitle>
 
       <Select
         label={t("import.review.target.label")}
@@ -186,7 +193,12 @@ export function ReviewTarget({
           error={checkError}
           general="import.error.check"
           actions={
-            <Button variant="quiet" isPending={isChecking} onPress={onCheckAgain}>
+            <Button
+              variant="quiet"
+              reservesPendingSpace
+              isPending={isChecking}
+              onPress={onCheckAgain}
+            >
               {t("common.retry")}
             </Button>
           }
@@ -204,6 +216,7 @@ export function ReviewTarget({
           actions={
             <Button
               variant="quiet"
+              reservesPendingSpace
               isPending={isOpening}
               isDisabled={isDisabled}
               onPress={() => {

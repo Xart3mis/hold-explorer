@@ -4,9 +4,9 @@ import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { IMPORT_PATH } from "../../app/destinations";
-import { t } from "../../app/i18n";
-import { Button, Notice } from "../../components";
-import { Page } from "../shell/Page";
+import { Page } from "../../app/shell/Page";
+import { Button, Notice, Tag } from "../../components";
+import { t } from "../../text/i18n";
 import { openDraft, useImportDraft } from "./draft";
 import styles from "./Import.module.css";
 import { ImportProblem } from "./ImportProblem";
@@ -38,6 +38,9 @@ export function ImportSheetPage() {
 
   const { file } = draft;
   const sheets = file.sheets.length > 1 ? file.sheets : [];
+  // While a sheet is read or the import is cancelled, the other buttons wait: only the one that
+  // was pressed shows the spinner.
+  const busy = choose.isPending || cancel.isPending;
 
   return (
     <Page
@@ -59,14 +62,17 @@ export function ImportSheetPage() {
         {sheets.length === 0 ? (
           <p className={styles.text}>{t("import.sheet.none")}</p>
         ) : (
-          <ul
+          // The roles are written out, as a fact list writes them: a list drawn without its
+          // markers is not told as a list by every engine.
+          <div
+            role="list"
             aria-label={t("import.sheet.list", { file: file.file_name })}
             className={styles.ruled}
           >
             {sheets.map((sheet) => {
               const inUse = sheet === file.sheet_name;
               return (
-                <li key={sheet} className={styles.ruledRow}>
+                <div key={sheet} role="listitem" className={styles.ruledRow}>
                   <span className={styles.ruledValue}>{sheet}</span>
                   <span className={styles.ruledEnd}>
                     {inUse ? (
@@ -74,13 +80,14 @@ export function ImportSheetPage() {
                         <span className={styles.count}>
                           {t("import.sheet.rows", { count: file.row_count })}
                         </span>
-                        <span className={styles.tag}>{t("import.sheet.inUse")}</span>
+                        <Tag>{t("import.sheet.inUse")}</Tag>
                       </>
                     ) : (
                       <Button
                         aria-label={t("import.sheet.useNamed", { sheet })}
+                        reservesPendingSpace
                         isPending={choose.isPending && choose.variables === sheet}
-                        isDisabled={choose.isPending && choose.variables !== sheet}
+                        isInert={busy}
                         onPress={() => {
                           choose.mutate(sheet);
                         }}
@@ -89,10 +96,10 @@ export function ImportSheetPage() {
                       </Button>
                     )}
                   </span>
-                </li>
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
 
         {choose.isError ? (
@@ -106,7 +113,7 @@ export function ImportSheetPage() {
 
         <div className={styles.actions}>
           <Button
-            isDisabled={choose.isPending}
+            isInert={busy}
             onPress={() => {
               void navigate(nextStep(draft), { state: { from } });
             }}
@@ -115,9 +122,11 @@ export function ImportSheetPage() {
           </Button>
           <Button
             variant="quiet"
+            reservesPendingSpace
             isPending={cancel.isPending}
+            isInert={choose.isPending}
             onPress={() => {
-              cancel.mutate(from);
+              cancel.mutate({ to: from, file: draft.file.content_hash });
             }}
           >
             {t("common.cancel")}

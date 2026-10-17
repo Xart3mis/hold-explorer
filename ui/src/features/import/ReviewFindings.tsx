@@ -1,12 +1,18 @@
 import { memo, useMemo } from "react";
-import { formatCount } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SkipKind } from "../../bindings/SkipKind";
 import type { SkippedRow } from "../../bindings/SkippedRow";
 import type { WarningKind } from "../../bindings/WarningKind";
-import { DataTable, type DataTableColumn } from "../../components";
-import { Details } from "./Details";
+import {
+  DataTable,
+  Disclosure,
+  DisclosureGroup,
+  DisclosureStatement,
+  type DataTableColumn,
+  textChars,
+} from "../../components";
+import { formatCount } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import styles from "./Import.module.css";
 
 /** Why a row was skipped, by its kind. */
@@ -55,6 +61,15 @@ const warnings: Record<WarningKind, { title: MessageKey; text: MessageKey }> = {
   },
 };
 
+/** The room of a row number: a sheet has at most 1,048,576 rows, written without separators. */
+const ROW_NUMBER_CHARS = 7;
+
+/** The least room of the value that was read before the table scrolls sideways. */
+const VALUE_CHARS = 16;
+
+/** How many skipped rows show before their table scrolls. */
+const LISTED_ROWS = { maxRows: 8 } as const;
+
 /**
  * Everything the import did not take as written: the rows it left out and what it changed or
  * assumed. The counts and what the app did are on the page at once; the rows and the examples
@@ -73,6 +88,7 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
         header: t("import.review.columnRow"),
         kind: "number",
         isRowHeader: true,
+        size: { chars: ROW_NUMBER_CHARS },
         // A row is named as the file numbers it, without separators.
         cell: (row) => String(row.row_number),
       },
@@ -80,7 +96,10 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
         id: "reason",
         header: t("import.review.columnReason"),
         cell: (row) => t(reasons[row.kind]),
-        width: "max-content",
+        // As wide as the longest reason there is, in whatever language it is written.
+        size: {
+          chars: Math.max(...Object.values(reasons).map((reason) => textChars(t(reason)))),
+        },
       },
       {
         id: "value",
@@ -89,7 +108,7 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
         kind: "identifier",
         isSupporting: true,
         cell: (row) => row.value ?? t("import.review.blank"),
-        width: "minmax(0, 1fr)",
+        size: { flex: 1, minChars: VALUE_CHARS },
       },
     ],
     [],
@@ -98,23 +117,22 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
     return <p className={styles.text}>{t("import.review.clean")}</p>;
   }
   return (
-    <div className={styles.detailsList}>
+    <DisclosureGroup>
       {skippedCount === 0 ? (
-        <p className={styles.detailsNone}>{t("import.review.skippedNone")}</p>
+        <DisclosureStatement>{t("import.review.skippedNone")}</DisclosureStatement>
       ) : (
-        <Details
+        <Disclosure
           level={3}
           title={t("import.review.skipped", { count: skippedCount })}
-          text={t("import.review.skippedHelp")}
+          summary={t("import.review.skippedHelp")}
         >
-          <div className={styles.tableBox}>
-            <DataTable
-              aria-label={t("import.review.skippedTable")}
-              columns={skippedColumns}
-              rows={skipped}
-              rowKey={(row) => String(row.row_number)}
-            />
-          </div>
+          <DataTable
+            aria-label={t("import.review.skippedTable")}
+            columns={skippedColumns}
+            rows={skipped}
+            rowKey={(row) => String(row.row_number)}
+            height={LISTED_ROWS}
+          />
           {skipped.length < skippedCount ? (
             <p className={styles.caption}>
               {t("import.review.skippedShown", {
@@ -123,21 +141,21 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
               })}
             </p>
           ) : null}
-        </Details>
+        </Disclosure>
       )}
 
       {groups.length === 0 ? (
-        <p className={styles.detailsNone}>{t("import.review.warningsNone")}</p>
+        <DisclosureStatement>{t("import.review.warningsNone")}</DisclosureStatement>
       ) : (
         groups.map((group) => {
           const title = t(warnings[group.kind].title);
           return (
-            <Details
+            <Disclosure
               key={group.kind}
               level={3}
               title={title}
               count={t("import.review.times", { count: group.count })}
-              text={t(warnings[group.kind].text)}
+              summary={t(warnings[group.kind].text)}
             >
               <ul
                 aria-label={t("import.review.examplesOf", { kind: title })}
@@ -156,10 +174,10 @@ export const ReviewFindings = memo(function ReviewFindings({ review }: { review:
                   })}
                 </p>
               ) : null}
-            </Details>
+            </Disclosure>
           );
         })
       )}
-    </div>
+    </DisclosureGroup>
   );
 });

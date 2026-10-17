@@ -1,5 +1,5 @@
-import i18next from "../app/i18n";
 import type { CommandError } from "../bindings/CommandError";
+import i18next from "../text/i18n";
 
 /** Whether a value has the shape of what a failed command carries. */
 export function isCommandError(value: unknown): value is CommandError {

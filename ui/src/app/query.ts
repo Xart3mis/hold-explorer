@@ -1,6 +1,13 @@
-import { keepPreviousData, QueryClient, queryOptions } from "@tanstack/react-query";
-import { api } from "../api/commands";
+import {
+  keepPreviousData,
+  notifyManager,
+  QueryClient,
+  queryOptions,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useCallback, useSyncExternalStore } from "react";
 import { keys } from "../api/keys";
+import { workspaceApi } from "../api/workspace-commands";
 
 /**
  * The one query client. Every command result is loaded through it.
@@ -11,7 +18,7 @@ import { keys } from "../api/keys";
  *   time: a `CommandError` is the command's answer, and anything else, a panic or an argument
  *   the command cannot read, is a fault that asking again does not mend. A retry would only keep
  *   the skeleton on screen for seconds before the error. The one exception is made where it is
- *   needed, not here: `useSnapshotQuery` reads again after `ViewChanged`.
+ *   needed, not here: the readings of ui/src/app/view.ts are read again after `ViewChanged`.
  * - Commands are local calls. They run whether or not the machine is online, and nothing is
  *   fetched again because the window was shown or the network came back.
  */
@@ -41,7 +48,7 @@ export const queryClient = new QueryClient({
  */
 export const startQuery = queryOptions({
   queryKey: keys.start,
-  queryFn: () => api.appStart(),
+  queryFn: () => workspaceApi.appStart(),
   staleTime: Infinity,
 });
 
@@ -56,3 +63,20 @@ queryClient.setQueryDefaults(keys.importDraft, { staleTime: Infinity, gcTime: In
 // way: both belong to the draft and go when it goes.
 queryClient.setQueryDefaults(keys.importReview, { staleTime: Infinity, gcTime: Infinity });
 queryClient.setQueryDefaults(keys.importChoices, { staleTime: Infinity, gcTime: Infinity });
+// The filters the user has set are kept by workspace for the session. Nothing reads them from
+// anywhere else, so they are never stale and never dropped while the app runs.
+queryClient.setQueryDefaults(keys.filters, { staleTime: Infinity, gcTime: Infinity });
+
+/**
+ * What a reader finds in the cache, read again whenever the cache changes. The cache also changes
+ * while a component renders, when a query is first asked for, so a change is passed on after the
+ * render that caused it, the way the query library passes its own changes on.
+ */
+export function useCached<Data>(read: (client: QueryClient) => Data | undefined): Data | undefined {
+  const client = useQueryClient();
+  const subscribe = useCallback(
+    (changed: () => void) => client.getQueryCache().subscribe(notifyManager.batchCalls(changed)),
+    [client],
+  );
+  return useSyncExternalStore(subscribe, () => read(client));
+}

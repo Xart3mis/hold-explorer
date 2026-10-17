@@ -1,7 +1,7 @@
-import { ArrowDown, ArrowUp, Minus, type LucideIcon } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Minus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button as RacButton } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Skeleton } from "../Skeleton/Skeleton";
@@ -60,9 +60,16 @@ export interface StatTileProps {
 export function StatTile({ label, value, delta, onPress, isLoading, unavailable }: StatTileProps) {
   const loading = isLoading === true;
   const missing = !loading && unavailable !== undefined;
+  const pressable = onPress !== undefined && !loading && !missing;
   const content = (
     <>
-      <span className={styles.label}>{label}</span>{" "}
+      <span className={styles.label}>
+        <span data-part="label-text" className={styles.labelText}>
+          {label}
+        </span>
+        {/* A tile that opens a screen says so before it is hovered: the ink of what acts, and a chevron. */}
+        {pressable ? <Icon icon={ChevronRight} /> : null}
+      </span>{" "}
       {loading ? (
         <span className={styles.value}>
           <Skeleton variant="stat" />
@@ -90,15 +97,20 @@ export function StatTile({ label, value, delta, onPress, isLoading, unavailable 
       ) : null}
     </>
   );
-  if (onPress !== undefined && !loading && !missing) {
+  if (pressable) {
     return (
-      <RacButton onPress={onPress} className={cx(styles.tile)}>
+      <RacButton
+        onPress={onPress}
+        data-part="stat-tile"
+        data-pressable=""
+        className={cx(styles.tile)}
+      >
         {content}
       </RacButton>
     );
   }
   return (
-    <div className={styles.tile} aria-busy={loading ? "true" : undefined}>
+    <div data-part="stat-tile" className={styles.tile} aria-busy={loading ? "true" : undefined}>
       {content}
     </div>
   );

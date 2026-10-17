@@ -1,9 +1,11 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use chrono::{Duration, NaiveDateTime};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FieldFilter, FilterSpec, Status};
 use hx_core::load::load_file;
+use hx_core::mapping::Field;
 use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
 use hx_core::warning::WarningKind;
@@ -16,12 +18,12 @@ use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::snapshots::{OverviewView, ViewRef};
 use super::AppState;
 
-struct Fixture {
-    dir: TempDir,
+pub(super) struct Fixture {
+    pub(super) dir: TempDir,
 }
 
 impl Fixture {
-    fn new() -> Fixture {
+    pub(super) fn new() -> Fixture {
         Fixture {
             dir: TempDir::new().unwrap(),
         }
@@ -31,11 +33,11 @@ impl Fixture {
         self.dir.path().join("data").join("workspaces")
     }
 
-    fn state(&self) -> AppState {
+    pub(super) fn state(&self) -> AppState {
         AppState::new(self.dir.path().join("config"), self.dir.path().join("data"))
     }
 
-    fn synth(&self, name: &str, seed: u64) -> PathBuf {
+    pub(super) fn synth(&self, name: &str, seed: u64) -> PathBuf {
         let cfg = SynthConfig::new(seed, 10, 60);
         let dir = self.dir.path().join("input");
         std::fs::create_dir_all(&dir).unwrap();
@@ -45,14 +47,19 @@ impl Fixture {
     }
 }
 
-fn at(text: &str) -> NaiveDateTime {
+pub(super) fn at(text: &str) -> NaiveDateTime {
     NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").unwrap()
 }
 
 fn no_progress(_: ImportPhase) {}
 
 /// Imports the file as a snapshot dated `taken_at` into a new workspace, or into the open one.
-fn import(state: &mut AppState, path: &Path, taken_at: &str, new_workspace: bool) -> i64 {
+pub(super) fn import(
+    state: &mut AppState,
+    path: &Path,
+    taken_at: &str,
+    new_workspace: bool,
+) -> i64 {
     let target = if new_workspace {
         TargetChoice::New { name: "W".into() }
     } else {
@@ -76,11 +83,11 @@ fn import(state: &mut AppState, path: &Path, taken_at: &str, new_workspace: bool
         .id
 }
 
-fn open_holds() -> FilterSpec {
+pub(super) fn open_holds() -> FilterSpec {
     FilterSpec::default()
 }
 
-fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
+pub(super) fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
     ViewRef {
         workspace_id: workspace_id.to_string(),
         snapshot_id,
@@ -380,6 +387,30 @@ fn the_complete_default_filter_the_interface_sends_means_open_holds() {
     let spec: FilterSpec = serde_json::from_str(json).unwrap();
     assert_eq!(spec, FilterSpec::default());
     assert_eq!(spec.status, Status::Open);
+}
+
+#[test]
+fn the_export_column_names_the_interface_shows_are_the_labels_of_the_fields() {
+    let json = include_str!("../../../ui/src/api/export-columns.json");
+    let names: BTreeMap<String, String> = serde_json::from_str(json).unwrap();
+    for field in Field::ALL {
+        let key = serde_json::to_value(field).unwrap();
+        let key = key.as_str().unwrap();
+        assert_eq!(
+            names.get(key).map(String::as_str),
+            Some(field.label()),
+            "the interface names the column of {key} as the engine does"
+        );
+    }
+    // Every name belongs to a field: the loop found one for each field, and there is no other.
+    assert_eq!(names.len(), Field::ALL.len());
+}
+
+#[test]
+fn the_fields_the_interface_takes_for_required_are_the_engines() {
+    let json = include_str!("../../../ui/src/api/required-fields.json");
+    let required: Vec<Field> = serde_json::from_str(json).unwrap();
+    assert_eq!(required, Field::REQUIRED);
 }
 
 fn demo_snapshots(fx: &Fixture, id: &str) -> Workspace {

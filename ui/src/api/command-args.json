@@ -21,7 +21,9 @@
     },
     "onProgress": "__CHANNEL__:1"
   },
-  "import_cancel": {},
+  "import_cancel": {
+    "contentHash": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+  },
   "snapshot_select": { "id": 2 },
   "overview": {
     "spec": {
@@ -35,5 +37,72 @@
     },
     "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
   },
-  "demo_create": {}
+  "demo_create": {},
+  "filter_options": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "filter_values": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "dim": "Discipline",
+    "search": "pip",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "lines": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "query": {
+      "sort": "LineId",
+      "single_hold_only": false,
+      "size_mismatch_only": false,
+      "reverse": false
+    },
+    "offset": 200,
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "holds": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "query": { "sort": "OldestFirst", "offset": 0, "limit": 200, "reverse": false },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "line_detail": {
+    "lineId": "L-1001",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "hold_detail": {
+    "position": 12,
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "workspace_current": {}
 }

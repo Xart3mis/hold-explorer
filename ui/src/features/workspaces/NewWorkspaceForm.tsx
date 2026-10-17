@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { asCommandError } from "../../api/error";
-import { t } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { useStart } from "../../app/actions/start";
+import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { Button, Notice, TextField } from "../../components";
+import { t } from "../../text/i18n";
 import styles from "./NewWorkspaceForm.module.css";
 
 export interface NewWorkspaceFormProps {
@@ -18,7 +19,8 @@ export interface NewWorkspaceFormProps {
  * create keeps the form, with the reason and what to do under the field.
  */
 export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps) {
-  const { createWorkspace, isBusy } = useApp();
+  const { createWorkspace } = useWorkspaceActions();
+  const { isBusy } = useStart();
   const [name, setName] = useState("");
   const [isMissing, setMissing] = useState(false);
   const form = useRef<HTMLFormElement>(null);
@@ -78,7 +80,12 @@ export function NewWorkspaceForm({ onCreated, onCancel }: NewWorkspaceFormProps)
         </Notice>
       ) : null}
       <div className={styles.actions}>
-        <Button type="submit" isPending={createWorkspace.isPending} isInert={isBusy}>
+        <Button
+          type="submit"
+          reservesPendingSpace
+          isPending={createWorkspace.isPending}
+          isInert={isBusy}
+        >
           {t("workspaces.create")}
         </Button>
         <Button variant="quiet" onPress={onCancel}>

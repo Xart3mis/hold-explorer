@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import { destinationPages } from "../../app/router";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
+import { VIEW_CHANGED } from "../../app/view";
+import type { ViewRef } from "../../bindings/ViewRef";
 import { Button } from "../../components";
 import { durationToken } from "../../design/token-values";
 import en from "../../locales/en.json";
@@ -11,11 +15,11 @@ import { expectAccessible } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
 import { opened, openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
+import { overviewOf } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
+import { formatDate } from "../../text/format";
 import { connectImportStart } from "../import/start";
-import { useShell } from "./context";
-import { Page } from "./Page";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;
@@ -39,7 +43,7 @@ describe("the sidebar", () => {
     ).toEqual([
       names.overview,
       `${names.breakdown} ${soon}`,
-      `${names.lines} ${soon}`,
+      names.lines,
       `${names.blockers} ${soon}`,
       `${names.history} ${soon}`,
       `${names.people} ${soon}`,
@@ -52,12 +56,11 @@ describe("the sidebar", () => {
     ).toEqual([`${names.rules} ${soon}`, names.settings]);
   });
 
-  it("puts the Soon tag in the accessible name of the seven that are not built, and of no other", async () => {
+  it("puts the Soon tag in the accessible name of the six that are not built, and of no other", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
     for (const id of [
       "breakdown",
-      "lines",
       "blockers",
       "history",
       "people",
@@ -67,15 +70,16 @@ describe("the sidebar", () => {
       expect(within(nav).getByRole("link", { name: `${names[id]} ${soon}` })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: names.overview })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.lines })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.settings })).toBeInTheDocument();
-    expect(within(nav).getAllByText(soon)).toHaveLength(7);
+    expect(within(nav).getAllByText(soon)).toHaveLength(6);
   });
 
   it("marks the current destination, and only it", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
     const overview = within(nav).getByRole("link", { name: names.overview });
-    const lines = within(nav).getByRole("link", { name: `${names.lines} ${soon}` });
+    const blockers = within(nav).getByRole("link", { name: `${names.blockers} ${soon}` });
     expect(overview).toHaveAttribute("aria-current", "page");
     expect(
       within(nav)
@@ -83,8 +87,8 @@ describe("the sidebar", () => {
         .filter((link) => link.hasAttribute("aria-current")),
     ).toHaveLength(1);
 
-    await user.click(lines);
-    expect(lines).toHaveAttribute("aria-current", "page");
+    await user.click(blockers);
+    expect(blockers).toHaveAttribute("aria-current", "page");
     expect(overview).not.toHaveAttribute("aria-current");
   });
 
@@ -286,6 +290,84 @@ describe("what a page reports to the shell", () => {
       within(screen.getByRole("alert")).getByRole("button", { name: en.common.dismiss }),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("what the shell says when the view on screen was brought back in step", () => {
+  /** The Rust side holds the older snapshot: it refuses a reading for any other, and says so when asked. */
+  const held = opened({ selected: 1 });
+  const refusing = {
+    overview: ({ view }: { view: ViewRef }) =>
+      view.snapshot_id === held.selected
+        ? overviewOf(held)
+        : Promise.reject(commandFailure(VIEW_CHANGED, "The view changed on the way.")),
+  };
+
+  it("is an information notice under the top bar, with a title and a text from the catalog, that stays on every page until it is dismissed", async () => {
+    const current = vi.fn(() => held);
+    const start = openStart();
+    const appStart = vi.fn(() => start);
+    const { user } = renderApp({
+      start,
+      path: "/overview",
+      handlers: { ...refusing, app_start: appStart, workspace_current: current },
+    });
+    await sidebar();
+    const title = await screen.findByText(en.shell.viewResyncedTitle);
+    const notice = must(title.closest<HTMLElement>("[data-tone]"), "the notice around the title");
+    // It says what happened and what to do, and it is not presented as an error.
+    expect(notice).toHaveAttribute("data-tone", "info");
+    expect(notice).toHaveAttribute("role", "status");
+    expect(notice).toHaveTextContent(en.shell.viewResyncedText);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // It belongs to the shell, not to the page whose reading found out.
+    expect(screen.getByRole("main")).toContainElement(notice);
+    expect(must(document.querySelector("[data-part='page']"), "the page")).not.toContainElement(
+      notice,
+    );
+    // The Rust side was asked what it holds, once, and was not made to start over.
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(appStart).toHaveBeenCalledTimes(1);
+    // The top bar names the snapshot the Rust side holds, and the page shows its numbers.
+    const [older] = held.snapshots;
+    expect(
+      within(topBar()).getByRole("button", {
+        name: new RegExp(formatDate(must(older, "the older snapshot").taken_at)),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: names.overview })).toBeInTheDocument();
+
+    await user.click(within(await sidebar()).getByRole("link", { name: names.settings }));
+    await screen.findByRole("heading", { level: 1, name: names.settings });
+    expect(screen.getByText(en.shell.viewResyncedTitle)).toBeInTheDocument();
+
+    await user.click(
+      within(
+        must(
+          screen.getByText(en.shell.viewResyncedTitle).closest<HTMLElement>("[data-tone]"),
+          "the notice around the title",
+        ),
+      ).getByRole("button", { name: en.common.dismiss }),
+    );
+    expect(screen.queryByText(en.shell.viewResyncedTitle)).not.toBeInTheDocument();
+  });
+
+  it("is not shown when the Rust side holds the view on screen: the page shows the error of its reading", async () => {
+    const current = vi.fn(() => opened());
+    renderApp({
+      start: openStart(),
+      path: "/overview",
+      handlers: {
+        overview: () =>
+          Promise.reject(commandFailure(VIEW_CHANGED, "The view changed on the way.")),
+        workspace_current: current,
+      },
+    });
+    await sidebar();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(en.errors.viewUnsettled);
+    expect(current).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(en.shell.viewResyncedTitle)).not.toBeInTheDocument();
   });
 });
 
@@ -769,7 +851,7 @@ describe("a file dragged over the window", () => {
 
 describe("the keyboard", () => {
   it("walks the shell in reading order: top bar, sidebar, page", SLOW, async () => {
-    const { user } = renderApp({ start: openStart(), path: "/lines" });
+    const { user } = renderApp({ start: openStart(), path: "/blockers" });
     const nav = await sidebar();
     // Start from the top of the document, as after a click on the window's background.
     (document.activeElement as HTMLElement | null)?.blur();

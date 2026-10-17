@@ -2,7 +2,6 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
-import { formatDateTime } from "../../app/format";
 import { queryClient } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FilterSpec } from "../../bindings/FilterSpec";
@@ -15,6 +14,7 @@ import { commandFailure, type Handlers } from "../../test/ipc";
 import { group, overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
+import { formatDateTime } from "../../text/format";
 
 const text = en.overview;
 const OLDER = "2026-09-30T14:05:00";
@@ -106,12 +106,15 @@ async function loaded(overview: Mock<Answer>): Promise<HTMLElement> {
 /** The cell of the stat tile group that carries the label. */
 function tile(label: string): HTMLElement {
   const figures = screen.getByRole("group", { name: text.figures });
-  return must(within(figures).getByText(label).parentElement, `the tile ${label}`);
+  return must(
+    within(figures).getByText(label).closest<HTMLElement>("[data-part='stat-tile']"),
+    `the tile ${label}`,
+  );
 }
 
 /** The bar rows of a group, each as the text it shows: label, holds, lines. */
 function barRows(name: string): string[] {
-  const bars = screen.getByRole("group", { name });
+  const bars = screen.getByRole("list", { name });
   return [...bars.querySelectorAll("[data-part='bar-row']")].map((row) =>
     row.textContent.replace(/\s+/g, " ").trim(),
   );
@@ -119,7 +122,7 @@ function barRows(name: string): string[] {
 
 /** The lengths of the bars of a group, in the order of its rows. */
 function barLengths(name: string): string[] {
-  const bars = screen.getByRole("group", { name });
+  const bars = screen.getByRole("list", { name });
   return [...bars.querySelectorAll<HTMLElement>("[data-part='bar']")].map(
     (bar) => bar.style.inlineSize,
   );
@@ -216,8 +219,12 @@ describe("the Overview with a snapshot", () => {
     const figures = screen.getByRole("group", { name: text.figures });
     expect(figures.children).toHaveLength(4);
     expect(figures.querySelector("[data-part='delta']")).toBeNull();
-    // A figure opens nothing yet, so it is not a button.
-    expect(within(figures).queryByRole("button")).not.toBeInTheDocument();
+    // The two figures of lines open Lines; the other two open nothing yet, so they are no button.
+    expect(
+      within(figures)
+        .getAllByRole("button")
+        .map((tile) => tile.textContent),
+    ).toEqual([`${text.linesOnHold} 2,208`, `${text.singleHoldLines} 714`]);
   });
 
   it("shows a dash and the reason when the snapshot gives no median age", async () => {
@@ -311,7 +318,7 @@ describe("the Overview with a snapshot", () => {
       ]);
       expect(barLengths(text.byDiscipline)).toEqual(["100%", "10%"]);
       // A count is one piece of text in its own cell of the row, whatever its length.
-      const bars = screen.getByRole("group", { name: text.byDiscipline });
+      const bars = screen.getByRole("list", { name: text.byDiscipline });
       const [first] = bars.querySelectorAll("[data-part='bar-row']");
       expect([...must(first, "the first row").children].map((part) => part.textContent)).toEqual([
         "Piping",
@@ -327,15 +334,16 @@ describe("the Overview with a snapshot", () => {
     },
   );
 
-  it("draws the bars as plain data: one neutral bar a row, and nothing to press", async () => {
+  it("draws the bars as plain data: one neutral bar a row, each a row that filters by its value", async () => {
     const { overview } = renderOverview();
     await loaded(overview);
-    const bars = screen.getByRole("group", { name: text.byDiscipline });
+    const bars = screen.getByRole("list", { name: text.byDiscipline });
     expect(bars.querySelectorAll("[data-part='bar']")).toHaveLength(7);
     expect(bars.querySelector("[data-ordinal]")).toBeNull();
-    // Filtering by a bar comes with the filter bar. Until then a row is not a control.
-    expect(within(bars).queryByRole("button")).not.toBeInTheDocument();
-    expect(bars.querySelector("[tabindex]")).toBeNull();
+    // A row is a button that filters by its value and opens Lines; none is in a filter yet.
+    const rows = within(bars).getAllByRole("button");
+    expect(rows).toHaveLength(7);
+    for (const row of rows) expect(row).toHaveAttribute("aria-pressed", "false");
   });
 
   it("names each switch with its group, and shows the same words on both", async () => {
@@ -356,6 +364,24 @@ describe("the Overview with a snapshot", () => {
     }
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
   });
+
+  it(
+    "gives the counts of a group's table the room of its widest count, and its name the rest",
+    SLOW,
+    async () => {
+      const { user, overview } = renderOverview();
+      await loaded(overview);
+      await user.click(disciplineSwitch());
+      const grid = screen.getByRole("grid", { name: text.byDiscipline });
+      const width = (name: string) =>
+        within(grid).getByRole("columnheader", { name }).parentElement?.style.width;
+      // Where nothing is laid out a figure is 7 px wide and the padding 12 px: the widest count,
+      // "1,515", is four figures and a separator. Six characters for every count would be 66 px.
+      expect(width(text.columnHolds)).toBe("58px");
+      // "Lines" needs more than three figures do, so the header decides.
+      expect(width(text.columnLines)).toBe("54px");
+    },
+  );
 
   it("shows a group as a table with the same rows in the same order", SLOW, async () => {
     const { user, overview } = renderOverview();
@@ -387,8 +413,8 @@ describe("the Overview with a snapshot", () => {
     await user.click(must(firstRow, "the first row"));
     expect(must(firstRow, "the first row")).not.toHaveAttribute("aria-selected");
     // The table stands in for the bars of its group; the other group keeps its bars.
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
-    expect(screen.getByRole("group", { name: text.byHoldType })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.getByRole("list", { name: text.byHoldType })).toBeInTheDocument();
     expect(holdTypeSwitch()).not.toBeChecked();
 
     // The switch is worked by the keyboard as well, and brings the bars back.
@@ -495,7 +521,7 @@ describe("the Overview while it changes", () => {
     // Both groups have their titles and rows of blocks with bars.
     for (const title of [text.byDiscipline, text.byHoldType]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
-      const bars = screen.getByRole("group", { name: title });
+      const bars = screen.getByRole("list", { name: title });
       expect(bars).toHaveAttribute("aria-busy", "true");
       const rows = bars.querySelectorAll("[data-part='skeleton-row']");
       expect(rows.length).toBeGreaterThan(2);
@@ -504,8 +530,9 @@ describe("the Overview while it changes", () => {
       }
     }
     // Nothing can be switched or pressed while nothing is there, and nothing is said to be wrong.
-    expect(within(main).queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(within(main).queryByRole("button")).not.toBeInTheDocument();
+    // The filter bar above what is loading is not part of it: its controls are there already.
+    expect(within(content(main)).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(content(main)).queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     // The snapshot is known before its numbers are: the line names it and gives no number.
     expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
@@ -534,7 +561,7 @@ describe("the Overview while it changes", () => {
     );
     // The error stands in place of the figures and the bars, and is the one thing that is said.
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
     expect(status(main)).toBeEmptyDOMElement();
     expect(must(main.querySelector("header p"), "the line under the title")).toHaveTextContent(
       snapshotOnly(NEWEST),
@@ -716,7 +743,7 @@ describe("the Overview of a workspace without snapshots", () => {
     expect(overview).toHaveBeenCalledWith(asked(null));
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: text.byDiscipline })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
     // One action, no snapshot to name under the title, and nothing being read.
     expect(within(main).getAllByRole("button")).toHaveLength(1);
     expect(must(main.querySelector("header"), "the page header").querySelector("p")).toBeNull();
@@ -761,6 +788,10 @@ describe("the Overview of a limited snapshot", () => {
     const notice = must(limitedNotice(main), "the notice of a limited snapshot");
     expect(notice).toHaveAttribute("data-tone", "info");
     expect(notice).toHaveTextContent(text.limitedText);
+    // It says what follows for the numbers under it. Which columns the snapshot lacks is said
+    // once, by the filter bar above, and not again here.
+    expect(text.limitedText).toMatch(/counts as open/);
+    expect(text.limitedText).not.toMatch(/column|hold ID/i);
     // It stands before the figures it is about, and is not part of what is dimmed or busy.
     expect(content(main)).not.toContainElement(notice);
     expect(

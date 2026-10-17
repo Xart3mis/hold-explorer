@@ -1,9 +1,9 @@
 import { Layers, Settings, Upload } from "lucide-react";
 import { useLocation } from "react-router";
 import { WELCOME_PATH, type Destination } from "../../app/destinations";
-import { t } from "../../app/i18n";
 import type { AppStart } from "../../bindings/AppStart";
 import { Button, Tooltip } from "../../components";
+import { t } from "../../text/i18n";
 import { startImport } from "../import/start";
 import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
 import { NavItem } from "./NavItem";

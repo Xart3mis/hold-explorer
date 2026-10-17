@@ -1,6 +1,6 @@
 import { CircleCheck, Info, OctagonAlert, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { IconButton } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";

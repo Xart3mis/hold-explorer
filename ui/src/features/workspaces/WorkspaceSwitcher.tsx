@@ -3,9 +3,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Input, TextField as RacTextField } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { asCommandError } from "../../api/error";
+import { useStart } from "../../app/actions/start";
+import { useWorkspaceActions, WORKSPACE_CHANGED } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
-import { t } from "../../app/i18n";
-import { useApp, WORKSPACE_CHANGED } from "../../app/useApp";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
@@ -18,6 +18,7 @@ import {
   VisuallyHidden,
 } from "../../components";
 import { cx } from "../../components/cx";
+import { t } from "../../text/i18n";
 import type { ShellProblem } from "../shell/problem";
 import styles from "./WorkspaceSwitcher.module.css";
 
@@ -133,7 +134,8 @@ export function WorkspaceSwitcher({
   renameErrorId,
   onProblem,
 }: WorkspaceSwitcherProps) {
-  const { openWorkspace, renameWorkspace, isBusy } = useApp();
+  const { openWorkspace, renameWorkspace } = useWorkspaceActions();
+  const { isBusy } = useStart();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const toast = useToast();

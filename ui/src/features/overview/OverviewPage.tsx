@@ -1,13 +1,17 @@
 import { Upload } from "lucide-react";
 import { useId, useState } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { openHoldsFilter } from "../../api/filter";
-import { formatCount, formatDateTime, formatDays } from "../../app/format";
-import { t } from "../../app/i18n";
+import { isSameDim } from "../../app/filters/dims";
+import { useFilters, withValues, type Filters } from "../../app/filters/state";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
+import type { Dim } from "../../bindings/Dim";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
+import type { Status } from "../../bindings/Status";
 import type { Summary } from "../../bindings/Summary";
 import {
   BarRow,
@@ -22,30 +26,24 @@ import {
   StatTileGroup,
   VisuallyHidden,
   type DataTableColumn,
+  textChars,
 } from "../../components";
+import { formatCount, formatDateTime, formatDays } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
+import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { DEFAULT_LINES_STATE, linesAddress } from "../lines/address";
+import { presetQuery } from "../lines/presets";
 import styles from "./OverviewPage.module.css";
 
-/** The page shows the open holds, and sends the whole filter that says so. */
-const OPEN_HOLDS = openHoldsFilter();
-
-/** The two groups of the page: what each is by, in the words of its title and of its table. */
+/**
+ * The two groups of the page: what each is by, in the words of the first column of its table, and
+ * the dimension a bar of it filters by.
+ */
 const DIMENSIONS = [
-  {
-    id: "discipline",
-    title: "overview.byDiscipline",
-    column: "overview.columnDiscipline",
-    toTable: "overview.showDisciplineAsTable",
-  },
-  {
-    id: "holdType",
-    title: "overview.byHoldType",
-    column: "overview.columnHoldType",
-    toTable: "overview.showHoldTypeAsTable",
-  },
-] as const;
+  { id: "discipline", column: "overview.columnDiscipline", dim: "Discipline" },
+  { id: "holdType", column: "overview.columnHoldType", dim: "HoldType" },
+] as const satisfies readonly { id: string; column: MessageKey; dim: Dim }[];
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
 
@@ -56,32 +54,111 @@ type DimensionId = (typeof DIMENSIONS)[number]["id"];
  */
 const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4 };
 
-/** The four figures of the snapshot: one container, its cells divided by hairlines. */
-function Figures({ summary }: { summary?: Summary }) {
+/** What the page calls its figures and its groups, in the text catalog. */
+interface Words {
+  figures: MessageKey;
+  holds: MessageKey;
+  lines: MessageKey;
+  /** The fourth figure: which median of the summary it is, its label, and why it may be absent. */
+  median: "median_age_days" | "median_duration_days";
+  medianLabel: MessageKey;
+  medianMissing: MessageKey;
+  title: Record<DimensionId, MessageKey>;
+  toTable: Record<DimensionId, MessageKey>;
+}
+
+/**
+ * The page shows the holds the status of the filters keeps, and names them after it: nothing on
+ * it calls a released hold open. The open holds have an age and the released ones a duration;
+ * among all holds the median age is that of the open ones, and its label says so.
+ */
+const WORDS: Record<Status, Words> = {
+  Open: {
+    figures: "overview.figures",
+    holds: "overview.openHolds",
+    lines: "overview.linesOnHold",
+    median: "median_age_days",
+    medianLabel: "overview.medianAge",
+    medianMissing: "overview.medianAgeMissing",
+    title: { discipline: "overview.byDiscipline", holdType: "overview.byHoldType" },
+    toTable: {
+      discipline: "overview.showDisciplineAsTable",
+      holdType: "overview.showHoldTypeAsTable",
+    },
+  },
+  Released: {
+    figures: "overview.releasedFigures",
+    holds: "overview.releasedHolds",
+    lines: "overview.releasedLines",
+    median: "median_duration_days",
+    medianLabel: "overview.releasedMedianDuration",
+    medianMissing: "overview.releasedMedianDurationMissing",
+    title: {
+      discipline: "overview.releasedByDiscipline",
+      holdType: "overview.releasedByHoldType",
+    },
+    toTable: {
+      discipline: "overview.releasedShowDisciplineAsTable",
+      holdType: "overview.releasedShowHoldTypeAsTable",
+    },
+  },
+  All: {
+    figures: "overview.allFigures",
+    holds: "overview.allHolds",
+    lines: "overview.allLines",
+    median: "median_age_days",
+    medianLabel: "overview.allMedianAge",
+    medianMissing: "overview.medianAgeMissing",
+    title: { discipline: "overview.allByDiscipline", holdType: "overview.allByHoldType" },
+    toTable: {
+      discipline: "overview.allShowDisciplineAsTable",
+      holdType: "overview.allShowHoldTypeAsTable",
+    },
+  },
+};
+
+/**
+ * The four figures of the snapshot: one container, its cells divided by hairlines. The two figures
+ * of lines open Lines: all of them, and those with a single hold. The other two have no screen
+ * behind them yet.
+ */
+function Figures({
+  summary,
+  words,
+  onLines,
+  onSingleHoldLines,
+}: {
+  summary?: Summary;
+  words: Words;
+  onLines: () => void;
+  onSingleHoldLines: () => void;
+}) {
   const loading = summary === undefined;
-  const age = summary?.median_age_days;
+  const median = summary?.[words.median];
   return (
-    <StatTileGroup aria-label={t("overview.figures")}>
+    <StatTileGroup aria-label={t(words.figures)}>
       <StatTile
-        label={t("overview.openHolds")}
+        label={t(words.holds)}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.holds) })}
       />
       <StatTile
-        label={t("overview.linesOnHold")}
+        label={t(words.lines)}
+        onPress={onLines}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.lines) })}
       />
       <StatTile
         label={t("overview.singleHoldLines")}
+        onPress={onSingleHoldLines}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.single_hold_lines) })}
       />
-      {/* An age needs a creation date. Without one the tile says so; it never shows a zero. */}
+      {/* An age or a duration needs dates. Without them the tile says so; it never shows a zero. */}
       <StatTile
-        label={t("overview.medianAge")}
+        label={t(words.medianLabel)}
         {...(loading
           ? { isLoading: true }
-          : age === null || age === undefined
-            ? { unavailable: t("overview.medianAgeMissing") }
-            : { value: formatDays(age) })}
+          : median === null || median === undefined
+            ? { unavailable: t(words.medianMissing) }
+            : { value: formatDays(median) })}
       />
     </StatTileGroup>
   );
@@ -98,16 +175,43 @@ interface GroupSectionProps {
    * the words that are shown, so that the switch can also be asked for by them.
    */
   toTable: string;
+  /** What the group says when the command sent it no row. */
+  none: string;
   /** The groups as the command sent them. Absent on a first load. */
   groups?: readonly Group[];
   skeletonRows: number;
   /** Whether the group is shown as a table in place of its bars. */
   asTable: boolean;
   onAsTableChange: (asTable: boolean) => void;
+  /** Whether a value of the group is in the active filter. */
+  isFiltered: (group: Group) => boolean;
+  /** Filters by the value of a bar that is pressed. */
+  onPress: (group: Group) => void;
 }
+
+/** Whether the filters keep a value of a dimension: it is among the values of its entry. */
+function isFilteredBy(filters: Filters, dim: Dim, group: Group): boolean {
+  return filters.fields.some(
+    (entry) =>
+      isSameDim(entry.dim, dim) &&
+      !entry.negate &&
+      entry.values.some((value) => value.key === group.key),
+  );
+}
+
+/** The room the widest of the counts shown needs, so the name of the group gets the rest. */
+function countChars(counts: readonly number[]): number {
+  return Math.max(1, ...counts.map((count) => textChars(formatCount(count))));
+}
+
+/** The least room of the name of a group before its table scrolls sideways. */
+const LABEL_CHARS = 16;
+
+const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
 
 /**
  * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
+ * A bar is pressed to see the lines of its value: it filters by that value and opens Lines.
  * The rows are shown largest first. That is the order the command sends; a copy is put in that
  * order here so that it does not depend on it, and rows of the same count keep the order given.
  * The length of a bar is its row's holds as a share of the largest count of the group; no number
@@ -117,21 +221,31 @@ function GroupSection({
   title,
   column,
   toTable,
+  none,
   groups,
   skeletonRows,
   asTable,
   onAsTableChange,
+  isFiltered,
+  onPress,
 }: GroupSectionProps) {
   const titleId = useId();
   const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
   const largest = rows[0]?.holds ?? 0;
   const columns: DataTableColumn<Group>[] = [
-    { id: "label", header: column, cell: (group) => group.label, isRowHeader: true },
+    {
+      id: "label",
+      header: column,
+      cell: (group) => group.label,
+      isRowHeader: true,
+      size: { flex: 1, minChars: LABEL_CHARS },
+    },
     {
       id: "holds",
       header: t("overview.columnHolds"),
       cell: (group) => formatCount(group.holds),
       kind: "number",
+      size: { chars: countChars(rows.map((group) => group.holds)) },
     },
     {
       id: "lines",
@@ -139,6 +253,7 @@ function GroupSection({
       cell: (group) => formatCount(group.lines),
       kind: "number",
       isSupporting: true,
+      size: { chars: countChars(rows.map((group) => group.lines)) },
     },
   ];
 
@@ -157,7 +272,7 @@ function GroupSection({
       {groups === undefined ? (
         <BarRowGroup isLoading skeletonRows={skeletonRows} aria-labelledby={titleId} />
       ) : rows.length === 0 ? (
-        <p className={styles.none}>{t("overview.noOpenHolds")}</p>
+        <p className={styles.none}>{none}</p>
       ) : asTable ? (
         <DataTable
           aria-label={title}
@@ -165,13 +280,18 @@ function GroupSection({
           rows={rows}
           // A blank value has the empty key, and a row needs a key that is not empty.
           rowKey={(group) => `group:${group.key}`}
+          // A group is read whole, as its bars are: the page scrolls, the table does not.
+          height={ALL_ROWS}
         />
       ) : (
         <BarRowGroup aria-labelledby={titleId}>
           {rows.map((group) => (
             <BarRow
               key={group.key}
-              isStatic
+              isSelected={isFiltered(group)}
+              onPress={() => {
+                onPress(group);
+              }}
               label={group.label}
               value={formatCount(group.holds)}
               secondaryValue={t("overview.lines", { count: group.lines })}
@@ -185,10 +305,11 @@ function GroupSection({
 }
 
 /**
- * Overview: the headline figures of the snapshot in view, and its open holds by discipline and
- * by hold type. It shows what the `overview` command returns for the open workspace and the
- * selected snapshot, and reads it again when either changes; the numbers of before stay on
- * screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
+ * Overview: the headline figures of the snapshot in view, and its holds by discipline and by
+ * hold type, for the filters every data screen shares: the open holds unless the filter bar
+ * under its header says otherwise. It shows what the `overview` command returns for the open
+ * workspace, the selected snapshot, and those filters, and reads it again when any of them
+ * changes; the numbers of before stay on screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
  * state that starts an import. A snapshot whose file lacked the hold ID or the released column
  * is said to be limited, above its figures.
  *
@@ -204,10 +325,17 @@ export function OverviewPage() {
     discipline: false,
     holdType: false,
   });
+  const { filters, spec, isDefault, update } = useFilters();
+  const navigate = useNavigate();
+  /** Opens Lines in a state of its own, under the filters that are set. */
+  const openLines = (address: string) => {
+    void navigate(address);
+  };
+  const words = WORDS[filters.status];
   const query = useSnapshotQuery({
     name: "overview",
-    params: [OPEN_HOLDS],
-    read: (view) => api.overview(OPEN_HOLDS, view),
+    params: [spec],
+    read: (view, asked) => api.overview(asked, view),
   });
   // What was read for the snapshot or the workspace of before is shown until the new reading is
   // there, with one exception: that the workspace of before had no snapshot says nothing about
@@ -215,7 +343,8 @@ export function OverviewPage() {
   const view: OverviewView | null | undefined =
     query.isError || (query.isPlaceholderData && query.data === null) ? undefined : query.data;
   const isLoading = view === undefined && !query.isError;
-  // The numbers on screen belong to another snapshot or workspace, and the new ones are on their way.
+  // The numbers on screen belong to another snapshot, workspace, or filter, and the new ones are
+  // on their way.
   const isUpdating = view !== undefined && view !== null && query.isPlaceholderData;
   // Whether the numbers on screen took the place of such numbers: said once they are there.
   const [change, setChange] = useState({ isUpdating: false, isUpdated: false });
@@ -263,6 +392,8 @@ export function OverviewPage() {
       title={t("destinations.name.overview")}
       width="content"
       {...(description === undefined ? {} : { description })}
+      // A workspace without snapshots has nothing to filter; its empty state says what to do.
+      {...(open?.selected == null ? {} : { bar: <FilterBar /> })}
     >
       <VisuallyHidden role="status">{status}</VisuallyHidden>
       {about?.limited === true ? (
@@ -301,19 +432,38 @@ export function OverviewPage() {
           data-stale={isUpdating ? "" : undefined}
           className={styles.overview}
         >
-          <Figures {...(view === undefined ? {} : { summary: view.summary })} />
+          <Figures
+            words={words}
+            onLines={() => {
+              openLines(linesAddress(DEFAULT_LINES_STATE));
+            }}
+            onSingleHoldLines={() => {
+              openLines(linesAddress({ rows: "lines", query: presetQuery("single") }));
+            }}
+            {...(view === undefined ? {} : { summary: view.summary })}
+          />
           <div className={styles.groups}>
-            {DIMENSIONS.map(({ id, title, column, toTable }) => (
+            {DIMENSIONS.map(({ id, column, dim }) => (
               <GroupSection
                 key={id}
-                title={t(title)}
+                title={t(words.title[id])}
                 column={t(column)}
-                toTable={t(toTable)}
+                toTable={t(words.toTable[id])}
+                // Without filters the snapshot has no open hold; with them, none that they keep.
+                none={t(isDefault ? "overview.noOpenHolds" : "overview.noneMatch")}
                 skeletonRows={SKELETON_ROWS[id]}
                 {...(view === undefined ? {} : { groups: groupsOf(id, view) })}
                 asTable={asTable[id]}
                 onAsTableChange={(shown) => {
                   setAsTable((before) => ({ ...before, [id]: shown }));
+                }}
+                isFiltered={(group) => isFilteredBy(filters, dim, group)}
+                onPress={(group) => {
+                  // The value takes the place of what the field was filtered by.
+                  update((current) =>
+                    withValues(current, dim, [{ key: group.key, label: group.label }], false),
+                  );
+                  openLines(linesAddress(DEFAULT_LINES_STATE));
                 }}
               />
             ))}

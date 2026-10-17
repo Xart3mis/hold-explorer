@@ -84,6 +84,8 @@ Observed scale: about 9,300 rows, 3,600 lines, 13 disciplines, 8 hold types, 5 r
 
 A file that lacks `id` or `released` imports as a **limited** snapshot. The trimmed file in use today is one: open holds only, eight columns. Features that need the missing columns are disabled for a workspace that has only limited snapshots, and each disabled feature says which column it needs.
 
+What a snapshot lacks is hidden and named, not shown empty. An optional column that is blank in every row of the snapshot (no hold ID, no hold released, no sizes, no stress calc, and so on) takes its table columns, its filter fields, its presets, and its facts in the detail panel out of view, and the filter bar says once, under its controls, which columns of the export the snapshot lacks, by their export names. A snapshot in which no hold is released says so, and offers the open holds only.
+
 ### 4.3 Required and optional columns
 
 Required: `line_id`, `hold_remark`, `hold_type`. Everything else is optional. Any column the mapping does not recognize is stored as a custom field and offered as a filter and a grouping.
@@ -276,8 +278,8 @@ The user ticks blockers as solved. The app shows lines freed now, lines one bloc
 - Top bar: workspace switcher, global search, snapshot selector, Import.
 - Left sidebar with labeled destinations: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then Rules and Settings. A destination that is not built yet is listed like the others with a quiet "Soon" tag, and opens a screen that says what the destination will show and that it is not available in this version. With no workspace open there is no sidebar; the top bar then leads to the workspaces and to Settings.
 - A page below a destination shows a breadcrumb above its title: the ancestors as links and the page itself last. A destination shows none. The workspace is not part of the trail.
-- Filter chips under the top bar on every data screen.
-- Right panel for the selected line, hold, or blocker. The list stays visible.
+- A filter bar under the page header of every data screen (Overview and Lines today), and on no other page. The status comes first and cannot be removed; then one chip per active filter, "Add filter", "Clear all" while a filter is set, and at the trailing end the number of holds the filters keep. While an action on the workspace runs, the bar keeps its place and says why nothing can be changed.
+- Right panel for the selected line, hold, or blocker. The list stays visible: from the wide breakpoint up the panel sits beside the content, which narrows; below it, it overlays the right edge. The selection is part of the address (`?line=<line ID>`, `?hold=<position>`), so the panel reads its own data whatever the filters are. A hold is addressed by its position in the snapshot, its place in file order, because a limited file has no hold ID; a position means nothing in another snapshot, so a snapshot switch drops a hold selection and keeps a line selection. Opening, creating, or building another workspace (the demo included) drops both. Escape closes the panel and gives the focus back to the row that opened it.
 - The snapshot selector defaults to the newest snapshot. Choosing an older one shows the data as it stood then, and a banner names the snapshot in view.
 
 ### 9.2 Destinations
@@ -286,7 +288,9 @@ The user ticks blockers as solved. The app shows lines freed now, lines one bloc
 
 **Breakdown.** One screen with a group-by switcher: discipline, hold type, role, blocker type, blocker, remark, size, stress calc, custom fields. List mode shows bars with hold and line counts and deltas; a row expands to its lines. Matrix mode shows a heatmap of any two dimensions, discipline by hold type by default; a cell opens its lines.
 
-**Lines.** A table: holds, disciplines, blockers, oldest age, sizes, stress calc, size-mismatch flag, change tag, watch star. Presets: All, Single hold, Easiest to release, Oldest first, Size mismatch, New since previous snapshot. The table switches between line rows and hold rows. "Easiest to release" orders lines by fewest disciplines, then fewest holds.
+**Lines.** A table: holds, disciplines, hold types, blockers, oldest age, sizes, stress calc, size-mismatch flag, change tag, watch star. Presets: All, Single hold, Easiest to release, Oldest first, Size mismatch, New since previous snapshot. The table switches between line rows and hold rows; hold rows show the line, discipline, hold type, remark, blocker, blocker type, name, role, and created date, then the age of an open hold, or the release date and the duration of a released one. "Easiest to release" orders lines by fewest disciplines, then fewest holds. A sortable header sorts by its column and a second press reverses it; rows without the sorted value stay last in both directions. The mode, the preset or sort, and the selection are kept in the address, so a saved view can keep them later.
+
+Rows load as the user scrolls, 200 at a time, and never more than 5,000 in one table; the whole result is not offered behind one scrollbar. A count line under the table always says how many rows are loaded and how many exist ("400 of 9,312 holds"), and once 5,000 are loaded it says to narrow the filters or reverse the sort to reach the rest. Column widths are declared, not measured from what the rows hold, and a line ID is never cut: the widest line ID of the whole result comes with each page.
 
 **Blockers.** Section 8.
 
@@ -322,7 +326,7 @@ One box matches line ID, remark, name, role, hold type, discipline, blocker, str
 
 Fields: status, discipline, hold type, role, name, blocker type, blocker, age band, created date range, release date range, size, stress calc, size mismatch, has note, watched, changed since previous snapshot, custom fields, text.
 
-Several values in one field combine with OR. Different fields combine with AND. Each field supports "is not". The filter picker shows a live count for each value, given the other active filters. Filters stay active while the user moves between destinations. "Clear all" is always visible.
+Several values in one field combine with OR. Different fields combine with AND. Each field supports "is not". The filter picker shows a live count for each value, given the other active filters, and says how many more values exist when the list is cut. Filters belong to a workspace for the session: they stay active while the user moves between destinations and snapshots, opening another workspace shows that workspace's filters of this session, and they are forgotten when the app closes (saved views will store them). "Clear all" is shown whenever a filter beyond the status is set, and also sets the status back to Open. A field whose export column the snapshot lacks is not offered (section 4.2).
 
 ### 10.3 Saved views
 

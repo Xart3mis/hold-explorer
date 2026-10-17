@@ -6,11 +6,11 @@ import { asCommandError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { keys } from "../../api/keys";
 import { OVERVIEW_PATH, WELCOME_PATH } from "../../app/destinations";
-import { formatList } from "../../app/format";
-import { t } from "../../app/i18n";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import { Button, DropZone, Notice, Progress } from "../../components";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
+import { formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { openDraft, useImportDraft } from "./draft";
 import styles from "./ImportEntryPage.module.css";
 import { ImportProblem } from "./ImportProblem";
@@ -152,15 +152,22 @@ export function ImportEntryPage() {
           {/* Beside another action Cancel is the quiet one; alone it is an ordinary button. */}
           <Button
             variant={failure === null ? "secondary" : "quiet"}
+            reservesPendingSpace
             isPending={cancel.isPending}
             onPress={() => {
               setCancelRequested(true);
-              cancel.mutate(from, {
-                // The import goes on as if Cancel had not been pressed, and the page says why.
-                onError: () => {
-                  setCancelRequested(false);
+              // A file that is being read has no hash yet: the cancel is for whatever it opens.
+              const file =
+                readingPath === undefined ? (stillOpen?.file.content_hash ?? null) : null;
+              cancel.mutate(
+                { to: from, file },
+                {
+                  // The import goes on as if Cancel had not been pressed, and the page says why.
+                  onError: () => {
+                    setCancelRequested(false);
+                  },
                 },
-              });
+              );
             }}
           >
             {t("common.cancel")}

@@ -2,14 +2,21 @@
 // development only; see ui/src/dev/app.tsx.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { AppStart } from "../bindings/AppStart";
+import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
+import type { Dim } from "../bindings/Dim";
+import type { FilterOptions } from "../bindings/FilterOptions";
+import type { FilterSpec } from "../bindings/FilterSpec";
+import type { HoldQuery } from "../bindings/HoldQuery";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { LineQuery } from "../bindings/LineQuery";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
+import type { ValuePage } from "../bindings/ValuePage";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { TargetCheck } from "../bindings/TargetCheck";
@@ -23,7 +30,9 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
-import { devOverview, type DevOverview } from "./overview";
+import { devHoldCount, devHoldDetail, devHolds, devLineDetail, devLines } from "./lines";
+import { devKept, devOverview, type DevOverview } from "./overview";
+import { devValues } from "./values";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
 const MARKER = "hx-dev-commands";
@@ -39,6 +48,9 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The Rust side has moved on to the snapshot before the newest and the interface was not told:
+  // the Overview is refused, asks what is open, and the shell says that it was brought in step.
+  "view-resynced",
   // The Overview: a workspace without snapshots, a snapshot whose file has no creation dates, a
   // first load that never ends, an update that never ends (select another snapshot to see it), a
   // failure, groups of three and of twenty-five values, and a workspace whose newest snapshot is
@@ -51,6 +63,38 @@ export const DEV_STATES = [
   "overview-error",
   "overview-few",
   "overview-many",
+  // The filter bar on the Overview: several filters set, more than fit in one line, a snapshot
+  // whose export had no size columns, a selection that never ends (select another snapshot to see
+  // the bar wait), and counts that cannot be read. `overview-limited` shows the bar of a
+  // snapshot without its released column.
+  "filters",
+  "filters-many",
+  "filters-absent",
+  "filters-busy",
+  "filters-error",
+  // The filter picker: the filters of `filters`, line IDs in the thousands (open Line ID from
+  // "Add filter" to see the line that says how many more there are), and values that take a
+  // second to be read, so that a first read and a re-read after a tick can be seen.
+  "filters-picker",
+  // Lines: every state answers the lines and the holds of its snapshot from made-up holds. These
+  // add a snapshot of 30,000 holds, filters that keep none, a snapshot whose sizes all match (the
+  // preset Size mismatch then finds nothing), a reading that fails, and a first load that never
+  // ends. Open them on the page: dev.html?state=lines-many#/lines?rows=holds
+  "lines-many",
+  "lines-none",
+  "lines-matching-sizes",
+  "lines-error",
+  "lines-loading",
+  // The detail panel: every state answers a line and a hold from the same made-up holds. Open a
+  // line or a hold by its address, and a line that is in no snapshot the same way:
+  //   dev.html?state=open#/lines?line=78B02-501-00002-PL-002
+  //   dev.html?state=open#/lines?rows=holds&hold=3
+  //   dev.html?state=open#/lines?line=78B99-000-00000-XX-000
+  // These add a newest snapshot that is limited (no released column, no hold ID), answers that
+  // take two seconds (select another snapshot to see a re-read), and a reading that fails.
+  "detail-limited",
+  "detail-slow",
+  "detail-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -76,6 +120,10 @@ export function isDevState(value: string): value is DevState {
 }
 
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
+
+/** What a reading answers when the workspace file is locked. */
+const LOCKED =
+  "The workspace file could not be read (it is locked by another program). Close the other program, then try again.";
 
 function failure(kind: string, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
@@ -140,6 +188,68 @@ const offsites: WorkspaceView = {
   snapshot_count: 0,
   latest_taken_at: null,
 };
+
+const value = (label: string): FilterValue => ({ key: label, label });
+
+/** A few filters, as a user who looks for old civil holds would set them. */
+const SOME_FILTERS: Filters = {
+  ...defaultFilters,
+  fields: [
+    { dim: "Discipline", values: [value("Civil"), value("Structural")], negate: false },
+    { dim: "HoldType", values: [value("Vendor data")], negate: true },
+  ],
+  ageBands: [{ min_days: 90, max_days: null }],
+};
+
+/** More filters than one line holds, one of every kind, with a value too long for a chip. */
+const MANY_FILTERS: Filters = {
+  status: "All",
+  fields: [
+    {
+      dim: "Discipline",
+      values: ["Civil", "Structural", "Piping", "Process"].map(value),
+      negate: false,
+    },
+    { dim: "HoldType", values: [value("Vendor data"), value("Client decision")], negate: false },
+    { dim: "Role", values: [value("Lead engineer")], negate: true },
+    {
+      dim: "Remark",
+      values: [
+        value(
+          "HOLD FOR VENDOR DATA OF PACKAGE UNIT 577-PK-400, NOZZLE ORIENTATION AND LOADS TO BE CONFIRMED",
+        ),
+      ],
+      negate: false,
+    },
+    { dim: { Custom: "Area" }, values: [value("North rack")], negate: false },
+  ],
+  text: "577-PR",
+  ageBands: [
+    { min_days: 60, max_days: 89 },
+    { min_days: 90, max_days: null },
+  ],
+  created: { from: "2026-06-01", to: "2026-09-30" },
+  released: { from: null, to: "2026-10-07" },
+  sizeMismatch: true,
+};
+
+/** The filters a state starts with, for the workspace it opens; `null` for the default. */
+export function devFilters(state: DevState): { workspaceId: string; filters: Filters } | null {
+  switch (state) {
+    case "filters":
+    case "filters-absent":
+    case "filters-busy":
+    case "filters-error":
+    case "filters-picker":
+      return { workspaceId: unit573.id, filters: SOME_FILTERS };
+    case "filters-many":
+      return { workspaceId: unit573.id, filters: MANY_FILTERS };
+    case "lines-none":
+      return { workspaceId: unit573.id, filters: { ...defaultFilters, text: "no such line" } };
+    default:
+      return null;
+  }
+}
 
 /** The file a state of the import flow has open, when the state is one of the flow. */
 export function devDraft(state: DevState): ImportDraft | null {
@@ -248,10 +358,21 @@ function world(state: DevState, theme: Theme): World {
   const all = [offsites, tankFarm, unit573];
 
   switch (state) {
-    case "overview-limited": {
+    case "overview-limited":
+    case "detail-limited": {
       // The newest export came without its released column.
       const held = fourSnapshots.map((taken) =>
         taken.id === 4 ? { ...taken, limited: true, open_count: taken.row_count } : taken,
+      );
+      snapshots.set(unit573.id, held);
+      start.list.workspaces = all;
+      start.open = { ...opened(4, null), snapshots: held };
+      break;
+    }
+    case "lines-many": {
+      // The newest export holds thirty thousand holds, six thousand of them released.
+      const held = fourSnapshots.map((taken) =>
+        taken.id === 4 ? { ...taken, row_count: 30_000, open_count: 24_000 } : taken,
       );
       snapshots.set(unit573.id, held);
       start.list.workspaces = all;
@@ -274,12 +395,25 @@ function world(state: DevState, theme: Theme): World {
       ];
       break;
     case "open":
+    case "view-resynced":
     case "no-dates":
     case "overview-loading":
     case "overview-updating":
     case "overview-error":
     case "overview-few":
     case "overview-many":
+    case "filters":
+    case "filters-many":
+    case "filters-absent":
+    case "filters-busy":
+    case "filters-error":
+    case "filters-picker":
+    case "lines-none":
+    case "lines-matching-sizes":
+    case "lines-error":
+    case "lines-loading":
+    case "detail-slow":
+    case "detail-error":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -379,8 +513,34 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     return typeof value === "string" ? value : "";
   };
 
+  /**
+   * What a data command is asked with, once the view it names is the one held here. As the Rust
+   * side does, a request for another view is refused.
+   */
+  const inView = (payload: unknown): { spec: FilterSpec; selected: SnapshotInfo | undefined } => {
+    const { view, spec } = payload as { view?: ViewRef; spec: FilterSpec };
+    const held = start.open;
+    if (!held) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
+    if (view?.workspace_id !== held.workspace.id || view.snapshot_id !== held.selected) {
+      throw failure(
+        "ViewChanged",
+        "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
+      );
+    }
+    return { spec, selected: held.snapshots.find(({ id }) => id === held.selected) };
+  };
+
   const answers: Record<string, (payload: unknown) => unknown> = {
-    app_start: () => start,
+    app_start: () => {
+      const answer = structuredClone(start);
+      // From here on the Rust side holds another snapshot than the one it has just named: the
+      // one before the newest.
+      if (state === "view-resynced" && start.open) {
+        start.open = { ...start.open, selected: start.open.snapshots.at(-2)?.id ?? null };
+      }
+      return answer;
+    },
+    workspace_current: () => start.open,
     settings_set_theme: (payload) => {
       const chosen = text(payload, "theme");
       if (chosen === "Dark" || chosen === "Light" || chosen === "System") {
@@ -436,6 +596,8 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       if (!start.open || typeof id !== "number") {
         throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
       }
+      // A selection that is looked at stays on its way, and the Rust side holds what it held.
+      if (state === "filters-busy") return new Promise<WorkspaceOpen>(() => undefined);
       start.open = { ...start.open, selected: id };
       return later(250, () => start.open);
     },
@@ -533,19 +695,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     },
     import_cancel: () => null,
     overview: (payload) => {
-      // As the Rust side does: a request for another view than the one it holds is refused.
-      const view = (payload as { view?: ViewRef } | undefined)?.view;
-      if (!start.open)
-        throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
-      if (
-        view?.workspace_id !== start.open.workspace.id ||
-        view.snapshot_id !== start.open.selected
-      ) {
-        throw failure(
-          "ViewChanged",
-          "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
-        );
-      }
+      const { spec } = inView(payload);
       overviewReadings += 1;
       if (state === "overview-loading") return new Promise(() => undefined);
       // The first reading answers; every reading after it stays on its way.
@@ -558,7 +708,104 @@ export function installDevCommands(state: DevState, theme: Theme): string {
           "The workspace file could not be read (it is locked by another program). Close the other program, then try again.",
         );
       }
-      return later(200, () => devOverview(start.open, overviewShape(state)));
+      return later(200, () => devOverview(start.open, overviewShape(state), spec));
+    },
+    filter_options: (payload): Promise<FilterOptions> => {
+      const { spec, selected } = inView(payload);
+      if (state === "filters-error") {
+        throw failure(
+          "Io",
+          "The workspace file could not be read (it is locked by another program). Close the other program, then try again.",
+        );
+      }
+      return later(120, () => {
+        // Each count is the filter with that one part replaced, as the command counts them. The
+        // states of Lines count the made-up holds their tables show, so the two agree.
+        const isLines = state.startsWith("lines-") || state.startsWith("detail-");
+        const kept = (part: Partial<FilterSpec>) =>
+          selected === undefined
+            ? 0
+            : isLines
+              ? devHoldCount(selected, { ...spec, ...part }, state === "lines-matching-sizes")
+              : devKept(selected, { ...spec, ...part });
+        const total = kept({});
+        const bands = [0.08, 0.13, 0.22, 0.2, 0.37];
+        const mismatch = Math.round(kept({ size_mismatch: null }) * 0.06);
+        return {
+          total,
+          facets: {
+            open: kept({ status: "Open" }),
+            released: kept({ status: "Released" }),
+            age_bands: bands.map((share) => Math.round(kept({ age_bands: [] }) * share)),
+            size_mismatch: mismatch,
+            size_match: kept({ size_mismatch: null }) - mismatch,
+          },
+          age_bands: [
+            { min_days: 0, max_days: 13 },
+            { min_days: 14, max_days: 29 },
+            { min_days: 30, max_days: 59 },
+            { min_days: 60, max_days: 89 },
+            { min_days: 90, max_days: null },
+          ],
+          // The states of Lines and of the panel answer from holds that carry two columns
+          // the mapping did not know, and the bar offers them.
+          custom_dims: isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [],
+          absent:
+            selected === undefined
+              ? []
+              : selected.limited
+                ? ["Released", "ReleaseRemark", "ReleaseDate"]
+                : state === "filters-absent"
+                  ? ["ModelSize", "LdtSize", "StressCalc"]
+                  : [],
+        };
+      });
+    },
+    lines: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { query, offset } = payload as { query: LineQuery; offset: number };
+      if (state === "lines-loading") return new Promise(() => undefined);
+      if (state === "lines-error") throw failure("Io", LOCKED);
+      return later(150, () =>
+        selected === undefined
+          ? { total: 0, widest_line_id: 0, rows: [] }
+          : devLines(selected, spec, query, offset, state === "lines-matching-sizes"),
+      );
+    },
+    holds: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { query } = payload as { query: HoldQuery };
+      if (state === "lines-loading") return new Promise(() => undefined);
+      if (state === "lines-error") throw failure("Io", LOCKED);
+      return later(150, () =>
+        selected === undefined
+          ? { total: 0, widest_line_id: 0, rows: [] }
+          : devHolds(selected, spec, query, state === "lines-matching-sizes"),
+      );
+    },
+    line_detail: (payload) => {
+      const { selected } = inView(payload);
+      const { lineId } = payload as { lineId: string };
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      return later(state === "detail-slow" ? 2000 : 120, () =>
+        selected === undefined ? null : devLineDetail(selected, lineId, matching),
+      );
+    },
+    hold_detail: (payload) => {
+      const { selected } = inView(payload);
+      const { position } = payload as { position: number };
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      return later(state === "detail-slow" ? 2000 : 120, () =>
+        selected === undefined ? null : devHoldDetail(selected, position, matching),
+      );
+    },
+    filter_values: (payload): Promise<ValuePage> => {
+      const { spec, selected } = inView(payload);
+      const { dim, search } = payload as { dim: Dim; search: string };
+      const isPicker = state === "filters-picker";
+      return later(isPicker ? 1200 : 150, () => devValues(selected, spec, dim, search, isPicker));
     },
     "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
     "plugin:opener|reveal_item_in_dir": () => null,

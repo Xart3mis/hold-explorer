@@ -72,6 +72,14 @@ describe("component stylesheets", () => {
     expect(css).not.toMatch(/transition-property\s*:/);
   });
 
+  it.each(files)("$name lets what leaves fade, and moves nothing while it goes", ({ css }) => {
+    // An overlay arrives with a short move toward its place and leaves by a fade alone.
+    for (const rule of css.match(/[^{}]*\[data-exiting\][^{}]*\{[^}]*\}/g) ?? []) {
+      const moves = /\btransform\s*:\s*(?!none\b)/.test(rule.slice(rule.indexOf("{")));
+      expect(moves, rule.trim()).toBe(false);
+    }
+  });
+
   it.each(files)("$name never removes the focus ring", ({ css }) => {
     expect(css).not.toMatch(/outline(-style|-width)?\s*:\s*(none|0)\b/);
   });

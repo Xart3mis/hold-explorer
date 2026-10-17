@@ -3,7 +3,7 @@ import { useLayoutEffect, type ReactNode } from "react";
 import { I18nProvider } from "react-aria-components";
 import { ToastRegion } from "../components/ToastRegion/ToastRegion";
 import { applyTheme } from "../design/theme";
-import { locale } from "./i18n";
+import { locale } from "../text/i18n";
 import { queryClient, startQuery } from "./query";
 
 /**

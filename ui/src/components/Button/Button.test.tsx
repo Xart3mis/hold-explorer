@@ -73,7 +73,7 @@ describe("Button", () => {
     const onPress = vi.fn();
     const user = userEvent.setup();
     render(
-      <Button isPending onPress={onPress}>
+      <Button reservesPendingSpace isPending onPress={onPress}>
         Import
       </Button>,
     );
@@ -138,7 +138,7 @@ describe("Button", () => {
   });
 
   it("keeps the room of the spinner while inert, so its width is the one at rest", () => {
-    const { rerender } = render(<Button isPending={false}>Open</Button>);
+    const { rerender } = render(<Button reservesPendingSpace>Open</Button>);
     const button = screen.getByRole("button", { name: "Open" });
     const stylesheet = readFileSync(join(import.meta.dirname, "Button.module.css"), "utf8");
     // The room is kept wherever no spinner fills it: at rest, and while inert.
@@ -146,13 +146,30 @@ describe("Button", () => {
       /\.button\[data-reserve\]:not\(\[data-pending\]\) \.label,\s*\.button\[data-reserve\]\[data-inert\] \.label\s*\{/,
     );
     rerender(
-      <Button isPending={false} isInert>
+      <Button reservesPendingSpace isInert>
         Open
       </Button>,
     );
     expect(button).toHaveAttribute("data-reserve");
     expect(button).toHaveAttribute("data-inert");
     expect(button.querySelector('[data-part="spinner"]')).toBeNull();
+  });
+
+  it("draws a disabled quiet button as text only, without the disabled fill", () => {
+    render(
+      <Button variant="quiet" isDisabled>
+        Clear all
+      </Button>,
+    );
+    expect(screen.getByRole("button", { name: "Clear all" })).toHaveAttribute("data-disabled");
+    const stylesheet = readFileSync(join(import.meta.dirname, "Button.module.css"), "utf8");
+    const disabled = stylesheet.search(/\.button\[data-disabled\]\s*\{/);
+    const quiet = stylesheet.search(
+      /\.button\[data-variant="quiet"\]\[data-disabled\]\s*\{\s*background-color: transparent;/,
+    );
+    // The rule for the quiet variant comes after the one for every variant, so it wins.
+    expect(disabled).toBeGreaterThanOrEqual(0);
+    expect(quiet).toBeGreaterThan(disabled);
   });
 
   it("when pending, shows the spinner in place of the leading icon", () => {
@@ -170,8 +187,8 @@ describe("Button", () => {
     expect(button.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
   });
 
-  it("reserves the room of the spinner when it can become pending and has no icon", () => {
-    const { rerender } = render(<Button isPending={false}>Import</Button>);
+  it("reserves the room of the spinner when it is asked to and has no icon", () => {
+    const { rerender } = render(<Button reservesPendingSpace>Import</Button>);
     const button = screen.getByRole("button", { name: "Import" });
     expect(button).toHaveAttribute("data-reserve");
 
@@ -179,18 +196,58 @@ describe("Button", () => {
     expect(button).not.toHaveAttribute("data-reserve");
   });
 
+  it("reserves no room when it says that it keeps none, pending or not", () => {
+    const { rerender } = render(
+      <Button reservesPendingSpace={false} isPending={false}>
+        Import
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Import" });
+    expect(button).not.toHaveAttribute("data-reserve");
+
+    rerender(
+      <Button reservesPendingSpace={false} isPending>
+        Import
+      </Button>,
+    );
+    expect(button).not.toHaveAttribute("data-reserve");
+    expect(button.querySelectorAll('[data-part="spinner"]')).toHaveLength(1);
+  });
+
+  it("reserves no room when it has an icon: the spinner takes the place of the icon", () => {
+    render(
+      <Button reservesPendingSpace icon={Download}>
+        Export
+      </Button>,
+    );
+    expect(screen.getByRole("button", { name: "Export" })).not.toHaveAttribute("data-reserve");
+  });
+
   it("carries the same width mark at rest and while pending, so its width cannot change", () => {
-    const { rerender } = render(<Button isPending={false}>Import</Button>);
+    const { rerender } = render(
+      <Button reservesPendingSpace isPending={false}>
+        Import
+      </Button>,
+    );
     const button = screen.getByRole("button", { name: "Import" });
     const atRest = { reserve: button.getAttribute("data-reserve"), classes: button.className };
+    expect(atRest.reserve).not.toBeNull();
 
-    rerender(<Button isPending>Import</Button>);
+    rerender(
+      <Button reservesPendingSpace isPending>
+        Import
+      </Button>,
+    );
     expect(button).toHaveAttribute("aria-busy", "true");
     expect({ reserve: button.getAttribute("data-reserve"), classes: button.className }).toEqual(
       atRest,
     );
 
-    rerender(<Button isPending={false}>Import</Button>);
+    rerender(
+      <Button reservesPendingSpace isPending={false}>
+        Import
+      </Button>,
+    );
     expect({ reserve: button.getAttribute("data-reserve"), classes: button.className }).toEqual(
       atRest,
     );
@@ -208,7 +265,7 @@ describe("Button", () => {
           <Button variant={variant} isDisabled>
             Disabled
           </Button>
-          <Button variant={variant} isPending>
+          <Button variant={variant} reservesPendingSpace isPending>
             Pending
           </Button>
         </>,

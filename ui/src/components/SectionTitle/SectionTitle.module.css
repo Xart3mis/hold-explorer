@@ -1,0 +1,15 @@
+/* What follows a title is spaced by its section, so the title has no margin of its own. */
+.title {
+  margin: 0;
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* A part inside a section: the size of body text, told from it by its weight and its ink. */
+.title[data-level="3"] {
+  font: var(--text-body-strong);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}

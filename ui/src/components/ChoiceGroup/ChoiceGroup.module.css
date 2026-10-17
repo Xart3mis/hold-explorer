@@ -1,0 +1,119 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-inline-size: 0;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* In a row: whole options side by side, which wrap as whole options. */
+.group[data-orientation="horizontal"] .options {
+  flex-flow: row wrap;
+  column-gap: var(--space-4);
+}
+
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* The whole row of an option is its target. */
+.radio {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--density-control-height);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  cursor: default;
+}
+
+/* The steps of the checkbox box, in the shape that tells a radio from it. */
+.circle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-on-accent);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.dot {
+  inline-size: var(--size-radio-dot);
+  block-size: var(--size-radio-dot);
+  border-radius: var(--radius-full);
+  background-color: currentcolor;
+}
+
+.radio[data-hovered] .circle {
+  border-color: var(--color-text-secondary);
+}
+
+.radio[data-pressed] .circle {
+  border-color: var(--color-text-secondary);
+  background-color: var(--color-surface-pressed);
+}
+
+.radio[data-selected] .circle {
+  border-color: var(--color-accent-text);
+  background-color: var(--color-accent);
+}
+
+.radio[data-selected][data-hovered] .circle {
+  background-color: var(--color-accent-hover);
+}
+
+.radio[data-selected][data-pressed] .circle {
+  background-color: var(--color-accent-active);
+}
+
+.radio[data-focus-visible] .circle {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.radio[data-disabled] {
+  color: var(--color-text-disabled);
+}
+
+.radio[data-disabled] .circle {
+  border-color: var(--color-border-default);
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-disabled);
+}
+
+/* The description starts where the label starts, under it. */
+.description {
+  padding-block-end: var(--space-1);
+  padding-inline-start: calc(var(--size-checkbox) + var(--space-2));
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.group[data-disabled] .description {
+  color: var(--color-text-disabled);
+}

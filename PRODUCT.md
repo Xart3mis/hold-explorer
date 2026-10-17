@@ -103,7 +103,7 @@ Banned patterns, by name:
 
 - Contrast meets WCAG 2.1 AA in both themes: 4.5:1 for text, 3:1 for large text, for the boundary of every control, for the focus ring, and for every chart mark on every fill it can sit on. `tools/design/check-tokens.mjs` enforces this from the tables in `DESIGN.md`. One exception is stated there: the fill of the primary button while it is pressed, in the dark theme, where the label carries the button.
 - Color never carries meaning alone. Every state has an icon and a label; every chart series has a text label and a table view.
-- Teal always means the same thing: something that can be acted on, or the current selection. Data is never drawn in it.
+- Teal always means the same thing: something that can be acted on, the current selection, focus, or the progress of an action the user started. Data is never drawn in it.
 - Chart series are validated for protanopia and deuteranopia in both themes. A series color keeps a stated minimum distance from every status color in normal vision; under red-green color blindness a status is told from a series by its icon and label. The results are recorded in `tools/design/palette-validation.md`.
 - All motion marks a state change, lasts 150 to 250 ms, and is removed when the system asks for reduced motion.
 - Every action is reachable by keyboard, in a logical order, with a visible focus ring.

@@ -1,15 +1,37 @@
 /*
  * The approved layout: a top bar across the window, the sidebar on the left while a workspace is
- * open, and the content area. Regions are separated by hairlines, never by a shadow.
+ * open, the content area, and the detail panel on the right while a row is selected. Regions are
+ * separated by hairlines, never by a shadow.
  */
 .layout {
+  position: relative;
   display: grid;
   grid-template:
-    "topbar topbar" var(--layout-topbar-height)
-    "sidebar content" minmax(0, 1fr)
-    / auto minmax(0, 1fr);
+    "topbar topbar topbar" var(--layout-topbar-height)
+    "sidebar content detail" minmax(0, 1fr)
+    / auto minmax(0, 1fr) auto;
   block-size: 100%;
+  /* The detail panel slides in from beyond the trailing edge; the window does not scroll to it. */
+  overflow-x: clip;
   background-color: var(--color-surface-app);
+}
+
+/* From the wide breakpoint the panel is a column of its own, and the content narrows. */
+.detail {
+  grid-area: detail;
+}
+
+/*
+ * Below it the panel lies over the right edge of the content area, which keeps its width: placed
+ * in the area of the content, at the layer of a panel, with the shadow of what floats.
+ */
+.layout[data-detail="overlay"] > .detail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: var(--z-panel);
+  grid-area: content;
+  box-shadow: var(--shadow-overlay);
 }
 
 /* The top bar never scrolls. */
@@ -141,23 +163,9 @@
   outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
-/*
- * The Soon tag: the neutral tag, at the trailing edge, so the tags form one quiet column. It
- * keeps its look in every state of the item.
- */
+/* The Soon tag sits at the trailing edge, so the tags of the sidebar form one quiet column. */
 .tag {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  block-size: var(--size-tag-height);
   margin-inline-start: auto;
-  padding: 0 var(--space-1-5);
-  border: var(--border-width-thin) solid var(--color-border-default);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  font: var(--text-caption);
-  font-variant-numeric: var(--font-numeric-tabular);
-  letter-spacing: var(--letter-spacing-normal);
 }
 
 /* The content area: what the shell has to say first, then the page, which scrolls. */
@@ -274,24 +282,4 @@
   font-variant-numeric: var(--font-numeric-tabular);
   letter-spacing: var(--letter-spacing-normal);
   overflow-wrap: anywhere;
-}
-
-/* A page: its header, then its content, left-aligned. Forms and prose keep a readable width. */
-.page {
-  display: flex;
-  flex-direction: column;
-  min-block-size: 100%;
-}
-
-.page[data-width="form"] {
-  max-inline-size: var(--layout-form-max-width);
-}
-
-.page[data-width="content"] {
-  max-inline-size: var(--layout-content-max-width);
-}
-
-/* The title takes the focus when its page opens; the ring shows where a keyboard user is. */
-.page h1:focus-visible {
-  border-radius: var(--radius-sm);
 }

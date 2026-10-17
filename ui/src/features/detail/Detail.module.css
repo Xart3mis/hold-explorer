@@ -1,0 +1,250 @@
+/*
+ * The detail panel: a region at the right of the shell, as wide as the layout says, with a head
+ * that stays and a body that scrolls. The shell places it beside the content or over its right
+ * edge; see Shell.module.css.
+ */
+.panel {
+  display: flex;
+  flex-direction: column;
+  inline-size: var(--layout-detail-width);
+  min-block-size: 0;
+  block-size: 100%;
+  border-inline-start: var(--border-width-thin) solid var(--color-border-default);
+  background-color: var(--color-surface-panel);
+  animation: enter var(--duration-slow) var(--ease-out);
+}
+
+/* It slides in from its own width at the trailing side. */
+@keyframes enter {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+/* The head does not scroll: the trail, the title with the close button, the copy of the line ID. */
+.head {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.trail {
+  min-inline-size: 0;
+}
+
+/* The room of the trail of a hold, kept while its line is not known. */
+.trailWaiting {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-body);
+}
+
+.titleRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.heading {
+  min-inline-size: 0;
+  padding-block: calc((var(--density-control-height) - var(--line-height-md)) / 2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* A line ID: the monospace at the size of a title, never cut, there to be selected and copied. */
+.heading[data-identifier] {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* A line ID inside a sentence: written as the export wrote it, and never broken at a hyphen. */
+.identifier {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: inherit;
+  white-space: nowrap;
+}
+
+.copyRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-inline-start: calc(-1 * var(--space-3));
+}
+
+.copyStatus {
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The body scrolls on its own. A re-read keeps what was there, dimmed. */
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-block-size: 0;
+  padding: var(--space-4);
+  overflow-y: auto;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.body[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+}
+
+.prose {
+  max-inline-size: var(--layout-prose-max-width);
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* What a section says in the place of its rows. */
+.statement {
+  color: var(--color-text-secondary);
+}
+
+/* Rows ruled like the rows of a fact list: a hairline above the first and one under each. */
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.rowTitle {
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.rowFoot {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.caption {
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* A count or a number of days at the trailing edge of a row. */
+.trailing {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.holdItem {
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+/* A hold: the whole row is the button that opens it. */
+.holdRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  inline-size: 100%;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.holdRow[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.holdRow[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+/* Inset: the row runs to the edge of the body, where a ring outside it would be cut. */
+.holdRow[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.holdHead {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.holdKind {
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.remark {
+  overflow-wrap: anywhere;
+}
+
+/* The LDT size, and the tag that says the sizes differ. */
+.sizes {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* A first load: rows of still blocks in the place of the rows. */
+.skeletonRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-block: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.skeletonLine {
+  display: flex;
+  align-items: center;
+  block-size: var(--line-height-body);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The panel appears in place. */
+  .panel {
+    animation: none;
+  }
+}

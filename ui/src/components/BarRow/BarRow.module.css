@@ -20,6 +20,16 @@
   opacity: var(--opacity-stale);
 }
 
+/*
+ * The item of the list that holds a row that can be pressed. It hands the columns of the group
+ * on to its button, and takes no room of its own.
+ */
+.item {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
 .row {
   display: grid;
   grid-template-columns: subgrid;

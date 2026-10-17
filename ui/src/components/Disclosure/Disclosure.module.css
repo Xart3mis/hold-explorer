@@ -1,0 +1,122 @@
+/*
+ * A row that opens: its title with what it counts, a sentence under it, and, once opened, the
+ * detail under that. The whole first line is the button. Rows follow each other like the rows of
+ * a fact list, and what opens appears at once: nothing is resized over time.
+ */
+.disclosure {
+  display: flex;
+  flex-direction: column;
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.head {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.heading {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font: inherit;
+}
+
+.trigger {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: var(--density-row-height);
+  padding-block: 0;
+  padding-inline: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.trigger[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.trigger[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+/* Inset: the row runs to the edge of its column, where a ring outside it would be cut. */
+.trigger[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.chevron {
+  flex: none;
+  color: var(--color-text-secondary);
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.count {
+  flex: none;
+  color: var(--color-text-secondary);
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The sentence and the detail start under the title, past the chevron. */
+.summary,
+.panel,
+.statement {
+  padding-inline-start: calc(var(--space-1) + var(--size-icon) + var(--space-2));
+}
+
+.summary {
+  max-inline-size: calc(
+    var(--layout-prose-max-width) + var(--space-1) + var(--size-icon) + var(--space-2)
+  );
+  padding-block-end: var(--space-2);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block-end: var(--space-3);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+/* A statement in the place of a row that opens: there is nothing to open. */
+.statement {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}

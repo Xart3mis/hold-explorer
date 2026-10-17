@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Breadcrumb as RacBreadcrumb, Breadcrumbs, Link } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Tooltip } from "../Tooltip/Tooltip";

@@ -36,11 +36,32 @@ export const keys = {
    * is selected, so both are part of the key: another workspace or another snapshot is another
    * reading. `null` stands for a workspace without snapshots, and for no workspace at all.
    *
-   * Only `useSnapshotQuery` (ui/src/app/view.ts) builds such a key: it sends the same view to the
-   * command, so the two cannot differ.
+   * Only `useSnapshotQuery` and `useSnapshotPages` (ui/src/app/view.ts) build such a key: they
+   * send the same view to the command, so the two cannot differ.
    */
   snapshot: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
     ["snapshot", view?.workspace_id ?? null, view?.snapshot_id ?? null, name, ...params] as const,
+  /**
+   * The same for a reading that is kept a page at a time (`useSnapshotPages`). What is kept under
+   * it is the list of the pages, not one answer, so it must never be the key of a plain reading:
+   * the marker after the name keeps the two apart, also for the same name and params.
+   */
+  snapshotPages: (view: ViewRef | null, name: string, params: readonly unknown[] = []) =>
+    [
+      "snapshot",
+      view?.workspace_id ?? null,
+      view?.snapshot_id ?? null,
+      name,
+      { pages: true },
+      ...params,
+    ] as const,
+  /** The filters of every workspace, as the user has set them in this session: the prefix of those keys. */
+  filters: ["filters"] as const,
+  /**
+   * The filters of one workspace. They are not what a command returned: the user set them, and
+   * they are kept here for the session so that every data screen shows the same ones.
+   */
+  workspaceFilters: (workspaceId: string) => ["filters", workspaceId] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

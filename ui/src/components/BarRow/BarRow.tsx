@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ToggleButton } from "react-aria-components";
-import { t } from "../../app/i18n";
+import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Skeleton } from "../Skeleton/Skeleton";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
@@ -27,7 +27,10 @@ export interface BarRowGroupProps {
   className?: string | undefined;
 }
 
-/** A group of bar rows. Labels, bars, and values line up in columns across the rows. */
+/**
+ * A group of bar rows. Labels, bars, and values line up in columns across the rows. To assistive
+ * technology it is a named list, and each row is an item of it.
+ */
 export function BarRowGroup({
   children,
   isLoading,
@@ -39,7 +42,7 @@ export function BarRowGroup({
   const loading = isLoading === true;
   return (
     <div
-      role="group"
+      role="list"
       {...props}
       aria-busy={loading ? "true" : undefined}
       data-stale={isStale === true && !loading ? "" : undefined}
@@ -74,7 +77,7 @@ export function BarRowGroup({
   );
 }
 
-export interface BarRowProps {
+interface BarRowBase {
   /** The category. */
   label: string;
   /** Its value, formatted. */
@@ -83,37 +86,42 @@ export interface BarRowProps {
   secondaryValue?: string;
   /** The length of the bar as a share of the longest bar of the group, from 0 to 1. */
   fraction: number;
-  /** Whether the category is in the active filter. */
-  isSelected?: boolean;
-  /** Filters by the category, or removes it from the filter. */
-  onPress?: () => void;
   /**
    * The step of an age band, 1 (youngest) to 5 (oldest). Only a group whose categories have an
    * order takes it; every other bar is the neutral color of plain data.
    */
   ordinalStep?: 1 | 2 | 3 | 4 | 5;
-  /**
-   * The row only shows its category: a screen that cannot filter by it yet. It is then not a
-   * button, takes no focus, and has no hover, pressed, or selected look, so nothing on it says
-   * that it can be pressed. `isSelected` and `onPress` are not used.
-   */
-  isStatic?: boolean;
+}
+
+/** A row that filters by its category when it is pressed. */
+interface PressableBarRowProps extends BarRowBase {
+  isStatic?: false;
+  /** Filters by the category, or removes it from the filter. */
+  onPress: () => void;
+  /** Whether the category is in the active filter. */
+  isSelected?: boolean;
 }
 
 /**
- * One category as a row: its label, a bar as long as its share, and its value. A button, unless
- * it is static.
+ * A row that only shows its category: a screen that cannot filter by it yet. It is not a button,
+ * takes no focus, and has no hover, pressed, or selected look, so nothing on it says that it can
+ * be pressed. It has no action and is never in the active filter.
  */
-export function BarRow({
-  label,
-  value,
-  secondaryValue,
-  fraction,
-  isSelected,
-  onPress,
-  ordinalStep,
-  isStatic,
-}: BarRowProps) {
+interface StaticBarRowProps extends BarRowBase {
+  isStatic: true;
+  onPress?: never;
+  isSelected?: never;
+}
+
+/** A row is a button or it is not: a row that can be pressed has an action, a static row none. */
+export type BarRowProps = PressableBarRowProps | StaticBarRowProps;
+
+/**
+ * One category as a row: its label, a bar as long as its share, and its value. An item of the
+ * list its group is, and inside it a button, unless it is static.
+ */
+export function BarRow(props: BarRowProps) {
+  const { label, value, secondaryValue, fraction, ordinalStep } = props;
   const share = Math.min(1, Math.max(0, fraction));
   const content = (
     <>
@@ -136,21 +144,23 @@ export function BarRow({
       )}
     </>
   );
-  if (isStatic === true) {
+  if (props.isStatic === true) {
     return (
-      <div data-part="bar-row" className={styles.row}>
+      <div role="listitem" data-part="bar-row" className={styles.row}>
         {content}
       </div>
     );
   }
   return (
-    <ToggleButton
-      isSelected={isSelected === true}
-      {...(onPress === undefined ? {} : { onPress })}
-      data-part="bar-row"
-      className={cx(styles.row)}
-    >
-      {content}
-    </ToggleButton>
+    <div role="listitem" className={styles.item}>
+      <ToggleButton
+        isSelected={props.isSelected === true}
+        onPress={props.onPress}
+        data-part="bar-row"
+        className={cx(styles.row)}
+      >
+        {content}
+      </ToggleButton>
+    </div>
   );
 }

@@ -39,6 +39,66 @@ describe("the sheet page", () => {
     expect(items[0]).not.toHaveTextContent(text.inUse);
   });
 
+  it("writes out the roles of the list, which a list drawn without markers loses in WebKit", async () => {
+    openFlow("/import/sheet", { draft: workbook() });
+    const main = await pageTitled(text.title);
+    const list = within(main).getByRole("list", {
+      name: text.list.replace("{{file}}", "Holds_2026-10-14.xlsx"),
+    });
+    expect(list).toHaveAttribute("role", "list");
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    for (const item of items) expect(item).toHaveAttribute("role", "listitem");
+  });
+
+  it("while a sheet is read, shows the spinner on its button alone and keeps the others inert", async () => {
+    const { user } = openFlow("/import/sheet", {
+      draft: workbook(),
+      handlers: { import_choose_sheet: () => new Promise<ImportDraft>(() => undefined) },
+    });
+    const main = await pageTitled(text.title);
+    await user.click(within(main).getByRole("button", { name: use("Sheet3") }));
+    const pressed = within(main).getByRole("button", { name: use("Sheet3") });
+    await waitFor(() => {
+      expect(pressed.querySelector('[data-part="spinner"]')).not.toBeNull();
+    });
+    expect(pressed).toHaveAttribute("aria-busy", "true");
+    const others = [
+      within(main).getByRole("button", { name: use("info") }),
+      within(main).getByRole("button", { name: text.keep.replace("{{sheet}}", "data") }),
+      within(main).getByRole("button", { name: en.common.cancel }),
+    ];
+    for (const other of others) {
+      expect(other).toHaveAttribute("data-inert");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(other).not.toBeDisabled();
+      expect(other.querySelector('[data-part="spinner"]')).toBeNull();
+    }
+  });
+
+  it("while the import is cancelled, shows the spinner on Cancel alone and keeps the sheets inert", async () => {
+    const { user } = openFlow("/import/sheet", {
+      draft: workbook(),
+      handlers: { import_cancel: () => new Promise<null>(() => undefined) },
+    });
+    const main = await pageTitled(text.title);
+    const cancel = within(main).getByRole("button", { name: en.common.cancel });
+    await user.click(cancel);
+    await waitFor(() => {
+      expect(cancel.querySelector('[data-part="spinner"]')).not.toBeNull();
+    });
+    const others = [
+      within(main).getByRole("button", { name: use("info") }),
+      within(main).getByRole("button", { name: use("Sheet3") }),
+      within(main).getByRole("button", { name: text.keep.replace("{{sheet}}", "data") }),
+    ];
+    for (const other of others) {
+      expect(other).toHaveAttribute("data-inert");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(other.querySelector('[data-part="spinner"]')).toBeNull();
+    }
+  });
+
   it("names the step in the breadcrumb, under Import", async () => {
     openFlow("/import/sheet", { draft: workbook() });
     await pageTitled(text.title);

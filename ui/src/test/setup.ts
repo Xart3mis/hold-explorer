@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "../app/i18n";
+import "../text/i18n";
 import { clearMocks } from "@tauri-apps/api/mocks";
 import { cleanup, configure } from "@testing-library/react";
 import { randomFillSync } from "node:crypto";
@@ -45,6 +45,28 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   configurable: true,
   value: () => null,
 });
+
+// jsdom has no IntersectionObserver. The row a table shows while more rows are loading is the
+// component library's, which watches it with one. Nothing intersects where nothing is laid out,
+// so the stand-in observes and reports nothing; the table finds the end of its rows by itself.
+if (typeof window.IntersectionObserver === "undefined") {
+  const nothing = (): void => undefined;
+  class NoIntersections implements IntersectionObserver {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly scrollMargin = "";
+    readonly thresholds: readonly number[] = [];
+    readonly observe = nothing;
+    readonly unobserve = nothing;
+    readonly disconnect = nothing;
+    readonly takeRecords = (): IntersectionObserverEntry[] => [];
+  }
+  Object.defineProperty(window, "IntersectionObserver", {
+    configurable: true,
+    writable: true,
+    value: NoIntersections,
+  });
+}
 
 afterEach(() => {
   cleanup();

@@ -1,22 +1,24 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { memo, useId, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
 import { IMPORT_PATH } from "../../app/destinations";
-import { formatCount, formatList } from "../../app/format";
-import { t } from "../../app/i18n";
+import { Page } from "../../app/shell/Page";
 import type { Field } from "../../bindings/Field";
 import {
   Button,
   DataTable,
   Notice,
+  SectionTitle,
   Select,
   type DataTableColumn,
+  textChars,
   type SelectOption,
 } from "../../components";
-import { Page } from "../shell/Page";
+import { formatCount, formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { useImportDraft } from "./draft";
 import { columnLabel, fieldLabel, FIELDS, orderFields, type Fields } from "./fields";
 import styles from "./Import.module.css";
@@ -49,6 +51,99 @@ interface PreviewRow {
   key: string;
   cells: readonly string[];
 }
+
+/** The most room a value of the preview is given, in characters: a line that is read at a glance. */
+const VALUE_CHARS = 64;
+
+/** How many rows of the preview show before it scrolls. */
+const PREVIEW_ROWS = { maxRows: 8 } as const;
+
+/**
+ * The room a column of the preview needs, in characters: its longest value among the rows shown.
+ * A line ID is written in the monospace and given all of its room; any other value is counted
+ * as text, and cut past a line that is read at a glance. The table itself keeps a column as wide
+ * as its header.
+ */
+function roomOf(
+  preview: readonly (readonly string[])[],
+  column: number,
+  isLineId: boolean,
+): number {
+  const room = (value: string) => (isLineId ? value.length : textChars(value));
+  const longest = Math.max(1, ...preview.map((row) => room(row[column] ?? "")));
+  return isLineId ? longest : Math.min(longest, VALUE_CHARS);
+}
+
+/** The key of a row of the preview. */
+function previewKey(row: PreviewRow): string {
+  return row.key;
+}
+
+/**
+ * The first rows of the file as a table, each column under its header and the field it
+ * supplies. It depends on the file and the mapping alone and is rendered again only for another
+ * of either: the page above it renders at every choice and while the review is on its way, and
+ * none of that changes a row.
+ */
+const Preview = memo(function Preview({
+  headers,
+  preview,
+  fields,
+}: {
+  headers: readonly string[];
+  preview: readonly (readonly string[])[];
+  fields: Fields;
+}) {
+  const columns = useMemo(
+    () =>
+      headers.map((_, column): DataTableColumn<PreviewRow> => {
+        const owner = fieldOf(fields, column);
+        const header = columnLabel(headers, column);
+        return {
+          // The table keeps its columns and its rows by one set of keys, so each kind has its own.
+          id: `column-${String(column)}`,
+          header:
+            owner === undefined
+              ? header
+              : t("import.mapping.previewMapped", { header, field: fieldLabel(owner) }),
+          // A line ID is written whole, as an identifier is. Any other value is cut at the end
+          // once it is longer than a line that can be read at a glance.
+          ...(owner === "LineId"
+            ? { kind: "identifier" as const, cell: (row: PreviewRow) => row.cells[column] ?? "" }
+            : {
+                cell: (row: PreviewRow) => (
+                  <span className={styles.previewValue}>{row.cells[column] ?? ""}</span>
+                ),
+              }),
+          isRowHeader: column === 0,
+          // A column that supplies no field is written in the quieter ink.
+          isSupporting: owner === undefined,
+          // As wide as the longest of its values that are shown needs: the table scrolls
+          // sideways, nothing is squeezed. A line ID is given all of its room; any other value
+          // at most a line that can be read at a glance. The last column takes what is left of
+          // the line as well.
+          size:
+            column === headers.length - 1
+              ? { flex: 1, minChars: roomOf(preview, column, owner === "LineId") }
+              : { chars: roomOf(preview, column, owner === "LineId") },
+        };
+      }),
+    [headers, preview, fields],
+  );
+  const rows = useMemo(
+    () => preview.map((cells, index): PreviewRow => ({ key: `row-${String(index)}`, cells })),
+    [preview],
+  );
+  return (
+    <DataTable
+      aria-label={t("import.mapping.preview")}
+      columns={columns}
+      rows={rows}
+      rowKey={previewKey}
+      height={PREVIEW_ROWS}
+    />
+  );
+});
 
 /**
  * The mapping step: one select per field, the required ones first, each offering the columns of
@@ -86,6 +181,9 @@ export function ImportMappingPage() {
 
   const { file } = draft;
   const { headers, preview } = file;
+  // While the file is read or the import is cancelled, the other buttons wait: only the one that
+  // was pressed shows the spinner.
+  const busy = review.isPending || cancel.isPending;
 
   // Another mapping is another reading of the file: what was reviewed before no longer holds.
   const change = (next: Fields) => {
@@ -147,7 +245,7 @@ export function ImportMappingPage() {
           selectedKey={column === undefined ? (isRequired ? null : NONE) : String(column)}
           placeholder={t("import.mapping.placeholder")}
           isRequired={isRequired}
-          isDisabled={review.isPending}
+          isInert={busy}
           onSelectionChange={(id) => {
             assign(field, id);
           }}
@@ -165,35 +263,6 @@ export function ImportMappingPage() {
   // once that mapping was changed and every required field has a column.
   const sentBack =
     sentWith?.kind === "MissingColumns" && (missing.length > 0 || !isChanged) ? sentWith : null;
-
-  const columns = headers.map((_, column): DataTableColumn<PreviewRow> => {
-    const owner = fieldOf(fields, column);
-    const header = columnLabel(headers, column);
-    return {
-      // The table keeps its columns and its rows by one set of keys, so each kind has its own.
-      id: `column-${String(column)}`,
-      header:
-        owner === undefined
-          ? header
-          : t("import.mapping.previewMapped", { header, field: fieldLabel(owner) }),
-      // A line ID is written whole, as an identifier is. Any other value is cut at the end
-      // once it is longer than a line that can be read at a glance.
-      ...(owner === "LineId"
-        ? { kind: "identifier" as const, cell: (row: PreviewRow) => row.cells[column] ?? "" }
-        : {
-            cell: (row: PreviewRow) => (
-              <span className={styles.previewValue}>{row.cells[column] ?? ""}</span>
-            ),
-          }),
-      isRowHeader: column === 0,
-      // A column that supplies no field is written in the quieter ink.
-      isSupporting: owner === undefined,
-      // As wide as its header and its values need: the table scrolls sideways, nothing is
-      // squeezed. The last column takes what is left of the line, so the rules run its length.
-      width: column === headers.length - 1 ? "minmax(max-content, 1fr)" : "max-content",
-    };
-  });
-  const rows = preview.map((cells, index): PreviewRow => ({ key: `row-${String(index)}`, cells }));
 
   return (
     <Page
@@ -239,7 +308,7 @@ export function ImportMappingPage() {
               </span>
               <Button
                 variant="quiet"
-                isDisabled={review.isPending}
+                isInert={busy}
                 onPress={() => {
                   void navigate(IMPORT_SHEET_PATH, { state: { from } });
                 }}
@@ -250,14 +319,14 @@ export function ImportMappingPage() {
           ) : null}
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>{t("import.mapping.required")}</h2>
+            <SectionTitle level={2}>{t("import.mapping.required")}</SectionTitle>
             <div className={styles.fields}>
               {ordered.required.map((field) => select(field, true))}
             </div>
           </section>
 
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>{t("import.mapping.optional")}</h2>
+            <SectionTitle level={2}>{t("import.mapping.optional")}</SectionTitle>
             <p className={styles.text}>{t("import.mapping.optionalHelp")}</p>
             <div className={styles.fields}>
               {ordered.optional.map((field) => select(field, false))}
@@ -280,7 +349,9 @@ export function ImportMappingPage() {
               <Button
                 variant="primary"
                 isDisabled={missing.length > 0}
+                reservesPendingSpace
                 isPending={review.isPending}
+                isInert={cancel.isPending}
                 {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
                 onPress={() => {
                   setSaid(null);
@@ -290,7 +361,7 @@ export function ImportMappingPage() {
                 {t("import.mapping.continue")}
               </Button>
               <Button
-                isDisabled={review.isPending}
+                isInert={busy}
                 onPress={() => {
                   change(file.auto_map.fields);
                   setSaid(t("import.mapping.resetDone"));
@@ -300,10 +371,11 @@ export function ImportMappingPage() {
               </Button>
               <Button
                 variant="quiet"
+                reservesPendingSpace
                 isPending={cancel.isPending}
-                isDisabled={review.isPending}
+                isInert={review.isPending}
                 onPress={() => {
-                  cancel.mutate(from);
+                  cancel.mutate({ to: from, file: draft.file.content_hash });
                 }}
               >
                 {t("common.cancel")}
@@ -322,24 +394,17 @@ export function ImportMappingPage() {
         </div>
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>{t("import.mapping.preview")}</h2>
+          <SectionTitle level={2}>{t("import.mapping.preview")}</SectionTitle>
           <p className={styles.text}>
-            {rows.length === 0
+            {preview.length === 0
               ? t("import.mapping.previewEmpty")
               : t("import.mapping.previewCaption", {
                   count: file.row_count,
-                  shown: formatCount(rows.length),
+                  shown: formatCount(preview.length),
                 })}
           </p>
-          {rows.length === 0 ? null : (
-            <div className={styles.tableBox}>
-              <DataTable
-                aria-label={t("import.mapping.preview")}
-                columns={columns}
-                rows={rows}
-                rowKey={(row) => row.key}
-              />
-            </div>
+          {preview.length === 0 ? null : (
+            <Preview headers={headers} preview={preview} fields={fields} />
           )}
         </section>
       </div>

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { RouterProvider } from "react-aria-components";
 import { Outlet, useHref, useLocation, useNavigate, type NavigateOptions } from "react-router";
 import { useIsMutating } from "@tanstack/react-query";
@@ -6,14 +15,19 @@ import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
 import { inApp, onFileDrag } from "../../api/window";
+import { useSelectionFollowsView } from "../../app/actions/selection";
+import { useSnapshotActions } from "../../app/actions/snapshots";
+import { useStart } from "../../app/actions/start";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
-import { formatDateTime } from "../../app/format";
-import { t } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
 import type { AppStart } from "../../bindings/AppStart";
+import { lengthToken } from "../../design/token-values";
 import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../components";
+import { formatDateTime } from "../../text/format";
+import { t } from "../../text/i18n";
+import { DetailPanel } from "../detail/DetailPanel";
+import { createDetailFocus, DetailFocusContext, useSelection } from "../detail/selection";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
-import { ShellContext, type ShellReport } from "./context";
 import type { ShellProblem } from "./problem";
 import { shortcutBindings, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
@@ -24,6 +38,31 @@ declare module "react-aria-components" {
   interface RouterConfig {
     routerOptions: NavigateOptions;
   }
+}
+
+function onResize(changed: () => void): () => void {
+  window.addEventListener("resize", changed);
+  return () => {
+    window.removeEventListener("resize", changed);
+  };
+}
+
+/**
+ * Whether the window is wide enough for the detail panel to sit beside the content
+ * (`--layout-breakpoint-wide`); below it the panel lies over the right edge of the content.
+ */
+function useIsWide(): boolean {
+  return useSyncExternalStore(onResize, () => {
+    const wide = wideBreakpoint();
+    return wide !== null && window.innerWidth >= wide;
+  });
+}
+
+/** The wide breakpoint in pixels, read from its token once; `null` while it cannot be read. */
+let breakpoint: number | null = null;
+function wideBreakpoint(): number | null {
+  breakpoint ??= lengthToken("--layout-breakpoint-wide");
+  return breakpoint;
 }
 
 /** The top bar before anything is known: the name of the app, and blocks where its controls go. */
@@ -99,7 +138,8 @@ interface ShellProps {
 
 /** The shell once the application start is known. */
 function LoadedShell({ start, destinations }: ShellProps) {
-  const { selectSnapshot, isBusy } = useApp();
+  const { selectSnapshot } = useSnapshotActions();
+  const { isBusy } = useStart();
   const navigate = useNavigate();
   const location = useLocation();
   const problemId = useId();
@@ -107,9 +147,15 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const isSwitching = useIsMutating({ mutationKey: keys.switching }) > 0;
   const [dragged, setDragged] = useState<readonly string[] | null>(null);
   const [problem, setProblem] = useState<ShellProblem | null>(null);
+  // What the shell was asked to say with `notify`: nothing failed, and the user should know.
+  const [notice, setNotice] = useState<ShellNotice | null>(null);
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
   // Why files cannot be dropped on this window, when the window refused to say when one is.
   const [dropProblem, setDropProblem] = useState<string | null>(null);
+  // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
+  const [detailFocus] = useState(createDetailFocus);
+  const { selection } = useSelection();
+  const isWide = useIsWide();
 
   // The page the app opened on, and whether it has been left since.
   const arrival = useRef<{ first: string | null; left: boolean }>({ first: null, left: false });
@@ -123,6 +169,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
 
   const open = start.open;
   const home = open === null ? WELCOME_PATH : OVERVIEW_PATH;
+  useSelectionFollowsView(open);
 
   // The toast region is rendered beside the layout. It learns from the root element where the
   // content area starts; see app.css.
@@ -200,6 +247,14 @@ function LoadedShell({ start, destinations }: ShellProps) {
   );
   useShortcuts(bindings);
 
+  // The detail panel shows while the address of a data destination selects a row, and there is a
+  // snapshot to read it from.
+  const isDataPage = destinations.some(
+    (destination) =>
+      destination.group === "data" && destination.available && destination.path === pathname,
+  );
+  const detail = isDataPage && open?.selected != null ? selection : null;
+
   const selected = open?.snapshots.find((snapshot) => snapshot.id === open.selected);
   // The command lists the snapshots oldest first, so the last one is the newest.
   const newest = open?.snapshots.at(-1);
@@ -214,98 +269,120 @@ function LoadedShell({ start, destinations }: ShellProps) {
     setProblem({ kind: "action", title, message: error.message });
   }, []);
   const shell = useMemo(
-    () => ({ start, dragged, arrivedAt, report }),
+    () => ({ start, dragged, arrivedAt, report, notify: setNotice }),
     [start, dragged, arrivedAt, report],
   );
 
   return (
     <ShellContext value={shell}>
-      <div className={styles.layout}>
-        <TopBar
-          start={start}
-          destinations={destinations}
-          renameErrorId={problem?.kind === "rename" ? problemId : undefined}
-          onProblem={setProblem}
-        />
-        {hasSidebar ? <Sidebar destinations={destinations} /> : null}
-        <main className={styles.content}>
-          {problem !== null || dropProblem !== null || warning !== null || older !== null ? (
-            <div className={styles.notices}>
-              {problem === null ? null : (
-                <div id={problemId}>
-                  <Notice
-                    tone="danger"
-                    title={problem.title}
-                    onDismiss={() => {
-                      setProblem(null);
-                    }}
-                  >
-                    {problem.message}
-                  </Notice>
-                </div>
-              )}
-              {dropProblem === null ? null : (
-                <Notice
-                  tone="warning"
-                  title={t("shell.dropUnavailable")}
-                  onDismiss={() => {
-                    setDropProblem(null);
-                  }}
-                >
-                  <span className={styles.noticeLine}>{dropProblem}</span>
-                  <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
-                </Notice>
-              )}
-              {warning === null ? null : (
-                <Notice
-                  tone="warning"
-                  title={t("workspaces.warningTitle")}
-                  onDismiss={() => {
-                    setDismissedWarning(warning.message);
-                  }}
-                >
-                  {warning.message}
-                </Notice>
-              )}
-              {older === null ? null : (
-                <Notice
-                  tone="info"
-                  actions={
-                    <Button
-                      variant="quiet"
-                      isPending={selectSnapshot.isPending}
-                      isInert={isBusy}
-                      onPress={() => {
-                        selectSnapshot.mutate(older.newest.id, {
-                          onSuccess: () => {
-                            setProblem(null);
-                          },
-                          onError: (error) => {
-                            setProblem({
-                              kind: "action",
-                              title: t("snapshots.selectError"),
-                              message: asCommandError(error).message,
-                            });
-                          },
-                        });
+      <DetailFocusContext value={detailFocus}>
+        <div
+          data-detail={detail === null ? undefined : isWide ? "beside" : "overlay"}
+          className={styles.layout}
+        >
+          <TopBar
+            start={start}
+            destinations={destinations}
+            renameErrorId={problem?.kind === "rename" ? problemId : undefined}
+            onProblem={setProblem}
+          />
+          {hasSidebar ? <Sidebar destinations={destinations} /> : null}
+          <main className={styles.content}>
+            {problem !== null ||
+            notice !== null ||
+            dropProblem !== null ||
+            warning !== null ||
+            older !== null ? (
+              <div className={styles.notices}>
+                {problem === null ? null : (
+                  <div id={problemId}>
+                    <Notice
+                      tone="danger"
+                      title={problem.title}
+                      onDismiss={() => {
+                        setProblem(null);
                       }}
                     >
-                      {t("snapshots.toNewest")}
-                    </Button>
-                  }
-                >
-                  {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
-                </Notice>
-              )}
+                      {problem.message}
+                    </Notice>
+                  </div>
+                )}
+                {notice === null ? null : (
+                  <Notice
+                    tone="info"
+                    title={notice.title}
+                    onDismiss={() => {
+                      setNotice(null);
+                    }}
+                  >
+                    {notice.text}
+                  </Notice>
+                )}
+                {dropProblem === null ? null : (
+                  <Notice
+                    tone="warning"
+                    title={t("shell.dropUnavailable")}
+                    onDismiss={() => {
+                      setDropProblem(null);
+                    }}
+                  >
+                    <span className={styles.noticeLine}>{dropProblem}</span>
+                    <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
+                  </Notice>
+                )}
+                {warning === null ? null : (
+                  <Notice
+                    tone="warning"
+                    title={t("workspaces.warningTitle")}
+                    onDismiss={() => {
+                      setDismissedWarning(warning.message);
+                    }}
+                  >
+                    {warning.message}
+                  </Notice>
+                )}
+                {older === null ? null : (
+                  <Notice
+                    tone="info"
+                    actions={
+                      <Button
+                        variant="quiet"
+                        reservesPendingSpace
+                        isPending={selectSnapshot.isPending}
+                        isInert={isBusy}
+                        onPress={() => {
+                          selectSnapshot.mutate(older.newest.id, {
+                            onSuccess: () => {
+                              setProblem(null);
+                            },
+                            onError: (error) => {
+                              setProblem({
+                                kind: "action",
+                                title: t("snapshots.selectError"),
+                                message: asCommandError(error).message,
+                              });
+                            },
+                          });
+                        }}
+                      >
+                        {t("snapshots.toNewest")}
+                      </Button>
+                    }
+                  >
+                    {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
+                  </Notice>
+                )}
+              </div>
+            ) : null}
+            <div data-stale={isSwitching ? "" : undefined} className={styles.scroll}>
+              {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
+              <Outlet key={pathname} />
             </div>
-          ) : null}
-          <div data-stale={isSwitching ? "" : undefined} className={styles.scroll}>
-            {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
-            <Outlet key={pathname} />
-          </div>
-          {dragged === null ? null : <DropFrame paths={dragged} />}
-        </main>
-      </div>
+            {dragged === null ? null : <DropFrame paths={dragged} />}
+          </main>
+          {detail === null ? null : <DetailPanel selection={detail} className={styles.detail} />}
+        </div>
+      </DetailFocusContext>
     </ShellContext>
   );
 }
@@ -316,7 +393,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
  * rendered once the start is known.
  */
 export function AppLayout({ destinations }: { destinations: readonly Destination[] }) {
-  const { start, error, reload, isReloading } = useApp();
+  const { start, error, reload, isReloading } = useStart();
   const navigate = useNavigate();
 
   if (start === undefined) {

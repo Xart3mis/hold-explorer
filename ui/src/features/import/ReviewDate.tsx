@@ -1,9 +1,9 @@
-import { useImperativeHandle, useState, type Ref } from "react";
-import { formatDateTime, formatLongDate } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
+import { useImperativeHandle, useRef, useState, type Ref } from "react";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotSource } from "../../bindings/SnapshotSource";
-import { Button, Checkbox, Notice, TextField } from "../../components";
+import { Button, Checkbox, Notice, SectionTitle, TextField } from "../../components";
+import { formatDateTime, formatLongDate } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import type { ImportChoices } from "./draft";
 import styles from "./Import.module.css";
 import type { DateState } from "./review";
@@ -66,21 +66,28 @@ export function ReviewDate({
   const { detected } = review;
   // What is being typed, until the field is left: the page works with what was last left.
   const [typing, setTyping] = useState<{ date?: string; time?: string }>({});
+  // The same, as it is at this moment. Leaving a field and activating Import can come in one
+  // task, before the fields are rendered again; read from here, the second finds nothing typed
+  // and does not keep the same values twice.
+  const typed = useRef<{ date?: string; time?: string }>({});
+  const setTyped = (next: { date?: string; time?: string }) => {
+    typed.current = next;
+    setTyping(next);
+  };
   const dateText = typing.date ?? date.dateText;
   const timeText = typing.time ?? date.timeText;
 
-  const hasTyped = typing.date !== undefined || typing.time !== undefined;
-  const commit = () => {
-    if (!hasTyped) return;
-    setTyping({});
-    onChoose({ date: dateText.trim(), time: timeText.trim() });
+  const commit = (): boolean => {
+    const held = typed.current;
+    if (held.date === undefined && held.time === undefined) return false;
+    setTyped({});
+    onChoose({
+      date: (held.date ?? date.dateText).trim(),
+      time: (held.time ?? date.timeText).trim(),
+    });
+    return true;
   };
-  useImperativeHandle(ref, () => ({
-    commitTyped: () => {
-      commit();
-      return hasTyped;
-    },
-  }));
+  useImperativeHandle(ref, () => ({ commitTyped: commit }));
   const onKeyDown = (event: { key: string; continuePropagation: () => void }) => {
     if (event.key === "Enter") commit();
     else event.continuePropagation();
@@ -90,7 +97,7 @@ export function ReviewDate({
 
   return (
     <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>{t("import.review.date.title")}</h2>
+      <SectionTitle level={2}>{t("import.review.date.title")}</SectionTitle>
 
       {detected === null ? (
         <Notice tone="warning" title={t("import.review.date.noneTitle")}>
@@ -116,9 +123,11 @@ export function ReviewDate({
           value={dateText}
           isDisabled={isDisabled}
           onChange={(value) => {
-            setTyping((held) => ({ ...held, date: value }));
+            setTyped({ ...typed.current, date: value });
           }}
-          onBlur={commit}
+          onBlur={() => {
+            commit();
+          }}
           onKeyDown={onKeyDown}
           // The message of a year that is refused names the years the review allows.
           {...(typing.date === undefined && date.dateError !== null
@@ -138,9 +147,11 @@ export function ReviewDate({
           value={timeText}
           isDisabled={isDisabled}
           onChange={(value) => {
-            setTyping((held) => ({ ...held, time: value }));
+            setTyped({ ...typed.current, time: value });
           }}
-          onBlur={commit}
+          onBlur={() => {
+            commit();
+          }}
           onKeyDown={onKeyDown}
           {...(typing.time === undefined && date.timeError !== null
             ? { errorMessage: t(date.timeError) }
@@ -159,7 +170,7 @@ export function ReviewDate({
             variant="quiet"
             isDisabled={isDisabled}
             onPress={() => {
-              setTyping({});
+              setTyped({});
               onChoose({ date: null, time: null });
             }}
           >

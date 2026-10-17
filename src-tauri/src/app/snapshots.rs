@@ -4,13 +4,14 @@ use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::query::{group_by, summary, Group, Summary};
 use hx_core::rules::RuleSet;
+use hx_core::solve::{solve_plan, SolvePlan};
 use hx_store::SnapshotInfo;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::error::CommandError;
 use super::workspaces::WorkspaceOpen;
-use super::{describe, AppState};
+use super::{describe, AppState, Cache};
 
 /// The view the interface is showing when it asks for data. A command that reads the data in
 /// view answers only when this names the open workspace and the selected snapshot.
@@ -48,7 +49,7 @@ impl AppState {
         let mut open = describe(workspace)?;
         open.selected = Some(snapshot_id);
         if self.selected != Some(snapshot_id) {
-            self.dataset = None;
+            self.cache = None;
         }
         self.selected = Some(snapshot_id);
         Ok(open)
@@ -59,8 +60,11 @@ impl AppState {
     /// open workspace and its selected snapshot. Every command that reads the data in view calls
     /// this first, so an answer can never be kept under the name of another view.
     pub(super) fn check_view(&self, view: &ViewRef) -> Result<(), CommandError> {
-        let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
-        if workspace.info()?.id == view.workspace_id && self.selected == view.snapshot_id {
+        let open_id = self
+            .open_id
+            .as_ref()
+            .ok_or_else(CommandError::no_workspace)?;
+        if *open_id == view.workspace_id && self.selected == view.snapshot_id {
             return Ok(());
         }
         Err(CommandError::new(
@@ -69,23 +73,60 @@ impl AppState {
         ))
     }
 
-    /// The dataset of this snapshot of the open workspace. It is built on the first call for a
-    /// snapshot and kept until another snapshot is asked for or another workspace is opened, so
-    /// the dataset of one snapshot is never given for another.
-    pub(super) fn dataset(&mut self, snapshot_id: i64) -> Result<&Dataset, CommandError> {
+    /// The cache for this snapshot of the open workspace, built on the first call for the pair
+    /// and kept until another snapshot is asked for or another workspace is installed, so what
+    /// one workspace or snapshot built is never given for another.
+    fn cache(&mut self, snapshot_id: i64) -> Result<&mut Cache, CommandError> {
         let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
-        let entry = match self.dataset.take() {
-            Some(entry) if entry.0 == snapshot_id => entry,
+        let workspace_id = self
+            .open_id
+            .clone()
+            .ok_or_else(CommandError::no_workspace)?;
+        let cache = match self.cache.take() {
+            Some(cache)
+                if cache.workspace_id == workspace_id && cache.snapshot_id == snapshot_id =>
+            {
+                cache
+            }
             _ => {
-                let built = workspace.dataset(snapshot_id, RuleSet::builtin())?;
+                let dataset = workspace.dataset(snapshot_id, RuleSet::builtin())?;
                 #[cfg(test)]
                 {
                     self.dataset_builds += 1;
                 }
-                (snapshot_id, built)
+                Cache {
+                    workspace_id,
+                    snapshot_id,
+                    dataset,
+                    plan: None,
+                    #[cfg(test)]
+                    plan_builds: self.plan_builds.clone(),
+                }
             }
         };
-        Ok(&self.dataset.insert(entry).1)
+        Ok(self.cache.insert(cache))
+    }
+
+    /// The dataset of this snapshot of the open workspace; see [`AppState::cache`].
+    pub(super) fn dataset(&mut self, snapshot_id: i64) -> Result<&Dataset, CommandError> {
+        Ok(&self.cache(snapshot_id)?.dataset)
+    }
+
+    /// The dataset of this snapshot with the solve plan of its open holds, which is built on the
+    /// first call for the snapshot and kept with the dataset.
+    pub(super) fn plan(
+        &mut self,
+        snapshot_id: i64,
+    ) -> Result<(&Dataset, &SolvePlan), CommandError> {
+        let cache = self.cache(snapshot_id)?;
+        let plan = cache.plan.get_or_insert_with(|| {
+            #[cfg(test)]
+            cache
+                .plan_builds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            solve_plan(&cache.dataset, &FilterSpec::default(), None)
+        });
+        Ok((&cache.dataset, plan))
     }
 
     /// The Overview of the selected snapshot for this filter; `None` when the workspace has no
@@ -119,5 +160,11 @@ impl AppState {
     #[cfg(test)]
     pub(super) fn dataset_builds(&self) -> usize {
         self.dataset_builds
+    }
+
+    /// How many solve plans were built since the application started.
+    #[cfg(test)]
+    pub(super) fn plan_builds(&self) -> usize {
+        self.plan_builds.load(std::sync::atomic::Ordering::Relaxed)
     }
 }

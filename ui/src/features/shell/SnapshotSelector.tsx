@@ -1,9 +1,10 @@
 import { asCommandError } from "../../api/error";
-import { formatDate, formatDateTime } from "../../app/format";
-import { t } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { useSnapshotActions } from "../../app/actions/snapshots";
+import { useStart } from "../../app/actions/start";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import { MenuButton, MenuItem, MenuSection } from "../../components";
+import { formatDate, formatDateTime } from "../../text/format";
+import { t } from "../../text/i18n";
 import type { ShellProblem } from "./problem";
 
 export interface SnapshotSelectorProps {
@@ -20,7 +21,8 @@ export interface SnapshotSelectorProps {
  * selected; while another control's action on the workspace runs, it waits without one.
  */
 export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
-  const { selectSnapshot, isBusy } = useApp();
+  const { selectSnapshot } = useSnapshotActions();
+  const { isBusy } = useStart();
   const selected = open.snapshots.find((snapshot) => snapshot.id === open.selected);
   // The command lists the snapshots oldest first; the menu starts with the newest.
   const newestFirst = [...open.snapshots].reverse();

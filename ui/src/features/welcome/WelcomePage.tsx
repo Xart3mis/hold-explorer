@@ -3,10 +3,12 @@ import { useNavigate, useSearchParams } from "react-router";
 import { asCommandError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { showInFolder } from "../../api/window";
+import { useDemo } from "../../app/actions/demo";
+import { useStart } from "../../app/actions/start";
+import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDate, formatList } from "../../app/format";
-import { t } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import type { CommandError } from "../../bindings/CommandError";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
@@ -15,16 +17,36 @@ import {
   DropZone,
   Notice,
   Progress,
+  Tag,
   type DataTableColumn,
+  textChars,
 } from "../../components";
+import { formatCount, formatDate, formatList } from "../../text/format";
+import { t } from "../../text/i18n";
 import { startImport } from "../import/start";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
 import { NewWorkspaceForm } from "../workspaces/NewWorkspaceForm";
 import styles from "./WelcomePage.module.css";
 
 /** Where "Show in folder" was pressed, so its error shows beside what was pressed. */
 type FolderError = { at: "folder" | "files"; error: CommandError } | null;
+
+/** The least room of the name of a workspace before the table scrolls sideways. */
+const NAME_CHARS = 20;
+
+/** The room of a count of snapshots. */
+const COUNT_CHARS = 5;
+
+/** What a quiet button needs around its label, counted in characters: its padding and the room of its spinner. */
+const BUTTON_CHARS = 5;
+
+const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
+
+/** When the newest snapshot of a workspace was taken, as its row writes it. */
+function latest(workspace: WorkspaceView): string {
+  return workspace.latest_taken_at === null
+    ? t("common.noValue")
+    : formatDate(workspace.latest_taken_at);
+}
 
 /**
  * The welcome page: where the app opens while no workspace is open, and where the workspaces are
@@ -34,7 +56,9 @@ type FolderError = { at: "folder" | "files"; error: CommandError } | null;
  */
 export function WelcomePage() {
   const { start, dragged } = useShell();
-  const { openWorkspace, openDemo, refreshWorkspaces, isBusy } = useApp();
+  const { openWorkspace, refreshWorkspaces } = useWorkspaceActions();
+  const { openDemo } = useDemo();
+  const { isBusy } = useStart();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const newButtonId = useId();
@@ -83,13 +107,14 @@ export function WelcomePage() {
       id: "name",
       header: t("workspaces.columnName"),
       isRowHeader: true,
+      size: { flex: 1, minChars: NAME_CHARS },
       cell: (workspace) => (
         <span className={styles.name}>
           <span className={styles.nameText}>{workspace.name}</span>
           {workspace.id === start.open?.workspace.id ? (
             <>
               {" "}
-              <span className={styles.tag}>{t("workspaces.openTag")}</span>
+              <Tag>{t("workspaces.openTag")}</Tag>
             </>
           ) : null}
         </span>
@@ -99,17 +124,18 @@ export function WelcomePage() {
       id: "snapshots",
       header: t("workspaces.columnSnapshots"),
       kind: "number",
+      size: { chars: COUNT_CHARS },
       cell: (workspace) => formatCount(workspace.snapshot_count),
     },
     {
       id: "latest",
       header: t("workspaces.columnLatest"),
       isSupporting: true,
-      width: "max-content",
-      cell: (workspace) =>
-        workspace.latest_taken_at === null
-          ? t("common.noValue")
-          : formatDate(workspace.latest_taken_at),
+      // As wide as the longest date that is shown, in whatever way the locale writes one.
+      size: {
+        chars: Math.max(1, ...workspaces.map((workspace) => textChars(latest(workspace)))),
+      },
+      cell: latest,
     },
   ];
 
@@ -156,6 +182,7 @@ export function WelcomePage() {
                 <>
                   <Button
                     variant="quiet"
+                    reservesPendingSpace
                     isPending={refreshWorkspaces.isPending}
                     onPress={() => {
                       refreshWorkspaces.mutate();
@@ -208,9 +235,13 @@ export function WelcomePage() {
               rowKey={(workspace) => workspace.id}
               selectedKey={openWorkspace.isPending ? opening : null}
               onSelectionChange={open}
+              // Every workspace is listed: the page scrolls, the table does not.
+              height={ALL_ROWS}
+              rowActionsSize={{ chars: textChars(t("workspaces.open")) + BUTTON_CHARS }}
               rowActions={(workspace) => (
                 <Button
                   variant="quiet"
+                  reservesPendingSpace
                   // The spinner is on the row that is being opened; the others wait without one.
                   isPending={openWorkspace.isPending && opening === workspace.id}
                   isInert={isBusy}
@@ -234,6 +265,7 @@ export function WelcomePage() {
           <p className={styles.text}>{t("welcome.demoText")}</p>
           <div>
             <Button
+              reservesPendingSpace
               isPending={openDemo.isPending}
               isInert={isBusy}
               onPress={() => {

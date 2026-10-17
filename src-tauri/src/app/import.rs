@@ -632,8 +632,13 @@ impl AppState {
         }
     }
 
-    /// Drops the draft. Never fails.
-    pub fn import_cancel(&mut self) {
-        self.draft = None;
+    /// Drops the draft of the file whose content hash is `content_hash`, or the draft of any
+    /// file with `None`. A cancel pressed for one file may reach the state after another file was
+    /// opened; that file's draft stays. Never fails.
+    pub fn import_cancel(&mut self, content_hash: Option<&str>) {
+        let held = self.draft.as_ref().map(|d| d.opened.content_hash.as_str());
+        if content_hash.is_none() || held == content_hash {
+            self.draft = None;
+        }
     }
 }

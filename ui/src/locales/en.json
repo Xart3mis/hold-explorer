@@ -20,7 +20,8 @@
     "showInFolder": "Show in folder"
   },
   "units": {
-    "days": "{{value}} d"
+    "days": "{{value}} d",
+    "inches": "{{value}}\""
   },
   "keys": {
     "ctrl": "Ctrl"
@@ -31,11 +32,106 @@
   "table": {
     "rowCount_one": "{{count, number}} row",
     "rowCount_other": "{{count, number}} rows",
+    "rowCountOf": "{{shown, number}} of {{total, number}} rows",
     "loading": "Loading rows",
+    "loadingMore": "Loading more rows",
+    "countLoadingMore": "{{line}}. Loading more rows",
     "actions": "Actions"
   },
   "toast": {
     "region": "Notifications"
+  },
+  "filterChip": {
+    "is": "{{field}} {{value}}",
+    "isNot": "{{field}} is not {{value}}",
+    "add": "Add filter",
+    "remove": "Remove the filter {{field}}"
+  },
+  "ageBand": {
+    "between_one": "{{min}} to {{count, number}} day",
+    "between_other": "{{min}} to {{count, number}} days",
+    "from_one": "{{count, number}} day or more",
+    "from_other": "{{count, number}} days or more",
+    "upTo_one": "up to {{count, number}} day",
+    "upTo_other": "up to {{count, number}} days",
+    "exact_one": "{{count, number}} day",
+    "exact_other": "{{count, number}} days",
+    "any": "any age"
+  },
+  "dateRange": {
+    "between": "{{from}} to {{to}}",
+    "from": "from {{from}}",
+    "until": "until {{to}}"
+  },
+  "filters": {
+    "bar": "Filters",
+    "status": {
+      "menu": "Status",
+      "list": "Holds to show",
+      "name": "Status: {{status}}",
+      "Open": "Open holds",
+      "Released": "Released holds",
+      "All": "All holds"
+    },
+    "dim": {
+      "BlockerType": "Blocker type",
+      "Blocker": "Blocker"
+    },
+    "field": {
+      "age": "Age",
+      "sizeMismatch": "Model and LDT sizes",
+      "text": "Text"
+    },
+    "sizeMismatch": {
+      "differ": "differ",
+      "match": "match"
+    },
+    "textValue": "“{{text}}”",
+    "more": "{{first}} +{{more, number}}",
+    "clear": "Clear all",
+    "total_one": "{{count, number}} hold",
+    "total_other": "{{count, number}} holds",
+    "busySwitching": "Waiting for the snapshot.",
+    "busyChanging": "Waiting for the workspace.",
+    "noReleased": "No hold in this snapshot is released. Only open holds can be shown.",
+    "absent_one": "This snapshot has no value in the export column {{columns}}. Filters and columns that need it are not offered.",
+    "absent_other": "This snapshot has no values in the export columns {{columns}}. Filters and columns that need them are not offered.",
+    "error": "The counts of the filters could not be read",
+    "picker": {
+      "filterBy": "Filter by {{field}}",
+      "add": "Add filter",
+      "fields": "Fields to filter by",
+      "isNot": "is not {{value}}",
+      "narrow": "Type to narrow",
+      "condition": {
+        "label": "Condition",
+        "is": "Is",
+        "isNot": "Is not"
+      },
+      "values": "{{field}} values",
+      "noMatch": "No value matches “{{text}}”.",
+      "noValues": "The other filters keep no hold, so there is no value to choose.",
+      "moreValues_one": "{{count, number}} more value. Type to narrow.",
+      "moreValues_other": "{{count, number}} more values. Type to narrow.",
+      "valuesError": "The values could not be read",
+      "noBands": "This workspace has no age band to choose.",
+      "size": {
+        "differ": "Differ",
+        "match": "Match"
+      },
+      "date": {
+        "from": "From",
+        "to": "To",
+        "placeholder": "2026-10-01",
+        "help": "Year, month, day",
+        "invalid": "This is not a date. Enter it as year, month, day, for example 2026-10-01.",
+        "fromAfterTo": "This day is after the last day, {{to}}. Enter that day or an earlier one.",
+        "toBeforeFrom": "This day is before the first day, {{from}}. Enter that day or a later one."
+      },
+      "text": {
+        "help": "Looked for in the line ID, the hold remark, the name, the hold type, the discipline, and the blocker."
+      }
+    }
   },
   "errorState": {
     "title": "This could not be loaded"
@@ -48,7 +144,10 @@
     "dropTitle": "Drop to import",
     "folderError": "The folder could not be shown",
     "dropUnavailable": "Files cannot be dropped on this window",
-    "dropUnavailableHelp": "The Import button still opens a file."
+    "dropUnavailableHelp": "The Import button still opens a file.",
+    "viewResyncedTitle": "The workspace or snapshot on screen was brought back in step",
+    "viewResyncedText": "This window showed another workspace or snapshot than the one Hold Explorer has open. It now shows the one that is open. If your last action seems to be missing, do it again.",
+    "viewResyncedNoneText": "This window showed a workspace that Hold Explorer no longer has open. No workspace is open now. If your last action seems to be missing, do it again."
   },
   "destinations": {
     "label": "Destinations",
@@ -70,7 +169,6 @@
     "action": "Go to Overview",
     "description": {
       "breakdown": "Breakdown will group the holds by discipline, hold type, role, blocker, or another field, as bars or as a matrix of two fields. A row or a cell will open its lines.",
-      "lines": "Lines will list every line on hold in one table, with its holds, disciplines, blockers, oldest age, and sizes. Presets will sort it, for example oldest first or easiest to release.",
       "blockers": "Blockers will show what the holds wait for and how the blockers depend on each other. It will rank them by the number of lines each one frees when it is solved.",
       "history": "History will compare two snapshots and list the holds that were added, released, changed, or reopened. It will also show the trend of open holds and the list of snapshots.",
       "people": "People will list, for each name on the export, the holds raised, open, and released, the oldest open hold, and the median age.",
@@ -405,6 +503,9 @@
         "Done": "Opening {{workspace}}."
       },
       "running": "An import that has started runs to its end. If it fails, nothing is changed.",
+      "changedTitle": "The choices changed as Import was pressed",
+      "changedText": "Nothing was imported. The workspace is checked again for the date and the workspace as they are now. Look them over, then import again.",
+      "changedSaid": "The choices changed as Import was pressed, so nothing was imported. Look them over once the workspace has been checked, then import again.",
       "progress": "Import in progress",
       "done": "Imported into {{workspace}}: {{holds}}, {{open}} open.",
       "doneReplaced": "Imported into {{workspace}}: {{holds}}, {{open}} open. The snapshot of {{replaced}} was replaced."
@@ -417,7 +518,7 @@
     "error": "The overview could not be loaded",
     "descriptionSnapshot": "Snapshot of {{date}}",
     "limitedTitle": "This is a limited snapshot",
-    "limitedText": "The file it was imported from had no column for the hold ID, or none that says whether a hold is released. What needs the missing column cannot be shown for this snapshot, and without the released column every hold counts as open.",
+    "limitedText": "The file it was imported from did not have everything a full export has. If it did not say which holds are released, every hold counts as open.",
     "description_one": "The snapshot of {{date}} has {{count, number}} hold, {{open, number}} of them open.",
     "description_other": "The snapshot of {{date}} has {{count, number}} holds, {{open, number}} of them open.",
     "figures": "Figures of the open holds",
@@ -438,8 +539,155 @@
     "lines_one": "{{count, number}} line",
     "lines_other": "{{count, number}} lines",
     "noOpenHolds": "This snapshot has no open holds.",
+    "noneMatch": "No hold matches the filters.",
+    "releasedFigures": "Figures of the released holds",
+    "releasedHolds": "Released holds",
+    "releasedLines": "Lines with released holds",
+    "releasedMedianDuration": "Median duration",
+    "releasedMedianDurationMissing": "No released hold has both a creation date and a release date.",
+    "releasedByDiscipline": "Released holds by discipline",
+    "releasedByHoldType": "Released holds by hold type",
+    "releasedShowDisciplineAsTable": "Show as table, released holds by discipline",
+    "releasedShowHoldTypeAsTable": "Show as table, released holds by hold type",
+    "allFigures": "Figures of the holds",
+    "allHolds": "Holds",
+    "allLines": "Lines",
+    "allMedianAge": "Median age of open holds",
+    "allByDiscipline": "Holds by discipline",
+    "allByHoldType": "Holds by hold type",
+    "allShowDisciplineAsTable": "Show as table, holds by discipline",
+    "allShowHoldTypeAsTable": "Show as table, holds by hold type",
     "emptyTitle": "This workspace has no snapshots",
     "emptyText": "Import a holds export to add the first snapshot. Overview then shows its open holds by discipline and by hold type.",
     "emptyAction": "Import"
+  },
+  "lines": {
+    "modes": "Rows to show",
+    "modeLines": "Lines",
+    "modeHolds": "Holds",
+    "linesTable": "Lines",
+    "holdsTable": "Holds",
+    "presets": {
+      "label": "Presets",
+      "all": "All",
+      "single": "Single hold",
+      "easiest": "Easiest to release",
+      "oldest": "Oldest first",
+      "mismatch": "Size mismatch"
+    },
+    "column": {
+      "line": "Line",
+      "holds": "Holds",
+      "disciplines": "Disciplines",
+      "holdTypes": "Hold types",
+      "blockers": "Blockers",
+      "oldest": "Oldest",
+      "modelSize": "Model size",
+      "ldtSize": "LDT size",
+      "stressCalc": "Stress calc",
+      "sizes": "Sizes",
+      "discipline": "Discipline",
+      "holdType": "Hold type",
+      "remark": "Remark",
+      "blocker": "Blocker",
+      "blockerType": "Blocker type",
+      "name": "Name",
+      "role": "Role",
+      "created": "Created",
+      "age": "Age",
+      "releasedOn": "Released on",
+      "duration": "Duration",
+      "status": "Status",
+      "days": "Days"
+    },
+    "sizeMismatch": "Size mismatch",
+    "statusOpen": "Open",
+    "statusReleased": "Released",
+    "countLines_one": "{{count, number}} line",
+    "countLines_other": "{{count, number}} lines",
+    "countLinesOf_one": "{{shown, number}} of {{count, number}} line",
+    "countLinesOf_other": "{{shown, number}} of {{count, number}} lines",
+    "countLinesLimited_one": "{{shown, number}} of {{count, number}} line is shown. Narrow the filters or reverse the sort to reach the others.",
+    "countLinesLimited_other": "{{shown, number}} of {{count, number}} lines are shown. Narrow the filters or reverse the sort to reach the others.",
+    "countHolds_one": "{{count, number}} hold",
+    "countHolds_other": "{{count, number}} holds",
+    "countHoldsOf_one": "{{shown, number}} of {{count, number}} hold",
+    "countHoldsOf_other": "{{shown, number}} of {{count, number}} holds",
+    "countHoldsLimited_one": "{{shown, number}} of {{count, number}} hold is shown. Narrow the filters or reverse the sort to reach the others.",
+    "countHoldsLimited_other": "{{shown, number}} of {{count, number}} holds are shown. Narrow the filters or reverse the sort to reach the others.",
+    "emptyTitle": "This workspace has no snapshots",
+    "emptyText": "Import a holds export to add the first snapshot. Lines then lists its lines on hold and their holds.",
+    "emptyAction": "Import",
+    "noneTitleLines": "No line matches the filters",
+    "noneTitleHolds": "No hold matches the filters",
+    "noneText": "Change a filter in the bar above, or clear them all to show the open holds of the snapshot again.",
+    "noneAction": "Clear all",
+    "noOpenTitle": "This snapshot has no open holds",
+    "noOpenText": "Every hold of this snapshot is released. Show all holds to see them.",
+    "noOpenAction": "Show all holds",
+    "presetNoneTitle": "No line fits {{preset}}",
+    "presetNoneText": "None of the lines the filters keep fits the preset {{preset}}. Choose All to show every line they keep.",
+    "presetNoneAction": "Choose All",
+    "errorLines": "The lines could not be loaded",
+    "errorHolds": "The holds could not be loaded"
+  },
+  "detail": {
+    "closePanel": "Close panel",
+    "holdTitle": "Hold",
+    "copyLineId": "Copy line ID",
+    "copied": "Line ID copied",
+    "copyFailedTitle": "The line ID could not be copied",
+    "copyFailed": "The system did not let Hold Explorer write to the clipboard ({{reason}}). Select the line ID in the title and press Ctrl+C.",
+    "noClipboard": "This window gives Hold Explorer no clipboard to write to. Select the line ID in the title and press Ctrl+C.",
+    "lineFacts": "Line facts",
+    "holdFacts": "Hold facts",
+    "facts": "Facts",
+    "remark": "Remark",
+    "otherColumns": "Other columns",
+    "blockers": "Blockers to clear",
+    "openHolds": "Open holds",
+    "releasedHolds": "Released holds",
+    "holdCount_one": "{{count, number}} hold",
+    "holdCount_other": "{{count, number}} holds",
+    "noBlockers": "Nothing blocks this line: none of its holds is open.",
+    "noOpenHolds": "No hold of this line is open in this snapshot.",
+    "noReleasedHolds": "No hold of this line is released in this snapshot.",
+    "step": "Step {{step, number}}",
+    "noStep": "Not in the solve order",
+    "blocksLines_one": "Blocks {{count, number}} line",
+    "blocksLines_other": "Blocks {{count, number}} lines",
+    "age": "Age {{days}}",
+    "duration": "Duration {{days}}",
+    "raisedByOn": "Raised by {{who}} on {{date}}",
+    "raisedBy": "Raised by {{who}}",
+    "raisedOn": "Raised on {{date}}",
+    "raisedUnknown": "No name and no creation date on this hold",
+    "notGiven": "Not given in the export",
+    "noReleaseRemark": "No release remark",
+    "sizeMismatch": "Size mismatch",
+    "fact": {
+      "line": "Line",
+      "modelSize": "Model size",
+      "ldtSize": "LDT size",
+      "stressCalc": "Stress calc",
+      "discipline": "Discipline",
+      "holdType": "Hold type",
+      "name": "Name",
+      "role": "Role",
+      "created": "Created",
+      "age": "Age",
+      "releasedOn": "Released on",
+      "duration": "Duration",
+      "releaseRemark": "Release remark",
+      "blocker": "Blocker",
+      "blockerType": "Blocker type",
+      "sourceId": "Source ID"
+    },
+    "lineMissingTitle": "This line is not in this snapshot",
+    "lineMissingText": "The snapshot in view has no hold on line {{lineId}}. Select another snapshot to see it, or close the panel.",
+    "holdMissingTitle": "This hold is not in this snapshot",
+    "holdMissingText": "This snapshot has fewer holds than the one this hold was chosen in. Choose a hold from the list, or close the panel.",
+    "errorLine": "The line could not be loaded",
+    "errorHold": "The hold could not be loaded"
   }
 }

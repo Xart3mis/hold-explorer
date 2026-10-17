@@ -5,17 +5,154 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 const message =
-  "Call commands through api in ui/src/api/commands.ts, the only module that imports invoke.";
+  "Call commands through the modules of ui/src/api/ that hold them, commands.ts and workspace-commands.ts, the only modules that import invoke.";
 
 const invokeModules = ["@tauri-apps/api/core", "@tauri-apps/api/core.*", "@tauri-apps/api/core/**"];
 
 // The file dialog, the file manager, and the window's own events are reached through one module.
 const tauriMessage =
-  "Reach Tauri through the modules of ui/src/api/: commands.ts for commands, window.ts for the file dialog, the file manager, and files dragged over the window.";
+  "Reach Tauri through the modules of ui/src/api/: commands.ts and workspace-commands.ts for commands, window.ts for the file dialog, the file manager, and files dragged over the window.";
+
+// How much of Tauri a set of files may import. `invoke` is imported by the two modules that hold
+// the commands. Everything else of Tauri (the file dialog, the file manager, the window's events)
+// is imported by the modules of ui/src/api/ only; a screen imports from there. Tests and the
+// development page answer the commands themselves, with the mocks Tauri ships, and nothing else
+// of Tauri is open to them.
+const invoke = {
+  paths: [{ name: "@tauri-apps/api", message }],
+  group: { group: invokeModules, message },
+};
+const tauri = {
+  all: { paths: [], patterns: [] },
+  noInvoke: { paths: invoke.paths, patterns: [invoke.group] },
+  none: {
+    paths: invoke.paths,
+    patterns: [
+      invoke.group,
+      { group: ["@tauri-apps/*", "@tauri-apps/*/**"], message: tauriMessage },
+    ],
+  },
+  mocks: {
+    paths: invoke.paths,
+    patterns: [invoke.group, { regex: "^@tauri-apps/(?!api/mocks$)", message: tauriMessage }],
+  },
+};
+
+// A command that changes the open workspace or the selected snapshot is sent as an action made
+// with workspaceAction(). A feature that sent one by itself would run outside the order of the
+// actions, and while it ran a page could read one snapshot's data for another. So those commands
+// are in a module of their own, and only the modules of ui/src/app/ import it.
+// The module is named with or without an extension, and the bundler resolves a `.js` spelling to
+// the `.ts` file, so every extension is the same module.
+const workspaceCommands = {
+  regex: "(^|/)workspace-commands(\\.[cm]?[jt]sx?)?$",
+  message:
+    "Send a command that changes the open workspace or the selected snapshot as an action made with workspaceAction() of ui/src/app/view.ts; the actions that exist are in ui/src/app/actions/. Only the modules of ui/src/app/ import ui/src/api/workspace-commands.ts.",
+};
+
+// The same commands reached with import() while the app runs, which the import rule does not see:
+// by their name, in a template, or in parts joined with +.
+const dynamicWorkspaceCommands = [
+  {
+    selector: "ImportExpression[source.value=/(^|\\/)workspace-commands(\\.[cm]?[jt]sx?)?$/]",
+    message: workspaceCommands.message,
+  },
+  {
+    selector: "ImportExpression > BinaryExpression Literal[value=/workspace-commands/]",
+    message: workspaceCommands.message,
+  },
+  {
+    selector:
+      "ImportExpression > TemplateLiteral > TemplateElement[value.raw=/workspace-commands/]",
+    message: workspaceCommands.message,
+  },
+];
+
+// The layers of ui/src/, lowest first: text, api, components, app, features. A module imports
+// from its own layer and from the ones named for it here, never from one above. A test of a layer
+// also imports the helpers of ui/src/test/ and the catalog it compares texts with. The design
+// modules, the bindings, and the catalog are imported by the layers and import none of them.
+const folders = [
+  "api",
+  "app",
+  "bindings",
+  "components",
+  "design",
+  "dev",
+  "features",
+  "locales",
+  "test",
+  "text",
+];
+const layers = {
+  text: {
+    imports: ["locales"],
+    message:
+      "A module of ui/src/text/ imports nothing else of the app: every layer imports the text modules, so they import none of them.",
+  },
+  api: {
+    imports: ["text", "bindings"],
+    message:
+      "A module of ui/src/api/ imports the text modules (ui/src/text/) and the bindings only. What needs the app, a component, or a feature belongs in ui/src/app/ or in the feature.",
+  },
+  components: {
+    imports: ["text", "design", "bindings"],
+    message:
+      "A module of ui/src/components/ imports the text modules (ui/src/text/), the design modules, and the bindings only. A component takes what it shows as props: it sends no command and knows no screen.",
+  },
+  design: {
+    imports: ["text", "bindings", "locales"],
+    message:
+      "A module of ui/src/design/ imports nothing of the api, the components, the app, or a feature: the components and every layer above them import the design modules.",
+  },
+  bindings: {
+    imports: [],
+    message:
+      "A module of ui/src/bindings/ is generated from the Rust types and imports other bindings only. Nothing of the app belongs there.",
+  },
+  locales: {
+    imports: [],
+    message:
+      "A module of ui/src/locales/ imports nothing of the app: the text modules (ui/src/text/) read the catalog, and every layer imports them.",
+  },
+  app: {
+    imports: ["text", "api", "bindings", "components", "design"],
+    message:
+      "A module of ui/src/app/ imports no feature; only the router (ui/src/app/router.tsx) names the pages. What two features share belongs in ui/src/app/.",
+  },
+  router: {
+    imports: ["app", "text", "api", "bindings", "components", "design", "features"],
+    message:
+      "The router (ui/src/app/router.tsx) imports the pages of the features and the app, and neither the helpers of the tests nor the development page.",
+  },
+  features: {
+    imports: ["text", "api", "bindings", "components", "design", "app", "locales"],
+    message:
+      "A module of ui/src/features/ imports every layer of the app, and neither the helpers of the tests (ui/src/test/) nor the development page (ui/src/dev/): what both need belongs in ui/src/app/ or in the feature.",
+  },
+};
+
+/** The imports a module of a layer may not make: every folder of ui/src/ it is not given. */
+function above(name, { isTest = false } = {}) {
+  const { imports, message } = layers[name];
+  const open = [name, ...imports, ...(isTest ? ["test", "locales"] : [])];
+  const closed = folders.filter((folder) => !open.includes(folder));
+  return { regex: `^(\\./)?(\\.\\./)+(${closed.join("|")})(/|$)`, message };
+}
+
+/** The setting of no-restricted-imports for one set of files. */
+function restricted(access, ...patterns) {
+  return ["error", { paths: access.paths, patterns: [...access.patterns, ...patterns] }];
+}
+
+/** The test files of one folder of ui/src/ ("api/"), or of all of it. */
+function tests(folder = "") {
+  return [`ui/src/${folder}**/*.test.{ts,tsx}`, `ui/src/${folder}**/*.test-d.{ts,tsx}`];
+}
 
 // Numbers and dates are formatted in one module, so every screen writes them the same way.
 const formatMessage =
-  "Format numbers and dates with the helpers in ui/src/app/format.ts, the only module that calls Intl.";
+  "Format numbers and dates with the helpers in ui/src/text/format.ts, the only module that calls Intl.";
 const formatSyntax = [
   { selector: "MemberExpression[object.name='Intl']", message: formatMessage },
   { selector: "NewExpression[callee.object.name='Intl']", message: formatMessage },
@@ -28,7 +165,7 @@ const formatSyntax = [
 // Every user-facing string is in the text catalog. A component takes its visible text as props
 // from the screen that uses it, or from the catalog with t().
 const catalogMessage =
-  "Take user-facing text from the catalog, ui/src/locales/en.json, with t() from ui/src/app/i18n.ts.";
+  "Take user-facing text from the catalog, ui/src/locales/en.json, with t() from ui/src/text/i18n.ts.";
 const textAttributes =
   "/^(aria-label|aria-description|aria-roledescription|aria-valuetext|alt|title|placeholder|label)$/";
 const catalogSyntax = [
@@ -48,18 +185,19 @@ const catalogSyntax = [
   },
 ];
 
-// A command that changes the open workspace or the selected snapshot is sent as an action of
-// useApp(), made with workspaceAction(). A feature that sent one by itself would run outside the
-// order of the actions, and while it ran a page could read one snapshot's data for another.
-const actionMessage =
-  "Send a command that changes the open workspace or the selected snapshot through an action of useApp() (ui/src/app/useApp.ts), made with workspaceAction() of ui/src/app/view.ts.";
-const actionSyntax = [
-  {
-    selector:
-      "MemberExpression[object.name='api'][property.name=/^(workspaceOpen|workspaceCreate|workspaceRename|snapshotSelect|importCommit|demoCreate)$/]",
-    message: actionMessage,
-  },
-];
+// The rule sets every module is written to.
+const presets = [
+  js.configs.recommended,
+  tseslint.configs.strictTypeChecked,
+  tseslint.configs.stylisticTypeChecked,
+  jsxA11y.flatConfigs.recommended,
+  reactHooks.configs.flat.recommended,
+].flat();
+
+// The bindings are generated by ts-rs, in its own style, and are not written to those rules.
+const presetRulesOff = Object.fromEntries(
+  presets.flatMap((preset) => Object.keys(preset.rules ?? {})).map((name) => [name, "off"]),
+);
 
 export default tseslint.config(
   {
@@ -76,99 +214,130 @@ export default tseslint.config(
       "node_modules/",
       "target/",
       "src-tauri/",
-      "ui/src/bindings/",
     ],
   },
-  js.configs.recommended,
-  tseslint.configs.strictTypeChecked,
-  tseslint.configs.stylisticTypeChecked,
-  jsxA11y.flatConfigs.recommended,
-  reactHooks.configs.flat.recommended,
+  ...presets,
   {
     languageOptions: {
       globals: globals.browser,
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
   },
+  // Which module may import which. A later block replaces an earlier one for the files it names,
+  // so each block holds everything that binds its files.
   {
-    // Commands: `invoke` is imported by one module.
+    files: ["ui/src/**/*.{ts,tsx}"],
+    rules: { "no-restricted-imports": restricted(tauri.none, workspaceCommands) },
+  },
+  {
+    files: ["ui/src/test/**/*.{ts,tsx}", "ui/src/dev/**/*.{ts,tsx}", ...tests()],
+    rules: { "no-restricted-imports": restricted(tauri.mocks, workspaceCommands) },
+  },
+  {
+    // The tests of the command mock send every kind of command through it.
+    files: tests("test/"),
+    rules: { "no-restricted-imports": restricted(tauri.mocks) },
+  },
+  ...["text", "components", "design", "locales"].flatMap((name) => [
+    {
+      files: [`ui/src/${name}/**/*.{ts,tsx}`],
+      rules: { "no-restricted-imports": restricted(tauri.none, workspaceCommands, above(name)) },
+    },
+    {
+      files: tests(`${name}/`),
+      rules: {
+        "no-restricted-imports": restricted(
+          tauri.mocks,
+          workspaceCommands,
+          above(name, { isTest: true }),
+        ),
+      },
+    },
+  ]),
+  {
+    files: ["ui/src/app/**/*.{ts,tsx}"],
+    rules: { "no-restricted-imports": restricted(tauri.none, above("app")) },
+  },
+  {
+    files: tests("app/"),
+    rules: { "no-restricted-imports": restricted(tauri.mocks, above("app", { isTest: true })) },
+  },
+  {
+    // The router is where the pages of the features are given their addresses.
+    files: ["ui/src/app/router.tsx"],
+    rules: { "no-restricted-imports": restricted(tauri.none, above("router")) },
+  },
+  {
+    files: ["ui/src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": restricted(tauri.none, workspaceCommands, above("features")),
+    },
+  },
+  {
+    files: tests("features/"),
+    rules: {
+      "no-restricted-imports": restricted(
+        tauri.mocks,
+        workspaceCommands,
+        above("features", { isTest: true }),
+      ),
+    },
+  },
+  {
     files: ["ui/src/api/**/*.{ts,tsx}"],
-    ignores: ["ui/src/api/commands.ts", "ui/src/api/**/*.test.ts", "ui/src/api/**/*.test-d.ts"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [{ name: "@tauri-apps/api", message }],
-          patterns: [{ group: invokeModules, message }],
-        },
-      ],
-    },
+    rules: { "no-restricted-imports": restricted(tauri.noInvoke, workspaceCommands, above("api")) },
   },
   {
-    // Everything else of Tauri (the file dialog, the file manager, the window's events) is
-    // imported by the modules of ui/src/api/ only. A screen imports from there.
-    files: ["ui/src/**/*.{ts,tsx}"],
-    ignores: ["ui/src/api/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [{ name: "@tauri-apps/api", message }],
-          patterns: [
-            { group: invokeModules, message },
-            {
-              group: ["@tauri-apps/*", "@tauri-apps/*/**"],
-              message: tauriMessage,
-            },
-          ],
-        },
-      ],
-    },
+    files: ["ui/src/api/commands.ts", "ui/src/api/workspace-commands.ts"],
+    rules: { "no-restricted-imports": restricted(tauri.all, workspaceCommands, above("api")) },
   },
   {
-    // Tests and the development page answer the commands themselves, with the mocks Tauri ships.
-    // Nothing else of Tauri is open to them.
-    files: ["ui/src/test/**/*.{ts,tsx}", "ui/src/dev/**/*.{ts,tsx}", "ui/src/**/*.test.{ts,tsx}"],
-    ignores: ["ui/src/api/**"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [{ name: "@tauri-apps/api", message }],
-          patterns: [
-            { group: invokeModules, message },
-            {
-              regex: "^@tauri-apps/(?!api/mocks$)",
-              message: tauriMessage,
-            },
-          ],
-        },
-      ],
-    },
+    files: tests("api/"),
+    rules: { "no-restricted-imports": restricted(tauri.all, above("api", { isTest: true })) },
   },
+  // What a module may not write. As above, each block holds everything that binds its files.
   {
     files: ["ui/src/**/*.{ts,tsx}"],
-    ignores: ["ui/src/app/format.ts"],
-    rules: { "no-restricted-syntax": ["error", ...formatSyntax] },
+    rules: { "no-restricted-syntax": ["error", ...formatSyntax, ...dynamicWorkspaceCommands] },
+  },
+  {
+    // The one module that calls Intl.
+    files: ["ui/src/text/format.ts"],
+    rules: { "no-restricted-syntax": ["error", ...dynamicWorkspaceCommands] },
   },
   {
     // The gallery is a development page with labels of its own, and tests pass sample text to
     // the components they render. Everything else takes its text from the catalog.
     files: ["ui/src/**/*.tsx"],
     ignores: ["ui/src/dev/**", "ui/src/**/*.test.tsx", "ui/src/**/*.test-d.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...formatSyntax,
+        ...catalogSyntax,
+        ...dynamicWorkspaceCommands,
+      ],
+    },
+  },
+  {
+    // The modules of ui/src/app/ may import the commands that change the view, in either way.
+    files: ["ui/src/app/**/*.{ts,tsx}"],
+    rules: { "no-restricted-syntax": ["error", ...formatSyntax] },
+  },
+  {
+    files: ["ui/src/app/**/*.tsx"],
+    ignores: ["ui/src/**/*.test.tsx", "ui/src/**/*.test-d.tsx"],
     rules: { "no-restricted-syntax": ["error", ...formatSyntax, ...catalogSyntax] },
   },
   {
-    // The features: the rules above, and no action on the open workspace of their own.
-    files: ["ui/src/features/**/*.ts"],
-    ignores: ["ui/src/**/*.test.ts", "ui/src/**/*.test-d.ts"],
-    rules: { "no-restricted-syntax": ["error", ...formatSyntax, ...actionSyntax] },
-  },
-  {
-    files: ["ui/src/features/**/*.tsx"],
-    ignores: ["ui/src/**/*.test.tsx", "ui/src/**/*.test-d.tsx"],
+    // The bindings are generated: of all the rules, only the one about their imports binds them.
+    // A rule that is added later for all of ui/src/** would bind them as well, and nobody can fix
+    // a generated file by hand: turn such a rule off here, as the rules below are.
+    files: ["ui/src/bindings/**/*.ts"],
     rules: {
-      "no-restricted-syntax": ["error", ...formatSyntax, ...catalogSyntax, ...actionSyntax],
+      ...presetRulesOff,
+      "no-restricted-syntax": "off",
+      "no-restricted-imports": restricted(tauri.none, workspaceCommands, above("bindings")),
     },
   },
   {

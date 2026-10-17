@@ -4,27 +4,30 @@ import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
+import { useImportCommit } from "../../app/actions/import";
+import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { IMPORT_PATH, OVERVIEW_PATH } from "../../app/destinations";
-import { formatCount, formatDateTime } from "../../app/format";
-import { t, type MessageKey } from "../../app/i18n";
-import { useApp } from "../../app/useApp";
+import { useShell } from "../../app/shell/context";
+import { Page } from "../../app/shell/Page";
 import type { ImportCommit } from "../../bindings/ImportCommit";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportPhase } from "../../bindings/ImportPhase";
 import type { ImportReview } from "../../bindings/ImportReview";
 import {
   Button,
+  Disclosure,
+  FactList,
   Notice,
   Progress,
+  SectionTitle,
   StatTile,
   StatTileGroup,
   useToast,
   VisuallyHidden,
 } from "../../components";
 import { cx } from "../../components/cx";
-import { useShell } from "../shell/context";
-import { Page } from "../shell/Page";
-import { Details } from "./Details";
+import { formatCount, formatDateTime } from "../../text/format";
+import { t, type MessageKey } from "../../text/i18n";
 import { clearImport, useImportDraft, type ImportChoices } from "./draft";
 import { columnLabel, fieldLabel, orderFields } from "./fields";
 import styles from "./Import.module.css";
@@ -72,9 +75,12 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const navigate = useNavigate();
   const toast = useToast();
   const { start, report } = useShell();
-  const { importCommit, openWorkspace } = useApp();
+  const { importCommit } = useImportCommit();
+  const { openWorkspace } = useWorkspaceActions();
   const cancel = useLeaveImport();
   const [phase, setPhase] = useState<ImportPhase | null>(null);
+  // Import was pressed while a choice changed, and nothing was sent; see `commit`.
+  const [changed, setChanged] = useState(false);
   // Whether the page is still shown when a commit that it started comes back.
   const shown = useRef(true);
   useEffect(() => {
@@ -159,6 +165,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const decide = (chosen: Partial<ImportChoices>) => {
     // A choice that is made after a failed import answers it: its error no longer applies.
     if (importCommit.isError) importCommit.reset();
+    setChanged(false);
     // A snapshot to replace was chosen among those of one workspace on one day. Once the date
     // or the target is another, that choice is gone for good: it does not return when the date
     // comes back to the day.
@@ -171,15 +178,34 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const commit = () => {
     // A date or a time can be typed and Import activated without the field being left, as
     // some assistive tools do it. What is typed is then taken as leaving the field takes it,
-    // and nothing is sent: the workspace has not been asked about that date. Import is pressed
-    // again once the check has answered and the button stands for what is on screen.
-    if (dateFields.current?.commitTyped() === true) return;
+    // and goes through the comparison below like any other choice.
+    dateFields.current?.commitTyped();
     if (reasons.length > 0 || date.moment === null || target.id === null) return;
-    // A press can also leave a field in the same moment, before the page is rendered again.
-    // So what was chosen is read as it is now. A date that is not the one the page was
-    // rendered with was never checked, and is not sent either.
+    // A press can also leave a field or change a choice in the same moment, before the page is
+    // rendered again. So what was chosen is read as it is now, and compared with what the page
+    // was rendered with, which is what the last check of the workspace answered for. When any
+    // of it differs, nothing is sent: the workspace is checked again, and the page says why
+    // Import has to be pressed again.
     const now = client.getQueryData<ImportChoices>(keys.importChoices) ?? choices;
-    if (readDate(review, now).moment !== date.moment) return;
+    const nowMoment = readDate(review, now).moment;
+    // A date that cannot be read is said by its field, and there is nothing to check.
+    if (nowMoment === null) return;
+    const nowTarget = readTarget(review, now).id;
+    const nowReplace = sameDay.find((snapshot) => snapshot.id === now.replace)?.id ?? null;
+    if (
+      nowMoment !== date.moment ||
+      // A confirmation counts only where one is asked for.
+      (mustConfirm && now.confirmed !== choices.confirmed) ||
+      nowTarget !== target.id ||
+      nowReplace !== (replaced?.id ?? null)
+    ) {
+      setChanged(true);
+      // Another date or target is another check, which the next render asks for by itself.
+      if (checkable && nowMoment === date.moment && nowTarget === target.id)
+        void checking.refetch();
+      return;
+    }
+    setChanged(false);
     // The name is sent as it stands: typed and not left, or as it was last left.
     const newName = (typedNameRef.current ?? readTarget(review, now).name).trim();
     if (target.isNew && newName === "") return;
@@ -236,7 +262,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
 
   const openIt = (id: string) => {
     if (start.open?.workspace.id === id) {
-      cancel.mutate(OVERVIEW_PATH);
+      cancel.mutate({ to: OVERVIEW_PATH, file: file.content_hash });
       return;
     }
     // Opening a workspace drops the draft on the Rust side as well.
@@ -270,41 +296,41 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
       </StatTileGroup>
 
       <div>
-        <ul aria-label={t("import.review.facts")} className={styles.ruled}>
-          <li className={styles.ruledRow}>
-            <span className={styles.ruledLabel}>{t("import.review.file")}</span>
-            <span className={cx(styles.ruledValue, styles.fileName)}>{review.file_name}</span>
-          </li>
-          {file.sheets.length === 0 ? null : (
-            <li className={styles.ruledRow}>
-              <span className={styles.ruledLabel}>{t("import.review.sheet")}</span>
-              <span className={styles.ruledValue}>{file.sheet_name}</span>
-              {file.sheets.length > 1 ? (
-                <span className={styles.ruledEnd}>
-                  <Button
-                    variant="quiet"
-                    isDisabled={committing}
-                    onPress={() => {
-                      void navigate(IMPORT_SHEET_PATH, { state: { from } });
-                    }}
-                  >
-                    {t("import.chooseSheet")}
-                  </Button>
-                </span>
-              ) : null}
-            </li>
-          )}
-          <li className={styles.ruledRow}>
-            <span className={styles.ruledLabel}>{t("import.review.project")}</span>
-            <span
-              className={styles.ruledValue}
-              data-absent={review.project_no === null ? "" : undefined}
-            >
-              {review.project_no ?? t("import.review.projectNone")}
-            </span>
-          </li>
-        </ul>
-        <Details
+        <FactList
+          aria-label={t("import.review.facts")}
+          items={[
+            { label: t("import.review.file"), value: review.file_name, kind: "identifier" },
+            ...(file.sheets.length === 0
+              ? []
+              : [
+                  {
+                    label: t("import.review.sheet"),
+                    value: file.sheet_name,
+                    ...(file.sheets.length > 1
+                      ? {
+                          action: (
+                            <Button
+                              variant="quiet"
+                              isDisabled={committing}
+                              onPress={() => {
+                                void navigate(IMPORT_SHEET_PATH, { state: { from } });
+                              }}
+                            >
+                              {t("import.chooseSheet")}
+                            </Button>
+                          ),
+                        }
+                      : {}),
+                  },
+                ]),
+            {
+              label: t("import.review.project"),
+              value: review.project_no ?? t("import.review.projectNone"),
+              isAbsent: review.project_no === null,
+            },
+          ]}
+        />
+        <Disclosure
           level={2}
           title={t("import.review.columnsShow")}
           action={
@@ -319,29 +345,25 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </Button>
           }
         >
-          <ul aria-label={t("import.review.columnsList")} className={styles.ruled}>
-            {orderFields(draft.required).all.map((field) => {
+          <FactList
+            aria-label={t("import.review.columnsList")}
+            items={orderFields(draft.required).all.map((field) => {
               const column = review.mapping.fields[field];
-              return (
-                <li key={field} className={styles.ruledRow}>
-                  <span className={styles.ruledLabel}>{fieldLabel(field)}</span>
-                  <span
-                    className={styles.ruledValue}
-                    data-absent={column === undefined ? "" : undefined}
-                  >
-                    {column === undefined
-                      ? t("import.review.columnsNone")
-                      : columnLabel(file.headers, column)}
-                  </span>
-                </li>
-              );
+              return {
+                label: fieldLabel(field),
+                value:
+                  column === undefined
+                    ? t("import.review.columnsNone")
+                    : columnLabel(file.headers, column),
+                isAbsent: column === undefined,
+              };
             })}
-          </ul>
-        </Details>
+          />
+        </Disclosure>
       </div>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>{t("import.review.findings")}</h2>
+        <SectionTitle level={2}>{t("import.review.findings")}</SectionTitle>
         <ReviewFindings review={review} />
       </section>
 
@@ -386,6 +408,11 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
           focusRef={problem}
         />
       ) : null}
+      {changed ? (
+        <Notice tone="warning" title={t("import.review.changedTitle")}>
+          {t("import.review.changedText")}
+        </Notice>
+      ) : null}
       {cancel.isError ? (
         <Notice tone="danger" title={t("import.cancelError")}>
           {asCommandError(cancel.error).message}
@@ -418,9 +445,10 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
             </Button>
             <Button
               variant="quiet"
+              reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
-                cancel.mutate(from);
+                cancel.mutate({ to: from, file: draft.file.content_hash });
               }}
             >
               {t("common.cancel")}
@@ -436,14 +464,21 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
         <div id={statusId} role="status" data-part="import-status">
           {committing ? (
             <VisuallyHidden>{progress}</VisuallyHidden>
-          ) : reasons.length === 0 ? null : (
-            <ul className={styles.reasons}>
-              {reasons.map((reason) => (
-                <li key={reason} className={styles.text}>
-                  {reason}
-                </li>
-              ))}
-            </ul>
+          ) : (
+            <>
+              {/* Why the last press sent nothing, said here as well: this region is always on
+                the page, so a change of what it holds is announced. The notice shows it. */}
+              {changed ? <VisuallyHidden>{t("import.review.changedSaid")}</VisuallyHidden> : null}
+              {reasons.length === 0 ? null : (
+                <ul className={styles.reasons}>
+                  {reasons.map((reason) => (
+                    <li key={reason} className={styles.text}>
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
         {/*
@@ -467,15 +502,35 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
  */
 export function ImportReviewPage() {
   const { draft, choices, choose, from, others } = useImportDraft();
+  const [arrivedWithFile] = useState(draft !== undefined);
+
+  if (draft === undefined) return arrivedWithFile ? null : <ReopenFile from={from} />;
+  return (
+    <ReviewOfDraft draft={draft} choices={choices} choose={choose} from={from} others={others} />
+  );
+}
+
+interface ReviewOfDraftProps {
+  draft: ImportDraft;
+  choices: ImportChoices;
+  choose: (chosen: Partial<ImportChoices>) => void;
+  from: string;
+  others: number;
+}
+
+/**
+ * The review page while a file is open. The review is read here and not above: a reading asked
+ * for after the file was forgotten would put the review back in the cache, in the middle of the
+ * render that takes the page off the screen.
+ */
+function ReviewOfDraft({ draft, choices, choose, from, others }: ReviewOfDraftProps) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const cancel = useLeaveImport();
-  const [arrivedWithFile] = useState(draft !== undefined);
 
   const reading = useQuery({
     queryKey: keys.importReview,
     queryFn: () => api.importReview(choices.fields),
-    enabled: draft !== undefined,
   });
   const failure = reading.isError ? asCommandError(reading.error) : null;
   const failed = failure?.kind;
@@ -493,8 +548,6 @@ export function ImportReviewPage() {
       });
     }
   }, [failed, failure?.kind, failure?.message, client, navigate, from, others]);
-
-  if (draft === undefined) return arrivedWithFile ? null : <ReopenFile from={from} />;
 
   const review = reading.data;
   const trail = {
@@ -557,9 +610,10 @@ export function ImportReviewPage() {
             )}
             <Button
               variant={failure === null ? "secondary" : "quiet"}
+              reservesPendingSpace
               isPending={cancel.isPending}
               onPress={() => {
-                cancel.mutate(from);
+                cancel.mutate({ to: from, file: draft.file.content_hash });
               }}
             >
               {t("common.cancel")}
