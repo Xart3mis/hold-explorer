@@ -76,3 +76,18 @@ textarea {
 :root[data-sidebar] {
   --toast-inset-inline-start: calc(var(--layout-sidebar-width) + var(--space-6));
 }
+
+/* The sidebar collapsed to a rail: the content area starts after the rail. */
+:root[data-sidebar="rail"] {
+  --toast-inset-inline-start: calc(var(--layout-rail-width) + var(--space-6));
+}
+
+/*
+ * Below the roomy breakpoint the content area has the tight padding. The shell marks the root
+ * element with the size of the window (DESIGN.md, "Adapting to the window"); everything that is
+ * lined up with the page reads the one token, so it follows.
+ */
+:root[data-window="small"],
+:root[data-window="medium"] {
+  --layout-page-padding-x: var(--layout-page-padding-x-tight);
+}

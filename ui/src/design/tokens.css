@@ -95,15 +95,18 @@
   --delay-tooltip: 500ms;
   --layout-topbar-height: 48px;
   --layout-sidebar-width: 208px;
+  --layout-rail-width: 48px;
   --layout-detail-width: 400px;
   --layout-filterbar-height: 44px;
   --layout-page-padding-x: 24px;
+  --layout-page-padding-x-tight: 16px;
   --layout-page-padding-y: 20px;
   --layout-content-max-width: 1280px;
   --layout-form-max-width: 720px;
   --layout-prose-max-width: 34rem;
   --layout-search-max-width: 30rem;
   --layout-breakpoint-wide: 1280px;
+  --layout-breakpoint-roomy: 1440px;
   --layout-window-min-width: 1024px;
   --layout-window-min-height: 640px;
 }

@@ -31,7 +31,13 @@ import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Skeleton } from "../Skeleton/Skeleton";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
-import { columnWidth, headerWidth, type ColumnSize, type DataTableColumnKind } from "./columns";
+import {
+  columnWidth,
+  headerWidth,
+  leavingColumns,
+  type ColumnSize,
+  type DataTableColumnKind,
+} from "./columns";
 import styles from "./DataTable.module.css";
 import { useCharWidths, useTableMetrics } from "./measure";
 
@@ -63,6 +69,19 @@ export interface DataTableColumn<Item> {
   isRowHeader?: boolean;
   /** The header is a button that asks for a sort by this column. */
   allowsSorting?: boolean;
+  /**
+   * The direction a press on the header sorts in while the column is not the sorted one. Its
+   * header shows it at rest, as a muted arrow, so a header that can be sorted looks pressable
+   * before it is pressed. `ascending` unless the column comes largest or newest first.
+   */
+  firstSortDirection?: "ascending" | "descending";
+  /**
+   * May the column leave a table that is too narrow for all of its columns: the higher the
+   * number, the sooner it leaves. Give one only to a column whose value can be read elsewhere,
+   * such as in the detail panel of the row. A column without one always stays, and so do the
+   * column that names the row and the column the rows are sorted by.
+   */
+  priority?: number;
 }
 
 export interface DataTableSort {
@@ -131,6 +150,12 @@ export interface DataTableProps<Item> {
    * keep their place, and without a key the table never takes its rows for another result.
    */
   resultKey?: string;
+  /**
+   * The sentence under the table that names the columns that left it for want of room, and says
+   * where their values are read. Written by the caller from the catalog. Without it the table
+   * says nothing of them.
+   */
+  leftOutText?: (headers: readonly string[]) => string;
   className?: string | undefined;
 }
 
@@ -354,7 +379,7 @@ function warnOfUnboundedHeight(): void {
  * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
  */
 export function DataTable<Item>({
-  columns,
+  columns: allColumns,
   rows,
   rowKey,
   selectedKey,
@@ -374,16 +399,19 @@ export function DataTable<Item>({
   onLoadMore,
   isLoadingMore,
   resultKey,
+  leftOutText,
   className,
   ...props
 }: DataTableProps<Item>) {
   const countId = useId();
+  const leftOutId = useId();
   const scroller = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [scrolledAcross, setScrolledAcross] = useState(false);
   // What the scroller itself has to be asked: how much of its height a sideways scrollbar takes,
-  // and how wide the layout made the pinned column.
-  const [measured, setMeasured] = useState({ scrollbar: 0, pinned: 0 });
+  // how wide the layout made the pinned column, and how wide the scroller is, which decides the
+  // columns that leave it.
+  const [measured, setMeasured] = useState({ scrollbar: 0, pinned: 0, width: 0 });
   const metrics = useTableMetrics(density);
   const chars = useCharWidths();
   const loading = isLoading === true;
@@ -393,7 +421,7 @@ export function DataTable<Item>({
   const shown = loading ? NO_ROWS : rows;
   const total = totalRows ?? rows.length;
 
-  const widths = columns.map((column): Width => {
+  const widthOf = (column: DataTableColumn<Item>): Width => {
     const sized = columnWidth(column.size, column.kind ?? "text", chars, metrics.paddingX);
     const least = headerWidth(
       column.header,
@@ -406,8 +434,28 @@ export function DataTable<Item>({
       width: typeof sized.width === "number" ? Math.max(sized.width, least) : sized.width,
       minWidth: Math.max(sized.minWidth, least),
     };
-  });
+  };
   const actionsWidth = columnWidth(rowActionsSize, "text", chars, metrics.paddingX);
+  // The columns that leave for want of room, by their priority. The same list of columns is kept
+  // for as long as the same columns stay, so nothing that is built from it is built again.
+  const leaving = [
+    ...leavingColumns(
+      allColumns.map((column) => ({
+        id: column.id,
+        least: widthOf(column).minWidth,
+        priority: column.priority,
+        stays: column.isRowHeader === true || column.id === sort?.column,
+      })),
+      measured.width,
+      hasActions ? actionsWidth.minWidth : 0,
+    ),
+  ].join("\n");
+  const columns = useMemo(() => {
+    const gone = new Set(leaving.split("\n"));
+    return allColumns.filter((column) => !gone.has(column.id));
+  }, [allColumns, leaving]);
+  const leftOut = allColumns.filter((column) => !columns.includes(column));
+  const widths = columns.map(widthOf);
   const placeholderWidths = hasActions ? [...widths, actionsWidth] : widths;
   // The rows are built again only when what a row is made of changes: which columns, of which
   // kind, and whether there are actions. What a cell shows is not part of that.
@@ -550,8 +598,12 @@ export function DataTable<Item>({
       element.scrollWidth > element.clientWidth
         ? Math.max(0, element.offsetHeight - element.clientHeight)
         : 0;
+    // The width the columns share. A scrollbar along the lower edge takes none of it.
+    const width = element.clientWidth;
     setMeasured((before) =>
-      before.pinned === pinned && before.scrollbar === scrollbar ? before : { pinned, scrollbar },
+      before.pinned === pinned && before.scrollbar === scrollbar && before.width === width
+        ? before
+        : { pinned, scrollbar, width },
     );
   };
   const afterLayout = useRef<() => void>(() => undefined);
@@ -648,6 +700,10 @@ export function DataTable<Item>({
   // page counts or loads in pages; a read-only table keeps its count as the grid's description.
   const countShown = countText !== undefined && !isEmpty;
   const countLive = countText !== undefined || totalRows !== undefined || onLoadMore !== undefined;
+  const leftOutLine =
+    leftOutText === undefined || leftOut.length === 0
+      ? null
+      : leftOutText(leftOut.map((column) => column.header));
 
   return (
     <div
@@ -672,7 +728,7 @@ export function DataTable<Item>({
           <Table
             ref={scroller}
             aria-label={props["aria-label"]}
-            aria-describedby={countId}
+            aria-describedby={leftOutLine === null ? countId : `${countId} ${leftOutId}`}
             data-selectable={selectable ? "" : undefined}
             selectionMode={selectable ? "single" : "none"}
             selectionBehavior="toggle"
@@ -725,14 +781,25 @@ export function DataTable<Item>({
                   data-pinned={column.isRowHeader === true ? "" : undefined}
                   className={cx(styles.column)}
                 >
-                  {({ sortDirection }) => (
-                    <>
-                      <span className={styles.label}>{column.header}</span>
-                      {sortDirection === undefined ? null : (
-                        <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
-                      )}
-                    </>
-                  )}
+                  {({ sortDirection, allowsSorting }) => {
+                    // The sorted header's arrow says the order of the rows; the muted one of a
+                    // header at rest says the order a press gives.
+                    const direction = sortDirection ?? column.firstSortDirection ?? "ascending";
+                    return (
+                      <>
+                        <span className={styles.label}>{column.header}</span>
+                        {allowsSorting ? (
+                          <span
+                            data-mark={sortDirection === undefined ? "rest" : "sorted"}
+                            data-direction={direction}
+                            className={styles.mark}
+                          >
+                            <Icon icon={direction === "ascending" ? ArrowUp : ArrowDown} />
+                          </span>
+                        ) : null}
+                      </>
+                    );
+                  }}
                 </Column>
               ))}
               {hasActions ? (
@@ -792,10 +859,23 @@ export function DataTable<Item>({
       {isEmpty && emptyState !== undefined ? (
         <div className={styles.empty}>{emptyState}</div>
       ) : null}
-      {countShown ? (
-        <p id={countId} role="status" className={styles.count}>
-          {status}
-        </p>
+      {countShown || leftOutLine !== null ? (
+        <div className={styles.foot}>
+          {countShown ? (
+            <p id={countId} role="status" className={styles.count}>
+              {status}
+            </p>
+          ) : (
+            <VisuallyHidden id={countId} {...(countLive ? { role: "status" } : {})}>
+              {status}
+            </VisuallyHidden>
+          )}
+          {leftOutLine === null ? null : (
+            <p id={leftOutId} data-part="left-out" className={styles.leftOut}>
+              {leftOutLine}
+            </p>
+          )}
+        </div>
       ) : (
         <VisuallyHidden id={countId} {...(countLive ? { role: "status" } : {})}>
           {status}

@@ -117,7 +117,28 @@
   text-overflow: ellipsis;
 }
 
-/* A sortable header is a button. The sorted one is written in the primary ink, with an arrow. */
+/*
+ * A sortable header is a button, and looks it before it is pressed: at rest its arrow is muted
+ * and points the way a press sorts. Hover and the keyboard's focus raise the arrow to the
+ * secondary ink; the sorted header has the label and the arrow in the primary ink.
+ */
+.mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-muted);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.column[data-hovered] .mark,
+.column[data-pressed] .mark,
+.column[data-focus-visible] .mark {
+  color: var(--color-text-secondary);
+}
+
+.column .mark[data-mark="sorted"] {
+  color: var(--color-text-primary);
+}
+
 .column[data-allows-sorting][data-hovered] {
   background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
@@ -377,10 +398,23 @@
 }
 
 /*
- * The count line: how many rows are loaded and how many there are. It stands under the scroller
- * and stays while the rows scroll. Under a table that fills its page a hairline closes the
- * scroller off, as the header does at its top.
+ * Under the scroller, and staying while the rows scroll: the count line, and at its trailing end
+ * the sentence that names the columns that left. Under a table that fills its page a hairline
+ * closes the scroller off, as the header does at its top.
  */
+.foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  column-gap: var(--space-4);
+  align-items: baseline;
+}
+
+.root[data-height="fill"] .foot {
+  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+}
+
+/* The count line: how many rows are loaded and how many there are. */
 .count {
   margin: 0;
   padding: var(--space-2) var(--density-cell-padding-x);
@@ -390,8 +424,15 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-.root[data-height="fill"] .count {
-  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+.leftOut {
+  margin: 0;
+  margin-inline-start: auto;
+  padding: var(--space-2) var(--density-cell-padding-x);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: end;
 }
 
 /*

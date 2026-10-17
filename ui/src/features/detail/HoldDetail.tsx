@@ -70,8 +70,8 @@ function holdFacts(hold: HoldRef | undefined, absent: DetailProps["absent"]): Fa
   facts.push(
     {
       label: t("detail.fact.blocker"),
+      // In the face of the body, as the blocker is everywhere: it is as often a word as a tag.
       ...(row === undefined ? { value: "" } : text(row.blocker.item)),
-      kind: "identifier",
     },
     { label: t("detail.fact.blockerType"), value: row?.blocker.kind ?? "" },
   );

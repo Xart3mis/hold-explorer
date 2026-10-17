@@ -30,6 +30,7 @@ import {
   type DataTableSort,
 } from "../../components";
 import { cx } from "../../components/cx";
+import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useDetailFocus, useSelection } from "../detail/selection";
 import { FilterBar } from "../filters/FilterBar";
@@ -395,6 +396,11 @@ export function LinesPage() {
     ...(canLoad ? { onLoadMore: pages.loadMore } : {}),
     isLoadingMore: isOwn && pages?.isLoadingMore === true,
     ...(emptyState === undefined ? {} : { emptyState }),
+    // The columns that leave a narrow table are read in the panel of a row.
+    leftOutText: (headers: readonly string[]) =>
+      t(shownMode === "holds" ? "lines.leftOutHolds" : "lines.leftOutLines", {
+        columns: formatList(headers),
+      }),
     onSelectionChange: select,
     selectedKey: selectionOf(location.search, shownMode),
   } as const;

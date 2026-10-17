@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import { destinationPages } from "../../app/router";
 import { useShell } from "../../app/shell/context";
@@ -20,6 +20,7 @@ import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
 import { formatDate } from "../../text/format";
 import { connectImportStart } from "../import/start";
+import { SIDEBAR_STORAGE_KEY } from "./window";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;
@@ -179,6 +180,135 @@ describe("where toasts sit", () => {
     expect(toasts).toContain(
       "inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));",
     );
+  });
+});
+
+describe("the sidebar's rail", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(SIDEBAR_STORAGE_KEY);
+  });
+
+  it("collapses to a rail and back by its last item, and keeps every name for assistive technology", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    const collapse = within(nav).getByRole("button", { name: en.destinations.collapse });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    expect(collapse).toHaveAttribute("aria-controls", nav.id);
+    expect(nav).toHaveAttribute("data-form", "full");
+
+    await user.click(collapse);
+    expect(nav).toHaveAttribute("data-form", "rail");
+    const expand = within(nav).getByRole("button", { name: en.destinations.expand });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    // The names of the items are those of the full sidebar, the Soon tag included.
+    expect(within(nav).getByRole("link", { name: names.overview })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      within(nav).getByRole("link", { name: `${names.breakdown} ${soon}` }),
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("rail");
+    expect(document.documentElement).toHaveAttribute("data-sidebar", "rail");
+
+    await user.click(expand);
+    expect(nav).toHaveAttribute("data-form", "full");
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("full");
+    expect(document.documentElement).toHaveAttribute("data-sidebar", "");
+  });
+
+  it("starts as the user left it", async () => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+    renderApp({ start: openStart(), path: "/overview" });
+    expect(await sidebar()).toHaveAttribute("data-form", "rail");
+  });
+
+  it(
+    "shows the name of an item in text on keyboard focus, with its tag and its shortcut",
+    SLOW,
+    async () => {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+      const { user } = renderApp({ start: openStart(), path: "/overview" });
+      const nav = await sidebar();
+      (document.activeElement as HTMLElement | null)?.blur();
+      const breakdown = within(nav).getByRole("link", { name: `${names.breakdown} ${soon}` });
+      for (let presses = 0; presses < 10 && document.activeElement !== breakdown; presses += 1) {
+        await user.tab();
+      }
+      expect(breakdown).toHaveFocus();
+      const tip = await screen.findByRole("tooltip");
+      expect(tip).toHaveTextContent(`${names.breakdown}, ${soon}`);
+      expect(tip).toHaveTextContent("Ctrl+2");
+    },
+  );
+
+  it("moves the toasts to the edge of the rail", async () => {
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync(join(import.meta.dirname, "../../app.css"), "utf8");
+    document.head.append(sheet);
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+      renderApp({ start: openStart(), path: "/overview" });
+      await sidebar();
+      expect(
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--toast-inset-inline-start")
+          .trim(),
+      ).toBe("calc(var(--layout-rail-width) + var(--space-6))");
+    } finally {
+      sheet.remove();
+    }
+  });
+});
+
+describe("the size of the window", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, "innerWidth");
+  });
+
+  function resize(width: number) {
+    act(() => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+      window.dispatchEvent(new Event("resize"));
+    });
+  }
+
+  it("marks the root element small, medium, or large by the two breakpoints, and the padding follows", async () => {
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync(join(import.meta.dirname, "../../app.css"), "utf8");
+    document.head.append(sheet);
+    const root = document.documentElement;
+    const padding = () => getComputedStyle(root).getPropertyValue("--layout-page-padding-x").trim();
+    try {
+      resize(1024);
+      const app = renderApp({ start: openStart(), path: "/overview" });
+      await sidebar();
+      expect(root).toHaveAttribute("data-window", "small");
+      expect(padding()).toBe("var(--layout-page-padding-x-tight)");
+      resize(1279);
+      expect(root).toHaveAttribute("data-window", "small");
+      resize(1280);
+      expect(root).toHaveAttribute("data-window", "medium");
+      expect(padding()).toBe("var(--layout-page-padding-x-tight)");
+      resize(1439);
+      expect(root).toHaveAttribute("data-window", "medium");
+      resize(1440);
+      expect(root).toHaveAttribute("data-window", "large");
+      expect(padding()).toBe("24px");
+      app.unmount();
+      expect(root).not.toHaveAttribute("data-window");
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("never collapses or expands the sidebar by itself", async () => {
+    resize(1024);
+    renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    expect(nav).toHaveAttribute("data-form", "full");
+    resize(1920);
+    expect(nav).toHaveAttribute("data-form", "full");
   });
 });
 
@@ -861,9 +991,10 @@ describe("the keyboard", () => {
       screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
       screen.getByRole("button", { name: en.shell.import }),
       ...within(nav).getAllByRole("link"),
+      within(nav).getByRole("button", { name: en.destinations.collapse }),
       screen.getByRole("button", { name: en.comingSoon.action }),
     ];
-    expect(expected).toHaveLength(13);
+    expect(expected).toHaveLength(14);
     for (const element of expected) {
       await user.tab();
       expect(element).toHaveFocus();

@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { RouterProvider } from "react-aria-components";
 import { Outlet, useHref, useLocation, useNavigate, type NavigateOptions } from "react-router";
 import { useIsMutating } from "@tanstack/react-query";
@@ -21,7 +12,6 @@ import { useStart } from "../../app/actions/start";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
 import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
 import type { AppStart } from "../../bindings/AppStart";
-import { lengthToken } from "../../design/token-values";
 import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../components";
 import { formatDateTime } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -33,36 +23,12 @@ import { shortcutBindings, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { useSidebarForm, useWindowMark, useWindowSize } from "./window";
 
 declare module "react-aria-components" {
   interface RouterConfig {
     routerOptions: NavigateOptions;
   }
-}
-
-function onResize(changed: () => void): () => void {
-  window.addEventListener("resize", changed);
-  return () => {
-    window.removeEventListener("resize", changed);
-  };
-}
-
-/**
- * Whether the window is wide enough for the detail panel to sit beside the content
- * (`--layout-breakpoint-wide`); below it the panel lies over the right edge of the content.
- */
-function useIsWide(): boolean {
-  return useSyncExternalStore(onResize, () => {
-    const wide = wideBreakpoint();
-    return wide !== null && window.innerWidth >= wide;
-  });
-}
-
-/** The wide breakpoint in pixels, read from its token once; `null` while it cannot be read. */
-let breakpoint: number | null = null;
-function wideBreakpoint(): number | null {
-  breakpoint ??= lengthToken("--layout-breakpoint-wide");
-  return breakpoint;
 }
 
 /** The top bar before anything is known: the name of the app, and blocks where its controls go. */
@@ -155,7 +121,10 @@ function LoadedShell({ start, destinations }: ShellProps) {
   // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
   const [detailFocus] = useState(createDetailFocus);
   const { selection } = useSelection();
-  const isWide = useIsWide();
+  // In a small window the panel lies over the right edge of the content; from a medium one on it
+  // sits beside it.
+  const isWide = useWindowSize() !== "small";
+  const [sidebarForm, setSidebarForm] = useSidebarForm();
 
   // The page the app opened on, and whether it has been left since.
   const arrival = useRef<{ first: string | null; left: boolean }>({ first: null, left: false });
@@ -172,16 +141,16 @@ function LoadedShell({ start, destinations }: ShellProps) {
   useSelectionFollowsView(open);
 
   // The toast region is rendered beside the layout. It learns from the root element where the
-  // content area starts; see app.css.
+  // content area starts: after the sidebar, or after its rail; see app.css.
   const hasSidebar = open !== null;
   useEffect(() => {
     if (!hasSidebar) return;
     const root = document.documentElement;
-    root.setAttribute("data-sidebar", "");
+    root.setAttribute("data-sidebar", sidebarForm === "rail" ? "rail" : "");
     return () => {
       root.removeAttribute("data-sidebar");
     };
-  }, [hasSidebar]);
+  }, [hasSidebar, sidebarForm]);
 
   // Every way of starting an import ends here: the import page, opened with the file and with
   // the address to return to. An import started from inside the import flow keeps the address
@@ -286,7 +255,9 @@ function LoadedShell({ start, destinations }: ShellProps) {
             renameErrorId={problem?.kind === "rename" ? problemId : undefined}
             onProblem={setProblem}
           />
-          {hasSidebar ? <Sidebar destinations={destinations} /> : null}
+          {hasSidebar ? (
+            <Sidebar destinations={destinations} form={sidebarForm} onFormChange={setSidebarForm} />
+          ) : null}
           <main className={styles.content}>
             {problem !== null ||
             notice !== null ||
@@ -395,6 +366,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
 export function AppLayout({ destinations }: { destinations: readonly Destination[] }) {
   const { start, error, reload, isReloading } = useStart();
   const navigate = useNavigate();
+  // What adapts to the window reads its size from the root element; see DESIGN.md.
+  useWindowMark(useWindowSize());
 
   if (start === undefined) {
     if (error === null) return <LoadingShell />;

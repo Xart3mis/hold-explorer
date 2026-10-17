@@ -307,10 +307,14 @@ describe("DataTable", () => {
     const oldest = screen.getByRole("columnheader", { name: "Oldest" });
     const holds = screen.getByRole("columnheader", { name: "Holds" });
     expect(oldest).toHaveAttribute("aria-sort", "descending");
-    expect(oldest.querySelector("svg")).not.toBeNull();
+    expect(oldest.querySelector('[data-mark="sorted"] svg')).not.toBeNull();
     expect(holds).toHaveAttribute("aria-sort", "none");
-    expect(holds.querySelector("svg")).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Line ID" })).not.toHaveAttribute("aria-sort");
+    // A header that can be sorted shows its muted mark at rest, not the mark of the sorted one.
+    expect(holds.querySelector('[data-mark="sorted"]')).toBeNull();
+    expect(holds.querySelector('[data-mark="rest"] svg')).not.toBeNull();
+    const line = screen.getByRole("columnheader", { name: "Line ID" });
+    expect(line).not.toHaveAttribute("aria-sort");
+    expect(line.querySelector("svg")).toBeNull();
 
     await user.click(holds);
     expect(onSortChange).toHaveBeenCalledWith({ column: "holds", direction: "ascending" });
@@ -1070,6 +1074,142 @@ describe("DataTable narrower than its columns", () => {
       scrollTable(grid, 0);
     });
     expect(grid.closest("[data-scrolled-x]")).not.toBeNull();
+  });
+});
+
+/** The columns of the test, where the first blocker and then the holds may leave a narrow table. */
+const leaving: DataTableColumn<Line>[] = columns.map((column) =>
+  column.id === "blocker"
+    ? { ...column, priority: 2 }
+    : column.id === "holds"
+      ? { ...column, priority: 1 }
+      : column,
+);
+
+const leftOutText = (headers: readonly string[]) =>
+  `Not shown at this width: ${headers.join(", ")}.`;
+
+function headers(): string[] {
+  return screen.getAllByRole("columnheader").map((header) => header.textContent);
+}
+
+describe("DataTable narrower than its columns, whose columns may leave", () => {
+  // The stand-in widths of a test: Line ID 192 px, Holds 74, Oldest 80, First blocker at least
+  // 136, which is 482 together.
+  const size = { width: 400, height: 400 };
+  tableViewport(size);
+  afterEach(() => {
+    size.width = 400;
+  });
+
+  it("takes out the column of the highest priority first, and names it under the table", () => {
+    render(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest"]);
+    const note = screen.getByText("Not shown at this width: First blocker.");
+    // It describes the table, and is no live region: a resize is not news.
+    expect(screen.getByRole("grid").getAttribute("aria-describedby")).toContain(note.id);
+    expect(note).not.toHaveAttribute("role");
+    expect(within(dataRow(0)).queryByText(lines[0]?.blocker ?? "")).not.toBeInTheDocument();
+  });
+
+  it("takes out the next one where the table is narrower still, and gives both back with room", () => {
+    const sizes = observeSizes();
+    size.width = 300;
+    const { rerender } = render(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Oldest"]);
+    expect(screen.getByText("Not shown at this width: Holds, First blocker.")).toBeInTheDocument();
+
+    size.width = 600;
+    act(() => {
+      sizes.resize();
+    });
+    rerender(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest", "First blocker"]);
+    expect(screen.queryByText(/Not shown at this width/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the column the rows are sorted by, and scrolls sideways when the rest do not fit", () => {
+    size.width = 300;
+    render(
+      table({
+        columns: leaving,
+        leftOutText,
+        sort: { column: "holds", direction: "descending" },
+      }),
+    );
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest"]);
+    expect(screen.getByText("Not shown at this width: First blocker.")).toBeInTheDocument();
+  });
+
+  it("keeps every column of a table that gives none a priority", () => {
+    render(table({ leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest", "First blocker"]);
+    expect(screen.queryByText(/Not shown at this width/)).not.toBeInTheDocument();
+  });
+});
+
+describe("DataTable's sortable headers", () => {
+  const firstDown = columns.map((column) =>
+    column.id === "holds" ? { ...column, firstSortDirection: "descending" as const } : column,
+  );
+  const mark = (header: HTMLElement) => header.querySelector<HTMLElement>("[data-mark]");
+
+  it("show at rest a mark that points the way a press sorts, and the sorted one its order", () => {
+    render(table({ columns: firstDown, sort: { column: "oldest", direction: "ascending" } }));
+    const holds = screen.getByRole("columnheader", { name: "Holds" });
+    const oldest = screen.getByRole("columnheader", { name: "Oldest" });
+    expect(mark(holds)).toHaveAttribute("data-mark", "rest");
+    expect(mark(holds)).toHaveAttribute("data-direction", "descending");
+    expect(mark(oldest)).toHaveAttribute("data-mark", "sorted");
+    expect(mark(oldest)).toHaveAttribute("data-direction", "ascending");
+    expect(oldest).toHaveAttribute("aria-sort", "ascending");
+    // A header that cannot be sorted has no mark, and a first load sorts nothing.
+    expect(mark(screen.getByRole("columnheader", { name: "Line ID" }))).toBeNull();
+    expect(mark(screen.getByRole("columnheader", { name: "First blocker" }))).toBeNull();
+  });
+
+  it("shows no mark while the rows are loading", () => {
+    render(table({ columns: firstDown, isLoading: true }));
+    expect(document.querySelector("[data-mark]")).toBeNull();
+  });
+
+  it("answers the pointer and the keyboard as a button does", SLOW, async () => {
+    const user = userEvent.setup();
+    render(table({ columns: firstDown, onSortChange: vi.fn() }));
+    const holds = screen.getByRole("columnheader", { name: "Holds" });
+    await user.hover(holds);
+    expect(holds).toHaveAttribute("data-hovered");
+    await user.unhover(holds);
+    expect(holds).not.toHaveAttribute("data-hovered");
+
+    // From the first row, up to its header row, and along it.
+    await user.tab();
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowUp}");
+    expect(holds).toHaveFocus();
+    expect(holds).toHaveAttribute("data-focus-visible");
+  });
+
+  it("are drawn by state: a muted mark at rest, a stronger one on hover and focus, full ink sorted", () => {
+    const stylesheet = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
+    const rule = (selector: string) =>
+      new RegExp(`(^|\\n)${selector.replace(/[.[\]:="]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+        stylesheet,
+      )?.[2] ?? "";
+    expect(rule(".mark")).toMatch(/color:\s*var\(--color-text-muted\);/);
+    expect(
+      rule(
+        ".column[data-hovered] .mark,\n.column[data-pressed] .mark,\n.column[data-focus-visible] .mark",
+      ),
+    ).toMatch(/color:\s*var\(--color-text-secondary\);/);
+    expect(rule('.column .mark[data-mark="sorted"]')).toMatch(
+      /color:\s*var\(--color-text-primary\);/,
+    );
+    expect(rule(".column[data-allows-sorting][data-hovered]")).toMatch(
+      /background-color:\s*var\(--color-surface-hover\);/,
+    );
+    expect(rule(".column[data-allows-sorting][data-pressed]")).toMatch(
+      /background-color:\s*var\(--color-surface-pressed\);/,
+    );
   });
 });
 

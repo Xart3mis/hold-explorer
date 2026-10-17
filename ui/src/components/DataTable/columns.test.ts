@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnWidth, headerWidth, textChars } from "./columns";
+import { columnWidth, headerWidth, leavingColumns, textChars, type FitColumn } from "./columns";
 
 const widths = { text: 8, mono: 9 };
 
@@ -51,5 +51,56 @@ describe("headerWidth", () => {
 
   it("adds the room of the arrow to a header that can be sorted", () => {
     expect(headerWidth("Holds", true, widths, 12, 20)).toBe(78);
+  });
+});
+
+describe("leavingColumns", () => {
+  // A table of five columns of 100 px: the first names the row, two may leave, one may not.
+  const table: FitColumn[] = [
+    { id: "line", least: 100, stays: true },
+    { id: "holds", least: 100, stays: false },
+    { id: "types", least: 100, priority: 1, stays: false },
+    { id: "sizes", least: 100, priority: 3, stays: false },
+    { id: "stress", least: 100, priority: 2, stays: false },
+  ];
+  const leaving = (width: number, columns = table, kept = 0) => [
+    ...leavingColumns(columns, width, kept),
+  ];
+
+  it("lets every column stay where they all fit", () => {
+    expect(leaving(500)).toEqual([]);
+    expect(leaving(800)).toEqual([]);
+  });
+
+  it("takes the highest priority out first, then the next, until the rest fit", () => {
+    expect(leaving(499)).toEqual(["sizes"]);
+    expect(leaving(400)).toEqual(["sizes"]);
+    expect(leaving(399)).toEqual(["sizes", "stress"]);
+    expect(leaving(300)).toEqual(["sizes", "stress"]);
+    expect(leaving(299)).toEqual(["sizes", "stress", "types"]);
+  });
+
+  it("never takes out a column without a priority, nor one that stays: the table scrolls then", () => {
+    expect(leaving(120)).toEqual(["sizes", "stress", "types"]);
+    const sorted = table.map((column) =>
+      column.id === "sizes" ? { ...column, stays: true } : column,
+    );
+    expect(leaving(399, sorted)).toEqual(["stress", "types"]);
+  });
+
+  it("takes the later of two columns of the same priority first", () => {
+    const same = table.map((column) =>
+      column.id === "stress" ? { ...column, priority: 3 } : column,
+    );
+    expect(leaving(499, same)).toEqual(["stress"]);
+  });
+
+  it("counts the room that is kept besides, such as the row actions", () => {
+    expect(leaving(500, table, 50)).toEqual(["sizes"]);
+  });
+
+  it("lets every column stay while the width is not known", () => {
+    expect(leaving(0)).toEqual([]);
+    expect(leaving(Number.NaN)).toEqual([]);
   });
 });
