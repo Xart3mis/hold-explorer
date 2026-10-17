@@ -34,6 +34,15 @@ function themeChangesOf(client: QueryClient): ThemeChanges {
 }
 
 /**
+ * Forgets the changes of the theme counted for `client`. The app has one client for its whole
+ * life and never needs this; the tests share that client and clear it after each test, and a test
+ * that ended with a change on its way would leave it counted for the next.
+ */
+export function resetThemeChanges(client: QueryClient): void {
+  themeChanges.delete(client);
+}
+
+/**
  * The action that changes the theme. It is no action on the open workspace: it runs beside them,
  * and nothing waits for it. See ui/src/app/actions/start.ts for what every action does.
  */

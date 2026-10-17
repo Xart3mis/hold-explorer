@@ -84,6 +84,18 @@ describe("the commands that change the view", () => {
     await expectRefused("ui/src/test/ipc.ts", "../api/workspace-commands", /workspaceAction\(\)/);
   });
 
+  it("are refused under every spelling of the module's extension", async () => {
+    for (const source of [
+      "../../api/workspace-commands.js",
+      "../../api/workspace-commands.tsx",
+      "../../api/workspace-commands.mjs",
+    ]) {
+      await expectRefused("ui/src/features/lines/LinesPage.tsx", source, /workspaceAction\(\)/);
+    }
+    await expectAllowed("ui/src/app/actions/snapshots.ts", "../../api/workspace-commands.js");
+    await expectAllowed("ui/src/features/lines/LinesPage.tsx", "../../api/commands.js");
+  });
+
   it("leave the other commands open to a feature", async () => {
     await expectAllowed("ui/src/features/lines/LinesPage.tsx", "../../api/commands");
   });
@@ -111,6 +123,29 @@ describe("the commands that change the view", () => {
         expect(said[0]).toMatch(/workspaceAction\(\)/);
       }
     }
+  });
+
+  it("are refused as well when import() is given their name in parts", async () => {
+    for (const code of [
+      'void import("../../api/" + "workspace-commands");\n',
+      'void import("../../api/workspace-commands.js");\n',
+    ]) {
+      const said = await syntax("ui/src/features/lines/LinesPage.tsx", code);
+      expect(said, code).toHaveLength(1);
+      expect(said[0]).toMatch(/workspaceAction\(\)/);
+    }
+    expect(
+      await syntax(
+        "ui/src/app/actions/demo.ts",
+        'void import("../../api/" + "workspace-commands");\n',
+      ),
+    ).toEqual([]);
+    expect(
+      await syntax(
+        "ui/src/features/lines/LinesPage.tsx",
+        'void import("../../api/" + "commands");\n',
+      ),
+    ).toEqual([]);
   });
 
   it("may be imported with import() by a module of ui/src/app/, and any other module by anyone", async () => {
@@ -215,6 +250,33 @@ describe("the layers", () => {
       await expectRefused("ui/src/locales/plurals.ts", source, /ui\/src\/locales\//);
     }
     await expectAllowed("ui/src/locales/plurals.ts", "./en.json");
+  });
+
+  it("see a layer above also through a path that starts with ./", async () => {
+    await expectRefused("ui/src/api/error.ts", "./../app/query", /ui\/src\/api\//);
+    await expectRefused("ui/src/app/view.ts", "./../features/shell/problem", /ui\/src\/app\//);
+    await expectAllowed("ui/src/api/error.ts", "./../text/i18n");
+  });
+
+  it("refuse a feature that imports the test helpers or the development page, but not its tests", async () => {
+    for (const source of ["../../test/app", "../../dev/commands"]) {
+      await expectRefused("ui/src/features/lines/LinesPage.tsx", source, /ui\/src\/features\//);
+      await expectRefused("ui/src/features/lines/sorts.ts", source, /ui\/src\/features\//);
+    }
+    await expectAllowed("ui/src/features/lines/LinesPage.test.tsx", "../../test/app");
+    await expectRefused(
+      "ui/src/features/lines/LinesPage.test.tsx",
+      "../../dev/commands",
+      /ui\/src\/features\//,
+    );
+  });
+
+  it("refuse the router the test helpers and the development page, and give it the pages", async () => {
+    for (const source of ["../test/app", "../dev/commands"]) {
+      await expectRefused("ui/src/app/router.tsx", source, /router/);
+    }
+    await expectAllowed("ui/src/app/router.tsx", "../features/overview/OverviewPage");
+    await expectAllowed("ui/src/app/router.tsx", "./destinations");
   });
 
   it("let a feature import every layer", async () => {

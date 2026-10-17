@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Settings } from "../../bindings/Settings";
 import type { Theme } from "../../bindings/Theme";
 import { held, loaded } from "../../test/actions";
+import { openStart } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { useThemeSetting } from "./theme";
 
@@ -79,5 +80,38 @@ describe("changing the theme", () => {
       expect(result.current.setTheme.isError).toBe(true);
     });
     expect(result.current.start?.settings.theme).toBe("Light");
+  });
+
+  describe("from one test to the next", () => {
+    // The two tests run in this order. The first ends with a change on its way; the setup of the
+    // tests must not let the next one count that change as its own.
+    it("ends with a change of the theme on its way", async () => {
+      const set = held<Settings>();
+      const { result } = await loaded(useThemeSetting, { settings_set_theme: set.handler });
+      act(() => {
+        result.current.setTheme.mutate("Light");
+      });
+      await waitFor(() => {
+        expect(set.handler).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("goes back to its own saved theme after a test that left a change on its way", async () => {
+      const start = openStart();
+      const { result } = await loaded(useThemeSetting, {
+        app_start: () => ({ ...start, settings: { ...start.settings, theme: "System" } }),
+        settings_set_theme: () => {
+          throw commandFailure("Settings", "The settings file could not be written.");
+        },
+      });
+      expect(result.current.start?.settings.theme).toBe("System");
+      act(() => {
+        result.current.setTheme.mutate("Light");
+      });
+      await waitFor(() => {
+        expect(result.current.setTheme.isError).toBe(true);
+      });
+      expect(result.current.start?.settings.theme).toBe("System");
+    });
   });
 });

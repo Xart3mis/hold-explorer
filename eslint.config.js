@@ -42,16 +42,23 @@ const tauri = {
 // with workspaceAction(). A feature that sent one by itself would run outside the order of the
 // actions, and while it ran a page could read one snapshot's data for another. So those commands
 // are in a module of their own, and only the modules of ui/src/app/ import it.
+// The module is named with or without an extension, and the bundler resolves a `.js` spelling to
+// the `.ts` file, so every extension is the same module.
 const workspaceCommands = {
-  regex: "(^|/)workspace-commands(\\.ts)?$",
+  regex: "(^|/)workspace-commands(\\.[cm]?[jt]sx?)?$",
   message:
     "Send a command that changes the open workspace or the selected snapshot as an action made with workspaceAction() of ui/src/app/view.ts; the actions that exist are in ui/src/app/actions/. Only the modules of ui/src/app/ import ui/src/api/workspace-commands.ts.",
 };
 
-// The same commands reached with import() while the app runs, which the import rule does not see.
+// The same commands reached with import() while the app runs, which the import rule does not see:
+// by their name, in a template, or in parts joined with +.
 const dynamicWorkspaceCommands = [
   {
-    selector: "ImportExpression[source.value=/(^|\\/)workspace-commands(\\.ts)?$/]",
+    selector: "ImportExpression[source.value=/(^|\\/)workspace-commands(\\.[cm]?[jt]sx?)?$/]",
+    message: workspaceCommands.message,
+  },
+  {
+    selector: "ImportExpression > BinaryExpression Literal[value=/workspace-commands/]",
     message: workspaceCommands.message,
   },
   {
@@ -113,6 +120,16 @@ const layers = {
     message:
       "A module of ui/src/app/ imports no feature; only the router (ui/src/app/router.tsx) names the pages. What two features share belongs in ui/src/app/.",
   },
+  router: {
+    imports: ["app", "text", "api", "bindings", "components", "design", "features"],
+    message:
+      "The router (ui/src/app/router.tsx) imports the pages of the features and the app, and neither the helpers of the tests nor the development page.",
+  },
+  features: {
+    imports: ["text", "api", "bindings", "components", "design", "app", "locales"],
+    message:
+      "A module of ui/src/features/ imports every layer of the app, and neither the helpers of the tests (ui/src/test/) nor the development page (ui/src/dev/): what both need belongs in ui/src/app/ or in the feature.",
+  },
 };
 
 /** The imports a module of a layer may not make: every folder of ui/src/ it is not given. */
@@ -120,7 +137,7 @@ function above(name, { isTest = false } = {}) {
   const { imports, message } = layers[name];
   const open = [name, ...imports, ...(isTest ? ["test", "locales"] : [])];
   const closed = folders.filter((folder) => !open.includes(folder));
-  return { regex: `^(\\.\\./)+(${closed.join("|")})(/|$)`, message };
+  return { regex: `^(\\./)?(\\.\\./)+(${closed.join("|")})(/|$)`, message };
 }
 
 /** The setting of no-restricted-imports for one set of files. */
@@ -248,7 +265,23 @@ export default tseslint.config(
   {
     // The router is where the pages of the features are given their addresses.
     files: ["ui/src/app/router.tsx"],
-    rules: { "no-restricted-imports": restricted(tauri.none) },
+    rules: { "no-restricted-imports": restricted(tauri.none, above("router")) },
+  },
+  {
+    files: ["ui/src/features/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": restricted(tauri.none, workspaceCommands, above("features")),
+    },
+  },
+  {
+    files: tests("features/"),
+    rules: {
+      "no-restricted-imports": restricted(
+        tauri.mocks,
+        workspaceCommands,
+        above("features", { isTest: true }),
+      ),
+    },
   },
   {
     files: ["ui/src/api/**/*.{ts,tsx}"],
