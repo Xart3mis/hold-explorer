@@ -177,17 +177,12 @@ describe("Lines", () => {
     expect(preset(text.presets.all)).toBeChecked();
   });
 
-  it("says how many lines there are when they are all loaded, without a count line", async () => {
+  it("says how many lines there are when they are all loaded", async () => {
     renderLines();
-    const table = await grid();
+    await grid();
     await waitFor(() => {
-      expect(table).toHaveAccessibleDescription(/3 lines$/);
+      expect(countLine()).toHaveTextContent(/^3 lines$/);
     });
-    // Heard, as the grid's description and politely, but not seen: every row is there.
-    expect(
-      within(must(table.closest<HTMLElement>("[data-part='lines-table']"))).getByRole("status"),
-    ).toHaveTextContent(/^3 lines$/);
-    expect(visibleCountLine()).toBeNull();
   });
 
   it("shows a skeleton on a first load", async () => {

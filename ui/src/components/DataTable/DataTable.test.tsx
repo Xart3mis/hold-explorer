@@ -560,22 +560,22 @@ describe("DataTable in a viewport", () => {
     expect(screen.getByRole("status").textContent).toBe(`4 rows. ${en.table.loadingMore}`);
   });
 
-  it("shows its count line only while a part of the result is shown, and announces it always", () => {
+  it("shows its count line under every result but an empty one, and announces it always", () => {
     const countText = (shown: number, total: number) =>
       `${String(shown)} of ${String(total)} lines`;
     const hidden = (element: HTMLElement) => getComputedStyle(element).position === "absolute";
     const { rerender } = render(table({ totalRows: 4, countText }));
-    // Every row is there: the line is heard and describes the grid, but is not seen.
+    // Every row is there: the table still says how many there are.
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("4 of 4 lines");
     expect(screen.getByRole("grid")).toHaveAccessibleDescription("4 of 4 lines");
-    expect(hidden(status)).toBe(true);
+    expect(hidden(status)).toBe(false);
 
     rerender(table({ totalRows: 3612, countText }));
     expect(screen.getByRole("status")).toHaveTextContent("4 of 3612 lines");
     expect(hidden(screen.getByRole("status"))).toBe(false);
 
-    // No row: the empty state says so, and no count line stands under it.
+    // No row: the empty state says so, and no count line stands under it; it is still heard.
     rerender(table({ rows: [], totalRows: 0, countText, emptyState: <p>No line matches.</p> }));
     expect(screen.getByText("No line matches.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("0 of 0 lines");

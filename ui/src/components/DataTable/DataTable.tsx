@@ -643,10 +643,10 @@ export function DataTable<Item>({
   // two: read aloud, and as the description of the grid, it must not run together.
   const status = loadingMore ? t("table.countLoadingMore", { line: count }) : count;
   const isEmpty = !loading && rows.length === 0;
-  // The line is seen only under a part of a longer result: a table that shows every row, or
-  // none, says its count without showing it. It is a live region only on a table whose rows the
+  // The page's count line is seen under every result but an empty one, whose empty state says
+  // that nothing is there; it is still heard. It is a live region only on a table whose rows the
   // page counts or loads in pages; a read-only table keeps its count as the grid's description.
-  const countShown = countText !== undefined && !loading && rows.length < total;
+  const countShown = countText !== undefined && !isEmpty;
   const countLive = countText !== undefined || totalRows !== undefined || onLoadMore !== undefined;
 
   return (
