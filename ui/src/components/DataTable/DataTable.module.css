@@ -404,6 +404,10 @@
   color: var(--color-danger-text);
 }
 
+.status[data-tone="neutral"] {
+  color: var(--color-text-secondary);
+}
+
 .status[data-tone="action"] {
   color: var(--color-accent-text);
 }

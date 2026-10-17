@@ -197,6 +197,11 @@ export interface DataTableChildren<Child> {
   error?: { text: string; onRetry: () => void };
   /** A last child row that leads on, such as "Open all 900 lines in Lines", and what it does. */
   more?: { text: string; onAction: () => void };
+  /**
+   * There are no children to show, for a reason the screen says, with what to do about it: a group
+   * the filters no longer keep, and Collapse. A child row says so, with the action as a button.
+   */
+  notice?: { text: string; action: string; onAction: () => void };
 }
 
 /** What a child row shows in the track of one column of its table. */
@@ -291,7 +296,8 @@ type ChildEntry =
   | { kind: "child"; key: string; id: string; item: unknown }
   | { kind: "loading"; key: string }
   | { kind: "error"; key: string; text: string }
-  | { kind: "more"; key: string; text: string };
+  | { kind: "more"; key: string; text: string }
+  | { kind: "notice"; key: string; text: string; action: string };
 
 const NO_CHILDREN: readonly ChildEntry[] = [];
 
@@ -301,6 +307,7 @@ interface ChildRowsShape {
   isLoading: boolean;
   error: string | null;
   more: string | null;
+  notice: { text: string; action: string } | null;
 }
 
 function childRowsShape(children: DataTableChildren<unknown>): ChildRowsShape {
@@ -309,13 +316,17 @@ function childRowsShape(children: DataTableChildren<unknown>): ChildRowsShape {
     isLoading: children.isLoading === true,
     error: children.error?.text ?? null,
     more: children.more?.text ?? null,
+    notice:
+      children.notice === undefined
+        ? null
+        : { text: children.notice.text, action: children.notice.action },
   };
 }
 
 /** The child rows of an expanded row: its children, then the row that says how they are. */
 function childEntries(
   parent: string,
-  { rows, isLoading, error, more }: ChildRowsShape,
+  { rows, isLoading, error, more, notice }: ChildRowsShape,
   childKey: (child: unknown) => string,
 ): readonly ChildEntry[] {
   const entries: ChildEntry[] = rows.map((child) => {
@@ -327,6 +338,8 @@ function childEntries(
   }
   if (error !== null) {
     entries.push({ kind: "error", key: `${parent}${STATUS}error`, text: error });
+  } else if (notice !== null) {
+    entries.push({ kind: "notice", key: `${parent}${STATUS}notice`, ...notice });
   } else if (more !== null && !isLoading) {
     entries.push({ kind: "more", key: `${parent}${STATUS}more`, text: more });
   }
@@ -338,7 +351,9 @@ function isSameShape(one: ChildRowsShape, other: ChildRowsShape): boolean {
     one.rows === other.rows &&
     one.isLoading === other.isLoading &&
     one.error === other.error &&
-    one.more === other.more
+    one.more === other.more &&
+    one.notice?.text === other.notice?.text &&
+    one.notice?.action === other.notice?.action
   );
 }
 
@@ -535,6 +550,18 @@ const ContentContext = createContext<Content>({ cell: () => null, actions: () =>
  * So a row costs the component library one element to keep, however many columns it has.
  */
 const ItemContext = createContext<unknown>(null);
+
+/**
+ * The props of a row that can never be selected in a table whose other rows can: without the
+ * `aria-selected` the library gives every row of such a table, so that a group is not read out as
+ * "not selected".
+ */
+function unmarked<Props extends object>(props: Props): Props {
+  // The same props, one fewer.
+  return Object.fromEntries(
+    Object.entries(props).filter(([name]) => name !== "aria-selected"),
+  ) as Props;
+}
 
 /** What a cell shows. It is drawn again when its row or what the cells show changes, and not because its cell was. */
 const CellValue = memo(function CellValue({ column }: { column: number }) {
@@ -946,21 +973,35 @@ export function DataTable<Item, Child = never>({
   );
   const cellCount = columns.length + (hasActions ? 1 : 0);
 
-  // What the screen says of the children of each expanded row, and the child rows that makes.
-  // Counted here for the selection and for the end of the rows; built where the rows are.
+  // What the screen says of the children of each row, and the child rows that makes. The
+  // children of a row that is collapsed stay in the table as well, out of sight, so that turning a
+  // row whose children are there changes which rows are drawn and nothing else: one render. The
+  // drawn rows are counted here for the selection and for the end of the rows.
   const childStates = new Map<string, DataTableChildren<Child>>();
   const childShapes = new Map<string, ChildRowsShape>();
   const childByKey = new Map<string, Extract<ChildEntry, { kind: "child" }>>();
+  const leafKeys: string[] = [];
   let drawnRows = rows.length;
   if (childRows !== undefined && !loading) {
     for (const item of shown) {
       const key = rowKey(item);
-      if (!expandedKeys.has(key)) continue;
       const children = childRows(item);
-      if (children === undefined) continue;
+      if (children === undefined) {
+        leafKeys.push(key);
+        continue;
+      }
       const shape = childRowsShape(children);
-      childStates.set(key, children);
-      childShapes.set(key, shape);
+      const isBare =
+        shape.rows.length === 0 &&
+        !shape.isLoading &&
+        shape.error === null &&
+        shape.more === null &&
+        shape.notice === null;
+      if (!isBare) {
+        childStates.set(key, children);
+        childShapes.set(key, shape);
+      }
+      if (isBare || !expandedKeys.has(key)) continue;
       // The children of the table are `Child`s.
       const entries = childEntries(key, shape, (child) => childKey(child as Child));
       drawnRows += entries.length;
@@ -970,9 +1011,9 @@ export function DataTable<Item, Child = never>({
 
   // What a press on a row asks for, and whether a row expands, is read when it is asked: the rows
   // are kept while the screen renders, and the functions it passes are new each time.
-  const latest = useRef({ expandedKeys, onExpandedChange, childStates, childRows, childKey });
+  const latest = useRef({ expandedKeys, onExpandedChange, childStates, childKey });
   useLayoutEffect(() => {
-    latest.current = { expandedKeys, onExpandedChange, childStates, childRows, childKey };
+    latest.current = { expandedKeys, onExpandedChange, childStates, childKey };
   });
   const turn = useCallback((key: string) => {
     const { expandedKeys: open, onExpandedChange: change } = latest.current;
@@ -987,29 +1028,28 @@ export function DataTable<Item, Child = never>({
   const leadOn = useCallback((key: string) => {
     latest.current.childStates.get(key)?.more?.onAction();
   }, []);
+  const answerNotice = useCallback((key: string) => {
+    latest.current.childStates.get(key)?.notice?.onAction();
+  }, []);
   const keyOfChild = useCallback(
     // The children of the table are `Child`s.
     (child: unknown) => latest.current.childKey?.(child as Child) ?? "",
     [],
   );
-  // Whether a row expands: it does when the screen gives it children, even none yet.
-  const expandsOf = useCallback(
-    (item: unknown) => latest.current.childRows?.(item as Item) !== undefined,
-    [],
-  );
-  // The rows that do not expand, in one word: the rows are built again when it changes.
-  const leaves = expandable
-    ? shown
-        .filter((item) => childRows(item) === undefined)
-        .map(rowKey)
-        .join(CHILD)
-    : "";
+  // The rows that do not expand, in one word: the rows are built again when it changes, and read
+  // whether they expand from it, in the render that built them.
+  const leaves = leafKeys.join(CHILD);
+  const leafSet = useMemo(() => new Set(leaves === "" ? [] : leaves.split(CHILD)), [leaves]);
 
   const childRow = useCallback(
     (parent: string, child: ChildEntry): ReactElement => {
       // A row that cannot be selected is still focused and pressed: it is disabled for the
       // selection alone.
       const unselectable = { isDisabled: true, disabledBehavior: "selection" } as const;
+      const status = {
+        ...unselectable,
+        render: (domProps: object) => <div {...unmarked(domProps)} />,
+      } as const;
       switch (child.kind) {
         case "child":
           return (
@@ -1020,7 +1060,7 @@ export function DataTable<Item, Child = never>({
               {...(childSelectable ? {} : unselectable)}
               render={(domProps) => (
                 <ItemContext value={child.item}>
-                  <div {...domProps} />
+                  <div {...(childSelectable ? domProps : unmarked(domProps))} />
                 </ItemContext>
               )}
             >
@@ -1029,7 +1069,13 @@ export function DataTable<Item, Child = never>({
           );
         case "loading":
           return (
-            <Row id={child.key} isDisabled data-part="loading-row" className={cx(styles.row)}>
+            <Row
+              id={child.key}
+              isDisabled
+              data-part="loading-row"
+              className={cx(styles.row)}
+              render={(domProps) => <div {...unmarked(domProps)} />}
+            >
               {loadingCells}
             </Row>
           );
@@ -1039,7 +1085,7 @@ export function DataTable<Item, Child = never>({
               id={child.key}
               data-part="error-row"
               className={cx(styles.row)}
-              {...unselectable}
+              {...status}
               onAction={() => {
                 retry(parent);
               }}
@@ -1065,13 +1111,44 @@ export function DataTable<Item, Child = never>({
               </Cell>
             </Row>
           );
+        case "notice":
+          return (
+            <Row
+              id={child.key}
+              data-part="notice-row"
+              className={cx(styles.row)}
+              {...status}
+              onAction={() => {
+                answerNotice(parent);
+              }}
+            >
+              <Cell
+                colSpan={cellCount}
+                data-pinned=""
+                data-kind="status"
+                className={cx(styles.cell)}
+              >
+                <span className={styles.status} data-tone="neutral">
+                  <span className={styles.value}>{child.text}</span>
+                  <Button
+                    variant="quiet"
+                    onPress={() => {
+                      answerNotice(parent);
+                    }}
+                  >
+                    {child.action}
+                  </Button>
+                </span>
+              </Cell>
+            </Row>
+          );
         case "more":
           return (
             <Row
               id={child.key}
               data-part="more-row"
               className={cx(styles.row)}
-              {...unselectable}
+              {...status}
               onAction={() => {
                 leadOn(parent);
               }}
@@ -1091,7 +1168,7 @@ export function DataTable<Item, Child = never>({
           );
       }
     },
-    [childCells, loadingCells, cellCount, childSelectable, retry, leadOn],
+    [childCells, loadingCells, cellCount, childSelectable, retry, leadOn, answerNotice],
   );
   // Told to the rows after every render: each hears of its own children, when they changed.
   const [store] = useState(() => new ChildStore());
@@ -1109,10 +1186,10 @@ export function DataTable<Item, Child = never>({
     if (!expandable) return null;
     const unselectable = { isDisabled: true, disabledBehavior: "selection" } as const;
     return (
-      <Collection items={shown} dependencies={[rowCells, parentSelectable, leaves]}>
+      <Collection items={shown} dependencies={[rowCells, parentSelectable, leafSet]}>
         {(item) => {
           const key = keyOf.current(item);
-          const expands = expandsOf(item);
+          const expands = !leafSet.has(key);
           return (
             <Row
               id={key}
@@ -1136,7 +1213,7 @@ export function DataTable<Item, Child = never>({
                   })}
               render={(domProps) => (
                 <ItemContext value={item}>
-                  <div {...domProps} />
+                  <div {...(parentSelectable ? domProps : unmarked(domProps))} />
                 </ItemContext>
               )}
             >
@@ -1147,7 +1224,7 @@ export function DataTable<Item, Child = never>({
         }}
       </Collection>
     );
-  }, [expandable, shown, rowCells, parentSelectable, leaves, expandsOf, turn]);
+  }, [expandable, shown, rowCells, parentSelectable, leafSet, turn]);
   const selectedKeys: string[] = [];
   if (parentSelectable && selectedKey !== undefined && selectedKey !== null) {
     selectedKeys.push(selectedKey);

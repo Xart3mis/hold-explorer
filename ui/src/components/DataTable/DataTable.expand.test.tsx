@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { Profiler, useState } from "react";
+import { TableLayout } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
@@ -74,6 +75,7 @@ interface TreeProps {
   onChildSelectionChange?: (member: Member) => void;
   selectedChildKey?: string | null;
   onLoadMore?: () => void;
+  resultKey?: string;
   countText?: (shown: number, total: number) => string;
   height?: "fill" | { maxRows: number };
 }
@@ -291,6 +293,40 @@ describe("DataTable with rows that expand", () => {
   });
 
   it(
+    "says why a row has no children to show, with what to do, pressed or chosen with Enter",
+    SLOW,
+    async () => {
+      const onAction = vi.fn();
+      const user = userEvent.setup();
+      render(
+        <Tree
+          initiallyExpanded={["PIPING"]}
+          childRows={(group) =>
+            group.key === "PIPING"
+              ? {
+                  rows: [],
+                  notice: { text: "The filters keep none of it.", action: "Collapse", onAction },
+                }
+              : readChildren(group)
+          }
+        />,
+      );
+      const row = treeRows()[1];
+      if (row === undefined) throw new Error("No notice row.");
+      expect(row).toHaveAttribute("data-part", "notice-row");
+      expect(row).toHaveAttribute("aria-level", "2");
+      expect(row).toHaveTextContent("The filters keep none of it.");
+      await user.click(within(row).getByRole("button", { name: "Collapse" }));
+      expect(onAction).toHaveBeenCalledTimes(1);
+      rowNamed("Piping").focus();
+      await user.keyboard("{ArrowDown}");
+      expect(row).toHaveFocus();
+      await user.keyboard("{Enter}");
+      expect(onAction).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it(
     "selects child rows, never a group, and marks every row of the child that is selected",
     SLOW,
     async () => {
@@ -313,6 +349,8 @@ describe("DataTable with rows that expand", () => {
       const marked = treeRows().filter((row) => row.getAttribute("aria-selected") === "true");
       expect(marked).toHaveLength(2);
       expect(rowNamed("Piping")).not.toHaveAttribute("aria-selected", "true");
+      // A group cannot be selected, so it does not say it is not selected.
+      expect(rowNamed("Piping")).not.toHaveAttribute("aria-selected");
 
       await user.click(within(rowNamed("STRESS-LINE-001")).getByText("STRESS-LINE-001"));
       expect(onChildSelectionChange).toHaveBeenCalledWith({ id: "STRESS-LINE-001", holds: 1 });
@@ -348,6 +386,54 @@ describe("DataTable with rows that expand", () => {
     expect(onExpandedChange).not.toHaveBeenCalled();
     await user.click(chevron("Stress"));
     expect(onExpandedChange).toHaveBeenLastCalledWith(new Set(["STRESS"]));
+  });
+
+  it("turns a row whose children it has in one render of its own, and no layout more", () => {
+    let commits = 0;
+    // The children of every row are there from the start, the same at every render, as a screen
+    // holds them once it read them.
+    const held = new Map(groups.map((group) => [group.key, readChildren(group)]));
+    // The table asks for the key of every row once when it renders.
+    const rowKey = vi.fn((group: Group) => group.key);
+    const table = (expanded: ReadonlySet<string>) => (
+      <Profiler
+        id="tree"
+        onRender={() => {
+          commits += 1;
+        }}
+      >
+        <DataTable
+          aria-label="Holds by discipline"
+          columns={columns}
+          rows={groups}
+          rowKey={rowKey}
+          childRows={(group) => held.get(group.key)}
+          childKey={(member) => member.id}
+          childColumns={childColumns}
+          expandedKeys={expanded}
+          onExpandedChange={() => undefined}
+        />
+      </Profiler>
+    );
+    const { rerender } = render(table(new Set()));
+    rerender(table(new Set(["PIPING"])));
+    expect(rowNamed("PIPING-LINE-001")).toBeInTheDocument();
+    const layouts = vi.spyOn(TableLayout.prototype, "update");
+    for (const expanded of [new Set<string>(), new Set(["PIPING"])]) {
+      commits = 0;
+      rowKey.mockClear();
+      layouts.mockClear();
+      rerender(table(expanded));
+      expect(screen.queryAllByRole("rowheader", { name: "PIPING-LINE-001" })).toHaveLength(
+        expanded.size,
+      );
+      // One render of the table, which changes the rows that are drawn, and no other.
+      expect(rowKey).toHaveBeenCalledTimes(groups.length);
+      // The library lays out the rows of that render, and once more when it has measured them;
+      // children that came into the table later would cost a render and a layout more.
+      expect(layouts.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(commits).toBeLessThanOrEqual(2);
+    }
   });
 
   it("counts the groups in its count line, not their child rows", () => {
@@ -463,6 +549,33 @@ describe("DataTable with rows that expand, in a viewport", () => {
     scrollTable(screen.getByRole("treegrid"), 200 * ROW);
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
+
+  it(
+    "returns to its top for another result with a row expanded, and finds that result's end",
+    SLOW,
+    () => {
+      const onLoadMore = vi.fn();
+      const props = {
+        rows: many.slice(0, 5),
+        childRows: twoHundred,
+        initiallyExpanded: ["G01"],
+        onLoadMore,
+        height: "fill",
+      } as const;
+      const { rerender } = render(<Tree {...props} resultKey="one" />);
+      const grid = screen.getByRole("treegrid");
+      scrollTable(grid, 200 * ROW);
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+      rerender(<Tree {...props} rows={[...props.rows]} resultKey="two" />);
+      expect(grid.scrollTop).toBe(0);
+      scrollTable(grid, 0);
+      expect(rowNamed("G01-LINE-001")).toBeInTheDocument();
+      // The child rows are counted in again: the end of the other result is as far down.
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+      scrollTable(grid, 200 * ROW);
+      expect(onLoadMore).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("keeps the focused child row in the document while it is scrolled away", SLOW, async () => {
     const user = userEvent.setup();

@@ -243,8 +243,10 @@ describe("BreakdownPage", () => {
       const error = await waitFor(() =>
         must(table.querySelector<HTMLElement>("[data-part='error-row']"), "the error row"),
       );
-      expect(error).toHaveTextContent(text.linesError);
-      expect(error).toHaveTextContent("locked by another program");
+      // The command's own message says what happened and what to do; the row is under its group.
+      expect(error).toHaveTextContent(
+        "The workspace file could not be read (it is locked by another program). Close the other program, then try again.",
+      );
       fail = false;
       const calls = detail.mock.calls.length;
       await user.click(within(error).getByRole("button", { name: en.common.retry }));
@@ -254,6 +256,46 @@ describe("BreakdownPage", () => {
       expect(detail.mock.calls.length).toBe(calls + 1);
     },
   );
+
+  it("says when the filters no longer keep an expanded group, and collapses it", SLOW, async () => {
+    const { user, router } = renderBreakdown({
+      path: "/breakdown?mode=list&by=Discipline&open=Civil",
+      groupDetail: ({ key }) => (key === "Civil" ? null : groupDetail(key)),
+    });
+    const table = await groupTable();
+    const notice = await waitFor(() =>
+      must(table.querySelector<HTMLElement>("[data-part='notice-row']"), "the notice row"),
+    );
+    expect(notice).toHaveTextContent(text.groupGone);
+    await user.click(within(notice).getByRole("button", { name: text.collapse }));
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?mode=list&by=Discipline");
+    });
+    expect(rowNamed(table, "Civil")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("expands none of the groups of before while another dimension is read", SLOW, async () => {
+    const {
+      user,
+      router,
+      groupDetail: detail,
+    } = renderBreakdown({
+      breakdown: ({ dim }) =>
+        dim === "Discipline" ? breakdownGroups() : new Promise(() => undefined),
+    });
+    const table = await groupTable();
+    await findRow(table, "Piping");
+    await choose(user, new RegExp(text.groupBy), en.import.field.HoldType);
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?mode=list&by=HoldType");
+    });
+    // The groups of the discipline stay, dimmed, and do not expand.
+    const piping = rowNamed(table, "Piping");
+    expect(piping).not.toHaveAttribute("aria-expanded");
+    await user.click(piping);
+    expect(router.state.location.search).toBe("?mode=list&by=HoldType");
+    expect(detail).not.toHaveBeenCalled();
+  });
 
   it("opens a line of a group in the detail panel", SLOW, async () => {
     const { user, router } = renderBreakdown({

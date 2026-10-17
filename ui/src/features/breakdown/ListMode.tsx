@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { dimName } from "../../app/filters/dims";
+import { dimId, dimName } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
@@ -178,7 +178,13 @@ export function ListMode({
   // was expanded is kept read while the result is the same, so one that is closed and opened
   // again shows its lines at once; under another result only the groups open in it are read.
   const shownKeys = useMemo(() => new Set(groups.map(groupKeyOf)), [groups]);
-  const open = useMemo(() => new Set(state.open), [state.open]);
+  // The address is read anew at every render; the set of open groups stays the same object while
+  // the groups it names are the same.
+  const openKeys = JSON.stringify(state.open);
+  const open = useMemo(() => new Set(JSON.parse(openKeys) as string[]), [openKeys]);
+  // While another dimension is read, the groups of before stay on screen, dimmed; they are of the
+  // dimension before, so none of them expands or is read under the new one.
+  const isCurrent = dimId(shownDim) === dimId(state.by);
   const [visited, setVisited] = useState<{ result: string; keys: readonly string[] }>({
     result: resultKey,
     keys: state.open,
@@ -191,9 +197,9 @@ export function ListMode({
       keys: isNewResult ? state.open : [...visited.keys, ...unread],
     });
   }
-  const reading = (isNewResult ? state.open : [...visited.keys, ...unread]).filter((key) =>
-    shownKeys.has(key),
-  );
+  const reading = isCurrent
+    ? (isNewResult ? state.open : [...visited.keys, ...unread]).filter((key) => shownKeys.has(key))
+    : [];
 
   // When the panel closes, the focus goes back to the line that opened it, or to the table when
   // that row is no longer there.
@@ -306,16 +312,34 @@ export function ListMode({
     });
   };
 
-  const childRows = (group: Group): DataTableChildren<LineRow> => {
-    if (!open.has(group.key)) return COLLAPSED;
+  /**
+   * The children of a group: those it was read with, also while it is collapsed, so that the
+   * table keeps them and turns the group in one render. A group of the dimension before does not
+   * expand.
+   */
+  const childRows = (group: Group): DataTableChildren<LineRow> | undefined => {
+    if (!isCurrent) return undefined;
+    const isOpen = open.has(group.key);
     const held = readings.get(group.key);
-    if (held === undefined) return { rows: NO_LINES, isLoading: true };
+    if (held === undefined) return isOpen ? { rows: NO_LINES, isLoading: true } : COLLAPSED;
     if (held.error !== null) {
+      // The command's message says what happened and what to do; the row stands under its group.
       return {
         rows: NO_LINES,
-        error: {
-          text: `${t("breakdown.linesError")} ${asCommandError(held.error).message}`,
-          onRetry: held.refetch,
+        error: { text: asCommandError(held.error).message, onRetry: held.refetch },
+      };
+    }
+    if (held.detail === null) {
+      return {
+        rows: NO_LINES,
+        notice: {
+          text: t("breakdown.groupGone"),
+          action: t("breakdown.collapse"),
+          onAction: () => {
+            const next = new Set(open);
+            next.delete(group.key);
+            setOpen(next);
+          },
         },
       };
     }
@@ -343,7 +367,7 @@ export function ListMode({
         <GroupReader
           key={key}
           spec={spec}
-          dim={state.by}
+          dim={shownDim}
           groupKey={key}
           onRead={onRead}
           onForget={onForget}
@@ -358,7 +382,9 @@ export function ListMode({
         childKey={lineKeyOf}
         childColumns={childColumns}
         expandedKeys={open}
-        onExpandedChange={setOpen}
+        onExpandedChange={(keys) => {
+          if (isCurrent) setOpen(keys);
+        }}
         selectedChildKey={selection?.kind === "line" ? selection.lineId : null}
         onChildSelectionChange={(line) => {
           if (byEnter.current) focus.askForHeading();
