@@ -15,6 +15,7 @@ import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
 import { inApp, onFileDrag } from "../../api/window";
+import { useSelectionFollowsView } from "../../app/actions/selection";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
@@ -168,6 +169,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
 
   const open = start.open;
   const home = open === null ? WELCOME_PATH : OVERVIEW_PATH;
+  useSelectionFollowsView(open);
 
   // The toast region is rendered beside the layout. It learns from the root element where the
   // content area starts; see app.css.

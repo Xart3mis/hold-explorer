@@ -30,10 +30,10 @@ export function useWorkspaceActions() {
   const openWorkspace = useMutation(
     workspaceAction(client, {
       kind: "switching",
-      mutationFn: (id: string) => {
+      onAsk: () => {
         leave.forWorkspace();
-        return workspaceApi.workspaceOpen(id);
       },
+      mutationFn: (id: string) => workspaceApi.workspaceOpen(id),
       onSuccess: (open) => {
         showOpened(client, open);
       },
@@ -43,10 +43,10 @@ export function useWorkspaceActions() {
   const createWorkspace = useMutation(
     workspaceAction(client, {
       kind: "changing",
-      mutationFn: (name: string) => {
+      onAsk: () => {
         leave.forWorkspace();
-        return workspaceApi.workspaceCreate(name);
       },
+      mutationFn: (name: string) => workspaceApi.workspaceCreate(name),
       onSuccess: (open) => {
         showOpened(client, open);
         return readList(client);

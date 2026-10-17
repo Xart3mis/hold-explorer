@@ -16,10 +16,10 @@ export function useDemo() {
   const openDemo = useMutation(
     workspaceAction(client, {
       kind: "changing",
-      mutationFn: () => {
+      onAsk: () => {
         leave.forWorkspace();
-        return workspaceApi.demoCreate();
       },
+      mutationFn: () => workspaceApi.demoCreate(),
       onSuccess: (open) => {
         showOpened(client, open);
         return readList(client);

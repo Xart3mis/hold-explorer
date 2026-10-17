@@ -426,6 +426,26 @@ describe("useSnapshotQuery", () => {
     expect(gone?.data).toBeUndefined();
   });
 
+  it("lists the workspace the Rust side holds, as an action that opens one does", async () => {
+    const read = vi.fn<Read>((view) =>
+      view.workspace_id === otherWorkspace.id
+        ? Promise.resolve("lines of the other")
+        : Promise.reject(viewChanged()),
+    );
+    const start = openStart();
+    // The Rust side holds a workspace the cached list does not know yet.
+    const held = opened({ workspace: { ...otherWorkspace, snapshot_count: 7 } });
+    const { result } = screenWith(read, start, () => held);
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of the other");
+    });
+    const cached = queryClient.getQueryData<AppStart>(keys.start);
+    expect(cached?.open).toEqual(held);
+    expect(cached?.list.workspaces.find((entry) => entry.id === otherWorkspace.id)).toEqual(
+      held.workspace,
+    );
+  });
+
   it("has the shell say, once, that the view on screen was brought back in step, however many readings found out", async () => {
     const read = vi.fn<Read>((view) =>
       view.snapshot_id === 1 ? Promise.resolve("lines of 1") : Promise.reject(viewChanged()),

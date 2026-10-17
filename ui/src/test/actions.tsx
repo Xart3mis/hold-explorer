@@ -16,8 +16,11 @@ export function wrapper({ children }: { children: ReactNode }) {
   return wrapperAt("/")({ children });
 }
 
+/** Where the router of a test starts: an address, or an address with what was passed to it. */
+type Entry = string | { pathname: string; search?: string; hash?: string; state?: unknown };
+
 /** The same, on a router at `path`. */
-function wrapperAt(path: string) {
+function wrapperAt(path: Entry) {
   return function At({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
@@ -30,17 +33,20 @@ function wrapperAt(path: string) {
 /**
  * The application start beside the actions a test is about (the hooks of ui/src/app/actions/),
  * once the start has answered, with a workspace open. The router is at `path`, and `search` is
- * the search text of the address the router is at.
+ * the search text of the address the router is at, and `location` that address.
  */
 export async function loaded<Actions extends object>(
   useActions: () => Actions,
   handlers: Handlers,
-  path = "/",
+  path: Entry = "/",
 ) {
   const start = openStart();
   mockCommands({ app_start: () => start, workspace_list: () => start.list, ...handlers });
   const hook = renderHook(
-    () => ({ ...useStart(), ...useActions(), search: useLocation().search }),
+    () => {
+      const location = useLocation();
+      return { ...useStart(), ...useActions(), search: location.search, location };
+    },
     { wrapper: wrapperAt(path) },
   );
   await waitFor(() => {

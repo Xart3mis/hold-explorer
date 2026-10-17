@@ -1,7 +1,12 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LineDetail } from "../../bindings/LineDetail";
+import { keys } from "../../api/keys";
+import { useImportCommit } from "../../app/actions/import";
+import { queryClient } from "../../app/query";
+import type { AppStart } from "../../bindings/AppStart";
 import type { ViewRef } from "../../bindings/ViewRef";
+import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
 import { expectAccessible } from "../../test/axe";
@@ -518,6 +523,82 @@ describe("The panel and the snapshot in view", () => {
       });
       unmount();
     }
+  });
+
+  /** A data page with nothing but a button that commits an import, as the review page does. */
+  function Committing({ into }: { into: WorkspaceOpen }) {
+    const { importCommit } = useImportCommit();
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          importCommit.mutate({
+            request: {
+              target: { kind: "Existing", id: into.workspace.id },
+              taken_at: "2026-10-14T08:00:00",
+              date_edited: false,
+              replace: null,
+            },
+            onProgress: () => undefined,
+          });
+        }}
+      >
+        Commit
+      </button>
+    );
+  }
+
+  it(
+    "closes when an import that ends meanwhile selects another snapshot or workspace",
+    SLOW,
+    async () => {
+      for (const [selected, into] of [
+        ["hold=1", opened({ selected: 1 })],
+        [`line=${LINE}`, opened({ workspace: otherWorkspace })],
+      ] as const) {
+        const snapshot = must(into.snapshots[0], "a snapshot");
+        const { user, router, unmount } = renderApp({
+          start: openStart(),
+          path: `/lines?rows=holds&${selected}`,
+          pages: { lines: <Committing into={into} />, overview: <p />, settings: <p /> },
+          handlers: { import_commit: () => ({ open: into, snapshot }) },
+        });
+        await panel(selected.startsWith("hold") ? text.holdTitle : LINE);
+        await user.click(screen.getByRole("button", { name: "Commit" }));
+        await waitFor(() => {
+          expect(router.state.location.search).toBe("?rows=holds");
+          expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+        });
+        unmount();
+      }
+    },
+  );
+
+  it("closes on a hold when the view is brought in step with another snapshot", SLOW, async () => {
+    // The Rust side holds the older snapshot: every reading of the newer one is refused.
+    const hold = ({ position, view }: { position: number; view: ViewRef }) => {
+      if (view.snapshot_id !== 1) throw commandFailure("ViewChanged", "Another view is open.");
+      return holdRef(position);
+    };
+    const { router } = renderApp({
+      start: openStart(),
+      path: "/lines?rows=holds&hold=1",
+      pages: { lines: <p />, overview: <p />, settings: <p /> },
+      handlers: {
+        hold_detail: hold,
+        filter_options: () => filterOptions(),
+        workspace_current: () => opened({ selected: 1 }),
+      },
+    });
+    await waitFor(
+      () => {
+        expect(router.state.location.search).toBe("?rows=holds");
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
+    // The start took the Rust side's word, which is why the hold went.
+    expect(queryClient.getQueryData<AppStart>(keys.start)?.open?.selected).toBe(1);
   });
 
   it("reads a line again for the other snapshot, dimmed meanwhile", SLOW, async () => {

@@ -114,6 +114,7 @@ import type { CommandError } from "../bindings/CommandError";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
+import { listed } from "./actions/start";
 import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
@@ -247,8 +248,13 @@ async function readForView<Data>(
       // Another reading of the same screen may have brought the start in step a moment ago. The
       // user is told once, by the reading that changes what is on screen.
       const moved = !isSameView(shownView(client), viewOf(held));
+      // As an action that opens a workspace does, the list names it as the Rust side has it.
       client.setQueryData<AppStart>(keys.start, (start) =>
-        start === undefined ? start : { ...start, open: held },
+        start === undefined
+          ? start
+          : held === null
+            ? { ...start, open: null }
+            : listed({ ...start, open: held }, held.workspace),
       );
       if (moved) {
         notify({
@@ -507,6 +513,12 @@ export interface WorkspaceAction<Variables, Data> {
    * others: a new workspace, another name, an import, the demo.
    */
   kind: "switching" | "changing";
+  /**
+   * Called when the action is asked for, also when it then waits its turn behind another: what
+   * must change at once, such as the selection of the detail panel, which is taken out of the
+   * address before anything of another view can be read.
+   */
+  onAsk?: (variables: Variables) => void;
   /** Sends the command. */
   mutationFn: (variables: Variables) => Promise<Data>;
   /** Writes what the command returned into the cached start. The action lasts until it is done. */
@@ -524,13 +536,16 @@ export interface WorkspaceAction<Variables, Data> {
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
-  { kind, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
+  { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
 ): UseMutationOptions<Data, Error, Variables> {
   return {
     mutationKey: keys[kind],
     scope: WORKSPACE_SCOPE,
     mutationFn,
-    onMutate: () => client.cancelQueries({ queryKey: keys.snapshots }),
+    onMutate: (variables: Variables) => {
+      onAsk?.(variables);
+      return client.cancelQueries({ queryKey: keys.snapshots });
+    },
     ...(onSuccess === undefined
       ? {}
       : { onSuccess: (data: Data, variables: Variables) => onSuccess(data, variables) }),

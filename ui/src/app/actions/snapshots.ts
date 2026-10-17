@@ -11,7 +11,8 @@ import { showOpened } from "./start";
  * A hold selected for the detail panel is taken out of the address as the other snapshot is asked
  * for, before anything of that snapshot can be read: its position names another hold there, or
  * none. A line stays selected, and the panel reads it again for the snapshot that is shown. The
- * address is the one the snapshot was chosen at; a selection that fails leaves the hold closed.
+ * address is the one the snapshot was chosen at, as it is when it is chosen; a selection that
+ * fails leaves the hold closed.
  */
 export function useSnapshotActions() {
   const client = useQueryClient();
@@ -20,10 +21,10 @@ export function useSnapshotActions() {
   const selectSnapshot = useMutation(
     workspaceAction(client, {
       kind: "switching",
-      mutationFn: (id: number) => {
+      onAsk: () => {
         leave.forSnapshot();
-        return workspaceApi.snapshotSelect(id);
       },
+      mutationFn: (id: number) => workspaceApi.snapshotSelect(id),
       onSuccess: (open) => {
         showOpened(client, open);
       },
