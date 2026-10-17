@@ -10,6 +10,12 @@
 
   display: flex;
   flex-direction: column;
+
+  /*
+   * A whole number of pixels: the library lays the columns out in the scroller's width rounded
+   * to a pixel, and a scroller a fraction narrower than that would scroll sideways for nothing.
+   */
+  inline-size: round(down, 100%, var(--size-pixel));
   min-inline-size: 0;
 }
 

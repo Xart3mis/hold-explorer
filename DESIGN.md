@@ -644,6 +644,7 @@ The focus ring is `outline: var(--focus-ring-width) solid var(--color-focus-ring
 | `--size-tooltip-max-width` | `280px` | Widest tooltip; longer text wraps. |
 | `--size-popover-width` | `320px` | Width of a popover. It does not change with what the popover holds. |
 | `--size-option-list-rows` | `8` | How many rows of an option list show before the list scrolls. |
+| `--size-pixel` | `1px` | The step a table's width is rounded down to, so the scroller is a whole number of pixels wide and lays out no fraction of a pixel past its edge. |
 | `--opacity-stale` | `0.6` | Opacity of the previous render while a refetch is in flight. |
 
 Icons come from one outline set, Lucide (npm `lucide-react`, ISC license), drawn at `--size-icon` with a stroke of `--size-icon-stroke` in `currentColor`. An icon never appears without a text label or an accessible name. The one exception is the separator of a breadcrumb, which stands between two labels and is decoration.

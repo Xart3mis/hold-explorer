@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -1043,6 +1045,17 @@ describe("DataTable narrower than its columns", () => {
       scrollTable(grid, 0);
     });
     expect(grid.closest("[data-scrolled-x]")).not.toBeNull();
+  });
+});
+
+describe("DataTable in a container of a fractional width", () => {
+  it("takes a whole number of pixels, so its columns never overflow by a fraction", () => {
+    // The library lays the columns out in the scroller's width rounded to a whole pixel. Given
+    // 1648.8 pixels, it would lay out 1634 in a scroller of 1633.8 and draw a sideways
+    // scrollbar for nothing. A layout cannot be measured here, so the rule is read.
+    const stylesheet = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
+    const root = /\.root\s*\{([^}]*)\}/.exec(stylesheet)?.[1] ?? "";
+    expect(root).toMatch(/inline-size:\s*round\(down,\s*100%,\s*var\(--size-pixel\)\);/);
   });
 });
 

@@ -83,6 +83,7 @@
   --size-tooltip-max-width: 280px;
   --size-popover-width: 320px;
   --size-option-list-rows: 8;
+  --size-pixel: 1px;
   --opacity-stale: 0.6;
   --duration-fast: 150ms;
   --duration-base: 200ms;
