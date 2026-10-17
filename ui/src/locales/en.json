@@ -503,6 +503,8 @@
         "Done": "Opening {{workspace}}."
       },
       "running": "An import that has started runs to its end. If it fails, nothing is changed.",
+      "changedTitle": "The choices changed as Import was pressed",
+      "changedText": "Nothing was imported. The workspace is checked again for the date and the workspace as they are now. Look them over, then import again.",
       "progress": "Import in progress",
       "done": "Imported into {{workspace}}: {{holds}}, {{open}} open.",
       "doneReplaced": "Imported into {{workspace}}: {{holds}}, {{open}} open. The snapshot of {{replaced}} was replaced."

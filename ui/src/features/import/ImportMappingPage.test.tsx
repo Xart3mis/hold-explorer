@@ -287,6 +287,31 @@ describe("the mapping page", () => {
     },
   );
 
+  it("while the file is read, shows the spinner on Continue alone and keeps the other buttons inert", async () => {
+    const { user } = openFlow("/import/mapping", {
+      draft: exportDraft(),
+      handlers: { import_review: () => new Promise<ImportReview>(() => undefined) },
+    });
+    const main = await mapping();
+    const next = within(main).getByRole("button", { name: text.continue });
+    await user.click(next);
+    await waitFor(() => {
+      expect(next.querySelector('[data-part="spinner"]')).not.toBeNull();
+    });
+    expect(next).toHaveAttribute("aria-busy", "true");
+    const others = [
+      within(main).getByRole("button", { name: en.import.chooseSheet }),
+      within(main).getByRole("button", { name: text.reset }),
+      within(main).getByRole("button", { name: en.common.cancel }),
+    ];
+    for (const other of others) {
+      expect(other).toHaveAttribute("data-inert");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(other).not.toBeDisabled();
+      expect(other.querySelector('[data-part="spinner"]')).toBeNull();
+    }
+  });
+
   it("offers another sheet only for a workbook that has several", async () => {
     const first = openFlow("/import/mapping", { draft: exportDraft() });
     const main = await mapping();

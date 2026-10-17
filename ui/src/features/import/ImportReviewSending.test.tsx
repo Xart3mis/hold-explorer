@@ -6,6 +6,7 @@ import type { ArgsOf } from "../../api/commands";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportDone } from "../../bindings/ImportDone";
+import type { ImportReview } from "../../bindings/ImportReview";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import en from "../../locales/en.json";
 import { otherWorkspace } from "../../test/fixtures";
@@ -30,6 +31,7 @@ import {
   sent,
 } from "../../test/review";
 import { SLOW } from "../../test/slow";
+import type { ImportChoices } from "./draft";
 
 const text = en.import.review;
 const sameDayChoice = new RegExp(` ${text.target.sameDayLabel}$`);
@@ -370,6 +372,130 @@ describe("a choice to replace a snapshot", () => {
     // The date is typed again as it was: nothing changed, so nothing is dropped.
     await enter(user, main, text.date.date, "2026-10-14");
     expect(await press(user, main, commit)).toMatchObject({ replace: sameDaySnapshot.id });
+  });
+});
+
+describe("a choice that changes in the moment Import is pressed", () => {
+  const PROPOSED: ImportChoices = {
+    fields: null,
+    date: null,
+    time: null,
+    confirmed: false,
+    target: null,
+    newName: null,
+    replace: null,
+  };
+  const changedTitle = text.changedTitle;
+
+  /**
+   * Changes a choice and presses Import in the same moment: the choice has reached the cache, and
+   * the page has not been rendered again with it.
+   */
+  function changeAndPress(main: HTMLElement, chosen: Partial<ImportChoices>) {
+    act(() => {
+      queryClient.setQueryData<ImportChoices>(keys.importChoices, (held) => ({
+        ...PROPOSED,
+        ...held,
+        ...chosen,
+      }));
+      importButton(main).click();
+    });
+  }
+
+  async function start(found: ImportReview, check?: (args: CheckArgs) => TargetCheck) {
+    const commit = committing();
+    const app = reviewing(found, {
+      import_commit: commit,
+      ...(check === undefined ? {} : { import_check_target: check }),
+    });
+    const main = await ready();
+    return { ...app, main, commit };
+  }
+
+  async function saysWhy(main: HTMLElement) {
+    expect(await within(main).findByText(changedTitle)).toBeVisible();
+    expect(within(main).getByText(text.changedText)).toBeVisible();
+  }
+
+  it("sends nothing for another time, checks the workspace again, and says why", SLOW, async () => {
+    const { main, commit, check, user } = await start(review());
+    check.mockClear();
+    changeAndPress(main, { date: "2026-10-14", time: "09:00" });
+    await waitFor(() => {
+      expect(check).toHaveBeenLastCalledWith({
+        target: { kind: "Existing", id: unit573.id },
+        takenAt: "2026-10-14T09:00:00",
+      });
+    });
+    await saysWhy(main);
+    expect(commit).not.toHaveBeenCalled();
+    // Pressed again, Import sends what is on screen, and the reason goes.
+    expect(await press(user, main, commit)).toMatchObject({ taken_at: "2026-10-14T09:00:00" });
+  });
+
+  it("sends nothing for a confirmation taken back, checks again, and says why", SLOW, async () => {
+    const commit = committing();
+    const { user, check } = reviewing(reviewToConfirm(), { import_commit: commit });
+    const main = await reviewPage();
+    await user.click(await within(main).findByRole("checkbox", { name: text.date.confirm }));
+    await waitFor(() => {
+      expect(importButton(main)).toBeEnabled();
+    });
+    check.mockClear();
+    changeAndPress(main, { confirmed: false });
+    await waitFor(() => {
+      expect(check).toHaveBeenCalledTimes(1);
+    });
+    await saysWhy(main);
+    expect(commit).not.toHaveBeenCalled();
+    expect(importButton(main)).toBeDisabled();
+  });
+
+  it("sends nothing for another target, checks that one, and says why", SLOW, async () => {
+    const { main, commit, check } = await start(review());
+    check.mockClear();
+    changeAndPress(main, { target: otherWorkspace.id });
+    await waitFor(() => {
+      expect(check).toHaveBeenLastCalledWith({
+        target: { kind: "Existing", id: otherWorkspace.id },
+        takenAt: "2026-10-14T08:00:00",
+      });
+    });
+    await saysWhy(main);
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing for a snapshot to replace, checks again, and says why", SLOW, async () => {
+    const sameDay = vi.fn<(args: CheckArgs) => TargetCheck>(() => ({
+      already_imported: null,
+      same_day: [sameDaySnapshot],
+    }));
+    const { main, commit, user } = await start(review(), sameDay);
+    sameDay.mockClear();
+    changeAndPress(main, { replace: sameDaySnapshot.id });
+    await waitFor(() => {
+      expect(sameDay).toHaveBeenCalledTimes(1);
+    });
+    await saysWhy(main);
+    expect(commit).not.toHaveBeenCalled();
+    // The page now shows the choice to replace, and the next press sends it.
+    expect(await press(user, main, commit)).toMatchObject({ replace: sameDaySnapshot.id });
+  });
+
+  it("sends the commit as it is when nothing changed", SLOW, async () => {
+    const { main, commit, check } = await start(review());
+    check.mockClear();
+    changeAndPress(main, {});
+    await waitFor(() => {
+      expect(commit).toHaveBeenCalledTimes(1);
+    });
+    expect(sent(commit)).toMatchObject({
+      target: { kind: "Existing", id: unit573.id },
+      taken_at: "2026-10-14T08:00:00",
+      replace: null,
+    });
+    expect(check).not.toHaveBeenCalled();
+    expect(within(main).queryByText(changedTitle)).not.toBeInTheDocument();
   });
 });
 

@@ -79,6 +79,8 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const { openWorkspace } = useWorkspaceActions();
   const cancel = useLeaveImport();
   const [phase, setPhase] = useState<ImportPhase | null>(null);
+  // Import was pressed while a choice changed, and nothing was sent; see `commit`.
+  const [changed, setChanged] = useState(false);
   // Whether the page is still shown when a commit that it started comes back.
   const shown = useRef(true);
   useEffect(() => {
@@ -163,6 +165,7 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const decide = (chosen: Partial<ImportChoices>) => {
     // A choice that is made after a failed import answers it: its error no longer applies.
     if (importCommit.isError) importCommit.reset();
+    setChanged(false);
     // A snapshot to replace was chosen among those of one workspace on one day. Once the date
     // or the target is another, that choice is gone for good: it does not return when the date
     // comes back to the day.
@@ -179,11 +182,28 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
     // again once the check has answered and the button stands for what is on screen.
     if (dateFields.current?.commitTyped() === true) return;
     if (reasons.length > 0 || date.moment === null || target.id === null) return;
-    // A press can also leave a field in the same moment, before the page is rendered again.
-    // So what was chosen is read as it is now. A date that is not the one the page was
-    // rendered with was never checked, and is not sent either.
+    // A press can also leave a field or change a choice in the same moment, before the page is
+    // rendered again. So what was chosen is read as it is now, and compared with what the page
+    // was rendered with, which is what the last check of the workspace answered for. When any
+    // of it differs, nothing is sent: the workspace is checked again, and the page says why
+    // Import has to be pressed again.
     const now = client.getQueryData<ImportChoices>(keys.importChoices) ?? choices;
-    if (readDate(review, now).moment !== date.moment) return;
+    const nowMoment = readDate(review, now).moment;
+    const nowTarget = readTarget(review, now).id;
+    const nowReplace = sameDay.find((snapshot) => snapshot.id === now.replace)?.id ?? null;
+    if (
+      nowMoment !== date.moment ||
+      now.confirmed !== choices.confirmed ||
+      nowTarget !== target.id ||
+      nowReplace !== (replaced?.id ?? null)
+    ) {
+      setChanged(true);
+      // Another date or target is another check, which the next render asks for by itself.
+      if (checkable && nowMoment === date.moment && nowTarget === target.id)
+        void checking.refetch();
+      return;
+    }
+    setChanged(false);
     // The name is sent as it stands: typed and not left, or as it was last left.
     const newName = (typedNameRef.current ?? readTarget(review, now).name).trim();
     if (target.isNew && newName === "") return;
@@ -386,6 +406,11 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
           focusRef={problem}
         />
       ) : null}
+      {changed ? (
+        <Notice tone="warning" title={t("import.review.changedTitle")}>
+          {t("import.review.changedText")}
+        </Notice>
+      ) : null}
       {cancel.isError ? (
         <Notice tone="danger" title={t("import.cancelError")}>
           {asCommandError(cancel.error).message}
@@ -468,15 +493,35 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
  */
 export function ImportReviewPage() {
   const { draft, choices, choose, from, others } = useImportDraft();
+  const [arrivedWithFile] = useState(draft !== undefined);
+
+  if (draft === undefined) return arrivedWithFile ? null : <ReopenFile from={from} />;
+  return (
+    <ReviewOfDraft draft={draft} choices={choices} choose={choose} from={from} others={others} />
+  );
+}
+
+interface ReviewOfDraftProps {
+  draft: ImportDraft;
+  choices: ImportChoices;
+  choose: (chosen: Partial<ImportChoices>) => void;
+  from: string;
+  others: number;
+}
+
+/**
+ * The review page while a file is open. The review is read here and not above: a reading asked
+ * for after the file was forgotten would put the review back in the cache, in the middle of the
+ * render that takes the page off the screen.
+ */
+function ReviewOfDraft({ draft, choices, choose, from, others }: ReviewOfDraftProps) {
   const client = useQueryClient();
   const navigate = useNavigate();
   const cancel = useLeaveImport();
-  const [arrivedWithFile] = useState(draft !== undefined);
 
   const reading = useQuery({
     queryKey: keys.importReview,
     queryFn: () => api.importReview(choices.fields),
-    enabled: draft !== undefined,
   });
   const failure = reading.isError ? asCommandError(reading.error) : null;
   const failed = failure?.kind;
@@ -494,8 +539,6 @@ export function ImportReviewPage() {
       });
     }
   }, [failed, failure?.kind, failure?.message, client, navigate, from, others]);
-
-  if (draft === undefined) return arrivedWithFile ? null : <ReopenFile from={from} />;
 
   const review = reading.data;
   const trail = {

@@ -181,6 +181,9 @@ export function ImportMappingPage() {
 
   const { file } = draft;
   const { headers, preview } = file;
+  // While the file is read or the import is cancelled, the other buttons wait: only the one that
+  // was pressed shows the spinner.
+  const busy = review.isPending || cancel.isPending;
 
   // Another mapping is another reading of the file: what was reviewed before no longer holds.
   const change = (next: Fields) => {
@@ -305,7 +308,7 @@ export function ImportMappingPage() {
               </span>
               <Button
                 variant="quiet"
-                isDisabled={review.isPending}
+                isInert={busy}
                 onPress={() => {
                   void navigate(IMPORT_SHEET_PATH, { state: { from } });
                 }}
@@ -348,6 +351,7 @@ export function ImportMappingPage() {
                 isDisabled={missing.length > 0}
                 reservesPendingSpace
                 isPending={review.isPending}
+                isInert={cancel.isPending}
                 {...(missing.length > 0 ? { "aria-describedby": blockedId } : {})}
                 onPress={() => {
                   setSaid(null);
@@ -357,7 +361,7 @@ export function ImportMappingPage() {
                 {t("import.mapping.continue")}
               </Button>
               <Button
-                isDisabled={review.isPending}
+                isInert={busy}
                 onPress={() => {
                   change(file.auto_map.fields);
                   setSaid(t("import.mapping.resetDone"));
@@ -369,7 +373,7 @@ export function ImportMappingPage() {
                 variant="quiet"
                 reservesPendingSpace
                 isPending={cancel.isPending}
-                isDisabled={review.isPending}
+                isInert={review.isPending}
                 onPress={() => {
                   cancel.mutate({ to: from, file: draft.file.content_hash });
                 }}
