@@ -144,6 +144,12 @@ const ACTIONS_SIZE: ColumnSize = { chars: 12 };
 
 const DEFAULT_HEIGHT = { maxRows: 12 } as const;
 
+/**
+ * How many frames a table that returns to its top for another result waits at most for the
+ * component library to report the top, before it counts where it is again.
+ */
+const RETURN_FRAMES = 4;
+
 /** The table has one header row, which is a row of the grid as the others are. */
 const HEADER_ROWS = 1;
 
@@ -597,12 +603,31 @@ export function DataTable<Item>({
     // it place the visible part again before that, at the old place as far as the new rows reach,
     // and it scrolls back there. So the table goes to its top once more in that frame, before it
     // is drawn, and the end it passes on the way is not taken for the end of the rows.
+    //
+    // It never waits long: after a few frames the table counts where it is again, wherever the
+    // library left it, and so it does as soon as the user scrolls, by wheel, key, or pointer.
     returning.current = true;
-    const frame = window.requestAnimationFrame(() => {
-      if (element.scrollTop > 0) element.scrollTop = 0;
-    });
+    let frames = 0;
+    let frame = 0;
+    const settle = () => {
+      frames += 1;
+      if (frames === 1 && element.scrollTop > 0) element.scrollTop = 0;
+      if (frames < RETURN_FRAMES) {
+        frame = window.requestAnimationFrame(settle);
+        return;
+      }
+      returning.current = false;
+      afterLayout.current();
+    };
+    frame = window.requestAnimationFrame(settle);
+    const byUser = () => {
+      returning.current = false;
+    };
+    const inputs = ["wheel", "keydown", "pointerdown", "touchstart"] as const;
+    for (const input of inputs) element.addEventListener(input, byUser, { passive: true });
     return () => {
       window.cancelAnimationFrame(frame);
+      for (const input of inputs) element.removeEventListener(input, byUser);
       returning.current = false;
     };
   }, [resultKey]);

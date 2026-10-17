@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -661,6 +661,44 @@ describe("DataTable in a viewport", () => {
     scrollTable(grid, 190 * ROW);
     expect(onLoadMore).toHaveBeenCalledTimes(2);
   });
+
+  it(
+    "does not stay on its way back to the top: a late placement leaves the end an end",
+    SLOW,
+    async () => {
+      const onLoadMore = vi.fn();
+      const page = many.slice(0, 200);
+      const { rerender } = render(table({ rows: page, onLoadMore, resultKey: "all" }));
+      const grid = screen.getByRole("grid");
+      scrollTable(grid, 190 * ROW);
+      expect(onLoadMore).toHaveBeenCalledTimes(1);
+      rerender(table({ rows: [...page], onLoadMore, resultKey: "civil" }));
+      // The library places the table again, later than the frame of the return, and the scroll to
+      // the top is never reported.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      scrollTable(grid, 190 * ROW);
+      // After a few frames the table counts where it is again.
+      await waitFor(() => {
+        expect(onLoadMore).toHaveBeenCalledTimes(2);
+      });
+    },
+  );
+
+  it(
+    "counts where it is again as soon as the user scrolls on the way back to its top",
+    SLOW,
+    () => {
+      const onLoadMore = vi.fn();
+      const page = many.slice(0, 200);
+      const { rerender } = render(table({ rows: page, onLoadMore, resultKey: "all" }));
+      const grid = screen.getByRole("grid");
+      scrollTable(grid, 190 * ROW);
+      rerender(table({ rows: [...page], onLoadMore, resultKey: "civil" }));
+      fireEvent.wheel(grid, { deltaY: 400 });
+      scrollTable(grid, 190 * ROW);
+      expect(onLoadMore).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it("asks for more again under another result whose end is in view where the last one's was", () => {
     const onLoadMore = vi.fn();
