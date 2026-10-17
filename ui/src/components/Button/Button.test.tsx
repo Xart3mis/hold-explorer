@@ -155,6 +155,23 @@ describe("Button", () => {
     expect(button.querySelector('[data-part="spinner"]')).toBeNull();
   });
 
+  it("draws a disabled quiet button as text only, without the disabled fill", () => {
+    render(
+      <Button variant="quiet" isDisabled>
+        Clear all
+      </Button>,
+    );
+    expect(screen.getByRole("button", { name: "Clear all" })).toHaveAttribute("data-disabled");
+    const stylesheet = readFileSync(join(import.meta.dirname, "Button.module.css"), "utf8");
+    const disabled = stylesheet.search(/\.button\[data-disabled\]\s*\{/);
+    const quiet = stylesheet.search(
+      /\.button\[data-variant="quiet"\]\[data-disabled\]\s*\{\s*background-color: transparent;/,
+    );
+    // The rule for the quiet variant comes after the one for every variant, so it wins.
+    expect(disabled).toBeGreaterThanOrEqual(0);
+    expect(quiet).toBeGreaterThan(disabled);
+  });
+
   it("when pending, shows the spinner in place of the leading icon", () => {
     const { rerender } = render(<Button icon={Download}>Export</Button>);
     const button = screen.getByRole("button", { name: "Export" });

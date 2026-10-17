@@ -109,3 +109,8 @@
 .button[data-variant="danger"][data-disabled] {
   border-color: var(--color-border-default);
 }
+
+/* A quiet button is text only at rest, and stays so: a fill would draw a box it never had. */
+.button[data-variant="quiet"][data-disabled] {
+  background-color: transparent;
+}
