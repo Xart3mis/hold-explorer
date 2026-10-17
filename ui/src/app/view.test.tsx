@@ -1615,6 +1615,111 @@ describe("useSnapshotPages", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(read).not.toHaveBeenCalled();
   });
+
+  it("names the result its rows belong to: the same while the rows of before stand in, another with the first new page", async () => {
+    const { read, waiting } = heldPages();
+    const { result, rerender } = tableWith(read);
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      waiting[0]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    const oldest = result.current.lines.resultKey;
+    expect(oldest).not.toBe("");
+
+    // A page more is the same result.
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(2);
+    });
+    act(() => {
+      waiting[1]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(4);
+    });
+    expect(result.current.lines.resultKey).toBe(oldest);
+
+    // Another order: while its first page is on its way the rows of before stand in, and the key
+    // still names them, at every render.
+    const seen: { key: string; rows: readonly string[] }[] = [];
+    const watch = setInterval(() => {
+      seen.push({ key: result.current.lines.resultKey, rows: result.current.lines.rows });
+    }, 2);
+    rerender({ sort: "newest" });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(3);
+    });
+    expect(result.current.lines.isPlaceholderData).toBe(true);
+    expect(result.current.lines.resultKey).toBe(oldest);
+    // A chain of changes before any of them answered: the rows that stand in are still those.
+    rerender({ sort: "largest" });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(4);
+    });
+    expect(result.current.lines.isPlaceholderData).toBe(true);
+    expect(result.current.lines.resultKey).toBe(oldest);
+
+    act(() => {
+      waiting[3]?.answer();
+    });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toEqual(["largest 2:0", "largest 2:1"]);
+    });
+    clearInterval(watch);
+    const largest = result.current.lines.resultKey;
+    expect(largest).not.toBe(oldest);
+    // The key changed in the same render as the rows, never before and never after them.
+    for (const { key, rows } of seen) {
+      expect(key).toBe(rows[0]?.startsWith("largest") === true ? largest : oldest);
+    }
+
+    // Back to an order whose pages are kept: its key comes back with its rows.
+    rerender({ sort: "oldest" });
+    await waitFor(() => {
+      expect(result.current.lines.rows[0]).toBe("oldest 2:0");
+    });
+    expect(result.current.lines.resultKey).toBe(oldest);
+  });
+
+  it("reads nothing while it is not enabled, and keeps what it has", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ sort, enabled }: { sort: string; enabled: boolean }) =>
+        useSnapshotPages({ name: "lines", params: [sort], read, enabled }),
+      { sort: "oldest", enabled: false },
+      start,
+      () => start.open,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.lines.isPending).toBe(true);
+
+    rerender({ sort: "oldest", enabled: true });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+
+    // Another order while it is not enabled: nothing is read, and nothing is added.
+    rerender({ sort: "newest", enabled: false });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+    act(() => {
+      result.current.lines.loadMore();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("workspaceAction", () => {

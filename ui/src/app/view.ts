@@ -38,7 +38,9 @@
  *    the parameters of before, to be shown dimmed and marked as busy until the new one is there;
  *    without `data` the screen shows its skeletons. It is read again whenever the view changes
  *    and whenever an action on the workspace has ended. Of `useSnapshotPages`: `rows` are the
- *    rows loaded so far, `loadMore` asks for the next page when the table nears their end, and
+ *    rows loaded so far, `loadMore` asks for the next page when the table nears their end,
+ *    `resultKey` names the result those rows belong to (hand it to the table, so that it returns
+ *    to its top when, and only when, the rows on screen are another result), and
  *    `isPlaceholderData` and `isPending` mean the same. A table may call `loadMore` whenever it
  *    is near the end of its rows: the call does nothing while a page is on its way, while
  *    `error` is set, and once `hasMore` is false, which it is when the rows are all there and
@@ -92,7 +94,7 @@
  *   reading again, a paged one only when its pages are not there.
  */
 import {
-  keepPreviousData,
+  hashKey,
   skipToken,
   useInfiniteQuery,
   useIsMutating,
@@ -358,6 +360,13 @@ export interface SnapshotPages<Row, Page extends Paged<Row>> {
   /** True while the rows shown are those of the filter, sort, or view of before. */
   isPlaceholderData: boolean;
   /**
+   * The result the rows shown belong to: the key they were read under, as a text. It stays the
+   * same while the rows of before stand in for others, also through several changes, and changes
+   * in the render that shows the first page of the new result. Pages that are added or read
+   * again keep it. Hand it to a table as its `resultKey`.
+   */
+  resultKey: string;
+  /**
    * True while the pages that are loaded are read again, after `keys.snapshots` was invalidated.
    * The rows of before stay meanwhile, to be shown dimmed, and `loadMore` waits.
    */
@@ -371,6 +380,13 @@ export interface SnapshotPages<Row, Page extends Paged<Row>> {
 }
 
 const NO_ROWS: readonly never[] = [];
+
+/**
+ * The key each list of pages was read under, by the list, for the lists that stood in for the
+ * pages of another key. Pages that stand in are the very list the reading before had, so this
+ * names them for as long as they are shown, and forgets them once nobody holds them.
+ */
+const readUnder = new WeakMap<object, string>();
 
 /**
  * The offset of the page after these: the number of rows loaded. There is none once the rows are
@@ -403,8 +419,13 @@ export function useSnapshotPages<
   name: ReadingName;
   params: Params;
   read: (view: ViewRef, offset: number, ...params: Params) => Promise<Page>;
+  /**
+   * False while the screen does not show these rows, as the rows of a mode that is not chosen:
+   * nothing is read and nothing is added, and what was read stays. Default true.
+   */
+  enabled?: boolean;
 }): SnapshotPages<Page["rows"][number], Page> {
-  const { name, params, read } = options;
+  const { name, params, read, enabled = true } = options;
   const { queryKey, isReadable, perform } = useReading(keys.snapshotPages, name, params);
 
   const query = useInfiniteQuery({
@@ -415,8 +436,12 @@ export function useSnapshotPages<
         : ({ signal, pageParam }) => perform(signal, (view) => read(view, pageParam, ...params)),
     initialPageParam: 0,
     getNextPageParam: (_last: Page, pages: Page[]) => nextOffset(pages),
-    // The rows of the params or the view of before stand in until the first page is there.
-    placeholderData: keepPreviousData,
+    // The rows of the params or the view of before stand in until the first page is there. They
+    // are the pages of the reading before, kept under its key, which names them meanwhile.
+    placeholderData: (previous, before) => {
+      if (previous !== undefined && before !== undefined) readUnder.set(previous, before.queryHash);
+      return previous;
+    },
     // The pages that are loaded are never read again by themselves: not when an action on the
     // workspace has ended, and not when the screen comes back. The data of a snapshot cannot
     // change under this key: the key names the view and the params, and a snapshot that is
@@ -424,10 +449,12 @@ export function useSnapshotPages<
     // invalidate `keys.snapshots`. The one other thing that reads these pages again is a page
     // that failed: the query library then takes the reading for invalid, whatever is set here.
     staleTime: Infinity,
-    enabled: isReadable,
+    enabled: enabled && isReadable,
   });
 
   const pages = query.data?.pages;
+  const ownKey = hashKey(queryKey);
+  const resultKey = query.isPlaceholderData ? (readUnder.get(query.data) ?? ownKey) : ownKey;
   const rows = useMemo<readonly Page["rows"][number][]>(
     () => pages?.flatMap((page) => page.rows) ?? NO_ROWS,
     [pages],
@@ -437,7 +464,12 @@ export function useSnapshotPages<
   // workspace runs or while a reading of this key is on its way. And a page that failed is not
   // asked for again by a table that only looks whether it is near its end: that takes a retry.
   const canLoadMore =
-    isReadable && hasMore && !query.isPlaceholderData && !query.isFetching && query.error === null;
+    enabled &&
+    isReadable &&
+    hasMore &&
+    !query.isPlaceholderData &&
+    !query.isFetching &&
+    query.error === null;
   const { fetchNextPage, refetch, isFetchNextPageError } = query;
 
   const loadMore = useCallback(() => {
@@ -460,6 +492,7 @@ export function useSnapshotPages<
     isLoadingMore: query.isFetchingNextPage,
     isPending: query.isPending,
     isPlaceholderData: query.isPlaceholderData,
+    resultKey,
     // Rows that stand in for others are waited for, not read again.
     isRefetching: query.isRefetching && !query.isPlaceholderData,
     error: query.error,
