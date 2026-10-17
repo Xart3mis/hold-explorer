@@ -729,3 +729,41 @@ export function useSelection(): { selection: Selection; select: (next: Selection
 - **M1c-2:** Breakdown list and matrix; Blockers solve-order list and the blocker in the panel; full Overview.
 - **M1c-3:** global search; saved views (the address of Task 8 and the filters of Task 6 are what a view stores); command palette and shortcut sheet; Settings (density, author name, data folder, About). Rust: first frame for theme System; a typed union of error kinds with structured data; recovery after a panic without a restart; a settings set-aside or block surfaced in `AppStart`; no set-aside on a transient read error; an absolute workspace folder; duplicate-id workspace files listed as unreadable; a bounded file read; merging the saved mapping; shared test fixtures in the desktop crate.
 - **Open for the owner, not blocking:** whether leaving the import flow by the sidebar should keep the file open; whether the stat figures are large enough on a meeting-room screen; whether rows loading as the user scrolls (decision 1) is acceptable or a full scrollbar is wanted.
+
+## Post-review corrections (2026-10-17)
+
+The plan was executed task by task, each task reviewed on its own and corrected until its review was clean, then verified as a whole with a design audit in Task 11. Where this plan's interfaces and the repository differ, the repository is right. The spec was updated to match (sections 4.2, 9.1, 9.2, 10.2).
+
+Decisions made during execution:
+
+| Decision | Effect |
+|---|---|
+| Tables load as the user scrolls (decision 1), chosen by the owner on 2026-10-13 | A page is 200 rows; the count line always says how many are loaded of how many exist. |
+| At most 5,000 rows in one table (controller, after Task 5's measurements) | Removing rows already loaded costs about 340 ms at 30,000; at 5,000 a status change paints in about 70 ms. Past the cap the count line says to narrow the filters or reverse the sort. |
+| Another workspace drops the whole selection (controller, Task 9) | Opening, creating, or building another workspace, the demo included, drops both `line` and `hold` from the address; a snapshot switch drops only `hold`. |
+| A workspace without snapshots has no absent fields (review of Task 2) | `filter_options` answers an empty `absent` there, and the bar is hidden. |
+
+| Area | Plan said | Now |
+|---|---|---|
+| Core sorts (Task 1) | Rows without the sorted value stay last; read by the implementer for line sorts only. | The rule also covers the hold sorts by Name, Discipline, and Hold type: the blank spellings (the dash the engine writes for a blank cell, and `Unspecified`) stay last in both directions. `absent_fields` also lists `Created`; `ChainLink::lines` falls back when a blocker is missing from the plan. |
+| Paged readings (Task 3) | `useSnapshotPages<Row, Page, Params>`; it re-reads like any query. | `useSnapshotPages<Page extends Paged<unknown>, const Params>` infers the row type, has `isRefetching`, and does not read again while its key stays (stale time without end). Later it also gained `resultKey` (the key of the pages shown) and `enabled` (Task 8). After five refusals, the answer of `workspace_current` is dropped when an action was asked for after the question. A second notice text exists for no open workspace. |
+| Shared components (Task 4) | The import flow's radio group is replaced by `ChoiceGroup`. | The import flow had no radio group (its choices are selects), so `ChoiceGroup` replaced nothing there. The sheet list's list role, lost in WebKit, went to Task 10. |
+| Virtualised table (Task 5) | `aria-rowcount` equals `totalRows`; re-rendering 30,000 loaded rows under 50 ms. | `aria-rowcount` is `totalRows + 1`: the library counts the header row. The 50 ms target at 30,000 loaded rows was not reachable (the cost is the library removing rows it holds), which led to the 5,000 cap above. The table takes `resultKey` from the caller, the key of the result whose rows are shown, changed in the same render as the rows; the Lines table sits in a container with a height and memoises its columns. `react-aria-components` is pinned to an exact version, because the layout subclass uses parts of the library not meant for callers. |
+| Filter bar (Task 6) | One chip per filter in the order they were added. | The five filters that are not dimensions (age, created, released, size mismatch, text) have chips in a fixed order after the field chips, since `Filters` records no order for them. The bar is hidden for a workspace without snapshots. While an action runs, the reason takes the place of the total. A snapshot whose `absent` lists `Released` is described as one in which no hold is released. The status control shows counts for Open and Released, none for All. |
+| Lines (Task 8) | 200 rows at a time, without a ceiling. | At most 5,000 rows per table, with the count line saying so (above). |
+| Detail panel (Task 9) | Only a snapshot switch drops a selection, and only a hold. | Another workspace drops both (above). |
+| Import follow-ups (Task 10) | Interface only; three items. | `import_cancel` takes the content hash of the file it was pressed for (a Rust change), `null` only from the entry page while it reads. The task also removed the React warning of the review page (a state update during another component's render) and gave the sheet list an explicit list role. |
+| Design audit (Task 11) | Fix or record every finding. | Fixed: a disabled quiet button ("Clear all" while an action runs) is text only, without the disabled fill (`DESIGN.md`, Buttons); a table is a whole number of pixels wide (new token `--size-pixel`), so a container of a fractional width no longer draws a sideways scrollbar for nothing; a blank name, role, or hold type in hold rows reads as the table's mark for no value instead of the dash the engine writes for a blank cell; the development page's example line address names a line of its snapshot. Recorded for the owner, below. |
+
+Measured on the final commit (release build, 10,000 rows, a loaded machine): import 155 ms, filtered views 8.8 ms, filter counts with a picker page and the first 200 lines 17.1 ms (budget 100 ms), a page of 200 holds 1.1 ms, full solve order 28.5 ms, import into a workspace 48 ms, read back as a dataset 78 ms. In the interface (production bundle, mocked commands): a status change painted in 72 ms with 200 holds loaded and 69 ms with 5,000; scrolling at a median frame of 17 ms. Application binary 12.0 MiB on Linux (limit 25 MB).
+
+Open for the owner after the audit, not blocking:
+
+- The filter bar's total repeats a figure already on screen: Overview's first tile ("Open holds") and, in hold rows, the count line under the table. In line rows it adds the one number the table does not give. Keep it everywhere, or show it on Lines only.
+- At 1,280 pixels the line rows scroll sideways (stress calc and the mismatch flag are past the edge), and in hold rows the age column is past the edge. The columns could be narrowed, or age moved before the remark.
+- The blocker column of hold rows is set as an identifier (monospace), which suits `577-PR-400` but also sets `Stress` and `Client` in monospace. The line IDs in the picker are in the body face, unlike the table.
+- A sortable header shows that it sorts only by its arrow once sorted; the others look like plain headers at rest.
+
+Not verified by this plan, and why: the app in a real window (no virtual display on the machine that ran the work; every screen was checked in a headless Chromium against mocked commands), the copy button of the panel in the real window, sticky pinning and scroll padding in the real webviews, and the `round()` width of a table in WebKitGTK and WebView2 (where it is not supported, the table behaves as before).
+
+Carried into later plans: as listed under "Left for later plans" above, and the minor findings of the task reviews kept in the working notes.
