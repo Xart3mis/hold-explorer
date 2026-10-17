@@ -114,8 +114,6 @@ pub struct SolveView {
     pub rows: Vec<SolveRow>,
     /// Lines on hold among the kept holds: the end the cumulative curve climbs to.
     pub lines_on_hold: usize,
-    /// Blockers of the kept holds that no step frees a line with.
-    pub unranked: usize,
 }
 pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView;
 
@@ -143,7 +141,7 @@ pub fn blocker_detail(ds: &Dataset, spec: &FilterSpec, plan: &SolvePlan, key: &s
 
 **Rules:** `matrix_top` counts exactly as `matrix` does for the values it keeps, and the "Other" row and column hold the sum of everything folded (the Other by Other cell too). Sums of all cells equal the kept holds. `solve_view` is `solve_plan(ds, spec, None)` with each step's blocker looked up; its numbers equal the plan's. `blocker_detail` reads lines and blockers among the kept holds; `frees` and `shared` are in first-appearance order; `step` is the blocker's place in `plan`, the plan of the same spec.
 
-**Tests (failing first):** on a hand-built dataset, `matrix_top` with room for everything equals `matrix`; with 2 by 2 it folds the rest into Other with the right sums, `folded_*` counts, and `max_cell`; an empty filter gives empty rows, no Other, `max_cell` 0. `stale_count` at 90: an open hold aged 89 is out, 90 in; released holds never count. `solve_view` rows equal the plan's steps in order, with labels; `lines_on_hold` equals `summary(...).lines`; `unranked` counts blockers with no step. `blocker_detail`: a blocker alone on a line frees it; one sharing a line lists it in `shared` and the other blocker in `linked` with the shared count; `oldest` is the hold with the greatest age; an unknown key gives `None`; a filter that removes its holds gives `None`. Perf (in the ignored release test): `matrix_top(Discipline, HoldType, 30, 30)` plus `solve_view` on 10,000 rows under 100 ms together.
+**Tests (failing first):** on a hand-built dataset, `matrix_top` with room for everything equals `matrix`; with 2 by 2 it folds the rest into Other with the right sums, `folded_*` counts, and `max_cell`; an empty filter gives empty rows, no Other, `max_cell` 0. `stale_count` at 90: an open hold aged 89 is out, 90 in; released holds never count. `solve_view` rows equal the plan's steps in order, with labels; `lines_on_hold` equals `summary(...).lines`. `blocker_detail`: a blocker alone on a line frees it; one sharing a line lists it in `shared` and the other blocker in `linked` with the shared count; `oldest` is the hold with the greatest age; an unknown key gives `None`; a filter that removes its holds gives `None`. Perf (in the ignored release test): `matrix_top(Discipline, HoldType, 30, 30)` plus `solve_view` on 10,000 rows under 100 ms together.
 
 **Commit:** `feat(core): folded matrix, solve rows, blocker detail, stale count`
 
@@ -257,6 +255,8 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 **Tests:** default request; swap; same-dimension prevention; a cell press sets two chips and opens Lines; Other cell inert; table view; address round trip; `axe`.
 
+Note for the screen: `FoldedMatrix.other_row` has the empty key that a real blank group also has; treat Other apart from the groups wherever a key is used.
+
 **Commit:** `feat(ui): Breakdown matrix mode`
 
 ---
@@ -265,11 +265,11 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 **Files:** new `ui/src/features/blockers/{BlockersPage.tsx, columns.tsx, address.ts}` with tests; destinations and router; catalog; mocks.
 
-**What it shows:** header "Blockers"; the filter bar; the cumulative curve (lines freed against step, y up to `lines_on_hold`, with the line "N of M lines freed after K steps" for the focused point); the steps table: step, blocker (label, identifier), type, discipline, holds, lines freed, cumulative; a line under the table when `unranked` is not zero ("N blockers free no line on their own and are not ranked"). Selecting a step opens the blocker panel (Task 8).
+**What it shows:** header "Blockers"; the filter bar; the cumulative curve (lines freed against step, y up to `lines_on_hold`, with the line "N of M lines freed after K steps" for the focused point); the steps table: step, blocker (label, identifier), type, discipline, holds, lines freed, cumulative. Selecting a step opens the blocker panel (Task 8).
 
 **Rules:** the curve's point press selects that step's blocker; table and curve share the selection; no paging (the steps of one snapshot are at most a few thousand); the table uses `DataTable` with a fill height.
 
-**Tests:** request with the spec; curve points equal the rows; selection from table and from curve writes `?blocker=<key>`; the unranked line; empty and error states; `Ctrl+4`; `axe`.
+**Tests:** request with the spec; curve points equal the rows; selection from table and from curve writes `?blocker=<key>`; empty and error states; `Ctrl+4`; `axe`.
 
 **Commit:** `feat(ui): Blockers destination with the solve order and its curve`
 
