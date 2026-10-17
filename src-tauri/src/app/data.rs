@@ -147,6 +147,7 @@ impl AppState {
                 .collect(),
         })
     }
+
     /// The detail of one Line of the snapshot in view; `None` when the snapshot has no such Line.
     pub fn line_detail(
         &mut self,

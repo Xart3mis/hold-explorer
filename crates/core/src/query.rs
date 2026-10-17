@@ -252,7 +252,8 @@ pub enum HoldSort {
     Discipline,
     /// Hold type ascending; holds with the blank spelling `—` come last.
     HoldType,
-    /// Blocker ascending: the discipline, then the item.
+    /// Blocker ascending: the discipline, then the item; holds with the blank discipline
+    /// `Unspecified` come last.
     Blocker,
     /// Name ascending; holds with the blank spelling `—` come last.
     Name,
@@ -371,10 +372,8 @@ pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
         HoldSort::Blocker => order_by(
             &mut selected,
             |(_, row)| {
-                Some((
-                    row.hold.discipline.to_lowercase(),
-                    row.blocker.item.to_lowercase(),
-                ))
+                text(&row.hold.discipline, UNSPECIFIED)
+                    .map(|discipline| (discipline, row.blocker.item.to_lowercase()))
             },
             |a, b| a.cmp(b),
             reverse,
@@ -1339,7 +1338,7 @@ mod tests {
             h.name = name.to_string();
             h
         };
-        // Position 1 is blank for all three sorts; 0 and 3 tie on every value.
+        // Position 1 is blank for all four sorts; 0 and 3 tie on every value.
         let ds = Dataset::build(
             vec![
                 make("Civil", "b", "bob"),
@@ -1359,6 +1358,7 @@ mod tests {
             ),
             (HoldSort::HoldType, vec![2, 0, 3, 1, 4], vec![0, 3, 2, 1, 4]),
             (HoldSort::Name, vec![2, 0, 3, 1, 4], vec![0, 3, 2, 1, 4]),
+            (HoldSort::Blocker, vec![0, 3, 2, 1, 4], vec![2, 0, 3, 1, 4]),
         ] {
             assert_eq!(hold_positions(&ds, sort, false), forward, "{sort:?}");
             assert_eq!(

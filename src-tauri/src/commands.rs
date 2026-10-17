@@ -430,6 +430,17 @@ mod tests {
     }
 
     #[test]
+    fn import_cancel_reads_a_content_hash_of_null() {
+        // The interface sends `contentHash: null` to drop whatever draft is open; the fixture
+        // holds only the string form.
+        let harness = Harness::new();
+        assert_eq!(
+            harness.outcome("import_cancel", &serde_json::json!({ "contentHash": null })),
+            "Ok"
+        );
+    }
+
+    #[test]
     fn every_key_the_interface_sends_is_an_argument_the_command_reads() {
         // Tauri reads a key that is absent as `None` when the argument is optional, and passes
         // over a key no argument has. So were `fields` of `import_review` named otherwise on one
@@ -512,7 +523,8 @@ mod tests {
         }
     }
 
-    /// The keys of `interface CommandMap { ... }`: lines indented by two spaces.
+    /// The keys of `interface CommandMap { ... }`: the lines that start with two spaces, a name
+    /// of lowercase letters and underscores, and a colon.
     fn typescript_commands() -> BTreeSet<String> {
         let start = COMMAND_MAP
             .find("interface CommandMap {")
@@ -522,10 +534,11 @@ mod tests {
         body[..end]
             .lines()
             .skip(1)
-            .filter(|line| line.starts_with("  ") && !line.starts_with("   "))
-            // The end of an entry written over several lines.
-            .filter(|line| !line.trim_start().starts_with('}'))
-            .filter_map(|line| line.trim().split(':').next())
+            .filter_map(|line| line.strip_prefix("  "))
+            .filter_map(|line| line.split_once(':').map(|(name, _)| name))
+            .filter(|name| {
+                !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+            })
             .map(str::to_string)
             .collect()
     }
