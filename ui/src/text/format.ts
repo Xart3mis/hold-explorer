@@ -82,6 +82,16 @@ export function formatCount(value: number): string {
   return count.format(value);
 }
 
+/**
+ * Whether a text of the export stands for a blank cell: the engine's blank spelling `—` (of a
+ * name, a role, a hold type, or the blocker of a blank remark), or nothing at all. Such a text is
+ * shown as the mark for no value, and left out of a list.
+ */
+export function isBlank(value: string): boolean {
+  const text = value.trim();
+  return text === "" || text === "—";
+}
+
 /** A plain list, its items separated the way the locale separates them: `xlsx, csv, txt`, `Piping, Civil`. */
 export function formatList(items: readonly string[]): string {
   return list.format(items);

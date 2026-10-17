@@ -406,6 +406,13 @@ fn the_export_column_names_the_interface_shows_are_the_labels_of_the_fields() {
     assert_eq!(names.len(), Field::ALL.len());
 }
 
+#[test]
+fn the_fields_the_interface_takes_for_required_are_the_engines() {
+    let json = include_str!("../../../ui/src/api/required-fields.json");
+    let required: Vec<Field> = serde_json::from_str(json).unwrap();
+    assert_eq!(required, Field::REQUIRED);
+}
+
 fn demo_snapshots(fx: &Fixture, id: &str) -> Workspace {
     Workspace::open(&fx.workspaces().join(format!("{id}.holdx-ws"))).unwrap()
 }

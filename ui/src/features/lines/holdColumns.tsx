@@ -2,9 +2,8 @@ import type { Field } from "../../bindings/Field";
 import type { HoldRef } from "../../bindings/HoldRef";
 import type { Status } from "../../bindings/Status";
 import { Tag, textChars } from "../../components";
-import { formatDate, formatDays } from "../../text/format";
+import { formatDate, formatDays, isBlank } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { isBlank } from "../detail/parts";
 import { missing, present, type NeedingColumn } from "./lineColumns";
 import { HOLD_SORTS } from "./sorts";
 
@@ -73,7 +72,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
     {
       id: "blocker",
       header: t("lines.column.blocker"),
-      cell: ({ row }) => row.blocker.item,
+      cell: ({ row }) => given(row.blocker.item),
       kind: "identifier",
       size: { chars: 16 },
       needs: ["Remark"],

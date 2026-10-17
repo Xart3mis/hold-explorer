@@ -177,9 +177,3 @@ export function has(absent: readonly Field[] | null, field: Field): boolean {
 export function notGiven(): { value: string; isAbsent: true } {
   return { value: t("detail.notGiven"), isAbsent: true };
 }
-
-/** A text of the export that stands for a blank cell: the name or role `—`, or nothing at all. */
-export function isBlank(value: string): boolean {
-  const text = value.trim();
-  return text === "" || text === "—";
-}

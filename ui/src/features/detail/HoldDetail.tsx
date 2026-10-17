@@ -2,12 +2,11 @@ import { api } from "../../api/commands";
 import { useSnapshotQuery } from "../../app/view";
 import type { HoldRef } from "../../bindings/HoldRef";
 import { Breadcrumb, Button, EmptyState, FactList, Skeleton, type Fact } from "../../components";
-import { formatDate, formatDays } from "../../text/format";
+import { formatDate, formatDays, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
 import styles from "./Detail.module.css";
 import {
   has,
-  isBlank,
   Loading,
   notGiven,
   PanelBody,
@@ -69,7 +68,11 @@ function holdFacts(hold: HoldRef | undefined, absent: DetailProps["absent"]): Fa
     facts.push(shows("Created") && { label: t("detail.fact.age"), ...days(row?.age_days ?? null) });
   }
   facts.push(
-    { label: t("detail.fact.blocker"), value: row?.blocker.item ?? "", kind: "identifier" },
+    {
+      label: t("detail.fact.blocker"),
+      ...(row === undefined ? { value: "" } : text(row.blocker.item)),
+      kind: "identifier",
+    },
     { label: t("detail.fact.blockerType"), value: row?.blocker.kind ?? "" },
   );
   if (row?.hold.source_id != null) {

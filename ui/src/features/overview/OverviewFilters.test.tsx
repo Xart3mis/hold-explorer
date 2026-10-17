@@ -89,7 +89,10 @@ async function chooseStatus(
 
 function tile(figures: string, label: string): HTMLElement {
   const group = screen.getByRole("group", { name: figures });
-  return must(within(group).getByText(label).parentElement, `the tile ${label}`);
+  return must(
+    within(group).getByText(label).closest<HTMLElement>("[data-part='stat-tile']"),
+    `the tile ${label}`,
+  );
 }
 
 describe("the Overview and the filters", () => {

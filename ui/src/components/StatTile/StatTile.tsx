@@ -99,13 +99,18 @@ export function StatTile({ label, value, delta, onPress, isLoading, unavailable 
   );
   if (pressable) {
     return (
-      <RacButton onPress={onPress} data-pressable="" className={cx(styles.tile)}>
+      <RacButton
+        onPress={onPress}
+        data-part="stat-tile"
+        data-pressable=""
+        className={cx(styles.tile)}
+      >
         {content}
       </RacButton>
     );
   }
   return (
-    <div className={styles.tile} aria-busy={loading ? "true" : undefined}>
+    <div data-part="stat-tile" className={styles.tile} aria-busy={loading ? "true" : undefined}>
       {content}
     </div>
   );

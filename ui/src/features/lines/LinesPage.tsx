@@ -4,10 +4,12 @@ import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
+import { OPTIONAL_FIELDS } from "../../api/export";
+import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
-import { useSnapshotPages, useSnapshotQuery, type SnapshotPages } from "../../app/view";
+import { useSnapshotPages, type SnapshotPages } from "../../app/view";
 import type { Field } from "../../bindings/Field";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { HoldQuery } from "../../bindings/HoldQuery";
@@ -81,23 +83,6 @@ type Shown =
   | { mode: "lines"; pages: SnapshotPages<LineRow, LinePage> }
   | { mode: "holds"; pages: SnapshotPages<HoldRef, HoldsPage> };
 
-/**
- * The fields an import may be without: all but the line ID, the remark, and the hold type. When
- * the options of the snapshot cannot be read, the page takes each of them for absent.
- */
-const OPTIONAL: readonly Field[] = [
-  "SourceId",
-  "Name",
-  "Role",
-  "Discipline",
-  "Created",
-  "Released",
-  "ReleaseRemark",
-  "ReleaseDate",
-  "ModelSize",
-  "LdtSize",
-  "StressCalc",
-];
 const NO_ROWS: readonly never[] = [];
 
 /** The query of the lines and the order of the holds while the page shows the other mode. */
@@ -288,17 +273,12 @@ export function LinesPage() {
     [focus],
   );
 
-  const options = useSnapshotQuery({
-    name: "filterOptions",
-    params: [spec],
-    read: (view, asked) => api.filterOptions(asked, view),
-    enabled: hasSnapshot,
-  });
+  const options = useFilterOptions({ enabled: hasSnapshot });
   // Which columns and presets the snapshot can fill is known once its options are read. Until then
   // the table waits with the columns every import has, so that nothing shows that will go, and if
   // they cannot be read it keeps to those.
   const optionsRead = options.data !== undefined || options.isError;
-  const absent = useSameList(options.data?.absent ?? OPTIONAL);
+  const absent = useSameList(options.data?.absent ?? OPTIONAL_FIELDS);
 
   const lineQuery = state.rows === "lines" ? state.query : DEFAULT_QUERY;
   const holdOrder: HoldOrder =

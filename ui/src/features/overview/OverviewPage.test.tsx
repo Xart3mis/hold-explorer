@@ -106,7 +106,10 @@ async function loaded(overview: Mock<Answer>): Promise<HTMLElement> {
 /** The cell of the stat tile group that carries the label. */
 function tile(label: string): HTMLElement {
   const figures = screen.getByRole("group", { name: text.figures });
-  return must(within(figures).getByText(label).parentElement, `the tile ${label}`);
+  return must(
+    within(figures).getByText(label).closest<HTMLElement>("[data-part='stat-tile']"),
+    `the tile ${label}`,
+  );
 }
 
 /** The bar rows of a group, each as the text it shows: label, holds, lines. */

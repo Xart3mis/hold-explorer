@@ -1,12 +1,11 @@
 import { useIsMutating } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { exportColumn } from "../../api/export";
 import { keys } from "../../api/keys";
 import { useStart } from "../../app/actions/start";
+import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
-import { useSnapshotQuery } from "../../app/view";
 import type { Field } from "../../bindings/Field";
 import { AddFilterChip, Button, ErrorState, FilterChip, Skeleton } from "../../components";
 import { formatList } from "../../text/format";
@@ -56,20 +55,18 @@ const CLOSED: Picker = {
  * which no hold is released is said to have none; only the open holds are then offered.
  */
 export function FilterBar() {
-  const { filters, spec, update, clear } = useFilters();
+  const { filters, update, clear } = useFilters();
   const { isBusy } = useStart();
   // Another workspace or snapshot is on its way, or the one in view is being changed.
   const isSwitching = useIsMutating({ mutationKey: keys.switching }) > 0;
-  const options = useSnapshotQuery({
-    name: "filterOptions",
-    params: [spec],
-    read: (view, asked) => api.filterOptions(asked, view),
-  });
+  const options = useFilterOptions();
   const bar = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLSpanElement>(null);
   const [picker, setPicker] = useState(CLOSED);
   // Nothing can be changed while an action runs, so the picker is closed for as long as it does.
   if (isBusy && picker.isOpen) setPicker({ ...picker, isOpen: false });
+  // Whether the bar holds the focus, which it can take only while an action runs.
+  const [hasFocus, setHasFocus] = useState(false);
   /** Whether the picker was open when the bar was drawn last: its closing gives the focus back. */
   const wasOpen = useRef(false);
 
@@ -151,8 +148,15 @@ export function FilterBar() {
       ref={bar}
       role="group"
       aria-label={t("filters.bar")}
-      // It holds the focus while an action runs that closed its picker.
-      tabIndex={-1}
+      // It holds the focus while an action runs that closed its picker, and keeps it after the
+      // action until the focus moves on. At rest it is no target: a click on it draws no ring.
+      tabIndex={isBusy || hasFocus ? -1 : undefined}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget) setHasFocus(true);
+      }}
+      onBlur={(event) => {
+        if (event.target === event.currentTarget) setHasFocus(false);
+      }}
       data-part="filter-bar"
       className={styles.bar}
     >

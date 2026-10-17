@@ -803,6 +803,43 @@ describe("FilterBar", () => {
     expect(within(region).getByRole("status")).toHaveTextContent(text.busySwitching);
   });
 
+  it("takes no focus from a click while no action runs", async () => {
+    const { user } = renderBar();
+    const region = await bar();
+    expect(region).not.toHaveAttribute("tabindex");
+    await user.click(total(region));
+    expect(region).not.toHaveFocus();
+  });
+
+  it("keeps the focus it took for an action once the action has ended, until it goes", async () => {
+    const select = held<WorkspaceOpen>();
+    const { user } = renderBar(undefined, { snapshot_select: select.handler });
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(region).toHaveAttribute("tabindex", "-1");
+    });
+    act(() => {
+      region.focus();
+    });
+    expect(region).toHaveFocus();
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(chip(region, "Discipline Civil")).toBeEnabled();
+    });
+    // Still able to hold the focus while it has it, so the focus is not dropped on the page.
+    expect(region).toHaveAttribute("tabindex", "-1");
+    expect(region).toHaveFocus();
+    await user.tab();
+    expect(region).not.toHaveAttribute("tabindex");
+  });
+
   it("does not open the picker from the remove button of a chip", async () => {
     const { user } = renderBar();
     const region = await bar();

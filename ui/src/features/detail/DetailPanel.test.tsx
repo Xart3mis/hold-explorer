@@ -129,6 +129,19 @@ describe("The panel of a line", () => {
     expect(hold).toHaveTextContent(fill(text.duration, { days: formatDays(23) }));
   });
 
+  it("titles a hold of a blank hold type by its discipline alone", async () => {
+    renderDetail({
+      handlers: {
+        line_detail: ({ lineId: id }: { lineId: string }) =>
+          lineDetail(id, { open: [holdRef(0, { line_id: id, hold_type: "—" })] }),
+      },
+    });
+    const region = await panel();
+    const open = await within(region).findByRole("list", { name: text.openHolds });
+    const title = must(within(open).getByRole("button").querySelector("span span"));
+    expect(title.textContent).toBe("Piping");
+  });
+
   it("opens a hold that is pressed", async () => {
     const hold = vi.fn(({ position }: { position: number }) => holdRef(position));
     const { user, router } = renderDetail({ handlers: { hold_detail: hold } });
@@ -326,6 +339,17 @@ describe("The panel of a hold", () => {
     expect(factValue(others, "Isometric")).toBe("ISO-573-0012");
   });
 
+  it("says that the export gives no blocker for a blank remark", async () => {
+    const hold = ({ position }: { position: number }) => {
+      const item = holdRef(position, { line_id: LINE });
+      return { ...item, row: { ...item.row, blocker: { kind: "Other", item: "—" } } };
+    };
+    renderDetail({ path: "/lines?rows=holds&hold=7", handlers: { hold_detail: hold } });
+    const region = await panel(text.holdTitle);
+    const facts = await within(region).findByRole("list", { name: text.holdFacts });
+    expect(factValue(facts, fact.blocker)).toBe(text.notGiven);
+  });
+
   it("shows the release of a released hold, and no age", async () => {
     renderDetail({
       path: "/lines?hold=2",
@@ -365,6 +389,9 @@ describe("The panel of a hold", () => {
     expect(
       await within(region).findByRole("heading", { name: text.holdMissingTitle }),
     ).toBeInTheDocument();
+    // The window of the app shows no address, so the reason does not name one.
+    expect(within(region).getByText(text.holdMissingText)).toBeVisible();
+    expect(text.holdMissingText).not.toMatch(/address/i);
     expect(within(region).getAllByRole("button", { name: text.closePanel })).toHaveLength(2);
   });
 });

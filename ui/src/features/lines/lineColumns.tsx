@@ -2,7 +2,7 @@ import { TriangleAlert } from "lucide-react";
 import type { Field } from "../../bindings/Field";
 import type { LineRow } from "../../bindings/LineRow";
 import { Tag, textChars, type DataTableColumn } from "../../components";
-import { formatCount, formatDays, formatList, formatSize } from "../../text/format";
+import { formatCount, formatDays, formatList, formatSize, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
 import { LINE_SORTS } from "./sorts";
 
@@ -20,6 +20,12 @@ export function figures(largest: number): number {
 /** What a cell shows for a value the hold or the line does not have. */
 export function missing(): string {
   return t("common.noValue");
+}
+
+/** A list of the export without its blank entries, or the mark for no value when none is left. */
+function given(items: readonly string[]): string {
+  const kept = items.filter((item) => !isBlank(item));
+  return kept.length === 0 ? missing() : formatList(kept);
 }
 
 /** The columns a snapshot has values for, as the table takes them. */
@@ -72,7 +78,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
     {
       id: "holdTypes",
       header: t("lines.column.holdTypes"),
-      cell: (line) => formatList(line.hold_types),
+      cell: (line) => given(line.hold_types),
       size: { flex: 1, minChars: 12 },
       needs: ["HoldType"],
     },

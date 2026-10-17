@@ -19,6 +19,13 @@ describe("holdColumns", () => {
     expect(cellOf("holdType", blank)).toBe(en.common.noValue);
   });
 
+  it("writes the blocker of a blank remark as the table's mark for no value", () => {
+    const item = holdRef(0);
+    const blank = { ...item, row: { ...item.row, blocker: { kind: "Other", item: "—" } } };
+    expect(cellOf("blocker", blank)).toBe(en.common.noValue);
+    expect(cellOf("blocker", item)).toBe("577-PK-400");
+  });
+
   it("writes a given name, role, and hold type as they are", () => {
     const given = holdRef(0);
     expect(cellOf("name", given)).toBe("A. Haddad");

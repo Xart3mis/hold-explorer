@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useId, useRef } from "react";
-import { api } from "../../api/commands";
-import { useFilters } from "../../app/filters/state";
-import { useSnapshotQuery } from "../../app/view";
+import { useFilterOptions } from "../../app/filters/options";
 import { cx } from "../../components/cx";
 import styles from "./Detail.module.css";
 import { HoldDetail } from "./HoldDetail";
@@ -31,12 +29,7 @@ export function DetailPanel({ selection, className }: DetailPanelProps) {
   const panel = useRef<HTMLElement>(null);
   const { close } = useSelection();
   const focus = useDetailFocus();
-  const { spec } = useFilters();
-  const options = useSnapshotQuery({
-    name: "filterOptions",
-    params: [spec],
-    read: (view, asked) => api.filterOptions(asked, view),
-  });
+  const options = useFilterOptions();
   // When the options cannot be read, the panel shows what the line or the hold has.
   const absent = options.data?.absent ?? (options.isError ? NONE : null);
 

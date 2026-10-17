@@ -686,7 +686,7 @@
     "lineMissingTitle": "This line is not in this snapshot",
     "lineMissingText": "The snapshot in view has no hold on line {{lineId}}. Select another snapshot to see it, or close the panel.",
     "holdMissingTitle": "This hold is not in this snapshot",
-    "holdMissingText": "The snapshot in view has fewer holds than the address names. Choose a hold from the list, or close the panel.",
+    "holdMissingText": "This snapshot has fewer holds than the one this hold was chosen in. Choose a hold from the list, or close the panel.",
     "errorLine": "The line could not be loaded",
     "errorHold": "The hold could not be loaded"
   }

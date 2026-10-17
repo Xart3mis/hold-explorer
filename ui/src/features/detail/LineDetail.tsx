@@ -17,13 +17,12 @@ import {
   Tag,
   type Fact,
 } from "../../components";
-import { formatDate, formatDays, formatList, formatSize } from "../../text/format";
+import { formatDate, formatDays, formatList, formatSize, isBlank } from "../../text/format";
 import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
 import styles from "./Detail.module.css";
 import {
   has,
-  isBlank,
   Loading,
   notGiven,
   PanelBody,
@@ -126,6 +125,12 @@ function BlockerRow({ link }: { link: ChainLink }) {
   );
 }
 
+/** What a hold is: its discipline and hold type, without what the export left blank. */
+function kindOf(discipline: string, holdType: string): string {
+  const kind = [discipline, holdType].filter((part) => !isBlank(part));
+  return kind.length === 0 ? notGiven().value : formatList(kind);
+}
+
 /** Who raised a hold and when, as far as the export says. */
 function raised({ row }: HoldRef, showsWho: boolean, showsWhen: boolean): string {
   const who = showsWho
@@ -170,7 +175,7 @@ function HoldList({
             >
               <span className={styles.holdHead}>
                 <span className={styles.holdKind}>
-                  {formatList([row.hold.discipline, row.hold.hold_type])}
+                  {kindOf(row.hold.discipline, row.hold.hold_type)}
                 </span>
                 {days === null || !showsWhen ? null : (
                   <span className={styles.trailing}>
