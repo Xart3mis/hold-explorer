@@ -1,5 +1,8 @@
-// Fixtures of the filter bar: what the `filter_options` command answers for a snapshot.
+// Fixtures of the filter bar and its picker: what the `filter_options` and `filter_values`
+// commands answer for a snapshot.
 import type { FilterOptions } from "../bindings/FilterOptions";
+import type { Group } from "../bindings/Group";
+import type { ValuePage } from "../bindings/ValuePage";
 
 /**
  * The options for the newest snapshot of the workspace the tests open and the default filter:
@@ -27,4 +30,18 @@ export function filterOptions(overrides: Partial<FilterOptions> = {}): FilterOpt
     absent: [],
     ...overrides,
   };
+}
+
+/** One value of a dimension with the holds that have it. Its key is its label unless one is given. */
+export function group(label: string, holds: number, key = label): Group {
+  return { key, label, holds, lines: holds };
+}
+
+/**
+ * The values the picker is offered for a dimension: three of them, all there are, as the command
+ * counts them for the default filter. A test that looks at other values gives its own.
+ */
+export function valuePage(overrides: Partial<ValuePage> = {}): ValuePage {
+  const values = [group("Piping", 1186), group("Process", 913), group("Civil", 702)];
+  return { total: values.length, values, ...overrides };
 }

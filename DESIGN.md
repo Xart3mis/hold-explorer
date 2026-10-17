@@ -1075,9 +1075,10 @@ A small surface that opens from a control and holds controls of its own: the fil
 - **Surface:** that of a menu: fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, at `--z-dropdown`. Padding `--space-3`; its parts are `--density-stack-gap` apart.
 - **Size:** `--size-popover-width` wide, whatever it holds, so it does not change width while a list inside it is read again. It is never taller than the room between its control and the edge of the window. When it holds more than fits, the list inside it scrolls and the popover does not.
 - **Placement:** under the control that opened it, `--space-1` away, leading edges lined up. Where there is no room below it opens above, and where there is none at the trailing side it lines up with the trailing edge.
+- **It keeps its place.** A popover that one of several controls can open, as any chip of the filter bar and "Add filter" open the filter picker, stands under the place that control had when it opened, and keeps that place for as long as it is open. What is chosen in it may widen, move, or remove the control, and the popover does not follow: nothing moves under the pointer of a user who ticks one value after another.
 - **Opening:** as a menu: it fades in and moves `--space-1` toward its place over `--duration-base`, leaves by fading over `--duration-fast`, and fades in place under reduced motion.
 - **The control that opened it** keeps its pressed look and has `aria-expanded="true"` for as long as the popover is open.
-- **Focus:** opening moves the focus into the popover: to the first field it holds, such as a search field, because a popover with a field is opened to type in it, and otherwise to the popover itself, which then shows the inset focus ring. Tab moves through the controls inside and stays inside. Esc, or a press outside, closes it, and closing gives the focus back to the control that opened it.
+- **Focus:** opening moves the focus into the popover: to the first field it holds, such as a search field, because a popover with a field is opened to type in it; without a field, to the first list it holds, on the item the list starts with, because a popover that is a list is opened to choose from it; and otherwise to the popover itself, which then shows the inset focus ring. When what the popover holds is replaced while it is open, as the list of fields is by the editor of the field that was chosen, the focus is taken into the new content by the same rule. Tab moves through the controls inside and stays inside. Esc, or a press outside, closes it, and closing gives the focus back to the control that opened it, or, when that control is gone, to the control the screen names for it.
 - **No scrim:** nothing is laid over the page. It stays as it is behind the popover, undimmed, and what the popover changes shows there at once. The page cannot be reached while the popover is open (Tab stays inside, and a press outside closes it), which is what a menu does as well.
 - **What it may hold:** fields, a choice group, an option list, quiet buttons, and text. A quiet button inside takes the hover fill `--color-surface-overlay-hover`. It never holds a primary button: an overlay does not carry one (the Two Surfaces Rule), and a popover has nothing to confirm, because what is chosen in it applies at once.
 - **Name:** it is a dialog to assistive technology and has an accessible name that says what it is for ("Filter by discipline").
@@ -1107,14 +1108,57 @@ A list of values to choose from, one or several, each with the count of what it 
 - **Footer:** an optional line under the list that does not scroll with it, in `--text-caption` and `--color-text-muted`, with the horizontal padding of an option. It says what the list leaves out: "1,300 more values. Type to narrow."
 - **No search field of its own.** Where a list can be longer than what is shown, a text field above it narrows it. The field is a part of what holds the list, not of the list.
 
-**The filter picker, composed.** A popover that holds, from top to bottom and in Tab order:
+The option list is composed with a field and a choice in the filter picker; see "Filter picker".
 
-1. A text field that narrows the values, with a visible label that names the field being filtered. It takes the focus when the popover opens.
-2. A choice group in a row: "Is" and "Is not". It applies to the whole field.
-3. The option list of the values, with several values to choose and the count each would keep. The list is pulled out by `--space-2` at both sides, so the fill of a highlighted option stops `--space-1` from the edge of the popover, as an item of a menu does, and the labels of the options start on the same line as the field above.
-4. The footer of the list, when more values exist than are listed.
+### Filter picker
 
-A ticked value applies at once and the popover stays open. The counts are then read again: they are dimmed until the new ones arrive, and the options stay as they are. Nothing in the picker is a button to confirm.
+What "Add filter" and a chip of the filter bar open: a popover in which a filter is set. It has two views. The list of fields says what can be filtered; an editor sets the filter of one field. Opened from "Add filter" it shows the list, and choosing a field replaces the list by that field's editor. Opened from a chip it shows the editor of the chip's field at once. It is the filter list of a spreadsheet, which this audience knows: a box to type in, and under it the values to tick.
+
+- **One picker, and nothing to confirm.** Everything set in it applies at once: the chip appears, changes, or goes in the bar behind it, and the content it filters is read again. The popover stays open until Esc or a press outside. It holds no button that applies, closes, or goes back. The way to another field is Esc and "Add filter", which then has the focus.
+- **Name:** the popover is named "Add filter" while it shows the list of fields, and "Filter by" and the name of the field while it shows an editor ("Filter by Discipline").
+- **The control that opened it** keeps its pressed look and `aria-expanded="true"`. A chip that goes while the picker is open, because its last value was unticked, hands both to "Add filter", and closing then gives the focus to "Add filter".
+- **A field is named as its chip names it:** by the name its column has everywhere else in the interface ("Raised by", "Hold remark", "Line ID"), and a custom column by its header.
+
+**The list of fields.** The items of a menu (see Menu), on the surface of the popover and with nothing else in it.
+
+- **Item:** at least `--density-row-height` tall, horizontal padding `--space-2`, corner `--radius-sm`, the name of the field in `--text-body` and `--color-text-primary`, on one line. The list is pulled out by `--space-2` at both sides, as an option list is, so a highlighted item stops `--space-1` from the edge of the popover.
+- **Order:** fixed, so a field is always in the same place: the fields of the export and of the blocker rules, then age, the two dates, the sizes, text, and last the custom columns of the snapshot, by header. A field that needs a column the snapshot has no value in is not listed; the filter bar says once which columns are missing.
+- **A field that has a filter** carries what it is filtered to as the detail of its item, `--space-4` after its name: `--text-caption` in `--color-text-muted`, as its chip reads it ("Civil +3", "is not Vendor data"), cut at the end with an ellipsis so the name always shows whole. Choosing such a field opens its editor with what is set. The detail describes the item to assistive technology.
+- **Highlighted, focus, pressed:** as an item of a menu: fill `--color-surface-overlay-hover` by the pointer or the arrow keys, the inset focus ring on the item the keyboard is on.
+- **Behavior:** the list takes the focus when the popover opens, on its first field. The arrow keys move, Home and End jump to the ends, typing jumps to a match, Enter or Space chooses. It is one stop for Tab.
+- **Height:** every field shows while the window has the room. Where it has not, the list scrolls inside the popover.
+- **Loading:** until the options of the snapshot are there for the first time, the spinner and a label in `--text-caption` stand in the place of the list, as in an option list, because which fields the snapshot has is not known yet. While they are read again the list of before stays and can be used.
+- **Error:** when the options could not be read, an inline danger notice with "Try again" stands in the place of the list.
+- **Empty and disabled:** not applicable. A snapshot always has fields to filter by, and while nothing can be changed "Add filter" is disabled.
+
+**The editor of a field of values** (discipline, hold type, role, raised by, blocker type, blocker, hold remark, line ID, model size, stress calculation, and every custom column). From top to bottom and in Tab order:
+
+1. A text field that narrows the values. Its label is the name of the field. Its placeholder says what typing does ("Type to narrow"): the label is taken by the name, and the list under the field answers each key. It takes the focus when the popover opens. What is typed is sent after the keys have stopped for a moment of the renderer's own choosing, never at every key and never on a timer of the interface.
+2. A choice group in a row, labeled "Condition": "Is" and "Is not". It applies to the whole field and can be set before a value is ticked.
+3. The option list of the values, several to choose, each with the count of holds it would keep. The counts are those of every other filter in force without this field's own, so a value that is not ticked shows what ticking it would add. The list is pulled out by `--space-2` at both sides, so the fill of a highlighted option stops `--space-1` from the edge of the popover, as an item of a menu does, and the labels of the options start on the same line as the field above.
+4. The footer of the list, when more values exist than are listed: how many more, and that typing narrows ("1,300 more values. Type to narrow.").
+
+- **Ticking** applies at once and the popover stays open. The counts are then read again: they are dimmed until the new ones arrive (see Option list), and the options keep their order and their place, so the next value can be ticked without looking for it.
+- **Unticking the last value** removes the filter and its chip. The editor stays as it is, with the condition that was chosen.
+- **A ticked value the list would not show** is shown first, under the label it was ticked under, so it can be unticked: with the count 0 in the muted ink when the answer holds every value, because no hold has it any more under the other filters; without a count when the answer holds only the first of many, because its count is then not known and the interface invents no number. While text is typed, the list holds what matches the text and nothing else; the ticked values are back when the field is cleared.
+- **Loading, first read:** the loading state of the option list. The field and the choice are there and can be used.
+- **Loading, a re-read:** after a tick, and after every change of the text: the counts dimmed, the list marked as busy.
+- **Empty:** the line of an empty option list. With text typed it names the text ("No value matches “flange”."). Without, it says why there is nothing: the other filters keep no hold.
+- **Error:** an inline danger notice with "Try again" in the place of the list. The field and the choice stay.
+
+**The editor of age.** The name of the field as a label (`--text-label`, `--color-text-secondary`), `--space-1` above an option list of the age bands of the workspace, several to choose, each with its count. A band is written in words ("0 to 13 days", "90 days or more"). The list has the focus when the popover opens. A ticked band that is no longer one of the bands is listed first, without a count. Loading, re-read, and error are those of the list of fields, because the bands come with the same answer.
+
+**The editor of a date** (creation date, release date). The name of the field as a label, then two text fields one under the other, "From" and "To", each as wide as the popover so that its helper line has room.
+
+- **Typing:** year, month, day ("2026-10-01"), the form the import review takes. The placeholder is an example. "From" has the focus when the popover opens.
+- **Helper line:** how to write a date, and once the field holds one, that date in words with its weekday, so a day taken for a month shows.
+- **Applies** as soon as a field holds a whole date, and when a field is emptied: one bound is enough, and the chip reads "from" or "until". Nothing waits for Enter. While a field holds text that is not yet a date, the bound it had stays in force.
+- **Error, a date that cannot be read:** shown when the field is left or Enter is pressed, not while it is typed: the field in its error state, the message in the place of the helper line, saying how to write a date.
+- **Error, "From" after "To":** shown at once, at the field that was changed last, in the place of its helper line: which of the two days is the wrong side of the other, by its date, and what to enter. Nothing is sent, and the range of before stays in force until the two agree.
+
+**The editor of the sizes.** The name of the field as a label ("Model and LDT sizes"), then an option list of two values, one to choose, each with its count: "Differ" and "Match". The mark is the circle of a single choice; choosing the chosen value again removes the filter. The list has the focus when the popover opens. When the counts could not be read the two values are listed without counts and can still be chosen; the filter bar says what failed.
+
+**The editor of text.** One text field labeled "Text", with a helper line that says where the text is looked for. It has the focus when the popover opens. What is typed applies on Enter, when the field is left, and when the popover closes, and not at every key, because each change reads the whole page again. An empty field removes the filter.
 
 ### Drop zone
 

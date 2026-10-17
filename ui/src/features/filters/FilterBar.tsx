@@ -1,5 +1,5 @@
 import { useIsMutating } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { exportColumn } from "../../api/export";
@@ -11,7 +11,7 @@ import type { Field } from "../../bindings/Field";
 import { AddFilterChip, Button, ErrorState, FilterChip, Skeleton } from "../../components";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
-import { chipsOf, type Chip } from "./chips";
+import { chipsOf, type Chip, type FilterField } from "./chips";
 import styles from "./FilterBar.module.css";
 import { FilterPicker } from "./FilterPicker";
 import { StatusControl } from "./StatusControl";
@@ -19,14 +19,39 @@ import { StatusControl } from "./StatusControl";
 /** The fields that have no value in a snapshot in which no hold is released. */
 const RELEASE_FIELDS: ReadonlySet<Field> = new Set(["Released", "ReleaseRemark", "ReleaseDate"]);
 
-/** A chip and "Add filter" open their picker by being its trigger; the press itself does nothing more. */
-const opensPicker = () => undefined;
+/** What opened the picker, when it was not a chip: "Add filter". No chip has this id. */
+const ADD = "add";
+
+/** The picker of the bar: whether it is open, for which field, and what opened it. */
+interface Picker {
+  isOpen: boolean;
+  /** The field whose editor it shows; `null` for the list of fields. */
+  field: FilterField | null;
+  /** The id of the chip that opened it, or `ADD`. */
+  from: string;
+  /** Where the control that opened it was, from the top left corner of the bar, in pixels. */
+  place: { left: number; top: number; width: number; height: number };
+  /** It was closed after the chip that opened it had gone: the focus goes to "Add filter". */
+  focusAdd: boolean;
+}
+
+const CLOSED: Picker = {
+  isOpen: false,
+  field: null,
+  from: ADD,
+  place: { left: 0, top: 0, width: 0, height: 0 },
+  focusAdd: false,
+};
 
 /**
  * The filter bar of a data screen: the status, one chip per active filter, the way to add one,
  * the way to clear them, and the number of holds the filters keep. It reads the filters every
  * data screen shares (`useFilters`) and the options of the snapshot in view for them, so it takes
  * no props; a page places it under its header (`bar` of `Page`).
+ *
+ * A chip and "Add filter" open the one picker of the bar. It stands under the place its control
+ * had when it opened and keeps that place: what is ticked in it widens a chip, adds one, or
+ * removes the one that opened it, and the picker must not move under the pointer for that.
  *
  * While an action on the workspace runs nothing can be changed, and a short sentence in the place
  * of the total says why; the bar keeps its height and every control its place. A snapshot that
@@ -44,6 +69,11 @@ export function FilterBar() {
     read: (view, asked) => api.filterOptions(asked, view),
   });
   const bar = useRef<HTMLDivElement>(null);
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [held, setPicker] = useState(CLOSED);
+  // Nothing can be changed while an action runs, so the picker is closed for as long as it does.
+  const picker = isBusy && held.isOpen ? { ...held, isOpen: false } : held;
+  if (picker !== held) setPicker(picker);
 
   const chips = chipsOf(filters);
   const counted = options.isError ? undefined : options.data;
@@ -59,6 +89,39 @@ export function FilterBar() {
   /** "Add filter": where the focus goes when the control that had it is gone. */
   const addFilter = () =>
     bar.current?.querySelector<HTMLElement>("[data-part='add-filter-chip']") ?? null;
+
+  // The chip that opened the picker is there for as long as its filter has a value.
+  const fromChip = picker.from !== ADD && chips.some((chip) => chip.id === picker.from);
+  /** The control that says it has the picker open: the one that opened it, or "Add filter" once that chip is gone. */
+  const expanded = !picker.isOpen ? null : fromChip ? picker.from : ADD;
+
+  /** Opens the picker under a control, for the field of a chip or, without one, to add a filter. */
+  const open = (field: FilterField | null, from: string, control: Element | null | undefined) => {
+    const origin = bar.current?.getBoundingClientRect();
+    const at = control?.getBoundingClientRect();
+    if (origin === undefined || at === undefined) return;
+    setPicker({
+      isOpen: true,
+      field,
+      from,
+      place: {
+        left: at.left - origin.left,
+        top: at.top - origin.top,
+        width: at.width,
+        height: at.height,
+      },
+      focusAdd: false,
+    });
+  };
+
+  // A picker that closes gives the focus back to the control that had it. When that was a chip
+  // that has gone meanwhile, "Add filter" takes it, as it does when a chip is removed.
+  const { isOpen, focusAdd } = picker;
+  useEffect(() => {
+    if (!isOpen && focusAdd) {
+      bar.current?.querySelector<HTMLElement>("[data-part='add-filter-chip']")?.focus();
+    }
+  }, [isOpen, focusAdd]);
 
   /**
    * Removes a filter. The focus moves to the chip after it, or to "Add filter" when it was the
@@ -92,28 +155,30 @@ export function FilterBar() {
             isInert={isBusy}
           />
           {chips.map((chip, index) => (
-            <FilterPicker
+            <FilterChip
               key={chip.id}
-              field={chip.field}
-              trigger={
-                <FilterChip
-                  field={chip.name}
-                  value={chip.value}
-                  isNegated={chip.isNegated}
-                  isDisabled={isBusy}
-                  onPress={opensPicker}
-                  onRemove={() => {
-                    remove(chip, index);
-                  }}
-                />
-              }
+              field={chip.name}
+              value={chip.value}
+              isNegated={chip.isNegated}
+              isDisabled={isBusy}
+              isExpanded={expanded === chip.id}
+              onPress={() => {
+                const pills = bar.current?.querySelectorAll("[data-part='filter-chip']");
+                open(chip.field, chip.id, pills?.[index]);
+              }}
+              onRemove={() => {
+                remove(chip, index);
+              }}
             />
           ))}
           {/* The two wrap as one: a line starts with the pill, on the line of the chips above. */}
           <span data-part="filter-actions" className={styles.actions}>
-            <FilterPicker
-              field={null}
-              trigger={<AddFilterChip isDisabled={isBusy} onPress={opensPicker} />}
+            <AddFilterChip
+              isDisabled={isBusy}
+              isExpanded={expanded === ADD}
+              onPress={() => {
+                open(null, ADD, addFilter());
+              }}
             />
             {chips.length === 0 ? null : (
               <Button
@@ -179,6 +244,30 @@ export function FilterBar() {
           className={styles.error}
         />
       ) : null}
+      {/* Where the control that opened the picker was: what the picker stands under. */}
+      <span
+        ref={anchor}
+        aria-hidden="true"
+        data-part="filter-picker-anchor"
+        className={styles.anchor}
+        style={picker.place}
+      />
+      <FilterPicker
+        anchor={anchor}
+        isOpen={picker.isOpen}
+        field={picker.field}
+        options={options}
+        onChoose={(field) => {
+          setPicker((current) => ({ ...current, field }));
+        }}
+        onClose={() => {
+          setPicker((current) => ({
+            ...current,
+            isOpen: false,
+            focusAdd: !fromChip && current.from !== ADD,
+          }));
+        }}
+      />
     </div>
   );
 }

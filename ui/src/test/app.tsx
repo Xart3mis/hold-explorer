@@ -6,7 +6,7 @@ import { AppProviders } from "../app/providers";
 import { queryClient } from "../app/query";
 import { appRoutes, type DestinationPages } from "../app/router";
 import type { AppStart } from "../bindings/AppStart";
-import { filterOptions } from "./filters";
+import { filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { mockCommands, type Handlers } from "./ipc";
 import { overviewOf } from "./overview";
@@ -27,8 +27,9 @@ export interface RenderAppOptions {
 /**
  * Renders the whole app, with its providers, on a router that keeps its history in memory. The
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`,
- * `overview` with the overview of the snapshot `start` has selected, and `filter_options` with
- * the options of the default filter, unless the test gives its own.
+ * `overview` with the overview of the snapshot `start` has selected, `filter_options` with the
+ * options of the default filter, and `filter_values` with three values whatever the dimension,
+ * unless the test gives its own.
  */
 export function renderApp(options: RenderAppOptions = {}) {
   const start = options.start ?? startState();
@@ -39,6 +40,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     workspace_list: () => start.list,
     overview: () => overviewOf(start.open),
     filter_options: () => filterOptions(),
+    filter_values: () => valuePage(),
     ...options.handlers,
   });
   const router = createMemoryRouter(appRoutes(options.destinations, options.pages), {

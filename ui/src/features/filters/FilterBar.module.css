@@ -5,6 +5,7 @@
  * starts where the title starts and ends where the content ends.
  */
 .bar {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
@@ -103,10 +104,13 @@
   padding-block-end: var(--space-1);
 }
 
-/* The name of the field a picker was opened for. */
-.pickerTitle {
-  color: var(--color-text-primary);
-  font: var(--text-body-strong);
-  font-variant-numeric: var(--font-numeric-proportional);
-  letter-spacing: var(--letter-spacing-normal);
+/*
+ * Where the control that opened the picker was when it opened. The picker stands under this, not
+ * under the control, so it keeps its place when the control moves. It shows nothing and takes no
+ * press; the bar gives it its place and its size.
+ */
+.anchor {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
 }

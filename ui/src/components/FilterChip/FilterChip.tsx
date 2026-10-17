@@ -34,6 +34,13 @@ function reading(field: string, value: string, isNegated: boolean): ReactNode[] 
   });
 }
 
+/** What a chip says of the dialog the screen opens for it: that it opens one, and whether it is open. */
+function opens(isExpanded: boolean | undefined) {
+  return isExpanded === undefined
+    ? {}
+    : { "aria-haspopup": "dialog" as const, "aria-expanded": isExpanded };
+}
+
 export interface FilterChipProps {
   /** The name of the field that is filtered: "Discipline". */
   field: string;
@@ -45,6 +52,11 @@ export interface FilterChipProps {
   onPress: () => void;
   /** Removes the filter. Its remove button, Backspace, and Delete call it. */
   onRemove: () => void;
+  /**
+   * Whether what it opens is open, when the screen holds that. A chip that is the trigger of a
+   * `Popover` is told by the popover and takes no value here.
+   */
+  isExpanded?: boolean;
   /**
    * The filters cannot be changed for the moment. The chip takes no focus and no press and has
    * no remove button. Its X stays as a picture, so the chip keeps its width and nothing beside
@@ -65,6 +77,7 @@ export function FilterChip({
   isNegated = false,
   onPress,
   onRemove,
+  isExpanded,
   isDisabled = false,
   className,
 }: FilterChipProps) {
@@ -78,6 +91,7 @@ export function FilterChip({
       <RacButton
         isDisabled={isDisabled}
         onPress={onPress}
+        {...opens(isExpanded)}
         onKeyDown={(event) => {
           if (event.key === "Backspace" || event.key === "Delete") onRemove();
           else event.continuePropagation();
@@ -121,17 +135,25 @@ export function FilterChip({
 export interface AddFilterChipProps {
   /** Opens the list of fields to filter by. */
   onPress: () => void;
+  /** Whether what it opens is open, when the screen holds that; see `FilterChip`. */
+  isExpanded?: boolean;
   /** The filters cannot be changed for the moment. */
   isDisabled?: boolean;
   className?: string | undefined;
 }
 
 /** The pill that adds a filter. It can be the trigger of a `Popover`. */
-export function AddFilterChip({ onPress, isDisabled = false, className }: AddFilterChipProps) {
+export function AddFilterChip({
+  onPress,
+  isExpanded,
+  isDisabled = false,
+  className,
+}: AddFilterChipProps) {
   return (
     <RacButton
       isDisabled={isDisabled}
       onPress={onPress}
+      {...opens(isExpanded)}
       data-part="add-filter-chip"
       className={cx(styles.add, className)}
     >

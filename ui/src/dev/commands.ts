@@ -4,6 +4,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
+import type { Dim } from "../bindings/Dim";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { ImportCommit } from "../bindings/ImportCommit";
@@ -13,6 +14,7 @@ import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
+import type { ValuePage } from "../bindings/ValuePage";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import type { TargetCheck } from "../bindings/TargetCheck";
@@ -27,6 +29,7 @@ import {
   unmappedDraft,
 } from "../test/import";
 import { devKept, devOverview, type DevOverview } from "./overview";
+import { devValues } from "./values";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
 const MARKER = "hx-dev-commands";
@@ -66,6 +69,10 @@ export const DEV_STATES = [
   "filters-absent",
   "filters-busy",
   "filters-error",
+  // The filter picker: the filters of `filters`, line IDs in the thousands (open Line ID from
+  // "Add filter" to see the line that says how many more there are), and values that take a
+  // second to be read, so that a first read and a re-read after a tick can be seen.
+  "filters-picker",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -207,6 +214,7 @@ export function devFilters(state: DevState): { workspaceId: string; filters: Fil
     case "filters-absent":
     case "filters-busy":
     case "filters-error":
+    case "filters-picker":
       return { workspaceId: unit573.id, filters: SOME_FILTERS };
     case "filters-many":
       return { workspaceId: unit573.id, filters: MANY_FILTERS };
@@ -360,6 +368,7 @@ function world(state: DevState, theme: Theme): World {
     case "filters-absent":
     case "filters-busy":
     case "filters-error":
+    case "filters-picker":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -698,6 +707,12 @@ export function installDevCommands(state: DevState, theme: Theme): string {
                   : [],
         };
       });
+    },
+    filter_values: (payload): Promise<ValuePage> => {
+      const { spec, selected } = inView(payload);
+      const { dim, search } = payload as { dim: Dim; search: string };
+      const isPicker = state === "filters-picker";
+      return later(isPicker ? 1200 : 150, () => devValues(selected, spec, dim, search, isPicker));
     },
     "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
     "plugin:opener|reveal_item_in_dir": () => null,

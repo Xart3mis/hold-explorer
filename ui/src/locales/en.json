@@ -98,7 +98,38 @@
     "error": "The counts of the filters could not be read",
     "picker": {
       "filterBy": "Filter by {{field}}",
-      "add": "Add filter"
+      "add": "Add filter",
+      "fields": "Fields to filter by",
+      "isNot": "is not {{value}}",
+      "narrow": "Type to narrow",
+      "condition": {
+        "label": "Condition",
+        "is": "Is",
+        "isNot": "Is not"
+      },
+      "values": "{{field}} values",
+      "noMatch": "No value matches “{{text}}”.",
+      "noValues": "The other filters keep no hold, so there is no value to choose.",
+      "moreValues_one": "{{count, number}} more value. Type to narrow.",
+      "moreValues_other": "{{count, number}} more values. Type to narrow.",
+      "valuesError": "The values could not be read",
+      "noBands": "This workspace has no age band to choose.",
+      "size": {
+        "differ": "Differ",
+        "match": "Match"
+      },
+      "date": {
+        "from": "From",
+        "to": "To",
+        "placeholder": "2026-10-01",
+        "help": "Year, month, day",
+        "invalid": "Enter the date as year, month, day, for example 2026-10-01.",
+        "fromAfterTo": "This day is after the last day, {{to}}. Enter that day or an earlier one.",
+        "toBeforeFrom": "This day is before the first day, {{from}}. Enter that day or a later one."
+      },
+      "text": {
+        "help": "Looked for in the line ID, the hold remark, the name, the hold type, the discipline, and the blocker."
+      }
     }
   },
   "errorState": {

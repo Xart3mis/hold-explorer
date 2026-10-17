@@ -997,12 +997,13 @@ function StillPopover({ children }: { children: ReactNode }) {
 
 function Pickers() {
   const [one, setOne] = useState<readonly string[]>(["yes"]);
+  const [size, setSize] = useState<readonly string[]>(["match"]);
   const [several, setSeveral] = useState<readonly string[]>(["civil"]);
   const still = () => undefined;
   return (
     <Section
       title="Popover and option list"
-      note="A popover is the surface of a menu for anything that is more than a list. The first is real: it takes the focus into its field, Tab stays inside, Escape closes it and gives the focus back. The stills beside it are the same surface drawn in the page. An option list ticks several values or holds one; its mark says which."
+      note="A popover is the surface of a menu for anything that is more than a list. The first is real: it takes the focus into its field, or without one into its first list, Tab stays inside, Escape closes it and gives the focus back. The stills beside it are the same surface drawn in the page. An option list ticks several values or holds one; its mark says which."
     >
       <Row label="real">
         <Specimen name="Opened from Add filter">
@@ -1036,6 +1037,21 @@ function Pickers() {
                 { value: "differ", label: "Differ" },
                 { value: "agree", label: "Agree" },
               ]}
+            />
+          </Popover>
+        </Specimen>
+        <Specimen name="Holding a list: the list takes the focus, on its ticked option">
+          <Popover trigger={<Button>Model and LDT sizes</Button>} aria-label="Filter by size">
+            <OptionList
+              aria-label="Model and LDT sizes"
+              selectionMode="single"
+              options={[
+                { key: "differ", label: "Differ", count: 214 },
+                { key: "match", label: "Match", count: 4828 },
+              ]}
+              selectedKeys={size}
+              onSelectionChange={setSize}
+              emptyText="No value matches."
             />
           </Popover>
         </Specimen>

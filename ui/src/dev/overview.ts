@@ -16,7 +16,7 @@ const SINGLE_HOLD_LINES = 2548;
 type Row = readonly [label: string, holds: number, lines: number];
 
 /** Thirteen disciplines, the blank one among them under the label the core gives it. */
-const DISCIPLINES: readonly Row[] = [
+export const DISCIPLINES: readonly Row[] = [
   ["Piping", 1186, 880],
   ["Process", 913, 690],
   ["Civil", 702, 418],
@@ -32,7 +32,7 @@ const DISCIPLINES: readonly Row[] = [
   ["Unspecified", 30, 26],
 ];
 
-const HOLD_TYPES: readonly Row[] = [
+export const HOLD_TYPES: readonly Row[] = [
   ["Vendor data", 1322, 968],
   ["Process data", 1041, 803],
   ["Client decision", 742, 561],
