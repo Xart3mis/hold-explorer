@@ -39,6 +39,11 @@ impl Row {
         format!("{}|{}", self.hold.discipline, self.blocker.item)
     }
 
+    /// How the blocker is written for display: `<discipline> / <item>`.
+    pub fn blocker_label(&self) -> String {
+        crate::query::blocker_label(&self.hold.discipline, &self.blocker.item)
+    }
+
     /// True when the hold has both a model size and an LDT size and they differ.
     pub fn size_mismatch(&self) -> bool {
         matches!((self.hold.model_size, self.hold.ldt_size), (Some(a), Some(b)) if a != b)

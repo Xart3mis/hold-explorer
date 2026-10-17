@@ -92,7 +92,7 @@ pub(crate) fn label_for(dim: &Dim, key: &str, row: &Row) -> String {
     }
     match dim {
         Dim::Remark => row.hold.remark.clone(),
-        Dim::Blocker => blocker_label(&row.hold.discipline, &row.blocker.item),
+        Dim::Blocker => row.blocker_label(),
         _ => key.to_string(),
     }
 }
@@ -1658,5 +1658,29 @@ mod tests {
         assert_eq!(stale_count(&ds, &all(), 90), 2);
         assert_eq!(stale_count(&ds, &all(), 91), 1);
         assert_eq!(stale_count(&ds, &all(), 0), 3);
+    }
+
+    #[test]
+    fn folding_one_dimension_leaves_the_other_whole() {
+        let top = matrix_top(&folding(), &open(), &Dim::Discipline, &Dim::HoldType, 2, 10);
+        assert_eq!((top.rows.len(), top.cols.len()), (2, 4));
+        assert!(top.other_row.is_some() && top.other_col.is_none());
+        assert_eq!((top.folded_rows, top.folded_cols), (2, 0));
+        assert_eq!((top.cells.len(), top.cells[0].len()), (3, 4));
+        let total: usize = top.cells.iter().flatten().sum();
+        assert_eq!(total, 8);
+    }
+
+    #[test]
+    fn folding_to_no_rows_puts_everything_in_other() {
+        let top = matrix_top(&folding(), &open(), &Dim::Discipline, &Dim::HoldType, 0, 10);
+        assert!(top.rows.is_empty());
+        assert_eq!(
+            top.other_row.as_ref().map(|g| (g.holds, g.lines)),
+            Some((8, 7))
+        );
+        assert_eq!(top.cells.len(), 1);
+        assert_eq!(top.cells[0].iter().sum::<usize>(), 8);
+        assert_eq!(top.folded_rows, 4);
     }
 }

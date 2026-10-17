@@ -6,7 +6,6 @@ use serde::Serialize;
 
 use crate::dataset::Dataset;
 use crate::filter::FilterSpec;
-use crate::query::blocker_label;
 
 /// One blocker among the selected holds, with the lines it is on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -24,6 +23,13 @@ pub struct BlockerNode {
     pub holds: usize,
     /// Lines this blocker is on, in order of first appearance.
     pub lines: Vec<String>,
+}
+
+impl BlockerNode {
+    /// How the blocker is written for display: `<discipline> / <item>`.
+    pub fn blocker_label(&self) -> String {
+        crate::query::blocker_label(&self.discipline, &self.item)
+    }
 }
 
 /// One blocker to solve, in plan order.
@@ -196,8 +202,6 @@ pub struct SolveView {
     pub rows: Vec<SolveRow>,
     /// Lines on hold among the kept holds: the end the cumulative curve climbs to.
     pub lines_on_hold: usize,
-    /// Blockers of the kept holds that no step frees a line with.
-    pub unranked: usize,
 }
 
 /// The full solve order of the holds `spec` keeps, each step with its blocker looked up.
@@ -212,18 +216,20 @@ pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView {
         .steps
         .iter()
         .enumerate()
-        .filter_map(|(index, step)| {
-            let node = nodes.get(step.key.as_str())?;
-            Some(SolveRow {
+        .map(|(index, step)| {
+            let node = nodes
+                .get(step.key.as_str())
+                .expect("every step of a plan names a node of the same plan");
+            SolveRow {
                 step: index + 1,
                 key: step.key.clone(),
-                label: blocker_label(&node.discipline, &node.item),
+                label: node.blocker_label(),
                 kind: node.kind.clone(),
                 discipline: node.discipline.clone(),
                 holds: node.holds,
                 gain: step.gain,
                 cumulative: step.cumulative,
-            })
+            }
         })
         .collect();
     let mut lines: HashSet<&str> = HashSet::new();
@@ -233,7 +239,6 @@ pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView {
     SolveView {
         rows,
         lines_on_hold: lines.len(),
-        unranked: plan.nodes.len() - plan.steps.len(),
     }
 }
 
@@ -414,8 +419,6 @@ mod tests {
         assert_eq!(view.rows[0].label, "Civil / 538-PR-100");
         assert_eq!(view.lines_on_hold, summary(&ds, &spec).lines);
         assert_eq!(view.lines_on_hold, 5);
-        assert_eq!(view.unranked, plan.nodes.len() - plan.steps.len());
-        assert_eq!(view.unranked, 0);
     }
 
     #[test]
@@ -425,9 +428,6 @@ mod tests {
             ..Default::default()
         };
         let view = solve_view(&chain(), &spec);
-        assert_eq!(
-            (view.rows.len(), view.lines_on_hold, view.unranked),
-            (0, 0, 0)
-        );
+        assert_eq!((view.rows.len(), view.lines_on_hold), (0, 0));
     }
 }

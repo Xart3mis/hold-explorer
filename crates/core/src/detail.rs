@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::dataset::{Dataset, Row};
 use crate::filter::{Dim, FilterSpec};
-use crate::query::{blocker_label, label_for};
+use crate::query::label_for;
 use crate::solve::SolvePlan;
 
 /// A hold with its position in the snapshot, by which the interface asks for it again.
@@ -202,7 +202,7 @@ pub fn blocker_detail(
         let entry = others.entry(other).or_insert_with_key(|other| {
             let linked = LinkedBlocker {
                 key: other.clone(),
-                label: blocker_label(&row.hold.discipline, &row.blocker.item),
+                label: row.blocker_label(),
                 kind: row.blocker.kind.clone(),
                 shared_lines: 0,
             };
@@ -233,7 +233,7 @@ pub fn blocker_detail(
 
     Some(BlockerDetail {
         key: key.to_string(),
-        label: blocker_label(&first.hold.discipline, &first.blocker.item),
+        label: first.blocker_label(),
         kind: first.blocker.kind.clone(),
         discipline: first.hold.discipline.clone(),
         item: first.blocker.item.clone(),
@@ -522,5 +522,16 @@ mod tests {
         let cut = solve_plan(&ds, &spec, Some(1));
         let b = blocker_detail(&ds, &spec, &cut, "Civil|538-PR-200").unwrap();
         assert_eq!(b.step, None);
+    }
+
+    #[test]
+    fn holds_count_released_ones_but_the_oldest_hold_is_open() {
+        let ds = snapshot_of_lines();
+        let all = spec_of(Status::All);
+        let plan = solve_plan(&ds, &all, None);
+        let piping = blocker_detail(&ds, &all, &plan, "Piping|P&ID").unwrap();
+        assert_eq!(piping.holds, 2);
+        // Position 0 is the released hold (50 days); the open one (position 1) is the oldest.
+        assert_eq!(piping.oldest.unwrap().position, 1);
     }
 }

@@ -12,8 +12,4 @@ rows: Array<SolveRow>,
 /**
  * Lines on hold among the kept holds: the end the cumulative curve climbs to.
  */
-lines_on_hold: number, 
-/**
- * Blockers of the kept holds that no step frees a line with.
- */
-unranked: number, };
+lines_on_hold: number, };
