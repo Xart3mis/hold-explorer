@@ -643,6 +643,25 @@ describe("DataTable in a viewport", () => {
     },
   );
 
+  it("takes no scroll on the way back to its top for the end of the other result", SLOW, () => {
+    const onLoadMore = vi.fn();
+    const page = many.slice(0, 200);
+    const { rerender } = render(table({ rows: page, onLoadMore, resultKey: "all" }));
+    const grid = screen.getByRole("grid");
+    scrollTable(grid, 190 * ROW);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    rerender(table({ rows: [...page], onLoadMore, resultKey: "civil" }));
+    expect(grid.scrollTop).toBe(0);
+    // The component library may scroll back toward the old place before the browser reports
+    // the scroll to the top; that is not the user coming to the end.
+    scrollTable(grid, 190 * ROW);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    // Once the top is reported, the end of the other result is an end again.
+    scrollTable(grid, 0);
+    scrollTable(grid, 190 * ROW);
+    expect(onLoadMore).toHaveBeenCalledTimes(2);
+  });
+
   it("asks for more again under another result whose end is in view where the last one's was", () => {
     const onLoadMore = vi.fn();
     const { rerender } = render(table({ onLoadMore, resultKey: "all" }));

@@ -489,10 +489,13 @@ export function DataTable<Item>({
   // The end of the rows is near once less than the height of the visible part is left below it.
   // `asked` holds how many rows there were at the last request of this stay at the end.
   const asked = useRef<number | null>(null);
+  // True while the table returns to its top for another result: see where `resultKey` is read.
+  const returning = useRef(false);
   const warned = useRef(false);
   const lookForEnd = () => {
     const element = scroller.current;
-    if (element === null) return;
+    // On the way back to the top for another result, the table is nowhere near its end.
+    if (element === null || returning.current) return;
     const rowsEnd = metrics.headerHeight + rows.length * metrics.rowHeight;
     const isNear =
       !loading && rows.length > 0 && element.scrollTop + 2 * element.clientHeight >= rowsEnd;
@@ -586,7 +589,22 @@ export function DataTable<Item>({
     if (lastResult.current === resultKey) return;
     lastResult.current = resultKey;
     asked.current = null;
-    if (scroller.current !== null && scroller.current.scrollTop > 0) scroller.current.scrollTop = 0;
+    const element = scroller.current;
+    if (element === null || element.scrollTop === 0) return;
+    element.scrollTop = 0;
+    // The component library keeps the place it was scrolled to until the scroll event of this
+    // change reaches it, which the browser sends with the next frame. Rows of another length make
+    // it place the visible part again before that, at the old place as far as the new rows reach,
+    // and it scrolls back there. So the table goes to its top once more in that frame, before it
+    // is drawn, and the end it passes on the way is not taken for the end of the rows.
+    returning.current = true;
+    const frame = window.requestAnimationFrame(() => {
+      if (element.scrollTop > 0) element.scrollTop = 0;
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      returning.current = false;
+    };
   }, [resultKey]);
 
   const count = loading
@@ -645,6 +663,8 @@ export function DataTable<Item>({
               });
             }}
             onScroll={(event) => {
+              // The scroll that brought the table back to its top for another result has arrived.
+              if (event.currentTarget.scrollTop === 0) returning.current = false;
               setScrolled(event.currentTarget.scrollTop > 0);
               setScrolledAcross(event.currentTarget.scrollLeft > 0);
               lookForEnd();
