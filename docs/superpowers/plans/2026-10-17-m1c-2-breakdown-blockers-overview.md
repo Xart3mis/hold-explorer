@@ -20,7 +20,7 @@ As M1c-1: each task gives files, the exact interface later tasks rely on, the ru
 
 ## Decisions this plan rests on
 
-1. **A Breakdown group opens in the detail panel; it does not expand in place.** Spec 9.2 says "a row expands to its lines". The table is virtualised (M1c-1), and expandable rows in a virtualised grid are where keyboard and screen-reader behaviour break. Pressing a group opens the panel with the group's numbers and its first 200 lines, and a link opens Lines with that filter. Owner-visible; reversed by making the table a tree grid later.
+1. **A Breakdown group expands in place to its lines** (spec 9.2; chosen by the owner on 2026-10-17 over opening it in the panel). The pinned React Aria Components 1.22.1 has expandable table rows (a tree grid: `hasChildItems`, `isExpanded`, the expanded keys of `useTreeGridState`); `DataTable` gains them. An expanded group shows its first 200 lines as child rows (read when it is expanded) and a last child row "Open all N lines in Lines" when there are more. Keyboard follows the tree grid pattern: Right expands, Left collapses or moves to the parent, Enter on a line row opens the line in the panel.
 2. **A matrix shows at most 30 rows and 30 columns.** The rest of each dimension is folded into one "Other" row or column, counted by Rust. A cell of "Other" is not pressable; the folded values are named in its tooltip line count only. Remark by blocker would otherwise be a million cells.
 3. **Charts are SVG over tokens, no chart library.** Two charts are needed (heatmap, cumulative line); a library would bring its own styles, motion, and accessibility model. Every chart has a table view, keyboard focus on its marks, and a tooltip that keyboard focus shows as well (spec 13.2).
 4. **The solve order follows the filters.** The Blockers screen plans the blockers of the holds the filters keep. The line panel's chain keeps using the unfiltered plan of open holds (M1c-1), and says so.
@@ -51,14 +51,15 @@ Every constraint of the M1c-1 plan holds, unchanged:
 
 ```
 crates/core/src/query.rs           matrix_top, stale_count
-crates/core/src/detail.rs          BlockerDetail, blocker_detail, GroupDetail inputs
+crates/core/src/detail.rs          BlockerDetail, blocker_detail
 crates/core/src/solve.rs           SolveRow, solve_rows
 src-tauri/src/app/data.rs          breakdown, matrix, solve_order, blocker_detail, group_lines
 src-tauri/src/app/snapshots.rs     OverviewView extended
 ui/src/components/charts/          Heatmap, LineChart, ChartTooltip, ChartTable (new)
 ui/src/features/breakdown/         BreakdownPage, list mode, matrix mode, dims, address (new)
+ui/src/components/DataTable/       expandable rows (tree grid)
 ui/src/features/blockers/          BlockersPage, curve, steps table, address (new)
-ui/src/features/detail/            GroupDetail, BlockerDetail; selection gains group and blocker
+ui/src/features/detail/            BlockerDetail; selection gains blocker
 ui/src/features/overview/          role bars, top blockers, top lines, attention list
 DESIGN.md                          Chart foundations, Heatmap, Legend, Line chart, chart focus
 ```
@@ -211,17 +212,19 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 4: Breakdown, list mode, and the group panel
+### Task 4: Expandable table rows, and Breakdown list mode
 
-**Files:** new `ui/src/features/breakdown/{BreakdownPage.tsx, ListMode.tsx, dims.ts, address.ts}` with tests; `ui/src/features/detail/{GroupDetail.tsx, selection.ts}`; `ui/src/app/selection.ts`; `ui/src/app/{destinations.ts, router.tsx}`; `ui/src/locales/en.json`; development mocks.
+**Files:** `ui/src/components/DataTable/*` (expandable rows) and the Table section of `DESIGN.md`; new `ui/src/features/breakdown/{BreakdownPage.tsx, ListMode.tsx, dims.ts, address.ts}` with tests; `ui/src/app/{destinations.ts, router.tsx}`; `ui/src/locales/en.json`; development mocks.
+
+**DataTable first:** optional props `childRows?: (item) => { rows, isLoading, error, more } | undefined`, `expandedKeys`, `onExpandedChange` (the screen holds the expanded keys and reads the children); child rows use their own columns renderer (`childColumns`) sharing the parent's tracks; the row count line counts top-level rows; virtualisation, the count line, load-more, `resultKey`, and selection keep working with rows expanded. Confirm the tree grid API in the installed `react-aria-components` 1.22.1 and `react-stately` 3.51.0 before building; adapt and report. `DESIGN.md` gains the expanded row: the chevron, indentation, child row look, loading and error child rows.
 
 **What it shows:** header "Breakdown" with a view switch (List, Matrix); a group-by select (Discipline, Hold type, Role, Name, Blocker type, Blocker, Remark, Size, Stress calc, then custom dimensions; the ones `absent` lists are left out); the filter bar; a table of groups: label, a neutral bar proportional to holds (scale domain from the largest group the command returned), holds, lines. Address: `/breakdown?mode=list&by=<dimId>`; the selection `?group=<key>`.
 
-**Rules:** pressing a group selects it and opens the group panel: its label, holds, lines, and its first 200 lines (a read-only list), with "Open in Lines" that adds the group's value to the filters and opens Lines. The selection is dropped when the group-by changes, and with the same rules as line and hold when the workspace or snapshot changes. Empty states as Lines'.
+**Rules:** pressing a group (or Right, or the chevron) expands it; its child rows are read with `group_detail` when it expands (skeleton child rows meanwhile; an error child row with a retry); the child rows show line ID, holds, disciplines, oldest; a line child row opens the line in the detail panel (`?line=`); a last child row "Open all N lines in Lines" adds the group's value to the filters and opens Lines. Expanded groups are kept in the address (`open=<key>,<key>`) and closed when the group-by changes. Empty states as Lines'.
 
-**Tests:** request per dimension; dims hidden by `absent`; address round trip; selecting a group asks `group_detail` and shows its lines; "Open in Lines" sets the filter and navigates; group-by change drops the selection; `Ctrl+2` opens it; no "Soon" tag; `axe`.
+**Tests:** DataTable: expand and collapse by pointer, Right, Left; child loading, error, and retry rows; aria-level and aria-expanded; virtualisation with a group of 200 lines expanded; selection and focus across parent and child rows. Page: request per dimension; dims hidden by `absent`; address round trip including open groups; expanding asks `group_detail` once and shows its lines; a line child opens the panel; "Open all" sets the filter and navigates; group-by change closes groups; `Ctrl+2` opens it; no "Soon" tag; `axe`.
 
-**Commit:** `feat(ui): Breakdown list mode and the group panel`
+**Commit:** `feat(ui): expandable table rows and Breakdown list mode`
 
 ---
 
@@ -300,7 +303,7 @@ Items listed as "later" by the M1c-1 reviews that touch what this plan builds on
 
 ### Task 10: Whole-plan verification and design audit
 
-As M1c-1's Task 11: every verification step (Rust, interface, bindings, tokens, build, `check:dist`, binary size, release performance with timings, parity, no data files); the design audit of Breakdown (both modes), Blockers, the blocker and group panels, and Overview, in both themes and densities at 1280 and 1920; the palette validator for the heatmap ramp; a keyboard-only walk (Overview to a top blocker, its linked blocker, a line it frees; Breakdown matrix cell to Lines; back); the spec (9.2 Breakdown, Blockers, Overview; 8.5 to 8.7 as far as built), the README, and the plan's post-review corrections.
+As M1c-1's Task 11: every verification step (Rust, interface, bindings, tokens, build, `check:dist`, binary size, release performance with timings, parity, no data files); the design audit of Breakdown (both modes, groups expanded), Blockers, the blocker panel, and Overview, in both themes and densities at 1280 and 1920; the palette validator for the heatmap ramp; a keyboard-only walk (Overview to a top blocker, its linked blocker, a line it frees; Breakdown matrix cell to Lines; back); the spec (9.2 Breakdown, Blockers, Overview; 8.5 to 8.7 as far as built), the README, and the plan's post-review corrections.
 
 **Commit:** `docs: record M1c-2 in the spec, the plan, and the README`
 
@@ -308,14 +311,14 @@ As M1c-1's Task 11: every verification step (Rust, interface, bindings, tokens, 
 
 ## What exists when this plan is done
 
-Breakdown in two modes, Blockers with the solve order and its curve, the blocker and group panels, and the full Overview of M1 (deltas and trend wait for M2). Five destinations real, four "Soon".
+Breakdown in two modes with groups that expand to their lines, Blockers with the solve order and its curve, the blocker panel, and the full Overview of M1 (deltas and trend wait for M2). Five destinations real, four "Soon".
 
 ## Spec coverage of this plan
 
 | Spec | Covered by | Left |
 |---|---|---|
 | 9.2 Overview: tiles, bars by discipline, hold type, role; top blockers and lines; attention list; drill-through | Tasks 1, 2, 8 | deltas, trend, released since previous (M2); overdue follow-ups, watchlist (M4) |
-| 9.2 Breakdown: group-by switcher, list with bars and counts, matrix heatmap, cell opens its lines | Tasks 1 to 5 | deltas (M2); a row expanding in place (decision 1) |
+| 9.2 Breakdown: group-by switcher, list with bars and counts, matrix heatmap, cell opens its lines | Tasks 1 to 5 | deltas (M2) |
 | 8.5 solve order, complete, gain per step, cumulative curve | Tasks 1, 2, 6 | |
 | 8.7 blocker detail: frees alone, still blocked, linked, oldest hold | Tasks 1, 2, 7 | change since previous (M2); line chain links (done in 7) |
 | 8.6 graph, 8.8 what-if, 8.1 to 8.4 rules editor, overrides, clean-up | | M3 |
