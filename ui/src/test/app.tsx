@@ -9,7 +9,7 @@ import type { AppStart } from "../bindings/AppStart";
 import { filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { mockCommands, type Handlers } from "./ipc";
-import { holdsView, linePage } from "./lines";
+import { holdRef, holdsView, lineDetail, linePage } from "./lines";
 import { overviewOf } from "./overview";
 
 export interface RenderAppOptions {
@@ -30,7 +30,8 @@ export interface RenderAppOptions {
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`,
  * `overview` with the overview of the snapshot `start` has selected, `filter_options` with the
  * options of the default filter, `filter_values` with three values whatever the dimension, and
- * `lines` and `holds` with the three lines and the three holds of a small snapshot, unless the
+ * `lines` and `holds` with the three lines and the three holds of a small snapshot, and
+ * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, unless the
  * test gives its own.
  */
 export function renderApp(options: RenderAppOptions = {}) {
@@ -45,6 +46,8 @@ export function renderApp(options: RenderAppOptions = {}) {
     filter_values: () => valuePage(),
     lines: () => linePage(),
     holds: () => holdsView(),
+    line_detail: ({ lineId }) => lineDetail(lineId),
+    hold_detail: ({ position }) => holdRef(position),
     ...options.handlers,
   });
   const router = createMemoryRouter(appRoutes(options.destinations, options.pages), {

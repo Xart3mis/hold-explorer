@@ -1,15 +1,23 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { expect, vi } from "vitest";
 import { useStart } from "../app/actions/start";
 import { queryClient } from "../app/query";
 import { openStart } from "./fixtures";
 import { mockCommands, type Handlers } from "./ipc";
 
-/** The query client of the app, around a hook a test renders by itself. */
+/**
+ * The query client of the app, around a hook a test renders by itself, on a router: an action
+ * may change the address, as selecting a snapshot does when a hold is open.
+ */
 export function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
 }
 
 /**

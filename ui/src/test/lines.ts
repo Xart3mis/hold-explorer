@@ -2,6 +2,7 @@
 import type { Hold } from "../bindings/Hold";
 import type { HoldRef } from "../bindings/HoldRef";
 import type { HoldsView } from "../bindings/HoldsView";
+import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineRow } from "../bindings/LineRow";
 
@@ -113,4 +114,53 @@ export function holdsView(
     });
   });
   return { total, widest_line_id: lineId(0).length, rows };
+}
+
+/**
+ * What `line_detail` answers for a line of `linePage`: two open holds on two blockers, the first
+ * at step 3 of the solve order and the second in none, one released hold, and sizes that differ.
+ */
+export function lineDetail(
+  id: string = lineId(0),
+  overrides: Partial<LineDetail> = {},
+): LineDetail {
+  return {
+    line_id: id,
+    model_size: 8,
+    ldt_size: 10,
+    stress_calc: "Required",
+    size_mismatch: true,
+    open: [
+      holdRef(0, { line_id: id }),
+      holdRef(3, {
+        line_id: id,
+        discipline: "Civil",
+        hold_type: "Client decision",
+        name: "M. Okafor",
+        role: "Designer",
+        remark: "HOLD UNTIL CLIENT CONFIRMS THE ROUTING NEAR THE PIPE RACK",
+        created: "2026-06-11T00:00:00",
+      }),
+    ],
+    released: [
+      holdRef(5, {
+        line_id: id,
+        released: true,
+        release_date: "2026-09-19T00:00:00",
+        release_remark: "Data received",
+        remark: "HOLD FOR STRESS CALCULATION",
+      }),
+    ],
+    chain: [
+      { key: "Piping|577-PK-400", label: "Piping / 577-PK-400", kind: "PK", step: 3, lines: 12 },
+      {
+        key: "Civil|Client decision",
+        label: "Civil / Client decision",
+        kind: "Other",
+        step: null,
+        lines: 1,
+      },
+    ],
+    ...overrides,
+  };
 }

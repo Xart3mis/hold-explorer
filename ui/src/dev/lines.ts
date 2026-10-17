@@ -6,7 +6,9 @@ import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { HoldRef } from "../bindings/HoldRef";
+import type { ChainLink } from "../bindings/ChainLink";
 import type { HoldsView } from "../bindings/HoldsView";
+import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { LineRow } from "../bindings/LineRow";
@@ -48,6 +50,7 @@ const ROLES = ["Lead engineer", "Designer", "Checker", "Package engineer", "—"
 const STRESS = ["Required", "Not required", "Done", ""];
 const SIZES = [0.75, 1, 1.5, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24];
 const SERVICES = ["FW", "CW", "PR", "PL", "ST", "NG", "IA"];
+const AREAS = ["North rack", "South rack", "Pump house", "Tank farm", ""];
 
 /** What a remark can say, with the blocker the rules would derive from it. */
 const REMARKS: readonly ((unit: number, item: number) => [string, string, string])[] = [
@@ -142,7 +145,11 @@ function generate(snapshot: SnapshotInfo, matchingSizes: boolean): readonly Hold
             model_size: model,
             ldt_size: ldt,
             stress_calc: stress,
-            extra: {},
+            // Two columns the mapping did not know: one most holds fill, one few do.
+            extra: {
+              Area: pick(random, AREAS, ""),
+              "Work pack": random() < 0.2 ? `WP-${String(unit)}-${String(1 + (line % 40))}` : "",
+            },
           },
           blocker: { kind, item },
           remark_key: remark.toLowerCase(),
@@ -465,4 +472,81 @@ export function devLines(
     widest_line_id: widest(sorted.map((line) => line.line_id)),
     rows: sorted.slice(offset, offset + PAGE),
   };
+}
+
+/** How many blockers of a snapshot the made-up solve plan gives a step. */
+const PLAN_STEPS = 40;
+
+/**
+ * The blockers of the open holds of a snapshot, with the lines each is on and its step: the
+ * blockers on the most lines get the first steps, as a plan that frees the most lines first
+ * would give them, and the rest have none.
+ */
+function blockersOf(snapshot: SnapshotInfo, matchingSizes: boolean) {
+  return remembered(`blockers:${String(snapshot.id)}:${String(matchingSizes)}`, () => {
+    const lines = new Map<string, Set<string>>();
+    for (const { row } of holdsOf(snapshot, matchingSizes)) {
+      if (row.hold.released) continue;
+      const key = `${row.hold.discipline}|${row.blocker.item}`;
+      const on = lines.get(key) ?? new Set<string>();
+      on.add(row.hold.line_id);
+      lines.set(key, on);
+    }
+    const ranked = [...lines.entries()]
+      .filter(([key]) => !key.endsWith("|Other"))
+      .sort(([a, one], [b, other]) => other.size - one.size || ascending(a, b))
+      .slice(0, PLAN_STEPS);
+    const steps = new Map(ranked.map(([key], index) => [key, index + 1]));
+    return { lines, steps };
+  });
+}
+
+/** What `line_detail` answers on the development page: `null` for a line without holds. */
+export function devLineDetail(
+  snapshot: SnapshotInfo,
+  lineId: string,
+  matchingSizes = false,
+): LineDetail | null {
+  const holds = holdsOf(snapshot, matchingSizes).filter(({ row }) => row.hold.line_id === lineId);
+  const open = holds.filter(({ row }) => !row.hold.released);
+  const first = open[0] ?? holds[0];
+  if (first === undefined) return null;
+  const { lines, steps } = blockersOf(snapshot, matchingSizes);
+  const chain: ChainLink[] = [];
+  for (const { row } of open) {
+    const key = `${row.hold.discipline}|${row.blocker.item}`;
+    if (chain.some((link) => link.key === key)) continue;
+    chain.push({
+      key,
+      label: `${row.hold.discipline} / ${row.blocker.item}`,
+      kind: row.blocker.kind,
+      step: steps.get(key) ?? null,
+      lines: lines.get(key)?.size ?? 1,
+    });
+  }
+  // Those with a step first, by step; the others after, in order of first appearance.
+  const stepped = chain
+    .filter((link) => link.step !== null)
+    .sort((a, b) => (a.step ?? 0) - (b.step ?? 0));
+  const { hold } = first.row;
+  return {
+    line_id: lineId,
+    model_size: hold.model_size,
+    ldt_size: hold.ldt_size,
+    stress_calc: hold.stress_calc,
+    size_mismatch:
+      hold.model_size !== null && hold.ldt_size !== null && hold.model_size !== hold.ldt_size,
+    open,
+    released: holds.filter(({ row }) => row.hold.released),
+    chain: [...stepped, ...chain.filter((link) => link.step === null)],
+  };
+}
+
+/** What `hold_detail` answers on the development page: `null` past the end of the snapshot. */
+export function devHoldDetail(
+  snapshot: SnapshotInfo,
+  position: number,
+  matchingSizes = false,
+): HoldRef | null {
+  return holdsOf(snapshot, matchingSizes)[position] ?? null;
 }

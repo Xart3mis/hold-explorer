@@ -30,7 +30,7 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
-import { devHoldCount, devHolds, devLines } from "./lines";
+import { devHoldCount, devHoldDetail, devHolds, devLineDetail, devLines } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
 
@@ -85,6 +85,16 @@ export const DEV_STATES = [
   "lines-matching-sizes",
   "lines-error",
   "lines-loading",
+  // The detail panel: every state answers a line and a hold from the same made-up holds. Open a
+  // line or a hold by its address, and a line that is in no snapshot the same way:
+  //   dev.html?state=open#/lines?line=78B01-500-00001-FW-001
+  //   dev.html?state=open#/lines?rows=holds&hold=3
+  //   dev.html?state=open#/lines?line=78B99-000-00000-XX-000
+  // These add a newest snapshot that is limited (no released column, no hold ID), answers that
+  // take two seconds (select another snapshot to see a re-read), and a reading that fails.
+  "detail-limited",
+  "detail-slow",
+  "detail-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -348,7 +358,8 @@ function world(state: DevState, theme: Theme): World {
   const all = [offsites, tankFarm, unit573];
 
   switch (state) {
-    case "overview-limited": {
+    case "overview-limited":
+    case "detail-limited": {
       // The newest export came without its released column.
       const held = fourSnapshots.map((taken) =>
         taken.id === 4 ? { ...taken, limited: true, open_count: taken.row_count } : taken,
@@ -401,6 +412,8 @@ function world(state: DevState, theme: Theme): World {
     case "lines-matching-sizes":
     case "lines-error":
     case "lines-loading":
+    case "detail-slow":
+    case "detail-error":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -708,7 +721,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(120, () => {
         // Each count is the filter with that one part replaced, as the command counts them. The
         // states of Lines count the made-up holds their tables show, so the two agree.
-        const isLines = state.startsWith("lines-");
+        const isLines = state.startsWith("lines-") || state.startsWith("detail-");
         const kept = (part: Partial<FilterSpec>) =>
           selected === undefined
             ? 0
@@ -766,6 +779,24 @@ export function installDevCommands(state: DevState, theme: Theme): string {
         selected === undefined
           ? { total: 0, widest_line_id: 0, rows: [] }
           : devHolds(selected, spec, query, state === "lines-matching-sizes"),
+      );
+    },
+    line_detail: (payload) => {
+      const { selected } = inView(payload);
+      const { lineId } = payload as { lineId: string };
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      return later(state === "detail-slow" ? 2000 : 120, () =>
+        selected === undefined ? null : devLineDetail(selected, lineId, matching),
+      );
+    },
+    hold_detail: (payload) => {
+      const { selected } = inView(payload);
+      const { position } = payload as { position: number };
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      return later(state === "detail-slow" ? 2000 : 120, () =>
+        selected === undefined ? null : devHoldDetail(selected, position, matching),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

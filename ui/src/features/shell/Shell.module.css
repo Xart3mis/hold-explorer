@@ -1,15 +1,35 @@
 /*
  * The approved layout: a top bar across the window, the sidebar on the left while a workspace is
- * open, and the content area. Regions are separated by hairlines, never by a shadow.
+ * open, the content area, and the detail panel on the right while a row is selected. Regions are
+ * separated by hairlines, never by a shadow.
  */
 .layout {
+  position: relative;
   display: grid;
   grid-template:
-    "topbar topbar" var(--layout-topbar-height)
-    "sidebar content" minmax(0, 1fr)
-    / auto minmax(0, 1fr);
+    "topbar topbar topbar" var(--layout-topbar-height)
+    "sidebar content detail" minmax(0, 1fr)
+    / auto minmax(0, 1fr) auto;
   block-size: 100%;
   background-color: var(--color-surface-app);
+}
+
+/* From the wide breakpoint the panel is a column of its own, and the content narrows. */
+.detail {
+  grid-area: detail;
+}
+
+/*
+ * Below it the panel lies over the right edge of the content area, which keeps its width: placed
+ * in the area of the content, at the layer of a panel, with the shadow of what floats.
+ */
+.layout[data-detail="overlay"] > .detail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: var(--z-panel);
+  grid-area: content;
+  box-shadow: var(--shadow-overlay);
 }
 
 /* The top bar never scrolls. */

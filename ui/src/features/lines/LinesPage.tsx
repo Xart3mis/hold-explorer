@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
@@ -29,6 +29,7 @@ import {
 } from "../../components";
 import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
+import { useDetailFocus, useSelection } from "../detail/selection";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import {
@@ -120,6 +121,12 @@ async function readHolds(
   return { ...page, status: spec.status };
 }
 
+/** The key the table gave the row an element is in; `null` outside a row. */
+function rowKeyOf(element: EventTarget | null): string | null {
+  const row = element instanceof Element ? element.closest<HTMLElement>("[role='row']") : null;
+  return row?.dataset.key ?? null;
+}
+
 /** The same list for as long as it has the same items, so what is built from it is kept. */
 function useSameList<Item>(list: readonly Item[]): readonly Item[] {
   const [held, setHeld] = useState(list);
@@ -203,6 +210,65 @@ export function LinesPage() {
   const state = parseLinesAddress(location.search);
   const mode = state.rows;
   const { spec, isDefault, clear, update } = useFilters();
+  const { selection, close } = useSelection();
+  const focus = useDetailFocus();
+  const tableArea = useRef<HTMLDivElement>(null);
+  // The row that opened the detail panel, and whether the key that is down is Enter: a row
+  // chosen with Enter opens the panel with the focus on its heading, a row pressed keeps it.
+  const opener = useRef<string | null>(null);
+  const byEnter = useRef(false);
+
+  // When the panel closes, the focus goes back to the row that opened it, or to the table when
+  // that row is no longer there.
+  useEffect(() => {
+    focus.setGiveBack(() => {
+      const area = tableArea.current;
+      if (area === null) return;
+      const rows = [...area.querySelectorAll<HTMLElement>("[role='row'][data-key]")];
+      const row = rows.find((candidate) => candidate.dataset.key === opener.current);
+      (row ?? area.querySelector<HTMLElement>("[role='grid']"))?.focus();
+    });
+    return () => {
+      focus.setGiveBack(null);
+    };
+  }, [focus]);
+
+  // What the table is told by the keyboard, learned around it: the table answers Enter and
+  // Escape itself. Enter selects a row, and a row selected with it opens the panel with the
+  // focus on its heading; Enter on the row that is open already takes the focus there. Escape
+  // on the table closes the panel and leaves the focus where it is, on the table.
+  const selectedKey = selectionOf(location.search, mode);
+  const isOpen = selection !== null;
+  useEffect(() => {
+    const area = tableArea.current;
+    if (area === null) return;
+    const learn = (event: KeyboardEvent) => {
+      byEnter.current = event.key === "Enter";
+    };
+    const forget = () => {
+      byEnter.current = false;
+    };
+    const answer = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isOpen && !event.defaultPrevented) {
+        event.preventDefault();
+        close();
+        return;
+      }
+      const key = rowKeyOf(event.target);
+      if (event.key === "Enter" && key !== null && key === selectedKey) {
+        opener.current = key;
+        focus.focusHeading();
+      }
+    };
+    area.addEventListener("keydown", learn, { capture: true });
+    area.addEventListener("pointerdown", forget, { capture: true });
+    area.addEventListener("keydown", answer);
+    return () => {
+      area.removeEventListener("keydown", learn, { capture: true });
+      area.removeEventListener("pointerdown", forget, { capture: true });
+      area.removeEventListener("keydown", answer);
+    };
+  });
 
   const options = useSnapshotQuery({
     name: "filterOptions",
@@ -252,6 +318,9 @@ export function LinesPage() {
     void navigate(linesAddress(next, location.search), { replace: true });
   };
   const select = (key: string) => {
+    opener.current = key;
+    if (byEnter.current) focus.askForHeading();
+    byEnter.current = false;
     void navigate(
       { pathname: location.pathname, search: withSelection(location.search, shownMode, key) },
       { replace: true },
@@ -372,7 +441,7 @@ export function LinesPage() {
           />
         )}
         {hasTable ? (
-          <div data-part="lines-table" className={styles.table}>
+          <div ref={tableArea} data-part="lines-table" className={styles.table}>
             {shownMode === "holds" ? (
               <DataTable
                 // A table of the other kind of row is another table: its rows are built anew.
