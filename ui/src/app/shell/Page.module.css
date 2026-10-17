@@ -19,6 +19,14 @@
   --page-max-width: var(--layout-content-max-width);
 }
 
+/*
+ * A page whose table is the page: as tall as the content area, so its last part can take the
+ * height that is left and the table scrolls inside it, never the page.
+ */
+.page[data-fill] {
+  block-size: 100%;
+}
+
 /* Without weight of its own, so a part that sets a narrower width keeps it. */
 :where(.page > *) {
   max-inline-size: var(--page-max-width);
@@ -34,6 +42,19 @@
   max-inline-size: none;
   margin-block-end: var(--space-4);
   margin-inline: calc(-1 * var(--layout-page-padding-x));
+}
+
+/*
+ * The view switch stands directly under the header. With a bar under it, the hairline of the
+ * switch and the upper hairline of the bar are one line: the bar starts on it, and the indicator
+ * of the view in view lies on it.
+ */
+.page > .views {
+  flex: none;
+}
+
+.page > .views + .bar {
+  margin-block-start: calc(-1 * var(--border-width-thin));
 }
 
 /* The title takes the focus when its page opens; the ring shows where a keyboard user is. */

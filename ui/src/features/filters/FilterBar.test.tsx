@@ -62,7 +62,7 @@ function renderBar(answer: Answer = () => filterOptions(), handlers: Handlers = 
   const app = renderApp({
     start: openStart(),
     path: "/overview",
-    pages: { overview: <Screen />, settings: <SettingsPage /> },
+    pages: { overview: <Screen />, lines: <Screen />, settings: <SettingsPage /> },
     handlers: { ...handlers, filter_options: options },
   });
   return { ...app, options };
@@ -890,11 +890,14 @@ describe("FilterBar", () => {
 });
 
 describe("where the filter bar is", () => {
-  it("is on Overview, and not on Settings, the welcome page, a coming soon screen, or the import page", async () => {
+  it("is on Overview and Lines, and not on Settings, the welcome page, a coming soon screen, or the import page", async () => {
     const { router } = renderApp({ start: openStart(), path: "/overview" });
     expect(await screen.findByRole("group", { name: text.bar })).toBeInTheDocument();
+    await act(() => router.navigate("/lines"));
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines });
+    expect(await screen.findByRole("group", { name: text.bar })).toBeInTheDocument();
 
-    for (const path of ["/settings", "/welcome", "/lines", "/import"]) {
+    for (const path of ["/settings", "/welcome", "/blockers", "/import"]) {
       await act(() => router.navigate(path));
       await screen.findByRole("heading", { level: 1 });
       expect(router.state.location.pathname).toBe(path);

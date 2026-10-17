@@ -11,6 +11,7 @@ import {
   IMPORT_REVIEW_PATH,
   IMPORT_SHEET_PATH,
 } from "../features/import/start";
+import { LinesPage } from "../features/lines/LinesPage";
 import { OverviewPage } from "../features/overview/OverviewPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { AppLayout } from "../features/shell/AppLayout";
@@ -32,6 +33,7 @@ export type DestinationPages = Partial<Record<DestinationId, ReactElement>>;
 
 export const destinationPages: DestinationPages = {
   overview: <OverviewPage />,
+  lines: <LinesPage />,
   settings: <SettingsPage />,
 };
 

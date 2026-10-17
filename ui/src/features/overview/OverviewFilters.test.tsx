@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import fixture from "../../api/open-holds-filter.json";
 import { defaultFilters, useFilters, type Filters } from "../../app/filters/state";
+import { destinationPages } from "../../app/router";
 import type { OverviewView } from "../../bindings/OverviewView";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
@@ -41,6 +42,7 @@ function renderOverview(answer: Answer = () => overviewView()) {
     start: openStart(),
     path: "/overview",
     pages: {
+      ...destinationPages,
       overview: (
         <>
           <OverviewPage />

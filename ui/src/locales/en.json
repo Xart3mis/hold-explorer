@@ -20,7 +20,8 @@
     "showInFolder": "Show in folder"
   },
   "units": {
-    "days": "{{value}} d"
+    "days": "{{value}} d",
+    "inches": "{{value}}\""
   },
   "keys": {
     "ctrl": "Ctrl"
@@ -168,7 +169,6 @@
     "action": "Go to Overview",
     "description": {
       "breakdown": "Breakdown will group the holds by discipline, hold type, role, blocker, or another field, as bars or as a matrix of two fields. A row or a cell will open its lines.",
-      "lines": "Lines will list every line on hold in one table, with its holds, disciplines, blockers, oldest age, and sizes. Presets will sort it, for example oldest first or easiest to release.",
       "blockers": "Blockers will show what the holds wait for and how the blockers depend on each other. It will rank them by the number of lines each one frees when it is solved.",
       "history": "History will compare two snapshots and list the holds that were added, released, changed, or reopened. It will also show the trend of open holds and the list of snapshots.",
       "people": "People will list, for each name on the export, the holds raised, open, and released, the oldest open hold, and the median age.",
@@ -557,5 +557,74 @@
     "emptyTitle": "This workspace has no snapshots",
     "emptyText": "Import a holds export to add the first snapshot. Overview then shows its open holds by discipline and by hold type.",
     "emptyAction": "Import"
+  },
+  "lines": {
+    "modes": "Rows to show",
+    "modeLines": "Lines",
+    "modeHolds": "Holds",
+    "linesTable": "Lines",
+    "holdsTable": "Holds",
+    "presets": {
+      "label": "Presets",
+      "all": "All",
+      "single": "Single hold",
+      "easiest": "Easiest to release",
+      "oldest": "Oldest first",
+      "mismatch": "Size mismatch"
+    },
+    "column": {
+      "line": "Line",
+      "holds": "Holds",
+      "disciplines": "Disciplines",
+      "holdTypes": "Hold types",
+      "blockers": "Blockers",
+      "oldest": "Oldest",
+      "modelSize": "Model size",
+      "ldtSize": "LDT size",
+      "stressCalc": "Stress calc",
+      "sizes": "Sizes",
+      "discipline": "Discipline",
+      "holdType": "Hold type",
+      "remark": "Remark",
+      "blocker": "Blocker",
+      "blockerType": "Blocker type",
+      "name": "Name",
+      "role": "Role",
+      "created": "Created",
+      "age": "Age",
+      "releasedOn": "Released on",
+      "duration": "Duration",
+      "status": "Status",
+      "days": "Days"
+    },
+    "sizeMismatch": "Size mismatch",
+    "statusOpen": "Open",
+    "statusReleased": "Released",
+    "countLines_one": "{{count, number}} line",
+    "countLines_other": "{{count, number}} lines",
+    "countLinesOf_one": "{{shown, number}} of {{count, number}} line",
+    "countLinesOf_other": "{{shown, number}} of {{count, number}} lines",
+    "countLinesLimited_one": "{{shown, number}} of {{count, number}} line are shown. Narrow the filters or reverse the sort to reach the others.",
+    "countLinesLimited_other": "{{shown, number}} of {{count, number}} lines are shown. Narrow the filters or reverse the sort to reach the others.",
+    "countHolds_one": "{{count, number}} hold",
+    "countHolds_other": "{{count, number}} holds",
+    "countHoldsOf_one": "{{shown, number}} of {{count, number}} hold",
+    "countHoldsOf_other": "{{shown, number}} of {{count, number}} holds",
+    "countHoldsLimited_one": "{{shown, number}} of {{count, number}} hold are shown. Narrow the filters or reverse the sort to reach the others.",
+    "countHoldsLimited_other": "{{shown, number}} of {{count, number}} holds are shown. Narrow the filters or reverse the sort to reach the others.",
+    "emptyTitle": "This workspace has no snapshots",
+    "emptyText": "Import a holds export to add the first snapshot. Lines then lists its lines on hold and their holds.",
+    "emptyAction": "Import",
+    "noneTitleLines": "No line matches the filters",
+    "noneTitleHolds": "No hold matches the filters",
+    "noneText": "Change a filter in the bar above, or clear them all to show the open holds of the snapshot again.",
+    "noneAction": "Clear all",
+    "noOpenTitle": "This snapshot has no open holds",
+    "noOpenText": "Choose All holds or Released holds in the status menu of the bar above to show the released ones.",
+    "presetNoneTitle": "No line fits {{preset}}",
+    "presetNoneText": "None of the lines the filters keep fits the preset {{preset}}. Choose All to show every line they keep.",
+    "presetNoneAction": "Choose All",
+    "errorLines": "The lines could not be loaded",
+    "errorHolds": "The holds could not be loaded"
   }
 }

@@ -1,0 +1,71 @@
+/*
+ * The page is as tall as the content area. Its content takes the height under the bar: the row
+ * of presets, a notice when a reading failed, and the table, which takes the rest and scrolls
+ * inside it.
+ */
+.content {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-block-size: 0;
+}
+
+/* The presets: a row of quiet buttons at the leading edge, one marked when it is the query. */
+.presets {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.preset {
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.preset[data-hovered] {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.preset[data-pressed] {
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
+.preset[data-selected] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+}
+
+.preset[data-selected][data-hovered],
+.preset[data-selected][data-pressed] {
+  background-color: var(--color-accent-subtle-hover);
+}
+
+.preset[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The table fills what is left, and scrolls inside it. */
+.table {
+  flex: 1 1 0;
+  min-block-size: 0;
+}

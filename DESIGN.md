@@ -701,7 +701,7 @@ Regions and their surfaces: top bar, sidebar, filter bar, and detail panel are `
 
 - **Form width**, at most `--layout-form-max-width`: a page that is filled in or read from top to bottom. Settings, the welcome page, the import page, the sheet step, the import review, a coming soon screen, and the page for an address that does not exist. Running text inside it is still at most `--layout-prose-max-width` wide.
 - **Content width**, at most `--layout-content-max-width`: a page of figures and charts that is read across. Overview and History. Wider than this, bars and tiles stretch until a value sits too far from its label.
-- **Full width**, the whole content area: a page whose table is the page. Lines, Breakdown, and Blockers, and any later page that is a table first. A table is never capped: more width shows more columns.
+- **Full width**, the whole content area: a page whose table is the page. Lines, Breakdown, and Blockers, and any later page that is a table first. A table is never capped: more width shows more columns. Such a page is also exactly as tall as the content area: it does not scroll, and its table takes the height under the header, the bar, and whatever stands above the table, and scrolls inside it.
 - **A form above a table** is a full-width page whose form part keeps the form width, so the fields stay readable and the table after them takes the content area. The mapping step is the one such page: its fields, then the preview of the file.
 
 **Where an error goes.** An error is shown where the user will look for what went wrong, and in one place only. Whatever the place, the text says what happened, why, and how to fix it.
@@ -810,6 +810,7 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
   - One column takes a share wherever the table may be wider than its columns, so the last column reaches the edge. The hairlines run the width of the table either way.
 - **Sideways scroll:** when the columns need more than the table is wide, no column gives way: the table scrolls sideways. The column that names the row, the first one, is pinned: it stays in view over the columns that scroll beneath it, in the header as well, and carries the fill of its row. Once the table is scrolled sideways, a `--border-width-thin` line in `--color-border-default` marks the edge of the pinned column. It is a hairline and not a shadow.
 - **Rows load as the table is scrolled.** A long result arrives a page at a time. When the last row that is loaded comes within the height of the visible part, the table asks for the next page: once for each time the end comes near, and again only after rows were added, so a page that brings nothing is not asked for twice. Only the rows near the visible part are in the document; the row that has the focus stays in it while it is scrolled away, so the focus is never lost to the page. The page says when the rows are another result, as after another filter or sort; the table then returns to its top, and the end of the other result counts as a new end. Nothing else is taken for another result: rows that are added, a result that is read again and lost a row, a first row that changed, all keep their place. Only a table that scrolls inside itself asks for more rows: one that is as tall as its rows has its end in view at all times, so it asks for none.
+- **At most 5,000 rows are loaded.** A table stops asking for more once 5,000 rows are there. A filter change re-renders the rows that are loaded: up to 5,000 it stays well under a tenth of a second in a production build, from 30,000 it took about a third of one (decision of 2026-10-13). The count line then says how many rows are shown of how many there are, and that the others are reached by narrowing the filters or by reversing the sort ("5,000 of 9,312 holds are shown. Narrow the filters or reverse the sort to reach the others."). The limit is one constant of the page that loads the rows.
 - **Load-more row:** while a page is on its way, one row of skeleton lines stands under the last row, at the row height, with the same hairline. It is a picture and not a row: it takes no focus and the arrow keys stop at the last row above it.
 - **Count line:** under a table that shows a part of a longer result, outside what scrolls: how many rows are loaded and how many there are, in the page's own words and with formatted numbers ("200 of 3,612 lines"). `--text-caption` in `--color-text-muted` with tabular figures, padding `--space-2` above and below and `--density-cell-padding-x` at the sides, so it starts where the first column does. Under a table that fills its page a hairline in `--color-border-default` stands between the rows and the line. While a page is on its way the line keeps the count and adds a second sentence after it ("200 of 3,612 lines. Loading more rows"); the count does not move. The line is a status region, so both are announced politely, and it describes the table. A table that shows all of its rows has no visible count line; its count is still announced.
 - **Hover:** fill `--color-surface-hover`.
@@ -832,6 +833,28 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
 - **Disabled:** text `--color-text-disabled`. The reason is given in text on the page, in the panel that is shown; a tooltip on the tab may repeat it.
 - **Loading and error:** belong to the tab's panel, not to the tab.
 
+### View switch
+
+Two to four views of one content: on Lines, a row per line or a row per hold. It looks like a tab list, because it sits where tabs sit and does what tabs seem to do, but it is a choice: every view shows the same place of the page in another way, so there is no panel per view.
+
+- **Anatomy:** a row with a bottom hairline in `--color-border-default`, directly under the page header. Each view is a label: height `--density-control-height`, horizontal padding `--space-3`, text `--text-label` in `--color-text-secondary`, corners `--radius-sm` at the top.
+- **Chosen:** text `--color-text-primary` and a `--border-width-thick` indicator in `--color-accent-text` on the hairline, as wide as the view. The indicator appears in place, fading in over `--duration-fast`; it does not travel.
+- **Hover:** text `--color-text-primary`, fill `--color-surface-hover`. **Active:** fill `--color-surface-pressed`.
+- **Focus:** the inset focus ring. To assistive technology it is a named radio group: one stop for Tab, and the arrow keys move to the next or the previous view and choose it.
+- **Disabled, loading, error:** not applicable. A view applies at once; what loads and fails is the content, which keeps the rows of before, dimmed, until the rows of the chosen view are there.
+
+### Preset row
+
+The questions asked of a table most often, each one press away: on Lines, All, Single hold, Easiest to release, Oldest first, Size mismatch. It stands under the filter bar, at the leading edge, above the table.
+
+- **Anatomy:** quiet buttons in one row, `--space-1` apart: height `--density-control-height`, horizontal padding `--space-3`, corner `--radius-sm` (square: a preset is a query, not a filter that can be removed), text `--text-label` in `--color-text-secondary`. The row wraps when it is narrower than its presets.
+- **Marked:** the preset that is the query of the page has fill `--color-accent-subtle` and text `--color-text-primary`; hover `--color-accent-subtle-hover`. One preset is marked when the query is exactly that preset; none is when the user sorted by a header, so the arrow in the header is the one mark of the sort.
+- **Hover:** fill `--color-surface-hover`, text `--color-text-primary`. **Active:** fill `--color-surface-pressed`.
+- **Focus:** the focus ring. To assistive technology it is a named radio group, one stop for Tab, the arrow keys moving between presets and choosing them. Choosing the marked preset again changes nothing.
+- **Missing data:** a preset that needs a column the snapshot has no value in is not offered (Size mismatch without the model or the LDT size); the filter bar says once which columns are missing.
+- **Empty:** a preset that keeps no row has the empty state of the table say which preset it is, and offer All.
+- **Loading and error:** belong to the table.
+
 ### Stat tile
 
 A row of figures, not a row of cards.
@@ -839,7 +862,8 @@ A row of figures, not a row of cards.
 - **Group:** one container on `--color-surface-raised` with a `--border-width-thin` border in `--color-border-default` and corner `--radius-md`. The tiles are cells of that one container, divided by vertical hairlines in `--color-border-subtle`. Cells are at least `--size-stat-tile-min-width` wide and share the row equally.
 - **Tile:** padding `--space-4`. A label on top (`--text-label`, `--color-text-secondary`), a `--space-1` gap, the value (`--text-stat`, `--color-text-primary`, proportional figures), and, when a previous snapshot exists, a delta line (`--text-caption`, `--color-text-secondary`): an arrow icon, the signed change, and "since previous snapshot" in `--color-text-muted`.
 - **The delta is not colored.** Whether more or fewer is good depends on the figure, so direction is shown by the arrow and the sign.
-- **Interaction:** each tile is a button that opens the filtered screen behind its number. Hover fill `--color-surface-hover`. Active fill `--color-surface-pressed`. Focus: the inset focus ring.
+- **Interaction:** a tile whose number has a screen behind it is a button that opens that screen, under the filters that are set (on Overview: "Lines on hold" opens Lines, "Single-hold lines" opens Lines with the Single hold preset). It says so before it is hovered: its label is in `--color-accent-text`, the ink of what can be acted on, with a chevron at `--size-icon` after it in the same ink, `--space-1` apart; the value keeps its ink. Hover fill `--color-surface-hover`. Active fill `--color-surface-pressed`. Focus: the inset focus ring. The whole tile is the target, and its name is its label and its value.
+- **Static:** a tile whose number has no screen behind it yet is not a button: no focus, no hover or pressed fill, no chevron, and its label in `--color-text-secondary`. A pressable tile is static while it loads and while its figure is unavailable: there is nothing to open yet.
 - **Disabled:** a figure the snapshot cannot provide shows a dash in `--color-text-disabled` and a caption naming the missing column.
 - **Loading:** a skeleton block in place of the value; the label stays.
 - **Error:** the group is replaced by one inline danger notice.
@@ -945,7 +969,7 @@ A destination that is not built yet opens a screen made of the page header and t
 
 ### Page header
 
-- **Anatomy:** on a page below a destination, a breadcrumb as the first line (see "Breadcrumb"); then the page title (`--text-page-title`, `--color-text-primary`) on the left, with an optional one-line description under it (`--text-body`, `--color-text-secondary`); page actions as buttons on the right, level with the title. Tabs or the filter bar, when the page has them, sit directly under the header.
+- **Anatomy:** on a page below a destination, a breadcrumb as the first line (see "Breadcrumb"); then the page title (`--text-page-title`, `--color-text-primary`) on the left, with an optional one-line description under it (`--text-body`, `--color-text-secondary`); page actions as buttons on the right, level with the title. Tabs, a view switch, or the filter bar, when the page has them, sit directly under the header; a view switch stands above the filter bar, and its hairline and the upper hairline of the bar are one line.
 - **Spacing:** the header starts at the content padding (`--layout-page-padding-x`, `--layout-page-padding-y`) and is followed by a `--space-4` gap. A `--space-2` gap separates the breadcrumb from the title. The header has no border and no background of its own.
 - **Rules:** one page title per page, and it names the destination or the step ("Lines", "Review import"). No icon beside it. A destination has no breadcrumb above its title; a page below a destination has one.
 - **Loading:** the title and the breadcrumb are known before the data is and never show a skeleton.

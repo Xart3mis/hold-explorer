@@ -63,7 +63,7 @@ async function renderProbe() {
   const app = renderApp({
     start: openStart(),
     path: "/overview",
-    pages: { overview: <Probe />, settings: <Probe /> },
+    pages: { overview: <Probe />, lines: <Probe />, settings: <Probe /> },
     handlers: {
       workspace_open: ({ id }) =>
         id === otherWorkspace.id

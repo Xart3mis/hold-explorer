@@ -36,6 +36,28 @@ describe("StatTile", () => {
     expect(onPress).toHaveBeenCalledTimes(3);
   });
 
+  it("says that it opens something before it is hovered, and a tile that opens nothing does not", () => {
+    render(
+      <StatTileGroup aria-label="Open holds in this snapshot">
+        <StatTile label="Open holds" value="5,042" />
+        <StatTile label="Lines on hold" value="3,611" onPress={vi.fn()} />
+        <StatTile label="Median age" isLoading onPress={vi.fn()} />
+      </StatTileGroup>,
+    );
+    const button = screen.getByRole("button", { name: "Lines on hold 3,611" });
+    expect(button).toHaveAttribute("data-pressable");
+    // A chevron after the label, which names nothing to assistive technology.
+    expect(within(button).getByText("Lines on hold").querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    const still = screen.getByText("Open holds");
+    expect(still.querySelector("svg")).toBeNull();
+    expect(still.closest("[data-pressable]")).toBeNull();
+    // While it loads it opens nothing yet, and says nothing of it.
+    expect(screen.getByText("Median age").querySelector("svg")).toBeNull();
+  });
+
   it("shows the change since the previous snapshot by an arrow and a sign, not by a color", () => {
     render(
       <StatTileGroup aria-label="Open holds in this snapshot">

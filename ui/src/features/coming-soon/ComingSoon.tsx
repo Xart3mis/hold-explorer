@@ -10,7 +10,6 @@ import { t, type MessageKey } from "../../text/i18n";
  */
 const descriptions: Partial<Record<DestinationId, MessageKey>> = {
   breakdown: "comingSoon.description.breakdown",
-  lines: "comingSoon.description.lines",
   blockers: "comingSoon.description.blockers",
   history: "comingSoon.description.history",
   people: "comingSoon.description.people",

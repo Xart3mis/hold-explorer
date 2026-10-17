@@ -20,6 +20,7 @@ import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { Status } from "../../bindings/Status";
 import { useCached } from "../query";
+import { isSameDim } from "./dims";
 import { useShell } from "../shell/context";
 import { toSpec } from "./spec";
 
@@ -77,6 +78,29 @@ function isDefault(filters: Filters): boolean {
     filters.released.to === null &&
     filters.sizeMismatch === null
   );
+}
+
+/**
+ * The filters with the values of one dimension set: in the place its entry has, or after the
+ * others when it has none. Without values the dimension has no entry: nothing is filtered by it.
+ */
+export function withValues(
+  filters: Filters,
+  dim: Dim,
+  values: readonly FilterValue[],
+  negate: boolean,
+): Filters {
+  const isIts = (entry: { dim: Dim }) => isSameDim(entry.dim, dim);
+  if (values.length === 0) {
+    return { ...filters, fields: filters.fields.filter((entry) => !isIts(entry)) };
+  }
+  const entry = { dim, values, negate };
+  return {
+    ...filters,
+    fields: filters.fields.some(isIts)
+      ? filters.fields.map((held) => (isIts(held) ? entry : held))
+      : [...filters.fields, entry],
+  };
 }
 
 export interface FiltersState {

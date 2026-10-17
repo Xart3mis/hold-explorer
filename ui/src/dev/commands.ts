@@ -7,11 +7,13 @@ import type { CommandError } from "../bindings/CommandError";
 import type { Dim } from "../bindings/Dim";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { HoldQuery } from "../bindings/HoldQuery";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { LineQuery } from "../bindings/LineQuery";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
 import type { ValuePage } from "../bindings/ValuePage";
@@ -28,6 +30,7 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
+import { devHolds, devLines } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
 
@@ -73,6 +76,15 @@ export const DEV_STATES = [
   // "Add filter" to see the line that says how many more there are), and values that take a
   // second to be read, so that a first read and a re-read after a tick can be seen.
   "filters-picker",
+  // Lines: every state answers the lines and the holds of its snapshot from made-up holds. These
+  // add a snapshot of 30,000 holds, filters that keep none, a snapshot whose sizes all match (the
+  // preset Size mismatch then finds nothing), a reading that fails, and a first load that never
+  // ends. Open them on the page: dev.html?state=lines-many#/lines?rows=holds
+  "lines-many",
+  "lines-none",
+  "lines-matching-sizes",
+  "lines-error",
+  "lines-loading",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -98,6 +110,10 @@ export function isDevState(value: string): value is DevState {
 }
 
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
+
+/** What a reading answers when the workspace file is locked. */
+const LOCKED =
+  "The workspace file could not be read (it is locked by another program). Close the other program, then try again.";
 
 function failure(kind: string, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
@@ -218,6 +234,8 @@ export function devFilters(state: DevState): { workspaceId: string; filters: Fil
       return { workspaceId: unit573.id, filters: SOME_FILTERS };
     case "filters-many":
       return { workspaceId: unit573.id, filters: MANY_FILTERS };
+    case "lines-none":
+      return { workspaceId: unit573.id, filters: { ...defaultFilters, text: "no such line" } };
     default:
       return null;
   }
@@ -340,6 +358,16 @@ function world(state: DevState, theme: Theme): World {
       start.open = { ...opened(4, null), snapshots: held };
       break;
     }
+    case "lines-many": {
+      // The newest export holds thirty thousand holds, six thousand of them released.
+      const held = fourSnapshots.map((taken) =>
+        taken.id === 4 ? { ...taken, row_count: 30_000, open_count: 24_000 } : taken,
+      );
+      snapshots.set(unit573.id, held);
+      start.list.workspaces = all;
+      start.open = { ...opened(4, null), snapshots: held };
+      break;
+    }
     case "first-run":
       break;
     case "workspaces":
@@ -369,6 +397,10 @@ function world(state: DevState, theme: Theme): World {
     case "filters-busy":
     case "filters-error":
     case "filters-picker":
+    case "lines-none":
+    case "lines-matching-sizes":
+    case "lines-error":
+    case "lines-loading":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -707,6 +739,28 @@ export function installDevCommands(state: DevState, theme: Theme): string {
                   : [],
         };
       });
+    },
+    lines: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { query, offset } = payload as { query: LineQuery; offset: number };
+      if (state === "lines-loading") return new Promise(() => undefined);
+      if (state === "lines-error") throw failure("Io", LOCKED);
+      return later(150, () =>
+        selected === undefined
+          ? { total: 0, widest_line_id: 0, rows: [] }
+          : devLines(selected, spec, query, offset, state === "lines-matching-sizes"),
+      );
+    },
+    holds: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { query } = payload as { query: HoldQuery };
+      if (state === "lines-loading") return new Promise(() => undefined);
+      if (state === "lines-error") throw failure("Io", LOCKED);
+      return later(150, () =>
+        selected === undefined
+          ? { total: 0, widest_line_id: 0, rows: [] }
+          : devHolds(selected, spec, query, state === "lines-matching-sizes"),
+      );
     },
     filter_values: (payload): Promise<ValuePage> => {
       const { spec, selected } = inView(payload);

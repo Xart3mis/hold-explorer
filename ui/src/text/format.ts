@@ -36,8 +36,11 @@ const time = new Intl.DateTimeFormat(locale, {
   timeZone: "UTC",
 });
 
-// A plain list of names with no "and" before the last: file formats, not a sentence.
+// A plain list with no "and" before the last: file formats, the disciplines of a line. Not a sentence.
 const list = new Intl.ListFormat(locale, { style: "short", type: "unit" });
+
+// A size as a drawing gives it: a whole number of inches, or a fraction to three places at most.
+const size = new Intl.NumberFormat(locale, { maximumFractionDigits: 3 });
 
 const percent = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 });
 
@@ -79,7 +82,7 @@ export function formatCount(value: number): string {
   return count.format(value);
 }
 
-/** A plain list, its items separated the way the locale separates them: `xlsx, csv, txt`. */
+/** A plain list, its items separated the way the locale separates them: `xlsx, csv, txt`, `Piping, Civil`. */
 export function formatList(items: readonly string[]): string {
   return list.format(items);
 }
@@ -104,6 +107,11 @@ export function formatDateTime(value: string): string {
 /** A number of days the way the export writes it: `71 d`. */
 export function formatDays(days: number): string {
   return t("units.days", { value: formatCount(days) });
+}
+
+/** A size in inches the way the export writes it: `6"`, `0.75"`. */
+export function formatSize(inches: number): string {
+  return t("units.inches", { value: size.format(inches) });
 }
 
 /**

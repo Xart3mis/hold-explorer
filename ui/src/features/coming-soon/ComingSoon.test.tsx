@@ -8,15 +8,7 @@ import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import { SLOW } from "../../test/slow";
 
-const notBuilt = [
-  "breakdown",
-  "lines",
-  "blockers",
-  "history",
-  "people",
-  "follow-up",
-  "rules",
-] as const;
+const notBuilt = ["breakdown", "blockers", "history", "people", "follow-up", "rules"] as const;
 const names = en.destinations.name;
 
 describe("ComingSoon", () => {
@@ -56,9 +48,9 @@ describe("ComingSoon", () => {
     },
   );
 
-  it("has seven different descriptions, each of one or two sentences", () => {
+  it("has a different description for each, of one or two sentences", () => {
     const texts = notBuilt.map((id) => en.comingSoon.description[id]);
-    expect(new Set(texts).size).toBe(7);
+    expect(new Set(texts).size).toBe(notBuilt.length);
     for (const text of texts) {
       const sentences = text.split(/(?<=\.)\s+/);
       expect(sentences.length).toBeGreaterThanOrEqual(1);
@@ -111,19 +103,19 @@ describe("ComingSoon", () => {
 
   it("gives way to the real page, and the sidebar tag goes, when a copy of the list marks a destination as built", async () => {
     const copy = destinations.map((destination) =>
-      destination.id === "lines" ? { ...destination, available: true } : destination,
+      destination.id === "breakdown" ? { ...destination, available: true } : destination,
     );
     renderApp({
       start: openStart(),
-      path: "/lines",
+      path: "/breakdown",
       destinations: copy,
-      pages: { ...destinationPages, lines: <p>The real Lines page</p> },
+      pages: { ...destinationPages, breakdown: <p>The real Breakdown page</p> },
     });
-    expect(await screen.findByText("The real Lines page")).toBeInTheDocument();
+    expect(await screen.findByText("The real Breakdown page")).toBeInTheDocument();
     expect(screen.queryByText(en.comingSoon.title)).not.toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: en.destinations.label });
-    expect(within(nav).getByRole("link", { name: names.lines })).toBeInTheDocument();
-    expect(within(nav).getAllByText(en.destinations.soon)).toHaveLength(6);
+    expect(within(nav).getByRole("link", { name: names.breakdown })).toBeInTheDocument();
+    expect(within(nav).getAllByText(en.destinations.soon)).toHaveLength(notBuilt.length - 1);
     // The others are untouched.
     expect(
       within(nav).getByRole("link", { name: `${names.blockers} ${en.destinations.soon}` }),

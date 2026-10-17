@@ -1,11 +1,13 @@
 import { Upload } from "lucide-react";
 import { useId, useState } from "react";
+import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { useFilters } from "../../app/filters/state";
+import { useFilters, withValues, type Filters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
+import type { Dim } from "../../bindings/Dim";
 import type { Group } from "../../bindings/Group";
 import type { OverviewView } from "../../bindings/OverviewView";
 import type { Status } from "../../bindings/Status";
@@ -29,13 +31,18 @@ import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
+import { DEFAULT_LINES_STATE, linesAddress } from "../lines/address";
+import { presetQuery } from "../lines/presets";
 import styles from "./OverviewPage.module.css";
 
-/** The two groups of the page: what each is by, in the words of the first column of its table. */
+/**
+ * The two groups of the page: what each is by, in the words of the first column of its table, and
+ * the dimension a bar of it filters by.
+ */
 const DIMENSIONS = [
-  { id: "discipline", column: "overview.columnDiscipline" },
-  { id: "holdType", column: "overview.columnHoldType" },
-] as const;
+  { id: "discipline", column: "overview.columnDiscipline", dim: "Discipline" },
+  { id: "holdType", column: "overview.columnHoldType", dim: "HoldType" },
+] as const satisfies readonly { id: string; column: MessageKey; dim: Dim }[];
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
 
@@ -109,8 +116,22 @@ const WORDS: Record<Status, Words> = {
   },
 };
 
-/** The four figures of the snapshot: one container, its cells divided by hairlines. */
-function Figures({ summary, words }: { summary?: Summary; words: Words }) {
+/**
+ * The four figures of the snapshot: one container, its cells divided by hairlines. The two figures
+ * of lines open Lines: all of them, and those with a single hold. The other two have no screen
+ * behind them yet.
+ */
+function Figures({
+  summary,
+  words,
+  onLines,
+  onSingleHoldLines,
+}: {
+  summary?: Summary;
+  words: Words;
+  onLines: () => void;
+  onSingleHoldLines: () => void;
+}) {
   const loading = summary === undefined;
   const median = summary?.[words.median];
   return (
@@ -121,10 +142,12 @@ function Figures({ summary, words }: { summary?: Summary; words: Words }) {
       />
       <StatTile
         label={t(words.lines)}
+        onPress={onLines}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.lines) })}
       />
       <StatTile
         label={t("overview.singleHoldLines")}
+        onPress={onSingleHoldLines}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.single_hold_lines) })}
       />
       {/* An age or a duration needs dates. Without them the tile says so; it never shows a zero. */}
@@ -159,6 +182,18 @@ interface GroupSectionProps {
   /** Whether the group is shown as a table in place of its bars. */
   asTable: boolean;
   onAsTableChange: (asTable: boolean) => void;
+  /** Whether a value of the group is in the active filter. */
+  isFiltered: (group: Group) => boolean;
+  /** Filters by the value of a bar that is pressed. */
+  onPress: (group: Group) => void;
+}
+
+/** Whether the filters keep a value of a dimension: it is among the values of its entry. */
+function isFilteredBy(filters: Filters, dim: Dim, group: Group): boolean {
+  return filters.fields.some(
+    (entry) =>
+      entry.dim === dim && !entry.negate && entry.values.some((value) => value.key === group.key),
+  );
 }
 
 /** The room the widest of the counts shown needs, so the name of the group gets the rest. */
@@ -173,6 +208,7 @@ const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
 
 /**
  * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
+ * A bar is pressed to see the lines of its value: it filters by that value and opens Lines.
  * The rows are shown largest first. That is the order the command sends; a copy is put in that
  * order here so that it does not depend on it, and rows of the same count keep the order given.
  * The length of a bar is its row's holds as a share of the largest count of the group; no number
@@ -187,6 +223,8 @@ function GroupSection({
   skeletonRows,
   asTable,
   onAsTableChange,
+  isFiltered,
+  onPress,
 }: GroupSectionProps) {
   const titleId = useId();
   const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
@@ -247,7 +285,10 @@ function GroupSection({
           {rows.map((group) => (
             <BarRow
               key={group.key}
-              isStatic
+              isSelected={isFiltered(group)}
+              onPress={() => {
+                onPress(group);
+              }}
               label={group.label}
               value={formatCount(group.holds)}
               secondaryValue={t("overview.lines", { count: group.lines })}
@@ -281,7 +322,12 @@ export function OverviewPage() {
     discipline: false,
     holdType: false,
   });
-  const { filters, spec, isDefault } = useFilters();
+  const { filters, spec, isDefault, update } = useFilters();
+  const navigate = useNavigate();
+  /** Opens Lines in a state of its own, under the filters that are set. */
+  const openLines = (address: string) => {
+    void navigate(address);
+  };
   const words = WORDS[filters.status];
   const query = useSnapshotQuery({
     name: "overview",
@@ -383,9 +429,18 @@ export function OverviewPage() {
           data-stale={isUpdating ? "" : undefined}
           className={styles.overview}
         >
-          <Figures words={words} {...(view === undefined ? {} : { summary: view.summary })} />
+          <Figures
+            words={words}
+            onLines={() => {
+              openLines(linesAddress(DEFAULT_LINES_STATE));
+            }}
+            onSingleHoldLines={() => {
+              openLines(linesAddress({ rows: "lines", query: presetQuery("single") }));
+            }}
+            {...(view === undefined ? {} : { summary: view.summary })}
+          />
           <div className={styles.groups}>
-            {DIMENSIONS.map(({ id, column }) => (
+            {DIMENSIONS.map(({ id, column, dim }) => (
               <GroupSection
                 key={id}
                 title={t(words.title[id])}
@@ -398,6 +453,14 @@ export function OverviewPage() {
                 asTable={asTable[id]}
                 onAsTableChange={(shown) => {
                   setAsTable((before) => ({ ...before, [id]: shown }));
+                }}
+                isFiltered={(group) => isFilteredBy(filters, dim, group)}
+                onPress={(group) => {
+                  // The value takes the place of what the field was filtered by.
+                  update((current) =>
+                    withValues(current, dim, [{ key: group.key, label: group.label }], false),
+                  );
+                  openLines(linesAddress(DEFAULT_LINES_STATE));
                 }}
               />
             ))}

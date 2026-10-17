@@ -30,7 +30,7 @@ export interface Destination {
 export const destinations: readonly Destination[] = [
   { id: "overview", path: "/overview", shortcut: "Ctrl+1", available: true, group: "data" },
   { id: "breakdown", path: "/breakdown", shortcut: "Ctrl+2", available: false, group: "data" },
-  { id: "lines", path: "/lines", shortcut: "Ctrl+3", available: false, group: "data" },
+  { id: "lines", path: "/lines", shortcut: "Ctrl+3", available: true, group: "data" },
   { id: "blockers", path: "/blockers", shortcut: "Ctrl+4", available: false, group: "data" },
   { id: "history", path: "/history", shortcut: "Ctrl+5", available: false, group: "data" },
   { id: "people", path: "/people", shortcut: "Ctrl+6", available: false, group: "data" },

@@ -43,7 +43,7 @@ describe("the sidebar", () => {
     ).toEqual([
       names.overview,
       `${names.breakdown} ${soon}`,
-      `${names.lines} ${soon}`,
+      names.lines,
       `${names.blockers} ${soon}`,
       `${names.history} ${soon}`,
       `${names.people} ${soon}`,
@@ -56,12 +56,11 @@ describe("the sidebar", () => {
     ).toEqual([`${names.rules} ${soon}`, names.settings]);
   });
 
-  it("puts the Soon tag in the accessible name of the seven that are not built, and of no other", async () => {
+  it("puts the Soon tag in the accessible name of the six that are not built, and of no other", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
     for (const id of [
       "breakdown",
-      "lines",
       "blockers",
       "history",
       "people",
@@ -71,15 +70,16 @@ describe("the sidebar", () => {
       expect(within(nav).getByRole("link", { name: `${names[id]} ${soon}` })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: names.overview })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.lines })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.settings })).toBeInTheDocument();
-    expect(within(nav).getAllByText(soon)).toHaveLength(7);
+    expect(within(nav).getAllByText(soon)).toHaveLength(6);
   });
 
   it("marks the current destination, and only it", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
     const overview = within(nav).getByRole("link", { name: names.overview });
-    const lines = within(nav).getByRole("link", { name: `${names.lines} ${soon}` });
+    const blockers = within(nav).getByRole("link", { name: `${names.blockers} ${soon}` });
     expect(overview).toHaveAttribute("aria-current", "page");
     expect(
       within(nav)
@@ -87,8 +87,8 @@ describe("the sidebar", () => {
         .filter((link) => link.hasAttribute("aria-current")),
     ).toHaveLength(1);
 
-    await user.click(lines);
-    expect(lines).toHaveAttribute("aria-current", "page");
+    await user.click(blockers);
+    expect(blockers).toHaveAttribute("aria-current", "page");
     expect(overview).not.toHaveAttribute("aria-current");
   });
 
@@ -851,7 +851,7 @@ describe("a file dragged over the window", () => {
 
 describe("the keyboard", () => {
   it("walks the shell in reading order: top bar, sidebar, page", SLOW, async () => {
-    const { user } = renderApp({ start: openStart(), path: "/lines" });
+    const { user } = renderApp({ start: openStart(), path: "/blockers" });
     const nav = await sidebar();
     // Start from the top of the document, as after a click on the window's background.
     (document.activeElement as HTMLElement | null)?.blur();

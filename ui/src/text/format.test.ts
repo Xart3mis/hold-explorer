@@ -7,6 +7,7 @@ import {
   formatDateTime,
   formatDays,
   formatList,
+  formatSize,
   formatLongDate,
   formatPercent,
   formatTime,
@@ -32,6 +33,25 @@ describe("formatList", () => {
     expect(formatList(["xlsx", "csv", "txt"])).toBe("xlsx, csv, txt");
     expect(formatList(["xlsx"])).toBe("xlsx");
     expect(formatList([])).toBe("");
+  });
+});
+
+describe("formatList of names", () => {
+  it("joins names the way a cell of a table lists them", () => {
+    expect(formatList(["Piping", "Civil", "Instrumentation and control"])).toBe(
+      "Piping, Civil, Instrumentation and control",
+    );
+  });
+});
+
+describe("formatSize", () => {
+  it("writes a size in inches the way the export does", () => {
+    expect(formatSize(6)).toBe('6"');
+    expect(formatSize(0.75)).toBe('0.75"');
+    expect(formatSize(1.5)).toBe('1.5"');
+    expect(formatSize(1200)).toBe('1,200"');
+    // A size is not given to more places than a drawing gives it.
+    expect(formatSize(0.3333333)).toBe('0.333"');
   });
 });
 

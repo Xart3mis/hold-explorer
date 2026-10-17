@@ -216,8 +216,12 @@ describe("the Overview with a snapshot", () => {
     const figures = screen.getByRole("group", { name: text.figures });
     expect(figures.children).toHaveLength(4);
     expect(figures.querySelector("[data-part='delta']")).toBeNull();
-    // A figure opens nothing yet, so it is not a button.
-    expect(within(figures).queryByRole("button")).not.toBeInTheDocument();
+    // The two figures of lines open Lines; the other two open nothing yet, so they are no button.
+    expect(
+      within(figures)
+        .getAllByRole("button")
+        .map((tile) => tile.textContent),
+    ).toEqual([`${text.linesOnHold} 2,208`, `${text.singleHoldLines} 714`]);
   });
 
   it("shows a dash and the reason when the snapshot gives no median age", async () => {
@@ -327,15 +331,16 @@ describe("the Overview with a snapshot", () => {
     },
   );
 
-  it("draws the bars as plain data: one neutral bar a row, and nothing to press", async () => {
+  it("draws the bars as plain data: one neutral bar a row, each a row that filters by its value", async () => {
     const { overview } = renderOverview();
     await loaded(overview);
     const bars = screen.getByRole("list", { name: text.byDiscipline });
     expect(bars.querySelectorAll("[data-part='bar']")).toHaveLength(7);
     expect(bars.querySelector("[data-ordinal]")).toBeNull();
-    // Filtering by a bar comes with the filter bar. Until then a row is not a control.
-    expect(within(bars).queryByRole("button")).not.toBeInTheDocument();
-    expect(bars.querySelector("[tabindex]")).toBeNull();
+    // A row is a button that filters by its value and opens Lines; none is in a filter yet.
+    const rows = within(bars).getAllByRole("button");
+    expect(rows).toHaveLength(7);
+    for (const row of rows) expect(row).toHaveAttribute("aria-pressed", "false");
   });
 
   it("names each switch with its group, and shows the same words on both", async () => {

@@ -53,6 +53,14 @@
   white-space: nowrap;
 }
 
+/* The label of a tile that opens a screen: the ink of what can be acted on, and a chevron after it. */
+.tile[data-pressable] .label {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  color: var(--color-accent-text);
+}
+
 .value {
   color: var(--color-text-primary);
   font: var(--text-stat);

@@ -87,4 +87,5 @@ export {
   type ToastOptions,
 } from "./ToastRegion/ToastRegion";
 export { Tooltip, type TooltipProps } from "./Tooltip/Tooltip";
+export { ViewSwitch, type View, type ViewSwitchProps } from "./ViewSwitch/ViewSwitch";
 export { VisuallyHidden, type VisuallyHiddenProps } from "./VisuallyHidden/VisuallyHidden";

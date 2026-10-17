@@ -2,7 +2,7 @@ import { useDeferredValue, useState } from "react";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimName, isSameDim } from "../../app/filters/dims";
-import { useFilters, type Filters, type FilterValue } from "../../app/filters/state";
+import { useFilters, withValues, type FilterValue } from "../../app/filters/state";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { ValuePage } from "../../bindings/ValuePage";
@@ -44,29 +44,6 @@ function optionsOf(answer: Answer | undefined, ticked: readonly FilterValue[]): 
       ...(isComplete ? { count: 0 } : {}),
     }));
   return [...gone, ...listed];
-}
-
-/**
- * The filters with the values of one dimension set: in the place its entry has, or after the
- * others when it has none. Without values the dimension has no entry: nothing is filtered by it.
- */
-function withValues(
-  filters: Filters,
-  dim: Dim,
-  values: readonly FilterValue[],
-  negate: boolean,
-): Filters {
-  const isIts = (entry: { dim: Dim }) => isSameDim(entry.dim, dim);
-  if (values.length === 0) {
-    return { ...filters, fields: filters.fields.filter((entry) => !isIts(entry)) };
-  }
-  const entry = { dim, values, negate };
-  return {
-    ...filters,
-    fields: filters.fields.some(isIts)
-      ? filters.fields.map((held) => (isIts(held) ? entry : held))
-      : [...filters.fields, entry],
-  };
 }
 
 export interface FieldValuesProps {
