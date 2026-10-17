@@ -64,8 +64,22 @@ const columns: DataTableColumn<Line>[] = [
   },
 ];
 
+/** What a table whose rows expand is given besides; these tests give a table none of it. */
+type ExpandingProps = Pick<
+  Required<DataTableProps<Line, Line>>,
+  | "childRows"
+  | "childKey"
+  | "childColumns"
+  | "expandedKeys"
+  | "onExpandedChange"
+  | "selectedChildKey"
+  | "onChildSelectionChange"
+>;
+
 /** What a test may change of the table: anything, and the columns with what names those that leave. */
-type TableOptions = Partial<Omit<DataTableProps<Line>, "columns" | "leftOutText">> &
+type TableOptions = Partial<
+  Omit<DataTableProps<Line>, "columns" | "leftOutText" | keyof ExpandingProps>
+> &
   (
     | { columns?: readonly DataTableColumn<Line>[]; leftOutText?: undefined }
     | {

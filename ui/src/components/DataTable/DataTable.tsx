@@ -1,7 +1,15 @@
-import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  ChevronRight,
+  ChevronsUpDown,
+  OctagonAlert,
+} from "lucide-react";
 import {
   createContext,
   memo,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -10,9 +18,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactElement,
   type ReactNode,
 } from "react";
 import {
+  Button as RacButton,
   Cell,
   Collection,
   Column,
@@ -27,6 +37,7 @@ import {
   type TableLayoutProps,
 } from "react-aria-components";
 import { t } from "../../text/i18n";
+import { Button } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Skeleton } from "../Skeleton/Skeleton";
@@ -175,7 +186,69 @@ interface TableProps<Item> {
   className?: string | undefined;
 }
 
-export type DataTableProps<Item> = TableProps<Item> & Fitting<Item>;
+/** The children of a row that expands, as the screen has them now. */
+export interface DataTableChildren<Child> {
+  /** The child rows that are there, in the order to show them. */
+  rows: readonly Child[];
+  /** The children are being read: while none is there, a skeleton child row stands for them. */
+  isLoading?: boolean;
+  /** They could not be read: a child row says so in the screen's words, with a retry. */
+  error?: { text: string; onRetry: () => void };
+  /** A last child row that leads on, such as "Open all 900 lines in Lines", and what it does. */
+  more?: { text: string; onAction: () => void };
+}
+
+/** What a child row shows in the track of one column of its table. */
+export interface DataTableChildColumn<Child> {
+  /** The id of the table's column whose track the cell takes. A track without one is blank. */
+  column: string;
+  cell: (child: Child) => ReactNode;
+  /** As a column's own kind: the child's value may be of another kind than its parent's. */
+  kind?: DataTableColumnKind;
+  isSupporting?: boolean;
+}
+
+/**
+ * Rows that expand to child rows: a tree grid. The screen holds which rows are expanded and reads
+ * their children; the table shows them under their row, in the tracks of the table's columns.
+ */
+type Expanding<Item, Child> =
+  | {
+      childRows?: undefined;
+      childKey?: undefined;
+      childColumns?: undefined;
+      expandedKeys?: undefined;
+      onExpandedChange?: undefined;
+      selectedChildKey?: undefined;
+      onChildSelectionChange?: undefined;
+    }
+  | {
+      /**
+       * The children of a row as the screen has them, or `undefined` for a row that has none and
+       * does not expand. It is read for an expanded row only to show its children, and for every
+       * row to know whether it expands, so it answers at once: it reads nothing itself.
+       */
+      childRows: (item: Item) => DataTableChildren<Child> | undefined;
+      /** A key of a child, unique among the children of its row. */
+      childKey: (child: Child) => string;
+      childColumns: readonly DataTableChildColumn<Child>[];
+      /** The keys of the rows that are expanded. */
+      expandedKeys: ReadonlySet<string>;
+      /** Called with the keys of the expanded rows after a row was turned. */
+      onExpandedChange: (keys: ReadonlySet<string>) => void;
+      /** The key of the child that is selected; every row of that child is marked. */
+      selectedChildKey?: string | null;
+      /**
+       * Called with the child whose row was selected. Giving it makes the child rows selectable.
+       * A row that expands is then turned, not selected, by a press or Enter, unless the table
+       * has `onSelectionChange` as well; its chevron, Right, and Left turn it either way.
+       */
+      onChildSelectionChange?: (child: Child) => void;
+    };
+
+export type DataTableProps<Item, Child = never> = TableProps<Item> &
+  Fitting<Item> &
+  Expanding<Item, Child>;
 
 const ACTIONS = "data-table-actions";
 
@@ -198,6 +271,104 @@ const HEADER_ROWS = 1;
 
 /** The rows of a table that is loading: none, and the same none at every render. */
 const NO_ROWS: readonly never[] = [];
+
+/**
+ * What stands between the key of a row and the key of a child, and of a row that says how its
+ * children are, in the keys the table gives child rows. The same child may be under two rows, so
+ * its key is its row's key, this, and its own. Two marks that no key of a row holds.
+ */
+const CHILD = "\u001f";
+const STATUS = "\u001e";
+
+/** A child row as the table holds it: a child, or a row that says how the children are. */
+type ChildEntry =
+  | { kind: "child"; key: string; id: string; item: unknown }
+  | { kind: "loading"; key: string }
+  | { kind: "error"; key: string; text: string }
+  | { kind: "more"; key: string; text: string };
+
+const NO_CHILDREN: readonly ChildEntry[] = [];
+
+/** What decides the child rows of an expanded row: all that `DataTableChildren` holds but its actions. */
+interface ChildRowsShape {
+  rows: readonly unknown[];
+  isLoading: boolean;
+  error: string | null;
+  more: string | null;
+}
+
+function childRowsShape(children: DataTableChildren<unknown>): ChildRowsShape {
+  return {
+    rows: children.rows,
+    isLoading: children.isLoading === true,
+    error: children.error?.text ?? null,
+    more: children.more?.text ?? null,
+  };
+}
+
+/** The child rows of an expanded row: its children, then the row that says how they are. */
+function childEntries(
+  parent: string,
+  { rows, isLoading, error, more }: ChildRowsShape,
+  childKey: (child: unknown) => string,
+): readonly ChildEntry[] {
+  const entries: ChildEntry[] = rows.map((child) => {
+    const id = childKey(child);
+    return { kind: "child", key: `${parent}${CHILD}${id}`, id, item: child };
+  });
+  if (isLoading && entries.length === 0) {
+    entries.push({ kind: "loading", key: `${parent}${STATUS}loading` });
+  }
+  if (error !== null) {
+    entries.push({ kind: "error", key: `${parent}${STATUS}error`, text: error });
+  } else if (more !== null && !isLoading) {
+    entries.push({ kind: "more", key: `${parent}${STATUS}more`, text: more });
+  }
+  return entries;
+}
+
+/** What the rows of a table whose rows expand are told of their children. */
+interface Tree {
+  /** The children of the rows that are expanded, by the key of their row. */
+  children: ReadonlyMap<string, ChildRowsShape>;
+  childKey: (child: unknown) => string;
+  /** The row of a child, or of what is said of the children, under its row. */
+  childRow: (parent: string, child: ChildEntry) => ReactElement;
+}
+
+const TreeContext = createContext<Tree | null>(null);
+
+/**
+ * The child rows under a row, while it is expanded. A row of the table is built once for its
+ * item and kept; its children are read here, from what the table says of them now, and built
+ * again only when they change. So turning a row, or reading its children, builds no other row.
+ */
+function TreeChildren({ parent }: { parent: string }) {
+  const tree = useContext(TreeContext);
+  const shape = tree?.children.get(parent);
+  const childKey = tree?.childKey;
+  const rows = shape?.rows;
+  const isLoading = shape?.isLoading;
+  const error = shape?.error;
+  const more = shape?.more;
+  const entries = useMemo(
+    () =>
+      rows === undefined || childKey === undefined
+        ? NO_CHILDREN
+        : childEntries(
+            parent,
+            { rows, isLoading: isLoading === true, error: error ?? null, more: more ?? null },
+            childKey,
+          ),
+    [parent, rows, isLoading, error, more, childKey],
+  );
+  if (tree === null || entries.length === 0) return null;
+  return (
+    <Collection items={entries} dependencies={[tree.childRow]}>
+      {(child) => tree.childRow(parent, child)}
+    </Collection>
+  );
+}
 
 /** What the layout is told besides the heights: how tall the body is while it has no row. */
 interface LayoutOptions extends TableLayoutProps {
@@ -225,6 +396,16 @@ interface ColumnPart {
  * that `layoutOptions.columnWidths` is still used as given, and that a `Column` outside a
  * `ResizableTableContainer` still has its `width` and `minWidth` read by the layout. The tests
  * of the pinned column, the widths, the empty height, and the row width fail if one of them goes.
+ *
+ * A table whose rows expand relies on more of the library, checked again on an upgrade as well:
+ * that the rows under an expanded row are flattened into the body by the table's collection and
+ * laid out there as rows of their own, by `buildRowGroup`, at the height of a row; that a row
+ * tells assistive technology whether it expands, and answers Right and Left, from a prop named
+ * `hasChildRows` (the hook of the row reads that name, the component `hasChildItems`, so the
+ * table passes both) and only in a table with a `treeColumn`; that a `Button` in the slot
+ * `chevron` of a row turns it; that a cell with a `colSpan` takes the tracks it spans; and that a
+ * row's own `disabledBehavior` of `selection` keeps it focusable in a table whose disabled rows
+ * are disabled for all. The tests of the expanding rows fail if one of them goes.
  */
 class DataTableLayout<T> extends TableLayout<T, LayoutOptions> {
   private emptyHeight = 0;
@@ -314,6 +495,38 @@ const CellValue = memo(function CellValue({ column }: { column: number }) {
   return <span className={styles.value}>{useContext(ContentContext).cell(column, item)}</span>;
 });
 
+/** What the cells of a child row show, by the index of the table's column whose track they take. */
+interface ChildContent {
+  cell: (column: number, child: unknown) => ReactNode;
+}
+
+const ChildContentContext = createContext<ChildContent>({ cell: () => null });
+
+/** What a cell of a child row shows; the child is the item of its row. */
+const ChildValue = memo(function ChildValue({ column }: { column: number }) {
+  const child = useContext(ItemContext);
+  return (
+    <span className={styles.value}>{useContext(ChildContentContext).cell(column, child)}</span>
+  );
+});
+
+/**
+ * The chevron of a row that expands, before the text of the cell that names the row. It is for
+ * the pointer: the row tells assistive technology whether it is expanded, and Right and Left turn
+ * it, so the chevron is hidden from it and out of the Tab order. The component library gives it
+ * its press through the slot.
+ */
+function Chevron() {
+  return (
+    // The library gives the button names of its own, so it is hidden by what holds it.
+    <span aria-hidden="true" className={styles.chevronRoom}>
+      <RacButton slot="chevron" data-part="chevron" className={cx(styles.chevron)}>
+        <Icon icon={ChevronRight} />
+      </RacButton>
+    </span>
+  );
+}
+
 const RowActions = memo(function RowActions() {
   const item = useContext(ItemContext);
   return useContext(ContentContext).actions(item);
@@ -395,8 +608,16 @@ function warnOfUnboundedHeight(): void {
  *
  * On a first load the body holds placeholders in the shape of rows. They are a picture, not
  * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
+ *
+ * Rows may expand to child rows (`childRows`): the table is then a tree grid. A row that expands
+ * has a chevron before its name; the chevron, a press on the row, or Enter turns it, Right
+ * expands it, and Left collapses it or goes from a child row to its row. The child rows stand in
+ * the tracks of the table's columns, with cells of their own (`childColumns`). While the children
+ * are read one skeleton row stands for them, which takes no focus; when they could not be read a
+ * row says so, with a retry; a last row may lead on to all of them. The count line counts the rows,
+ * not their children.
  */
-export function DataTable<Item>({
+export function DataTable<Item, Child = never>({
   columns: given,
   rows,
   rowKey,
@@ -418,9 +639,16 @@ export function DataTable<Item>({
   isLoadingMore,
   resultKey,
   leftOutText,
+  childRows,
+  childKey,
+  childColumns,
+  expandedKeys,
+  onExpandedChange,
+  selectedChildKey,
+  onChildSelectionChange,
   className,
   ...props
-}: DataTableProps<Item>) {
+}: DataTableProps<Item, Child>) {
   const countId = useId();
   const leftOutId = useId();
   // A column that cannot leave is one whose priority is not there.
@@ -436,7 +664,10 @@ export function DataTable<Item>({
   const chars = useCharWidths();
   const loading = isLoading === true;
   const loadingMore = isLoadingMore === true && !loading;
-  const selectable = onSelectionChange !== undefined && !loading;
+  const expandable = childRows !== undefined;
+  const parentSelectable = onSelectionChange !== undefined && !loading;
+  const childSelectable = expandable && onChildSelectionChange !== undefined && !loading;
+  const selectable = parentSelectable || childSelectable;
   const hasActions = rowActions !== undefined;
   const shown = loading ? NO_ROWS : rows;
   const total = totalRows ?? rows.length;
@@ -450,9 +681,13 @@ export function DataTable<Item>({
       metrics.paddingX,
       metrics.arrow,
     );
+    // In a table whose rows expand, the cell that names a row starts with the room of the
+    // chevron, and the cells of child rows are indented as far: the column takes that room on top
+    // of what it declares, so an identifier under a row is not cut.
+    const chevron = expandable && column.isRowHeader === true ? metrics.arrow : 0;
     return {
-      width: typeof sized.width === "number" ? Math.max(sized.width, least) : sized.width,
-      minWidth: Math.max(sized.minWidth, least),
+      width: typeof sized.width === "number" ? Math.max(sized.width + chevron, least) : sized.width,
+      minWidth: Math.max(sized.minWidth + chevron, least),
     };
   };
   const actionsWidth = columnWidth(rowActionsSize, "text", chars, metrics.paddingX);
@@ -536,7 +771,18 @@ export function DataTable<Item>({
           data-pinned={cell.isPinned ? "" : undefined}
           className={cx(styles.cell)}
         >
-          {() => <CellValue column={index} />}
+          {expandable && cell.isPinned
+            ? ({ hasChildItems }) => (
+                <>
+                  {hasChildItems ? (
+                    <Chevron />
+                  ) : (
+                    <span data-part="chevron-room" className={styles.chevronRoom} />
+                  )}
+                  <CellValue column={index} />
+                </>
+              )
+            : () => <CellValue column={index} />}
         </Cell>
       )),
       ...(hasActions
@@ -547,7 +793,7 @@ export function DataTable<Item>({
           ]
         : []),
     ],
-    [cells, hasActions],
+    [cells, hasActions, expandable],
   );
   // The rows as the component library takes them. It keeps what it built for an item, and this
   // is the same element until the rows or their shape change, so a render of the table for any
@@ -572,6 +818,286 @@ export function DataTable<Item>({
     ),
     [shown, rowCells],
   );
+
+  // Rows that expand. The screen says which rows are expanded and what their children are; the
+  // table builds a row for each child and for what it says of them (they are being read, they
+  // could not be read, there are more), and keeps every row whose children did not change.
+  const childShape = JSON.stringify(
+    columns.map((column): CellShape & { hasValue: boolean } => {
+      const own = childColumns?.find((child) => child.column === column.id);
+      return {
+        id: column.id,
+        kind: own?.kind ?? "text",
+        isSupporting: own?.isSupporting === true,
+        isPinned: column.isRowHeader === true,
+        hasValue: own !== undefined,
+      };
+    }),
+  );
+  const childCellShapes = useMemo(
+    () => JSON.parse(childShape) as (CellShape & { hasValue: boolean })[],
+    [childShape],
+  );
+  const childContent = useMemo((): ChildContent => {
+    const byTrack = columns.map((column) =>
+      childColumns?.find((child) => child.column === column.id),
+    );
+    // The items the child cells are handed are children of this table, so they are `Child`s.
+    return { cell: (column, child) => byTrack[column]?.cell(child as Child) };
+  }, [columns, childColumns]);
+  // The cells of a child row, in the tracks of the table's columns.
+  const childCells = useMemo(
+    () => [
+      ...childCellShapes.map((cell, index) => (
+        <Cell
+          key={cell.id}
+          data-column={cell.id}
+          data-kind={cell.kind}
+          data-supporting={cell.isSupporting ? "" : undefined}
+          data-pinned={cell.isPinned ? "" : undefined}
+          className={cx(styles.cell)}
+        >
+          {() => (cell.hasValue ? <ChildValue column={index} /> : null)}
+        </Cell>
+      )),
+      ...(hasActions
+        ? [<Cell key={ACTIONS} data-kind="actions" className={cx(styles.cell)} />]
+        : []),
+    ],
+    [childCellShapes, hasActions],
+  );
+  // The cells of the row that stands for children that are being read: a skeleton line in each
+  // track, and the one line assistive technology reads in place of them.
+  const loadingCells = useMemo(
+    () => [
+      ...childCellShapes.map((cell) => (
+        <Cell
+          key={cell.id}
+          data-column={cell.id}
+          data-kind={cell.kind}
+          data-pinned={cell.isPinned ? "" : undefined}
+          className={cx(styles.cell)}
+        >
+          {cell.isPinned ? <VisuallyHidden>{t("table.childLoading")}</VisuallyHidden> : null}
+          <Skeleton className={styles.placeholderLine} />
+        </Cell>
+      )),
+      ...(hasActions
+        ? [<Cell key={ACTIONS} data-kind="actions" className={cx(styles.cell)} />]
+        : []),
+    ],
+    [childCellShapes, hasActions],
+  );
+  const cellCount = columns.length + (hasActions ? 1 : 0);
+
+  // What the screen says of the children of each expanded row, and the child rows that makes.
+  // Counted here for the selection and for the end of the rows; built where the rows are.
+  const childStates = new Map<string, DataTableChildren<Child>>();
+  const childShapes = new Map<string, ChildRowsShape>();
+  const childByKey = new Map<string, Extract<ChildEntry, { kind: "child" }>>();
+  let drawnRows = rows.length;
+  if (childRows !== undefined && !loading) {
+    for (const item of shown) {
+      const key = rowKey(item);
+      if (!expandedKeys.has(key)) continue;
+      const children = childRows(item);
+      if (children === undefined) continue;
+      const shape = childRowsShape(children);
+      childStates.set(key, children);
+      childShapes.set(key, shape);
+      // The children of the table are `Child`s.
+      const entries = childEntries(key, shape, (child) => childKey(child as Child));
+      drawnRows += entries.length;
+      for (const entry of entries) if (entry.kind === "child") childByKey.set(entry.key, entry);
+    }
+  }
+
+  // What a press on a row asks for, and whether a row expands, is read when it is asked: the rows
+  // are kept while the screen renders, and the functions it passes are new each time.
+  const latest = useRef({ expandedKeys, onExpandedChange, childStates, childRows, childKey });
+  useLayoutEffect(() => {
+    latest.current = { expandedKeys, onExpandedChange, childStates, childRows, childKey };
+  });
+  const turn = useCallback((key: string) => {
+    const { expandedKeys: open, onExpandedChange: change } = latest.current;
+    if (open === undefined || change === undefined) return;
+    const next = new Set(open);
+    if (!next.delete(key)) next.add(key);
+    change(next);
+  }, []);
+  const retry = useCallback((key: string) => {
+    latest.current.childStates.get(key)?.error?.onRetry();
+  }, []);
+  const leadOn = useCallback((key: string) => {
+    latest.current.childStates.get(key)?.more?.onAction();
+  }, []);
+  const keyOfChild = useCallback(
+    // The children of the table are `Child`s.
+    (child: unknown) => latest.current.childKey?.(child as Child) ?? "",
+    [],
+  );
+  // Whether a row expands: it does when the screen gives it children, even none yet.
+  const expandsOf = useCallback(
+    (item: unknown) => latest.current.childRows?.(item as Item) !== undefined,
+    [],
+  );
+  // The rows that do not expand, in one word: the rows are built again when it changes.
+  const leaves = expandable
+    ? shown
+        .filter((item) => childRows(item) === undefined)
+        .map(rowKey)
+        .join(CHILD)
+    : "";
+
+  const childRow = useCallback(
+    (parent: string, child: ChildEntry): ReactElement => {
+      // A row that cannot be selected is still focused and pressed: it is disabled for the
+      // selection alone.
+      const unselectable = { isDisabled: true, disabledBehavior: "selection" } as const;
+      switch (child.kind) {
+        case "child":
+          return (
+            <Row
+              id={child.key}
+              data-part="child-row"
+              className={cx(styles.row)}
+              {...(childSelectable ? {} : unselectable)}
+              render={(domProps) => (
+                <ItemContext value={child.item}>
+                  <div {...domProps} />
+                </ItemContext>
+              )}
+            >
+              {childCells}
+            </Row>
+          );
+        case "loading":
+          return (
+            <Row id={child.key} isDisabled data-part="loading-row" className={cx(styles.row)}>
+              {loadingCells}
+            </Row>
+          );
+        case "error":
+          return (
+            <Row
+              id={child.key}
+              data-part="error-row"
+              className={cx(styles.row)}
+              {...unselectable}
+              onAction={() => {
+                retry(parent);
+              }}
+            >
+              <Cell
+                colSpan={cellCount}
+                data-pinned=""
+                data-kind="status"
+                className={cx(styles.cell)}
+              >
+                <span className={styles.status} data-tone="danger">
+                  <Icon icon={OctagonAlert} className={styles.statusIcon} />
+                  <span className={styles.value}>{child.text}</span>
+                  <Button
+                    variant="quiet"
+                    onPress={() => {
+                      retry(parent);
+                    }}
+                  >
+                    {t("common.retry")}
+                  </Button>
+                </span>
+              </Cell>
+            </Row>
+          );
+        case "more":
+          return (
+            <Row
+              id={child.key}
+              data-part="more-row"
+              className={cx(styles.row)}
+              {...unselectable}
+              onAction={() => {
+                leadOn(parent);
+              }}
+            >
+              <Cell
+                colSpan={cellCount}
+                data-pinned=""
+                data-kind="status"
+                className={cx(styles.cell)}
+              >
+                <span className={styles.status} data-tone="action">
+                  <span className={styles.value}>{child.text}</span>
+                  <Icon icon={ArrowRight} className={styles.statusIcon} />
+                </span>
+              </Cell>
+            </Row>
+          );
+      }
+    },
+    [childCells, loadingCells, cellCount, childSelectable, retry, leadOn],
+  );
+  // Read by the rows at every render of the table: each keeps its children while they are the same.
+  const tree: Tree = { children: childShapes, childKey: keyOfChild, childRow };
+
+  // The rows of a table whose rows expand, as the library takes them: built once for each item,
+  // as the rows of any table are, with their children under them.
+  const treeBody = useMemo(() => {
+    if (!expandable) return null;
+    const unselectable = { isDisabled: true, disabledBehavior: "selection" } as const;
+    return (
+      <Collection items={shown} dependencies={[rowCells, parentSelectable, leaves]}>
+        {(item) => {
+          const key = keyOf.current(item);
+          const expands = expandsOf(item);
+          return (
+            <Row
+              id={key}
+              hasChildItems={expands}
+              // The library reads whether a row expands under this name where it tells assistive
+              // technology and answers Right and Left (see the notes of the layout on an upgrade).
+              {...{ hasChildRows: expands }}
+              data-part="parent-row"
+              className={cx(styles.row)}
+              {...(parentSelectable
+                ? {}
+                : {
+                    ...unselectable,
+                    ...(expands
+                      ? {
+                          onAction: () => {
+                            turn(key);
+                          },
+                        }
+                      : {}),
+                  })}
+              render={(domProps) => (
+                <ItemContext value={item}>
+                  <div {...domProps} />
+                </ItemContext>
+              )}
+            >
+              {rowCells}
+              <TreeChildren parent={key} />
+            </Row>
+          );
+        }}
+      </Collection>
+    );
+  }, [expandable, shown, rowCells, parentSelectable, leaves, expandsOf, turn]);
+  const selectedKeys: string[] = [];
+  if (parentSelectable && selectedKey !== undefined && selectedKey !== null) {
+    selectedKeys.push(selectedKey);
+  }
+  if (childSelectable && selectedChildKey !== undefined && selectedChildKey !== null) {
+    for (const child of childByKey.values()) {
+      if (child.id === selectedChildKey) selectedKeys.push(child.key);
+    }
+  }
+  const treeColumn = expandable
+    ? columns.find((column) => column.isRowHeader === true)?.id
+    : undefined;
+
   const layoutOptions = useMemo(
     (): LayoutOptions => ({
       rowHeight: metrics.rowHeight,
@@ -593,7 +1119,7 @@ export function DataTable<Item>({
     const element = scroller.current;
     // On the way back to the top for another result, the table is nowhere near its end.
     if (element === null || returning.current) return;
-    const rowsEnd = metrics.headerHeight + rows.length * metrics.rowHeight;
+    const rowsEnd = metrics.headerHeight + drawnRows * metrics.rowHeight;
     const isNear =
       !loading && rows.length > 0 && element.scrollTop + 2 * element.clientHeight >= rowsEnd;
     if (!isNear) {
@@ -774,139 +1300,158 @@ export function DataTable<Item>({
       }
     >
       <ContentContext value={content}>
-        <Virtualizer layout={DataTableLayout} layoutOptions={layoutOptions}>
-          <Table
-            ref={scroller}
-            aria-label={props["aria-label"]}
-            aria-describedby={leftOutLine === null ? countId : `${countId} ${leftOutId}`}
-            data-selectable={selectable ? "" : undefined}
-            selectionMode={selectable ? "single" : "none"}
-            selectionBehavior="toggle"
-            disallowEmptySelection
-            selectedKeys={
-              !selectable || selectedKey === undefined || selectedKey === null ? [] : [selectedKey]
-            }
-            onSelectionChange={(keys) => {
-              if (keys === "all") return;
-              const [key] = keys;
-              if (key !== undefined) onSelectionChange?.(String(key));
-            }}
-            {...(sort === undefined ? {} : { sortDescriptor: sort })}
-            onSortChange={(descriptor) => {
-              onSortChange?.({
-                column: String(descriptor.column),
-                direction: descriptor.direction,
-              });
-            }}
-            onScroll={(event) => {
-              // The scroll that brought the table back to its top for another result has arrived.
-              if (event.currentTarget.scrollTop === 0) returning.current = false;
-              setScrolled(event.currentTarget.scrollTop > 0);
-              setScrolledAcross(event.currentTarget.scrollLeft > 0);
-              lookForEnd();
-            }}
-            className={cx(styles.table)}
-            // The library counts the rows it was given. The rows of the whole result are more,
-            // and it passes no count of ours on, so the count is set where it draws.
-            render={(domProps) => (
-              <div
-                {...domProps}
-                {...(totalRows === undefined || loading
+        <ChildContentContext value={childContent}>
+          <TreeContext value={tree}>
+            <Virtualizer layout={DataTableLayout} layoutOptions={layoutOptions}>
+              <Table
+                ref={scroller}
+                aria-label={props["aria-label"]}
+                aria-describedby={leftOutLine === null ? countId : `${countId} ${leftOutId}`}
+                // Rows that expand answer the pointer whether or not they can be selected.
+                data-selectable={selectable || (expandable && !loading) ? "" : undefined}
+                selectionMode={selectable ? "single" : "none"}
+                selectionBehavior="toggle"
+                disallowEmptySelection
+                selectedKeys={selectable ? selectedKeys : []}
+                onSelectionChange={(keys) => {
+                  if (keys === "all") return;
+                  const [key] = keys;
+                  if (key === undefined) return;
+                  const child = childByKey.get(String(key));
+                  // The items of child rows are children of this table, so they are `Child`s.
+                  if (child !== undefined) onChildSelectionChange?.(child.item as Child);
+                  else onSelectionChange?.(String(key));
+                }}
+                {...(treeColumn === undefined || expandedKeys === undefined
                   ? {}
-                  : { "aria-rowcount": totalRows + HEADER_ROWS })}
-              />
-            )}
-          >
-            <TableHeader className={cx(styles.head)}>
-              {columns.map((column, index) => (
-                <Column
-                  key={column.id}
-                  id={column.id}
-                  isRowHeader={column.isRowHeader === true}
-                  allowsSorting={column.allowsSorting === true && !loading}
-                  textValue={column.header}
-                  width={widths[index]?.width ?? null}
-                  minWidth={widths[index]?.minWidth ?? null}
-                  data-column={column.id}
-                  data-kind={column.kind ?? "text"}
-                  data-pinned={column.isRowHeader === true ? "" : undefined}
-                  className={cx(styles.column)}
-                >
-                  {({ sortDirection, allowsSorting }) => (
-                    <>
-                      <span className={styles.label}>{column.header}</span>
-                      {/* At rest a muted two-way mark says the header sorts; the sorted header
+                  : {
+                      treeColumn,
+                      // A row that cannot be selected is disabled for the selection alone; a row
+                      // that stands for children being read is disabled for all, so it takes no focus.
+                      disabledBehavior: "all",
+                      expandedKeys,
+                      onExpandedChange: (keys: Set<Key>) => {
+                        onExpandedChange(new Set([...keys].map(String)));
+                      },
+                    })}
+                {...(sort === undefined ? {} : { sortDescriptor: sort })}
+                onSortChange={(descriptor) => {
+                  onSortChange?.({
+                    column: String(descriptor.column),
+                    direction: descriptor.direction,
+                  });
+                }}
+                onScroll={(event) => {
+                  // The scroll that brought the table back to its top for another result has arrived.
+                  if (event.currentTarget.scrollTop === 0) returning.current = false;
+                  setScrolled(event.currentTarget.scrollTop > 0);
+                  setScrolledAcross(event.currentTarget.scrollLeft > 0);
+                  lookForEnd();
+                }}
+                className={cx(styles.table)}
+                // The library counts the rows it was given. The rows of the whole result are more,
+                // and it passes no count of ours on, so the count is set where it draws.
+                render={(domProps) => (
+                  <div
+                    {...domProps}
+                    {...(totalRows === undefined || loading || expandable
+                      ? {}
+                      : { "aria-rowcount": totalRows + HEADER_ROWS })}
+                  />
+                )}
+              >
+                <TableHeader className={cx(styles.head)}>
+                  {columns.map((column, index) => (
+                    <Column
+                      key={column.id}
+                      id={column.id}
+                      isRowHeader={column.isRowHeader === true}
+                      allowsSorting={column.allowsSorting === true && !loading}
+                      textValue={column.header}
+                      width={widths[index]?.width ?? null}
+                      minWidth={widths[index]?.minWidth ?? null}
+                      data-column={column.id}
+                      data-kind={column.kind ?? "text"}
+                      data-pinned={column.isRowHeader === true ? "" : undefined}
+                      className={cx(styles.column)}
+                    >
+                      {({ sortDirection, allowsSorting }) => (
+                        <>
+                          <span className={styles.label}>{column.header}</span>
+                          {/* At rest a muted two-way mark says the header sorts; the sorted header
                           alone has an arrow, which says the order of the rows. */}
-                      {!allowsSorting ? null : sortDirection === undefined ? (
-                        <span data-mark="rest" className={styles.mark}>
-                          <Icon icon={ChevronsUpDown} />
-                        </span>
-                      ) : (
-                        <span
-                          data-mark="sorted"
-                          data-direction={sortDirection}
-                          className={styles.mark}
-                        >
-                          <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
-                        </span>
+                          {!allowsSorting ? null : sortDirection === undefined ? (
+                            <span data-mark="rest" className={styles.mark}>
+                              <Icon icon={ChevronsUpDown} />
+                            </span>
+                          ) : (
+                            <span
+                              data-mark="sorted"
+                              data-direction={sortDirection}
+                              className={styles.mark}
+                            >
+                              <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
+                            </span>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                </Column>
-              ))}
-              {hasActions ? (
-                <Column
-                  id={ACTIONS}
-                  textValue={t("table.actions")}
-                  width={actionsWidth.width}
-                  minWidth={actionsWidth.minWidth}
-                  className={cx(styles.column)}
+                    </Column>
+                  ))}
+                  {hasActions ? (
+                    <Column
+                      id={ACTIONS}
+                      textValue={t("table.actions")}
+                      width={actionsWidth.width}
+                      minWidth={actionsWidth.minWidth}
+                      className={cx(styles.column)}
+                    >
+                      <VisuallyHidden>{t("table.actions")}</VisuallyHidden>
+                    </Column>
+                  ) : null}
+                </TableHeader>
+                <TableBody
+                  className={cx(styles.body)}
+                  {...(loading
+                    ? {
+                        renderEmptyState: () => (
+                          <>
+                            {/* The one line assistive technology reads in place of the rows. */}
+                            <VisuallyHidden>{t("table.loading")}</VisuallyHidden>
+                            <div aria-hidden="true">
+                              {Array.from({ length: skeletonRows }, (_, row) => (
+                                <PlaceholderRow
+                                  key={row}
+                                  part="skeleton-row"
+                                  shape={row % TEXT_SHAPES}
+                                  columns={cells}
+                                  widths={placeholderWidths}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        ),
+                      }
+                    : {})}
                 >
-                  <VisuallyHidden>{t("table.actions")}</VisuallyHidden>
-                </Column>
-              ) : null}
-            </TableHeader>
-            <TableBody
-              className={cx(styles.body)}
-              {...(loading
-                ? {
-                    renderEmptyState: () => (
-                      <>
-                        {/* The one line assistive technology reads in place of the rows. */}
-                        <VisuallyHidden>{t("table.loading")}</VisuallyHidden>
-                        <div aria-hidden="true">
-                          {Array.from({ length: skeletonRows }, (_, row) => (
-                            <PlaceholderRow
-                              key={row}
-                              part="skeleton-row"
-                              shape={row % TEXT_SHAPES}
-                              columns={cells}
-                              widths={placeholderWidths}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    ),
-                  }
-                : {})}
-            >
-              {body}
-              {loadingMore ? (
-                <TableLoadMoreItem isLoading className={cx(styles.loadMore)}>
-                  <VisuallyHidden>{t("table.loadingMore")}</VisuallyHidden>
-                  <div aria-hidden="true">
-                    <PlaceholderRow
-                      part="load-more-row"
-                      shape={rows.length % TEXT_SHAPES}
-                      columns={cells}
-                      widths={placeholderWidths}
-                    />
-                  </div>
-                </TableLoadMoreItem>
-              ) : null}
-            </TableBody>
-          </Table>
-        </Virtualizer>
+                  {expandable ? treeBody : body}
+                  {loadingMore ? (
+                    <TableLoadMoreItem isLoading className={cx(styles.loadMore)}>
+                      <VisuallyHidden>{t("table.loadingMore")}</VisuallyHidden>
+                      <div aria-hidden="true">
+                        <PlaceholderRow
+                          part="load-more-row"
+                          shape={rows.length % TEXT_SHAPES}
+                          columns={cells}
+                          widths={placeholderWidths}
+                        />
+                      </div>
+                    </TableLoadMoreItem>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </Virtualizer>
+          </TreeContext>
+        </ChildContentContext>
       </ContentContext>
       {isEmpty && emptyState !== undefined ? (
         <div className={styles.empty}>{emptyState}</div>

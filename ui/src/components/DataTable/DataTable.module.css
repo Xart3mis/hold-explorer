@@ -323,6 +323,99 @@
   pointer-events: none;
 }
 
+/*
+ * Rows that expand. The cell that names a row starts with a chevron, which points to the side
+ * while the row is collapsed and down while it is expanded; a row without children keeps its
+ * room, so every name starts in the same place. A child row is a row like the others, at the same
+ * height and with the same hairline; its first cell is indented by the room of the chevron, so a
+ * child's name starts under the name of its row.
+ */
+.chevronRoom {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-icon);
+  block-size: var(--size-icon);
+  margin-inline-end: var(--space-1);
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: default;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.row[data-hovered] .chevron {
+  color: var(--color-text-primary);
+}
+
+.cell[data-expanded] .chevron {
+  transform: rotate(90deg);
+}
+
+.cell[data-level="2"][data-pinned] {
+  padding-inline-start: calc(var(--density-cell-padding-x) + var(--size-icon) + var(--space-1));
+}
+
+/* While the children are read: a skeleton line in each track, as on a first load. */
+.row[data-part="loading-row"] .placeholderLine {
+  inline-size: 16ch;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="identifier"] .placeholderLine {
+  inline-size: 21ch;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="number"] {
+  justify-content: flex-end;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="number"] .placeholderLine {
+  inline-size: 3ch;
+}
+
+/*
+ * A row that says how the children are, across the tracks: that they could not be read, with a
+ * retry, or that there are more of them, and where to read them all. The second is an action, in
+ * the ink of what can be acted on.
+ */
+.status {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-inline-size: 0;
+  font-variant-numeric: var(--font-numeric-proportional);
+}
+
+.status[data-tone="danger"] .statusIcon {
+  color: var(--color-danger-text);
+}
+
+.status[data-tone="action"] {
+  color: var(--color-accent-text);
+}
+
+.status .value {
+  flex: 0 1 auto;
+}
+
+.statusIcon {
+  flex: none;
+}
+
 /* A refetch keeps the previous rows, dimmed. */
 .body {
   transition: opacity var(--duration-fast) var(--ease-out);
@@ -467,4 +560,10 @@
 .probeMono {
   font: var(--text-mono);
   font-variant-numeric: var(--font-numeric-tabular);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: color var(--duration-fast) var(--ease-out);
+  }
 }
