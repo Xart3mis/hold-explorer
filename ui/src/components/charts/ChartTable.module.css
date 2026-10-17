@@ -1,0 +1,53 @@
+/* The toggle of the table view: a quiet button, marked as a preset is while the table shows. */
+.toggle {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-1-5);
+  align-items: center;
+  block-size: var(--density-control-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.toggle[data-hovered] {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.toggle[data-pressed] {
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
+.toggle[data-selected] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+}
+
+.toggle[data-selected][data-hovered] {
+  background-color: var(--color-accent-subtle-hover);
+}
+
+.toggle[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* A chart has no transition under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition: none;
+  }
+}

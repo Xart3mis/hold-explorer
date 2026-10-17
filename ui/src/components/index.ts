@@ -8,6 +8,17 @@ export {
   type ButtonVariant,
   type IconButtonProps,
 } from "./Button/Button";
+export {
+  ChartTable,
+  ChartViewToggle,
+  type ChartTableColumn,
+  type ChartTableProps,
+  type ChartTableRow,
+  type ChartView,
+  type ChartViewToggleProps,
+} from "./charts/ChartTable";
+export { Heatmap, type HeatmapItem, type HeatmapProps } from "./charts/Heatmap";
+export { LineChart, type LineChartProps, type LinePoint } from "./charts/LineChart";
 export { Checkbox, type CheckboxProps } from "./Checkbox/Checkbox";
 export { ChoiceGroup, type Choice, type ChoiceGroupProps } from "./ChoiceGroup/ChoiceGroup";
 export {

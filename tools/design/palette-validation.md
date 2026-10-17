@@ -228,6 +228,8 @@ $ node <dataviz skill>/scripts/validate_palette.js "#d9eafc,#a8cbf1,#79ace1,#508
   exit code 1  (light, --color-surface-panel)
 ```
 
+Run again on 2026-10-18 for the heatmap of the Breakdown matrix, which uses all seven steps, against the same token values: the four runs gave the same lines and exit codes as above, word for word.
+
 ### Status marks, every pair
 
 Tokens: `--color-chart-status-danger --color-chart-status-warning --color-chart-status-success`. Flags: `--pairs all`.

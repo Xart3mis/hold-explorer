@@ -38,6 +38,14 @@
     "countLoadingMore": "{{line}}. Loading more rows",
     "actions": "Actions"
   },
+  "charts": {
+    "legend": "Legend",
+    "legendFewer": "Fewer",
+    "legendMore": "More, up to {{max}}",
+    "tableView": "Table view",
+    "tableName": "{{name}}, table",
+    "point": "{{label}}. {{xLabel}} {{x}}, {{yLabel}} {{y}}."
+  },
   "toast": {
     "region": "Notifications"
   },

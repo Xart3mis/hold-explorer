@@ -572,7 +572,7 @@ Flat by default. Depth is shown first by surface steps and hairlines, and by sha
 
 ## 5. Components
 
-Every component a screen of the first desktop version needs is specified here with all its states. Two parts of a chart are not specified yet, on purpose: the heatmap cell and the chart legend. Their colors and rules are fixed in the chart palette above; their anatomy and states are written by the plan that builds the Breakdown matrix and the stacked trends, which will know what they need. They are not forgotten.
+Every component a screen of the first desktop version needs is specified here with all its states. The charts are specified after the bar row: what every chart shares ("Chart foundations"), the heatmap and its legend, the line chart, their focus and tooltip, and their table view. The legend of several named series is not specified yet, on purpose: it is written by the plan that builds the stacked trends, which will know what it needs. Its colors and rules are fixed in the chart palette above.
 
 ### Foundations
 
@@ -915,6 +915,104 @@ A horizontal bar per category: bars by discipline, hold type, role; top blockers
 - **Disabled:** not applicable.
 - **Loading:** skeleton rows with bars of varied length. A refetch keeps the previous rows at `--opacity-stale`.
 - **Error:** one inline danger notice in place of the group.
+
+### Chart foundations
+
+What every chart shares: the heatmap of the Breakdown matrix, the line chart of the Blockers curve, and the charts that come after them. The colors are fixed in "Chart palette"; this part sets the shape and the behavior.
+
+- **Drawn by hand, over the tokens.** No chart library. The line chart is an SVG drawing. The heatmap is a grid of elements, not a drawing: its cells print their values and its labels are cut with an ellipsis and stay in view while the grid scrolls, which text in an SVG drawing cannot do. Both take every color, size, and duration from a token.
+- **Where a chart sits:** directly on `--color-surface-app`, as a table does. No card, no outer border, no background of its own.
+- **Size:** a chart is as wide as its container and never wider. What cannot fit, a heatmap of thirty columns in a small window, scrolls inside the chart's own region (see "Heatmap"); the page never scrolls sideways.
+- **One value axis.** A chart has at most one value axis. Two measures of different scale are two charts.
+- **Text:** axis labels and the legend in `--text-caption` and `--color-text-muted`, labels of rows and columns in `--text-body` or `--text-label` as each chart says, values with tabular figures. Text never wears a mark's color.
+- **Interaction:** every chart answers the pointer and the keyboard alike. It is one stop in the Tab order; the arrow keys move from mark to mark inside it, and Home and End jump to the ends. What the pointer shows on hover, the keyboard shows on focus (see "Chart focus and tooltip"). A mark that leads somewhere is pressed with Enter or a click.
+- **Loading:** a first load shows a skeleton in the shape of the chart, in `--color-skeleton`, without motion. A refetch keeps the previous chart at `--opacity-stale` until the new answer is there.
+- **Empty:** the empty state of the screen in the place of the chart, as a table has it.
+- **Error:** belongs to the screen: an inline danger notice above the chart with "Try again", and the chart of before stays under it.
+- **Motion:** only the color of a cell's ring and the opacity of the tooltip change, over `--duration-fast`. Nothing in a chart moves or grows. Under reduced motion a chart has no transition at all.
+- **Table view:** every chart has one (see "Chart table view").
+
+| Token | Value | Use |
+|---|---|---|
+| `--size-heatmap-cell-width` | `56px` | Width of a heatmap cell: room for "10,000" in tabular figures with `--space-1` at each side. |
+| `--size-heatmap-header-height` | `128px` | Height of the heatmap's column labels, which stand upright. |
+| `--size-line-chart-height` | `240px` | Height of a line chart, the band of the x axis included. |
+| `--size-chart-axis-width` | `56px` | Width of the value axis at the leading side of a line chart: its tick labels. |
+| `--size-chart-line` | `2px` | Stroke of a line in a chart. |
+| `--size-chart-marker` | `8px` | Diameter of the marker on a point of a line. |
+| `--size-legend-swatch` | `12px` | Height of a legend swatch, and the side of the swatch of an empty cell. |
+| `--size-legend-step` | `24px` | Width of one step of a ramp in a legend. |
+
+### Heatmap
+
+A count for every pair of two dimensions: the Breakdown matrix, disciplines by hold type. Up to thirty rows and thirty columns, and an "Other" row and column for the values folded into them.
+
+- **Anatomy:** the legend above, `--density-stack-gap` over the grid. In the grid, a corner, a row of column labels, and then one row per value of the row dimension: its label and its cells.
+- **Cell:** `--size-heatmap-cell-width` wide and `--density-row-height` tall, corner `--radius-xs`. Cells are `--space-0-5` apart in both directions, and the gap shows the surface: neighbors are told apart by the gap, never by an outline.
+- **Color:** a cell takes the sequential step of its value, and nothing else colors it. The domain is (0, `max`], with `max` given by the command; it is cut into seven equal parts, and a value takes the step of the part it falls in, the upper bound included: a value of `max` takes step 7, one of a seventh of `max` step 1, and anything above it step 2 (`step(value, max, 7)` in `ui/src/components/charts/scale.ts`). The ramp is the one of the theme, so low values recede toward the surface in both.
+- **Value:** every cell with a value prints it, `--text-table` with tabular figures, right-aligned with `--space-1` of padding: `--color-text-primary` on steps 1 to 4, `--color-chart-text-inverse` on steps 5 to 7.
+- **An empty cell** (a value of 0) has no fill: it is the surface with a `--border-width-thin` hairline in `--color-border-default` inside its edge, and it prints nothing. It is not the lightest step: the lightest step means "a few", the empty square means "none", and the legend says so. Its value, 0, is in its accessible name, its tooltip, and the table view.
+- **Row labels:** a column `--size-bar-label-width` wide, `--text-body` in `--color-text-primary`, cut at the end with an ellipsis, `--space-2` before the first cell. The column stays in view, on `--color-surface-app`, while the cells scroll sideways under it.
+- **Column labels:** upright, read from bottom to top, in a row `--size-heatmap-header-height` tall, `--text-label` in `--color-text-secondary`, set at the bottom and cut at the end with an ellipsis. The row stays in view while the cells scroll down under it. The corner holds the name of the row dimension in the same style, at its bottom.
+- **The full text** of a label that was cut is in the tooltip of every cell of its row or column, in the table view, and in the accessible name of the label, which keeps the whole text.
+- **Other:** the last row and the last column when the command folded values into them, named from the catalog. Their labels are in `--color-text-secondary`, and they stand `--space-1` from the rows and columns before them in place of `--space-0-5`, so the fold is seen. Their cells take the ramp like every cell and are never pressable: "Other" is not one value that a filter could take.
+- **Pressable cell:** where the screen gives an action, a cell that is not in Other is pressed with Enter or a click.
+- **Hover:** a `--border-width-thin` ring in `--color-text-secondary` around the cell, over the gap, so the cell under the pointer is seen on any step. Its tooltip follows after `--delay-tooltip`.
+- **Focus:** the focus ring around the cell with no offset, so it lies over the gap, on the surface, and clears 3:1 there. The focused cell is lifted above the labels that stay in view, whose fill covers the gaps beside them, so its ring is never cut. The cell's tooltip shows at once.
+- **Keys:** the grid is one stop in the Tab order, on the cell the keyboard was last on (the first cell at first). The arrow keys move by one cell, into Other as into any row and column, and stop at the edges. Home and End jump to the first and the last cell of the row, `Ctrl+Home` and `Ctrl+End` to the first and the last cell of the grid. A cell that takes the focus is scrolled clear of the row labels and the column labels.
+- **Scrolling:** the grid scrolls inside its own region, sideways when its columns do not fit and down when the screen gives it less height than its rows need. The page does not scroll sideways.
+- **To assistive technology** it is a grid named by the screen: column headers, a row header per row, and a cell per value, whose name is its value.
+- **Loading:** a first load shows skeleton blocks in the shape of the grid: six rows of eight cells and a label line for each row. A refetch keeps the previous grid at `--opacity-stale`.
+- **Empty, error:** as in "Chart foundations".
+
+### Legend
+
+The key of the heatmap, one line above it, at the leading edge. It is not a control.
+
+- **Anatomy, from the leading edge:** the swatch of an empty cell (a square of `--size-legend-swatch` with the hairline of an empty cell), `--space-1`, and the value 0 formatted as a cell formats it; `--space-4`; the word "Fewer", `--space-1`, the seven steps of the ramp in order, each `--size-legend-step` wide and `--size-legend-swatch` tall with corner `--radius-xs` and `--space-0-5` apart, `--space-1`, and "More, up to" the `max` of the command, formatted as a cell formats it.
+- **Text:** `--text-caption` in `--color-text-muted`, tabular figures.
+- **Its domain is the command's.** The upper end is the `max` the heatmap is given, never a number the interface works out.
+- **To assistive technology** the swatches are pictures and are hidden; the legend reads its text.
+- **States:** none. It changes with the `max` it is given and dims with its heatmap on a refetch.
+
+### Line chart
+
+A series of points joined by a line: the Blockers curve, lines freed against the step of the solve order. Up to a few thousand points.
+
+- **Plot:** `--size-line-chart-height` tall, the band of the x axis included, and as wide as its container. The value axis is at the leading side, `--size-chart-axis-width` wide.
+- **Value axis:** from 0 at the baseline to the `yMax` the chart is given at the top, never a range the interface works out. Ticks at clean values (1, 2, or 5 times a power of ten), at most five above 0, each with a hairline gridline in `--color-chart-grid` across the plot and its label right-aligned in the axis, `--text-caption` in `--color-text-muted` with tabular figures. The baseline is a hairline in `--color-chart-axis`. The name of the value (`yLabel`) stands above the axis in the same style.
+- **x axis:** labels at clean values under the baseline (at most eight), in the same style; the name of the x value (`xLabel`) at the trailing end of the band. No vertical gridlines.
+- **Line:** one path through every point, a stroke of `--size-chart-line` in `--color-chart-neutral` with round joins and caps, no fill under it. A single series has no legend: the screen's heading names it.
+- **Markers:** none at rest, so a long line stays a line. The point under the pointer or the keyboard shows a marker of `--size-chart-marker` in `--color-chart-neutral-hover` with a ring of `--space-0-5` in `--color-surface-app`, and a vertical hairline in `--color-chart-axis` from the baseline to the top at its x. The point the screen has selected keeps a marker in `--color-chart-neutral-selected` at all times. A chart of one point shows its marker at all times.
+- **Pointer:** the point nearest the pointer along x is the one shown, so the pointer never has to land on the line. A click presses that point.
+- **Keys:** the chart is one stop in the Tab order, on the selected point, or on the first point when none is. The left and right arrows move by one point, Page Up and Page Down by a tenth of the points (at least one), Home and End to the first and the last point. Enter presses the point.
+- **Focus:** the focus ring around the plot, the marker and the hairline at the point, and its tooltip at once.
+- **To assistive technology** it is a list box named by the screen; the point the keyboard is on is its one option, which reads the point's label and both of its values, and its place among the points.
+- **Loading:** a skeleton block as large as the plot. A refetch keeps the previous chart at `--opacity-stale`.
+- **Empty, error:** as in "Chart foundations".
+- **A forecast** (a band and a dashed projection) is not drawn by this chart yet.
+
+### Chart focus and tooltip
+
+The chart tooltip is the tooltip of "Tooltip", with rows. It names the mark the pointer or the keyboard is on and gives its exact value.
+
+- **Shape:** that of a tooltip: fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-sm`, `--shadow-overlay`, padding `--space-1` above and below and `--space-2` at the sides, at most `--size-tooltip-max-width` wide, at `--z-tooltip`.
+- **Rows:** one per fact, `--space-2` between label and value: the label in `--text-caption` and `--color-text-secondary`, then the value in `--text-label` and `--color-text-primary` with tabular figures. The value row of a mark leads with its key: a swatch of `--size-legend-swatch` in the cell's step for a heatmap, a short line of `--size-chart-line` in the line's color for a line chart. Labels that were cut on the chart are written in full and wrap.
+- **What it shows:** for a heatmap cell, the row value, the column value, and the count; for a point, its label, its x, and its y.
+- **Placement:** `--space-1` under the mark, above it where there is no room below, kept inside the window. It never covers the mark.
+- **Showing:** on keyboard focus, at once. Under the pointer, after `--delay-tooltip`; once it shows, it follows the pointer from mark to mark without waiting again, until the pointer leaves the chart. It fades in over `--duration-fast`, and without a transition under reduced motion.
+- **Dismissing:** when the pointer leaves the chart and the focus is not in it, when the focus leaves the chart, and on Esc, which hides it until the next move and moves nothing. It takes no pointer: it follows the pointer, so it could not be reached anyway, and it holds nothing that is not in the table view.
+- **States:** none of its own.
+
+### Chart table view
+
+The same numbers as a table, for reading exact values, for assistive technology, and for a printed page. Every chart has one.
+
+- **The toggle:** a quiet toggle button "Table view" with a table icon, placed by the screen in the row above its chart. Pressed, it has fill `--color-accent-subtle` and text `--color-text-primary`, as a marked preset; hover `--color-surface-hover`, or `--color-accent-subtle-hover` while pressed; active `--color-surface-pressed`; the focus ring. It has `aria-pressed`. Pressing it shows the table in the place of the chart, and pressing it again the chart; the focus stays on the toggle.
+- **The table:** a read-only table (see "Table") at most twelve rows tall, then it scrolls. Values are formatted as the chart formats them, so every number of the chart is in it, and only those.
+- **Heatmap:** the first column holds the row values under the name of the row dimension and stays in view; then one column per column value, named by its full text, and Other last. An empty cell reads 0.
+- **Line chart:** one row per point, in the order of the points: the x value, the label, and the y value, each column named as the chart names its axes.
+- **States:** those of the chart it stands for: skeleton rows on a first load, dimmed rows on a refetch.
 
 ### Notice (inline)
 

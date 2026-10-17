@@ -289,3 +289,11 @@
   flex: 1 1 auto;
   min-block-size: 0;
 }
+
+/* The heading of a chart with its table view toggle at the trailing end. */
+.chartHead {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-end;
+  justify-content: space-between;
+}
