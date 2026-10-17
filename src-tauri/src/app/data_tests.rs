@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{self, HoldQuery, HoldSort, LineQuery, LineSort};
@@ -7,7 +8,9 @@ use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
 use super::snapshot_tests::{import, open_holds, view_of, Fixture};
-use super::{AppState, ViewRef, PAGE_ROWS, PICKER_VALUES};
+use super::{
+    AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
+};
 
 /// The view the interface shows when it shows what the state holds.
 fn shown(state: &AppState) -> ViewRef {
@@ -69,6 +72,19 @@ fn outcomes(state: &mut AppState, view: &ViewRef) -> Vec<String> {
         kind(state.holds(&spec, &HoldQuery::default(), view).map(drop)),
         kind(state.line_detail("L-1", view).map(drop)),
         kind(state.hold_detail(0, view).map(drop)),
+        kind(state.breakdown(&spec, &Dim::Role, view).map(drop)),
+        kind(
+            state
+                .matrix(&spec, &Dim::Discipline, &Dim::HoldType, view)
+                .map(drop),
+        ),
+        kind(state.solve_order(&spec, view).map(drop)),
+        kind(state.blocker_detail(&spec, "A|b", view).map(drop)),
+        kind(
+            state
+                .group_detail(&spec, &Dim::Discipline, "A", view)
+                .map(drop),
+        ),
     ]
 }
 
@@ -78,7 +94,7 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     let mut state = fx.state();
     // Nothing is open.
     let none = view_of("0123456789abcdef", None);
-    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 6]);
+    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 11]);
 
     let mut state = small(&fx);
     let (workspace, snapshot) = (state.open_id(), state.selected_snapshot().unwrap());
@@ -89,12 +105,12 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     ] {
         assert_eq!(
             outcomes(&mut state, &stale),
-            ["ViewChanged"; 6],
+            ["ViewChanged"; 11],
             "{stale:?}"
         );
     }
     let view = shown(&state);
-    assert_eq!(outcomes(&mut state, &view), ["Ok"; 6]);
+    assert_eq!(outcomes(&mut state, &view), ["Ok"; 11]);
 }
 
 #[test]
@@ -128,6 +144,27 @@ fn a_workspace_without_snapshots_answers_as_for_an_empty_snapshot() {
     );
     assert_eq!(state.line_detail("L-1", &view).unwrap(), None);
     assert_eq!(state.hold_detail(0, &view).unwrap(), None);
+    assert!(state
+        .breakdown(&spec, &Dim::Role, &view)
+        .unwrap()
+        .is_empty());
+    let matrix = state
+        .matrix(&spec, &Dim::Discipline, &Dim::HoldType, &view)
+        .unwrap();
+    assert_eq!(
+        (matrix.rows.len(), matrix.cols.len(), matrix.max_cell),
+        (0, 0, 0)
+    );
+    assert!(matrix.cells.is_empty() && matrix.other_row.is_none());
+    let solve = state.solve_order(&spec, &view).unwrap();
+    assert_eq!((solve.rows.len(), solve.lines_on_hold), (0, 0));
+    assert_eq!(state.blocker_detail(&spec, "A|b", &view).unwrap(), None);
+    assert_eq!(
+        state
+            .group_detail(&spec, &Dim::Discipline, "A", &view)
+            .unwrap(),
+        None
+    );
     assert_eq!(state.dataset_builds(), 0);
 }
 
@@ -395,4 +432,174 @@ fn current_is_none_after_a_start_that_reopens_nothing() {
     state.settings.last_workspace = None;
     state.start();
     assert_eq!(state.current().unwrap(), None);
+}
+
+/// The dataset of the snapshot the state shows, built again without the app.
+fn dataset_of(state: &mut AppState) -> Dataset {
+    let selected = state.selected_snapshot().unwrap();
+    state.dataset(selected).unwrap().clone()
+}
+
+#[test]
+fn breakdown_equals_the_core_grouping() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    for dim in [Dim::Role, Dim::Blocker, Dim::Discipline] {
+        let groups = state.breakdown(&spec, &dim, &view).unwrap();
+        assert!(!groups.is_empty());
+        assert_eq!(groups, query::group_by(&ds, &spec, &dim), "{dim:?}");
+    }
+}
+
+#[test]
+fn matrix_folds_at_the_side_and_keeps_the_totals() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let kept = query::summary(&ds, &spec).holds;
+    let matrix = state
+        .matrix(&spec, &Dim::LineId, &Dim::Blocker, &view)
+        .unwrap();
+    assert_eq!(matrix.rows.len(), MATRIX_SIDE);
+    assert_eq!(matrix.cols.len(), MATRIX_SIDE);
+    assert!(matrix.other_row.is_some() && matrix.folded_rows > 0);
+    assert_eq!(matrix.cells.len(), MATRIX_SIDE + 1);
+    assert_eq!(matrix.cells.iter().flatten().sum::<usize>(), kept);
+    assert_eq!(
+        matrix,
+        query::matrix_top(
+            &ds,
+            &spec,
+            &Dim::LineId,
+            &Dim::Blocker,
+            MATRIX_SIDE,
+            MATRIX_SIDE
+        )
+    );
+}
+
+#[test]
+fn the_solve_order_equals_the_core_view_and_leaves_the_cached_plan_alone() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let order = state.solve_order(&spec, &view).unwrap();
+    assert!(!order.rows.is_empty());
+    assert_eq!(order, hx_core::solve::solve_view(&ds, &spec));
+    assert_eq!(state.plan_builds(), 0);
+}
+
+#[test]
+fn a_blocker_detail_follows_the_filter_and_answers_none_when_the_filter_removes_it() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let order = state.solve_order(&spec, &view).unwrap();
+    let key = order.rows[0].key.clone();
+    let detail = state.blocker_detail(&spec, &key, &view).unwrap().unwrap();
+    let plan = hx_core::solve::solve_plan(&ds, &spec, None);
+    assert_eq!(
+        Some(detail.clone()),
+        hx_core::detail::blocker_detail(&ds, &spec, &plan, &key)
+    );
+    assert_eq!(detail.step, Some(1));
+
+    let mut without = spec.clone();
+    without.fields.push(hx_core::filter::FieldFilter {
+        dim: Dim::Blocker,
+        values: vec![key.clone()],
+        negate: true,
+    });
+    assert_eq!(state.blocker_detail(&without, &key, &view).unwrap(), None);
+    assert_eq!(state.blocker_detail(&spec, "no|such", &view).unwrap(), None);
+}
+
+#[test]
+fn a_group_detail_lists_at_most_the_group_lines_with_the_true_total() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+
+    // A group of the big file with more lines than the cap.
+    let (dim, largest) = [Dim::Discipline, Dim::Role, Dim::BlockerType, Dim::HoldType]
+        .into_iter()
+        .filter_map(|dim| {
+            let group = query::group_by(&ds, &spec, &dim).into_iter().next()?;
+            Some((dim, group))
+        })
+        .max_by_key(|(_, group)| group.lines)
+        .unwrap();
+    assert!(largest.lines > GROUP_LINES, "{}", largest.lines);
+    let detail = state
+        .group_detail(&spec, &dim, &largest.key, &view)
+        .unwrap()
+        .unwrap();
+    assert_eq!(detail.group, largest);
+    assert_eq!(detail.lines.total, largest.lines);
+    assert_eq!(detail.lines.rows.len(), GROUP_LINES);
+    let mut of_group = spec.clone();
+    of_group.fields.push(hx_core::filter::FieldFilter {
+        dim: dim.clone(),
+        values: vec![largest.key.clone()],
+        negate: false,
+    });
+    assert_eq!(
+        detail.lines,
+        query::line_page(&ds, &of_group, &LineQuery::default(), 0, Some(GROUP_LINES))
+    );
+
+    // A key the filter does not keep.
+    assert_eq!(
+        state
+            .group_detail(&spec, &dim, "no such value", &view)
+            .unwrap(),
+        None
+    );
+    let mut narrowed = spec.clone();
+    narrowed.fields.push(hx_core::filter::FieldFilter {
+        dim: dim.clone(),
+        values: vec![largest.key.clone()],
+        negate: true,
+    });
+    assert_eq!(
+        state
+            .group_detail(&narrowed, &dim, &largest.key, &view)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn the_overview_parts_equal_the_core_functions() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let overview = state.overview(&spec, &view).unwrap().unwrap();
+    assert_eq!(overview.by_role, query::group_by(&ds, &spec, &Dim::Role));
+    let blockers = query::group_by(&ds, &spec, &Dim::Blocker);
+    assert!(blockers.len() > TOP_ITEMS);
+    assert_eq!(overview.top_blockers, blockers[..TOP_ITEMS]);
+    assert_eq!(
+        overview.top_lines,
+        query::line_page(&ds, &spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows
+    );
+    assert_eq!(overview.top_lines.len(), TOP_ITEMS);
+    assert_eq!(overview.stale.days, STALE_DAYS);
+    assert_eq!(
+        overview.stale.holds,
+        query::stale_count(&ds, &spec, STALE_DAYS)
+    );
 }

@@ -16,7 +16,7 @@ use hx_core::dataset::Dataset;
 use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
-pub use data::{FilterOptions, HoldsView};
+pub use data::{FilterOptions, GroupDetail, HoldsView};
 pub use error::CommandError;
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
@@ -31,6 +31,14 @@ use settings::{load_settings_checked, save_settings, LoadedSettings};
 pub const PAGE_ROWS: usize = 200;
 /// Most values `filter_values` returns.
 pub const PICKER_VALUES: usize = 200;
+/// Most rows and most columns of a matrix before the rest is folded into "Other".
+pub const MATRIX_SIDE: usize = 30;
+/// Most Lines `group_detail` lists for one group.
+pub const GROUP_LINES: usize = 200;
+/// Most entries of the Overview's top blockers and top lines.
+pub const TOP_ITEMS: usize = 10;
+/// Age in days from which an open hold counts as stale.
+pub const STALE_DAYS: i64 = 90;
 
 /// The dataset that was built last, with the workspace and the snapshot it belongs to, and the
 /// solve plan of its open holds once one was asked for. Read it through [`AppState::dataset`]

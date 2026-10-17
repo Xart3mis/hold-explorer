@@ -2,10 +2,14 @@
 // which holds the commands that change the view, are the only ones that import `invoke`.
 import { invoke, type Channel } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
+import type { BlockerDetail } from "../bindings/BlockerDetail";
 import type { Dim } from "../bindings/Dim";
 import type { Field } from "../bindings/Field";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { FoldedMatrix } from "../bindings/FoldedMatrix";
+import type { Group } from "../bindings/Group";
+import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { HoldRef } from "../bindings/HoldRef";
 import type { HoldsView } from "../bindings/HoldsView";
@@ -19,6 +23,7 @@ import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { Settings } from "../bindings/Settings";
+import type { SolveView } from "../bindings/SolveView";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { TargetChoice } from "../bindings/TargetChoice";
 import type { Theme } from "../bindings/Theme";
@@ -64,6 +69,20 @@ interface CommandMap {
   line_detail: { args: { lineId: string; view: ViewRef }; result: LineDetail | null };
   hold_detail: { args: { position: number; view: ViewRef }; result: HoldRef | null };
   workspace_current: { args: Record<string, never>; result: WorkspaceOpen | null };
+  breakdown: { args: { spec: FilterSpec; dim: Dim; view: ViewRef }; result: Group[] };
+  matrix: {
+    args: { spec: FilterSpec; rowDim: Dim; colDim: Dim; view: ViewRef };
+    result: FoldedMatrix;
+  };
+  solve_order: { args: { spec: FilterSpec; view: ViewRef }; result: SolveView };
+  blocker_detail: {
+    args: { spec: FilterSpec; key: string; view: ViewRef };
+    result: BlockerDetail | null;
+  };
+  group_detail: {
+    args: { spec: FilterSpec; dim: Dim; key: string; view: ViewRef };
+    result: GroupDetail | null;
+  };
 }
 
 export type CommandName = keyof CommandMap;
@@ -133,6 +152,19 @@ export const api = {
   lineDetail: (lineId: string, view: ViewRef) => call("line_detail", { lineId, view }),
   /** The Hold at this position of the snapshot; `null` past the end. */
   holdDetail: (position: number, view: ViewRef) => call("hold_detail", { position, view }),
+  /** The kept holds grouped by one dimension, largest group first. */
+  breakdown: (spec: FilterSpec, dim: Dim, view: ViewRef) => call("breakdown", { spec, dim, view }),
+  /** The kept holds crossed by two dimensions, folded at 30 values on each side. */
+  matrix: (spec: FilterSpec, rowDim: Dim, colDim: Dim, view: ViewRef) =>
+    call("matrix", { spec, rowDim, colDim, view }),
+  /** The solve order of the kept holds. */
+  solveOrder: (spec: FilterSpec, view: ViewRef) => call("solve_order", { spec, view }),
+  /** The detail of one blocker among the kept holds; `null` when no kept hold has it. */
+  blockerDetail: (spec: FilterSpec, key: string, view: ViewRef) =>
+    call("blocker_detail", { spec, key, view }),
+  /** One group of a dimension with its first 200 Lines; `null` when the filter keeps none of it. */
+  groupDetail: (spec: FilterSpec, dim: Dim, key: string, view: ViewRef) =>
+    call("group_detail", { spec, dim, key, view }),
   /** The open workspace with the snapshot that is selected; `null` without one. Changes nothing. */
   workspaceCurrent: () => call("workspace_current", {}),
 };

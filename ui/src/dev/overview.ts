@@ -3,6 +3,7 @@
 // twenty-five. For development only; see ui/src/dev/app.tsx.
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
+import type { LineRow } from "../bindings/LineRow";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Status } from "../bindings/Status";
@@ -45,6 +46,45 @@ export const HOLD_TYPES: readonly Row[] = [
   ["Other", 45, 41],
 ];
 
+export const ROLES: readonly Row[] = [
+  ["Lead", 2470, 1760],
+  ["Checker", 1604, 1190],
+  ["Designer", 822, 601],
+  ["Unspecified", 146, 120],
+];
+
+/** Blockers of the first few holds, the label written as the core writes a blocker. */
+const BLOCKERS: readonly Row[] = [
+  ["Piping / PR-1042", 96, 61],
+  ["Civil / DWG-220", 74, 49],
+  ["Process / P&ID-7", 51, 40],
+  ["Instrumentation and control / DS-318", 47, 38],
+  ["Structural / CALC-55", 43, 31],
+  ["Piping / PR-1077", 39, 33],
+  ["Electrical / DWG-801", 36, 29],
+  ["Pipe stress / SC-12", 33, 28],
+  ["Materials / MTO-9", 30, 24],
+  ["Process / DATA-64", 28, 22],
+  ["Civil / DWG-231", 25, 20],
+];
+
+/** The lines that wait longest, as many as the Overview lists. */
+const LINES_ON_TOP: readonly (readonly [string, number, number])[] = [
+  ["L-1001", 4, 212],
+  ["L-1187", 3, 188],
+  ["L-2040", 6, 171],
+  ["L-0312", 2, 160],
+  ["L-3318", 1, 149],
+  ["L-1450", 5, 143],
+  ["L-2207", 2, 131],
+  ["L-0988", 3, 120],
+  ["L-1766", 1, 118],
+  ["L-2951", 2, 104],
+];
+
+/** Open holds that are 90 days old or more, as a share of the open holds of the numbers above. */
+const STALE_SHARE = 0.18;
+
 /** Twenty-five values with labels of every length, some too long for the label column. */
 const MANY: readonly Row[] = [
   ["Piping", 742, 566],
@@ -73,6 +113,21 @@ const MANY: readonly Row[] = [
   ["Document control", 24, 21],
   ["Unspecified", 126, 97],
 ];
+
+function lineRows(shape: DevOverview): LineRow[] {
+  return LINES_ON_TOP.map(([line_id, holds, age]) => ({
+    line_id,
+    holds,
+    disciplines: ["Piping"],
+    hold_types: ["Vendor data"],
+    blockers: 1,
+    oldest_age_days: shape === "no-dates" ? null : age,
+    model_size: null,
+    ldt_size: null,
+    stress_calc: "",
+    size_mismatch: false,
+  }));
+}
 
 function groups(rows: readonly Row[], share: number): Group[] {
   return rows.map(([label, holds, lines]) => ({
@@ -130,6 +185,16 @@ function overviewOfSnapshot(
     },
     by_discipline: scaled(disciplines, holds),
     by_hold_type: scaled(holdTypes, holds),
+    by_role: scaled(ROLES, holds),
+    top_blockers: groups(BLOCKERS, share)
+      .slice(0, 10)
+      .map((group) => ({ ...group, key: group.label.replace(" / ", "|") })),
+    top_lines: lineRows(shape),
+    // A hold has an age only when the snapshot has dates, and only an open one.
+    stale: {
+      holds: shape === "no-dates" || status === "Released" ? 0 : Math.round(holds * STALE_SHARE),
+      days: 90,
+    },
   };
 }
 

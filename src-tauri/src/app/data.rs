@@ -3,20 +3,21 @@
 
 use chrono::DateTime;
 use hx_core::dataset::Dataset;
-use hx_core::detail::{line_detail, HoldRef, LineDetail};
-use hx_core::filter::{default_age_bands, AgeBand, Dim, FilterSpec};
+use hx_core::detail::{blocker_detail, line_detail, BlockerDetail, HoldRef, LineDetail};
+use hx_core::filter::{default_age_bands, AgeBand, Dim, FieldFilter, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{
-    facet_counts, holds, line_page, summary, value_page, FacetCounts, HoldQuery, LinePage,
-    LineQuery, ValuePage,
+    facet_counts, group_by, holds, line_page, matrix_top, summary, value_page, FacetCounts,
+    FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage,
 };
 use hx_core::rules::RuleSet;
+use hx_core::solve::{solve_plan, solve_view, SolveView};
 use serde::Serialize;
 use ts_rs::TS;
 
 use super::error::CommandError;
 use super::snapshots::ViewRef;
-use super::{AppState, PAGE_ROWS, PICKER_VALUES};
+use super::{AppState, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES};
 
 /// What the filter bar needs for the snapshot in view and a filter.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -44,6 +45,16 @@ pub struct HoldsView {
     pub widest_line_id: usize,
     /// The holds of the page, each with its position in the snapshot.
     pub rows: Vec<HoldRef>,
+}
+
+/// One group of a dimension with its numbers and its first Lines.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct GroupDetail {
+    /// The group, counted among the holds the request's filter keeps.
+    pub group: Group,
+    /// The first `GROUP_LINES` Lines of the group in the default order, with the true total.
+    pub lines: LinePage,
 }
 
 /// A snapshot without a hold, which is what a workspace without snapshots answers for.
@@ -178,5 +189,75 @@ impl AppState {
                 position,
                 row: row.clone(),
             }))
+    }
+
+    /// The kept holds grouped by `dim`, largest group first.
+    pub fn breakdown(
+        &mut self,
+        spec: &FilterSpec,
+        dim: &Dim,
+        view: &ViewRef,
+    ) -> Result<Vec<Group>, CommandError> {
+        self.in_view(view, |ds, _| group_by(ds, spec, dim))
+    }
+
+    /// The kept holds crossed by two dimensions, folded at [`MATRIX_SIDE`] on each side.
+    pub fn matrix(
+        &mut self,
+        spec: &FilterSpec,
+        row_dim: &Dim,
+        col_dim: &Dim,
+        view: &ViewRef,
+    ) -> Result<FoldedMatrix, CommandError> {
+        self.in_view(view, |ds, _| {
+            matrix_top(ds, spec, row_dim, col_dim, MATRIX_SIDE, MATRIX_SIDE)
+        })
+    }
+
+    /// The solve order of the kept holds. The plan is built for this filter on every request and
+    /// not kept; the cached plan of the open holds belongs to the line panel.
+    pub fn solve_order(
+        &mut self,
+        spec: &FilterSpec,
+        view: &ViewRef,
+    ) -> Result<SolveView, CommandError> {
+        self.in_view(view, |ds, _| solve_view(ds, spec))
+    }
+
+    /// The detail of one blocker among the kept holds; `None` when no kept hold has it.
+    pub fn blocker_detail(
+        &mut self,
+        spec: &FilterSpec,
+        key: &str,
+        view: &ViewRef,
+    ) -> Result<Option<BlockerDetail>, CommandError> {
+        self.in_view(view, |ds, _| {
+            let plan = solve_plan(ds, spec, None);
+            blocker_detail(ds, spec, &plan, key)
+        })
+    }
+
+    /// One group of `dim` with its numbers and its first [`GROUP_LINES`] Lines; `None` when the
+    /// filter keeps no hold with this key.
+    pub fn group_detail(
+        &mut self,
+        spec: &FilterSpec,
+        dim: &Dim,
+        key: &str,
+        view: &ViewRef,
+    ) -> Result<Option<GroupDetail>, CommandError> {
+        self.in_view(view, |ds, _| {
+            let group = group_by(ds, spec, dim)
+                .into_iter()
+                .find(|group| group.key == key)?;
+            let mut of_group = spec.without(dim);
+            of_group.fields.push(FieldFilter {
+                dim: dim.clone(),
+                values: vec![key.to_string()],
+                negate: false,
+            });
+            let lines = line_page(ds, &of_group, &LineQuery::default(), 0, Some(GROUP_LINES));
+            Some(GroupDetail { group, lines })
+        })
     }
 }

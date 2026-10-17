@@ -2,7 +2,9 @@
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
-use hx_core::query::{group_by, summary, Group, Summary};
+use hx_core::query::{
+    group_by, line_page, stale_count, summary, Group, LineQuery, LineRow, Summary,
+};
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, SolvePlan};
 use hx_store::SnapshotInfo;
@@ -11,7 +13,7 @@ use ts_rs::TS;
 
 use super::error::CommandError;
 use super::workspaces::WorkspaceOpen;
-use super::{describe, AppState, Cache};
+use super::{describe, AppState, Cache, STALE_DAYS, TOP_ITEMS};
 
 /// The view the interface is showing when it asks for data. A command that reads the data in
 /// view answers only when this names the open workspace and the selected snapshot.
@@ -38,6 +40,24 @@ pub struct OverviewView {
     pub by_discipline: Vec<Group>,
     /// The kept holds by hold type, largest group first.
     pub by_hold_type: Vec<Group>,
+    /// The kept holds by role, largest group first.
+    pub by_role: Vec<Group>,
+    /// The blockers with the most kept holds, largest first, at most `TOP_ITEMS`.
+    pub top_blockers: Vec<Group>,
+    /// The first Lines in the default order, at most `TOP_ITEMS`.
+    pub top_lines: Vec<LineRow>,
+    /// The open holds the filter keeps that have waited long.
+    pub stale: StaleCount,
+}
+
+/// Open holds that have waited at least `days` days.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct StaleCount {
+    /// Open kept holds whose age is at least `days`.
+    pub holds: usize,
+    /// The age that makes a hold stale.
+    pub days: i64,
 }
 
 impl AppState {
@@ -153,6 +173,16 @@ impl AppState {
             summary: summary(dataset, spec),
             by_discipline: group_by(dataset, spec, &Dim::Discipline),
             by_hold_type: group_by(dataset, spec, &Dim::HoldType),
+            by_role: group_by(dataset, spec, &Dim::Role),
+            top_blockers: group_by(dataset, spec, &Dim::Blocker)
+                .into_iter()
+                .take(TOP_ITEMS)
+                .collect(),
+            top_lines: line_page(dataset, spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows,
+            stale: StaleCount {
+                holds: stale_count(dataset, spec, STALE_DAYS),
+                days: STALE_DAYS,
+            },
         }))
     }
 

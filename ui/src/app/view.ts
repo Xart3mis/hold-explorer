@@ -277,7 +277,18 @@ async function readForView<Data>(
  * has a marker after the name (`keys.snapshotPages`), so the two never share a key.
  */
 export type ReadingName =
-  "overview" | "filterOptions" | "filterValues" | "lines" | "holds" | "lineDetail" | "holdDetail";
+  | "overview"
+  | "filterOptions"
+  | "filterValues"
+  | "lines"
+  | "holds"
+  | "lineDetail"
+  | "holdDetail"
+  | "breakdown"
+  | "matrix"
+  | "solveOrder"
+  | "blockerDetail"
+  | "groupDetail";
 
 /**
  * What both hooks start from: the key of a reading for the view on screen, built by `keyOf`,
