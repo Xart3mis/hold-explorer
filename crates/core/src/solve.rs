@@ -1,11 +1,12 @@
 //! Which blockers to solve first.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
 use crate::dataset::Dataset;
 use crate::filter::FilterSpec;
+use crate::query::blocker_label;
 
 /// One blocker among the selected holds, with the lines it is on.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -165,11 +166,83 @@ pub fn solve_plan(ds: &Dataset, spec: &FilterSpec, max_steps: Option<usize>) -> 
     SolvePlan { nodes, steps }
 }
 
+/// One step of the solve order with what the interface shows of its blocker.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SolveRow {
+    /// One-based place of the step in the plan.
+    pub step: usize,
+    /// `<discipline>|<item>`.
+    pub key: String,
+    /// `<discipline> / <item>`, as `Group::label` writes a blocker.
+    pub label: String,
+    /// Blocker type, such as `PR` or `P&ID`.
+    pub kind: String,
+    /// The discipline that owns the blocker.
+    pub discipline: String,
+    /// Number of selected holds waiting for this blocker.
+    pub holds: usize,
+    /// Lines freed by this step.
+    pub gain: usize,
+    /// Lines freed by this step and all steps before it.
+    pub cumulative: usize,
+}
+
+/// The solve order of the selected holds as rows.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SolveView {
+    /// The steps, in order.
+    pub rows: Vec<SolveRow>,
+    /// Lines on hold among the kept holds: the end the cumulative curve climbs to.
+    pub lines_on_hold: usize,
+    /// Blockers of the kept holds that no step frees a line with.
+    pub unranked: usize,
+}
+
+/// The full solve order of the holds `spec` keeps, each step with its blocker looked up.
+pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView {
+    let plan = solve_plan(ds, spec, None);
+    let nodes: HashMap<&str, &BlockerNode> = plan
+        .nodes
+        .iter()
+        .map(|node| (node.key.as_str(), node))
+        .collect();
+    let rows = plan
+        .steps
+        .iter()
+        .enumerate()
+        .filter_map(|(index, step)| {
+            let node = nodes.get(step.key.as_str())?;
+            Some(SolveRow {
+                step: index + 1,
+                key: step.key.clone(),
+                label: blocker_label(&node.discipline, &node.item),
+                kind: node.kind.clone(),
+                discipline: node.discipline.clone(),
+                holds: node.holds,
+                gain: step.gain,
+                cumulative: step.cumulative,
+            })
+        })
+        .collect();
+    let mut lines: HashSet<&str> = HashSet::new();
+    for node in &plan.nodes {
+        lines.extend(node.lines.iter().map(String::as_str));
+    }
+    SolveView {
+        rows,
+        lines_on_hold: lines.len(),
+        unranked: plan.nodes.len() - plan.steps.len(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dataset::Dataset;
     use crate::filter::FilterSpec;
+    use crate::query::summary;
     use crate::rules::RuleSet;
     use crate::testkit::{hold, sample, snapshot};
 
@@ -319,5 +392,42 @@ mod tests {
 
         let plan = solve_plan(&ds, &FilterSpec::default(), Some(1));
         assert_eq!(brief(&plan), vec![("Civil|538-PR-100", 1, 1)]);
+    }
+
+    #[test]
+    fn the_solve_view_rows_are_the_plan_steps_with_labels() {
+        let ds = chain();
+        let spec = FilterSpec::default();
+        let plan = solve_plan(&ds, &spec, None);
+        let view = solve_view(&ds, &spec);
+        assert_eq!(view.rows.len(), plan.steps.len());
+        for (index, (row, step)) in view.rows.iter().zip(&plan.steps).enumerate() {
+            let node = plan.nodes.iter().find(|n| n.key == step.key).unwrap();
+            assert_eq!(row.step, index + 1);
+            assert_eq!(row.key, step.key);
+            assert_eq!(row.label, format!("{} / {}", node.discipline, node.item));
+            assert_eq!(row.kind, node.kind);
+            assert_eq!(row.discipline, node.discipline);
+            assert_eq!(row.holds, node.holds);
+            assert_eq!((row.gain, row.cumulative), (step.gain, step.cumulative));
+        }
+        assert_eq!(view.rows[0].label, "Civil / 538-PR-100");
+        assert_eq!(view.lines_on_hold, summary(&ds, &spec).lines);
+        assert_eq!(view.lines_on_hold, 5);
+        assert_eq!(view.unranked, plan.nodes.len() - plan.steps.len());
+        assert_eq!(view.unranked, 0);
+    }
+
+    #[test]
+    fn the_solve_view_of_nothing_is_empty() {
+        let spec = FilterSpec {
+            status: crate::filter::Status::Released,
+            ..Default::default()
+        };
+        let view = solve_view(&chain(), &spec);
+        assert_eq!(
+            (view.rows.len(), view.lines_on_hold, view.unranked),
+            (0, 0, 0)
+        );
     }
 }

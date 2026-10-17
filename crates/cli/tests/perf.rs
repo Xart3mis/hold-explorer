@@ -9,10 +9,11 @@ use hx_core::filter::Status;
 use hx_core::filter::{default_age_bands, Dim, FilterSpec};
 use hx_core::load::load_file;
 use hx_core::query::{
-    facet_counts, group_by, holds, line_page, lines, summary, value_page, HoldQuery, LineQuery,
+    facet_counts, group_by, holds, line_page, lines, matrix_top, summary, value_page, HoldQuery,
+    LineQuery,
 };
 use hx_core::rules::RuleSet;
-use hx_core::solve::solve_plan;
+use hx_core::solve::{solve_plan, solve_view};
 use hx_store::{ImportOptions, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
@@ -92,8 +93,25 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
         "full solve order took {solve:?}"
     );
 
+    let started = Instant::now();
+    let folded = matrix_top(
+        &ds,
+        &FilterSpec::default(),
+        &Dim::Discipline,
+        &Dim::HoldType,
+        30,
+        30,
+    );
+    let view = solve_view(&ds, &FilterSpec::default());
+    let breakdown = started.elapsed();
+    assert!(folded.max_cell > 0 && !view.rows.is_empty());
+    assert!(
+        breakdown < Duration::from_millis(100),
+        "a folded matrix and the solve rows took {breakdown:?}"
+    );
+
     eprintln!(
-        "perf: import {import:?}, filtered views {views:?}, filter counts and pages {pickers:?}, hold page {paging:?}, full solve order {solve:?}"
+        "perf: import {import:?}, filtered views {views:?}, filter counts and pages {pickers:?}, hold page {paging:?}, full solve order {solve:?}, folded matrix and solve rows {breakdown:?}"
     );
 }
 

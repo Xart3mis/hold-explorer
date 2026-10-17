@@ -1,12 +1,12 @@
 //! Everything about one line, for the detail panel.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
 use crate::dataset::{Dataset, Row};
-use crate::filter::Dim;
-use crate::query::label_for;
+use crate::filter::{Dim, FilterSpec};
+use crate::query::{blocker_label, label_for};
 use crate::solve::SolvePlan;
 
 /// A hold with its position in the snapshot, by which the interface asks for it again.
@@ -117,6 +117,142 @@ pub fn line_detail(ds: &Dataset, plan: &SolvePlan, line_id: &str) -> Option<Line
     })
 }
 
+/// Another blocker on the lines of the one in view.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct LinkedBlocker {
+    /// `<discipline>|<item>`.
+    pub key: String,
+    /// `<discipline> / <item>`, as `Group::label` writes a blocker.
+    pub label: String,
+    /// Blocker type, such as `PR` or `P&ID`.
+    pub kind: String,
+    /// Lines both blockers are on.
+    pub shared_lines: usize,
+}
+
+/// One blocker among the selected holds: what solving it frees and what it is tied to.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct BlockerDetail {
+    /// `<discipline>|<item>`.
+    pub key: String,
+    /// `<discipline> / <item>`, as `Group::label` writes a blocker.
+    pub label: String,
+    /// Blocker type, such as `PR` or `P&ID`.
+    pub kind: String,
+    /// The discipline that owns the blocker.
+    pub discipline: String,
+    /// The specific thing waited for.
+    pub item: String,
+    /// Number of selected holds waiting for this blocker.
+    pub holds: usize,
+    /// Lines this blocker alone holds: solving it frees them. In order of first appearance.
+    pub frees: Vec<String>,
+    /// Lines it is on that other blockers also hold. In order of first appearance.
+    pub shared: Vec<String>,
+    /// Other blockers on its lines, most shared lines first, then by label.
+    pub linked: Vec<LinkedBlocker>,
+    /// Its oldest open hold; `None` when none has a creation date.
+    pub oldest: Option<HoldRef>,
+    /// One-based place in the solve order of the same holds; `None` when no step ranks it.
+    pub step: Option<usize>,
+}
+
+/// The detail of one blocker among the holds `spec` keeps; `None` when no kept hold has it.
+/// `plan` is the solve plan of the same holds.
+pub fn blocker_detail(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    plan: &SolvePlan,
+    key: &str,
+) -> Option<BlockerDetail> {
+    let kept = || {
+        ds.rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| spec.matches(row))
+    };
+    let mut first: Option<&Row> = None;
+    let mut holds = 0;
+    let mut lines: Vec<&str> = Vec::new();
+    let mut on_blocker: HashSet<&str> = HashSet::new();
+    let mut oldest: Option<(i64, usize)> = None;
+    for (position, row) in kept().filter(|(_, row)| row.blocker_key() == key) {
+        first.get_or_insert(row);
+        holds += 1;
+        if on_blocker.insert(row.hold.line_id.as_str()) {
+            lines.push(row.hold.line_id.as_str());
+        }
+        if let Some(age) = row.age_days.filter(|_| !row.hold.released) {
+            if oldest.is_none_or(|(best, _)| age > best) {
+                oldest = Some((age, position));
+            }
+        }
+    }
+    let first = first?;
+
+    // Other blockers on the same lines, with the lines they share with this one.
+    let mut others: HashMap<String, (LinkedBlocker, HashSet<&str>)> = HashMap::new();
+    for (_, row) in kept() {
+        let other = row.blocker_key();
+        if other == key || !on_blocker.contains(row.hold.line_id.as_str()) {
+            continue;
+        }
+        let entry = others.entry(other).or_insert_with_key(|other| {
+            let linked = LinkedBlocker {
+                key: other.clone(),
+                label: blocker_label(&row.hold.discipline, &row.blocker.item),
+                kind: row.blocker.kind.clone(),
+                shared_lines: 0,
+            };
+            (linked, HashSet::new())
+        });
+        entry.1.insert(row.hold.line_id.as_str());
+    }
+    let held_by_others: HashSet<&str> = others
+        .values()
+        .flat_map(|(_, shared)| shared.iter().copied())
+        .collect();
+    let (shared, frees): (Vec<&str>, Vec<&str>) = lines
+        .iter()
+        .partition(|line| held_by_others.contains(**line));
+    let mut linked: Vec<LinkedBlocker> = others
+        .into_values()
+        .map(|(mut linked, shared)| {
+            linked.shared_lines = shared.len();
+            linked
+        })
+        .collect();
+    linked.sort_by(|a, b| {
+        b.shared_lines
+            .cmp(&a.shared_lines)
+            .then_with(|| a.label.cmp(&b.label))
+            .then_with(|| a.key.cmp(&b.key))
+    });
+
+    Some(BlockerDetail {
+        key: key.to_string(),
+        label: blocker_label(&first.hold.discipline, &first.blocker.item),
+        kind: first.blocker.kind.clone(),
+        discipline: first.hold.discipline.clone(),
+        item: first.blocker.item.clone(),
+        holds,
+        frees: frees.into_iter().map(str::to_string).collect(),
+        shared: shared.into_iter().map(str::to_string).collect(),
+        linked,
+        oldest: oldest.map(|(_, position)| HoldRef {
+            position,
+            row: ds.rows[position].clone(),
+        }),
+        step: plan
+            .steps
+            .iter()
+            .position(|step| step.key == key)
+            .map(|index| index + 1),
+    })
+}
+
 /// Distinct lines of the snapshot with an open hold waiting for the blocker `key`.
 fn lines_with_open_blocker(ds: &Dataset, key: &str) -> usize {
     let mut lines: Vec<&str> = ds
@@ -133,7 +269,7 @@ fn lines_with_open_blocker(ds: &Dataset, key: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::filter::FilterSpec;
+    use crate::filter::{FilterSpec, Status};
     use crate::rules::RuleSet;
     use crate::solve::solve_plan;
     use crate::testkit::{hold, snapshot};
@@ -259,5 +395,132 @@ mod tests {
         assert!(detail.open.is_empty() && detail.chain.is_empty());
         assert_eq!(detail.released.len(), 1);
         assert_eq!(detail.model_size, Some(2.0));
+    }
+
+    fn spec_of(status: Status) -> FilterSpec {
+        FilterSpec {
+            status,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_blocker_alone_on_a_line_frees_it_and_a_shared_one_is_linked() {
+        let ds = snapshot_of_lines();
+        let spec = spec_of(Status::Open);
+        let plan = solve_plan(&ds, &spec, None);
+        let a = blocker_detail(&ds, &spec, &plan, "Civil|538-PR-100").unwrap();
+        assert_eq!(a.label, "Civil / 538-PR-100");
+        assert_eq!(
+            (a.kind.as_str(), a.discipline.as_str(), a.item.as_str()),
+            ("PR", "Civil", "538-PR-100")
+        );
+        assert_eq!(a.holds, 3);
+        assert_eq!(a.frees, vec!["Y", "Z"]);
+        assert_eq!(a.shared, vec!["X"]);
+        let linked: Vec<_> = a
+            .linked
+            .iter()
+            .map(|l| {
+                (
+                    l.key.as_str(),
+                    l.label.as_str(),
+                    l.kind.as_str(),
+                    l.shared_lines,
+                )
+            })
+            .collect();
+        assert_eq!(
+            linked,
+            vec![
+                ("Civil|538-PR-200", "Civil / 538-PR-200", "PR", 1),
+                ("Piping|P&ID", "Piping / P&ID", "P&ID", 1),
+            ]
+        );
+        assert_eq!(a.step, Some(1));
+        let oldest = a.oldest.unwrap();
+        assert_eq!(oldest.position, 3);
+
+        let b = blocker_detail(&ds, &spec, &plan, "Civil|538-PR-200").unwrap();
+        assert_eq!(
+            (b.frees.as_slice(), b.shared.as_slice()),
+            (&["W".to_string()][..], &["X".to_string()][..])
+        );
+        assert_eq!(b.oldest.unwrap().position, 2);
+        assert_eq!(b.step, Some(2));
+    }
+
+    #[test]
+    fn linked_blockers_are_ordered_by_shared_lines_then_label() {
+        let ds = Dataset::build(
+            vec![
+                hold("1", "Civil", "MISC.", "Pending 538-PR-100", 1),
+                hold("1", "Civil", "MISC.", "Pending 538-PR-300", 1),
+                hold("2", "Civil", "MISC.", "Pending 538-PR-100", 1),
+                hold("2", "Civil", "MISC.", "Pending 538-PR-300", 1),
+                hold("2", "Civil", "MISC.", "Pending 538-PR-200", 1),
+                hold("3", "Civil", "MISC.", "Pending 538-PR-100", 1),
+                hold("3", "Civil", "MISC.", "Pending 538-PR-200", 1),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        let spec = FilterSpec::default();
+        let plan = solve_plan(&ds, &spec, None);
+        let a = blocker_detail(&ds, &spec, &plan, "Civil|538-PR-100").unwrap();
+        let linked: Vec<_> = a
+            .linked
+            .iter()
+            .map(|l| (l.key.as_str(), l.shared_lines))
+            .collect();
+        assert_eq!(
+            linked,
+            vec![("Civil|538-PR-200", 2), ("Civil|538-PR-300", 2)]
+        );
+    }
+
+    #[test]
+    fn the_oldest_hold_has_the_greatest_age_and_none_without_dates() {
+        let mut undated = hold("U", "Civil", "MISC.", "Pending 538-PR-900", 1);
+        undated.created = None;
+        let ds = Dataset::build(
+            vec![
+                hold("A", "Civil", "MISC.", "Pending 538-PR-100", 5),
+                hold("B", "Civil", "MISC.", "Pending 538-PR-100", 30),
+                hold("C", "Civil", "MISC.", "Pending 538-PR-100", 12),
+                undated,
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        let spec = FilterSpec::default();
+        let plan = solve_plan(&ds, &spec, None);
+        let a = blocker_detail(&ds, &spec, &plan, "Civil|538-PR-100").unwrap();
+        assert_eq!(a.oldest.unwrap().position, 1);
+        let u = blocker_detail(&ds, &spec, &plan, "Civil|538-PR-900").unwrap();
+        assert_eq!(u.oldest, None);
+    }
+
+    #[test]
+    fn an_unknown_blocker_or_one_the_filter_removes_has_no_detail() {
+        let ds = snapshot_of_lines();
+        let spec = spec_of(Status::Open);
+        let plan = solve_plan(&ds, &spec, None);
+        assert_eq!(blocker_detail(&ds, &spec, &plan, "nope|nothing"), None);
+        let released = spec_of(Status::Released);
+        let plan = solve_plan(&ds, &released, None);
+        assert_eq!(
+            blocker_detail(&ds, &released, &plan, "Civil|538-PR-100"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_blocker_without_a_step_has_no_place() {
+        let ds = snapshot_of_lines();
+        let spec = spec_of(Status::Open);
+        let cut = solve_plan(&ds, &spec, Some(1));
+        let b = blocker_detail(&ds, &spec, &cut, "Civil|538-PR-200").unwrap();
+        assert_eq!(b.step, None);
     }
 }
