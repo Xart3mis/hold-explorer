@@ -99,8 +99,9 @@ export function ChartTooltip({ id, anchor, rows }: ChartTooltipProps) {
       data-placed={place === null ? undefined : ""}
       style={place === null ? undefined : { top: place.top, left: place.left }}
     >
-      {rows.map((row) => (
-        <div key={row.label} className={styles.row}>
+      {rows.map((row, index) => (
+        // Two rows may share a label, as in a matrix of a dimension against itself.
+        <div key={index} className={styles.row}>
           <span className={styles.label}>{row.label}</span>
           <span className={styles.value}>
             {row.mark === undefined ? null : (
@@ -123,7 +124,10 @@ export function ChartTooltip({ id, anchor, rows }: ChartTooltipProps) {
 export interface ChartTooltipState<Key> {
   /** The mark whose tooltip shows, or `null`. */
   active: Key | null;
-  /** The keyboard is on this mark: its tooltip shows at once. */
+  /**
+   * The keyboard is on this mark: its tooltip shows at once, and the pointer no longer leads
+   * until it moves again.
+   */
   focus: (key: Key) => void;
   /** The focus left the chart. */
   blur: () => void;
@@ -155,8 +159,11 @@ export function useChartTooltip<Key extends string | number>(): ChartTooltipStat
 
   useEffect(() => stopTimer, [stopTimer]);
 
+  // The last input leads: a key takes the tooltip from the pointer until the pointer moves
+  // again. The pointer has not left the chart, so its tooltip then follows it without a delay.
   const focus = useCallback((key: Key) => {
     setFocused(key);
+    setHovered(null);
     setDismissed(false);
   }, []);
   const blur = useCallback(() => {

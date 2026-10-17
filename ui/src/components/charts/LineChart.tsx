@@ -249,13 +249,23 @@ function Plot({
   const yTicks = ticks(0, top, Y_TICKS);
   const xTicks = ticks(first, end, X_TICKS);
 
+  // The screen hears of the shown point when it changes, and not at each of its own renders.
+  const reportActive = useRef(onActiveChange);
+  const reported = useRef<number | null>(null);
   useEffect(() => {
-    onActiveChange?.(shown);
-  }, [onActiveChange, shown]);
+    reportActive.current = onActiveChange;
+  }, [onActiveChange]);
+  useEffect(() => {
+    if (reported.current === shown) return;
+    reported.current = shown;
+    reportActive.current?.(shown);
+  }, [shown]);
 
+  // The keyboard's point leads from here on: the pointer leads again when it moves.
   const moveTo = (index: number) => {
     const next = Math.max(0, Math.min(last, index));
     setCursor(next);
+    setHovered(null);
     tip.focus(next);
   };
 
@@ -325,7 +335,7 @@ function Plot({
     <div
       role="listbox"
       aria-label={name}
-      aria-activedescendant={optionId}
+      aria-activedescendant={`${optionId}-${String(keyIndex)}`}
       tabIndex={0}
       className={styles.box}
       onKeyDown={onKeyDown}
@@ -339,7 +349,8 @@ function Plot({
       }}
     >
       <span
-        id={optionId}
+        // A new id at every move, so assistive technology announces the move.
+        id={`${optionId}-${String(keyIndex)}`}
         role="option"
         aria-selected={keyIndex === selected}
         aria-posinset={keyIndex + 1}
@@ -388,7 +399,10 @@ function Plot({
               tip.leave();
             }}
             onClick={(event) => {
-              press(pointAt(event));
+              // A click moves the keyboard to the point it pressed.
+              const index = pointAt(event);
+              moveTo(index);
+              press(index);
             }}
           >
             {yTicks.map((value) => (
@@ -444,7 +458,7 @@ function Plot({
       </div>
       <ChartTooltip
         id={tooltipId}
-        anchor={tip.active === null ? null : () => markerAnchor.current}
+        anchor={tip.active === null || tip.active !== shown ? null : () => markerAnchor.current}
         rows={tooltipRows}
       />
     </div>

@@ -146,6 +146,109 @@ describe("LineChart", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("lets the keyboard lead while the pointer rests on the plot, until the pointer moves", () => {
+    vi.useFakeTimers();
+    const { container } = render(chart());
+    const plot = container.querySelector("svg");
+    if (!plot) throw new Error("The chart drew nothing");
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, WIDTH, HEIGHT));
+    const box = screen.getByRole("listbox");
+    act(() => {
+      box.focus();
+    });
+    // The pointer rests on point 31, and its tooltip shows.
+    fireEvent.pointerMove(plot, { clientX: (30 / 39) * WIDTH, clientY: 100, pointerType: "mouse" });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Blocker 31");
+
+    // A key moves the keyboard's point, and it is the one drawn and named.
+    fireEvent.keyDown(box, { key: "ArrowRight" });
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Blocker 2");
+    expect(tooltip).not.toHaveTextContent("Blocker 31");
+    const markers = container.querySelectorAll("[data-part=marker][data-active]");
+    expect(markers).toHaveLength(1);
+    expect(Number(markers[0]?.getAttribute("cx"))).toBeCloseTo((1 / 39) * WIDTH);
+
+    // The pointer moves again: it leads again, without a new delay.
+    fireEvent.pointerMove(plot, { clientX: WIDTH - 1, clientY: 100, pointerType: "mouse" });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Blocker 40");
+  });
+
+  it("moves the keyboard to the point that was clicked", async () => {
+    const user = userEvent.setup();
+    const onPointPress = vi.fn();
+    const { container } = render(chart({ onPointPress }));
+    const plot = container.querySelector("svg");
+    if (!plot) throw new Error("The chart drew nothing");
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, WIDTH, HEIGHT));
+    await user.pointer({
+      target: plot,
+      coords: { clientX: WIDTH - 1, clientY: 100 },
+      keys: "[MouseLeft]",
+    });
+    expect(onPointPress).toHaveBeenCalledWith(points[39], 39);
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "ArrowLeft" });
+    expect(option()).toHaveAttribute("aria-posinset", "39");
+  });
+
+  it("points to another option at every move, so the move is announced", async () => {
+    const user = userEvent.setup();
+    render(chart());
+    await user.tab();
+    const box = screen.getByRole("listbox");
+    const first = box.getAttribute("aria-activedescendant");
+    expect(first).toBe(option().id);
+    await user.keyboard("{ArrowRight}");
+    const second = box.getAttribute("aria-activedescendant");
+    expect(second).not.toBe(first);
+    expect(second).toBe(option().id);
+    await user.keyboard("{ArrowLeft}");
+    expect(box.getAttribute("aria-activedescendant")).toBe(first);
+  });
+
+  it("closes a tooltip the pointer opened on Escape, while the focus is elsewhere", () => {
+    vi.useFakeTimers();
+    const { container } = render(chart());
+    const plot = container.querySelector("svg");
+    if (!plot) throw new Error("The chart drew nothing");
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, WIDTH, HEIGHT));
+    fireEvent.pointerMove(plot, { clientX: 10, clientY: 100, pointerType: "mouse" });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("tells the screen which point is shown only when it changes", async () => {
+    const user = userEvent.setup();
+    const seen: (number | null)[] = [];
+    const { rerender } = render(
+      chart({
+        onActiveChange: (index) => {
+          seen.push(index);
+        },
+      }),
+    );
+    // Nothing is shown at first, and that is not news.
+    expect(seen).toEqual([]);
+    await user.tab();
+    await user.keyboard("{ArrowRight}");
+    // A new handler at a render of the screen does not repeat the last call.
+    rerender(
+      chart({
+        onActiveChange: (index) => {
+          seen.push(index);
+        },
+      }),
+    );
+    expect(seen).toEqual([0, 1]);
+  });
+
   it("draws one point with its marker", () => {
     const { container } = render(chart({ points: [{ x: 1, y: 5, label: "Blocker 1" }] }));
     expect(container.querySelectorAll("[data-part=marker]")).toHaveLength(1);

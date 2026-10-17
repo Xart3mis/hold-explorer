@@ -216,6 +216,27 @@ describe("Heatmap", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("lets the keyboard lead while the pointer rests on another cell", () => {
+    vi.useFakeTimers();
+    render(heatmap());
+    act(() => {
+      cell(0, 0).focus();
+    });
+    fireEvent.pointerEnter(cell(2, 2), { pointerType: "mouse" });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("tooltip")).toHaveTextContent("40");
+
+    fireEvent.keyDown(cell(0, 0), { key: "ArrowDown" });
+    expect(cell(1, 0)).toHaveFocus();
+    const tooltip = screen.getByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Piping");
+    expect(tooltip).toHaveTextContent("70");
+    expect(cell(1, 0)).toHaveAttribute("aria-describedby", tooltip.id);
+    expect(cell(2, 2)).not.toHaveAttribute("aria-describedby");
+  });
+
   it("shows a legend from the domain it is given", () => {
     render(heatmap({ max: 1515 }));
     const legend = screen.getByRole("group", { name: "Legend" });

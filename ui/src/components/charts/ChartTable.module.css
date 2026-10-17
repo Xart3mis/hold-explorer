@@ -40,6 +40,11 @@
   background-color: var(--color-accent-subtle-hover);
 }
 
+/* A press shows on a marked toggle as well: its tint gives way while the button is held. */
+.toggle[data-selected][data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
 .toggle[data-focus-visible] {
   outline: var(--focus-ring-width) solid var(--color-focus-ring);
   outline-offset: var(--focus-ring-offset);

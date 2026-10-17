@@ -24,6 +24,10 @@ describe("ChartTable", () => {
     const rows = within(table).getAllByRole("row");
     expect(rows).toHaveLength(3);
     expect(rows[1]).toHaveTextContent("Civil1,515");
+    expect(rows[2]).toHaveTextContent("Piping1,285");
+    const piping = rows[2];
+    if (!piping) throw new Error("The table has no second row");
+    expect(within(piping).getByRole("rowheader")).toHaveTextContent("Piping");
     expect(rows[1]).not.toHaveAttribute("aria-selected");
   });
 });
