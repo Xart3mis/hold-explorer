@@ -144,14 +144,16 @@ describe("DataTable", () => {
     expect(screen.getByRole("rowheader", { name: "78B01-573-4434-FW-001" })).toBeInTheDocument();
   });
 
-  it("announces its row count politely, and gives it as the description of the grid", () => {
+  it("gives its row count as the description of the grid, and is no live region", () => {
+    // A read-only table that is all there: its rows change with the page, whose own status
+    // says so; a table of its own would only add a second announcement.
     const { rerender } = render(table());
-    const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("4 rows");
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByRole("grid")).toHaveAccessibleDescription("4 rows");
 
     rerender(table({ rows: lines.slice(0, 1) }));
-    expect(status).toHaveTextContent("1 row");
+    expect(screen.getByRole("grid")).toHaveAccessibleDescription("1 row");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("moves the focused row with the arrow keys, Home, and End", SLOW, async () => {
@@ -403,7 +405,7 @@ describe("DataTable", () => {
     render(table({ rows: [], isLoading: true, skeletonRows: 5 }));
     const grid = screen.getByRole("grid", { name: "Lines on hold" });
     expect(grid.closest('[aria-busy="true"]')).not.toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent(en.table.loading);
+    expect(grid).toHaveAccessibleDescription(en.table.loading);
     expect(grid.querySelectorAll('[data-part="skeleton-row"]')).toHaveLength(5);
     expect(grid.querySelectorAll('[data-part="skeleton"]')).toHaveLength(20);
     expect(screen.getAllByRole("columnheader")).toHaveLength(4);
@@ -447,7 +449,7 @@ describe("DataTable", () => {
     render(table({ rows: [], emptyState: <p>No holds match these filters.</p> }));
     expect(screen.getAllByRole("columnheader")).toHaveLength(4);
     expect(screen.getByText("No holds match these filters.")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("0 rows");
+    expect(screen.getByRole("grid")).toHaveAccessibleDescription("0 rows");
   });
 
   it(
@@ -549,12 +551,35 @@ describe("DataTable in a viewport", () => {
   });
 
   it("counts the rows it was given where the total is not known", () => {
-    const { rerender } = render(table());
+    const onLoadMore = () => undefined;
+    const { rerender } = render(table({ onLoadMore }));
     expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "5");
     expect(screen.getByRole("status")).toHaveTextContent("4 rows");
     // The line that is only heard reads as two sentences as well.
-    rerender(table({ isLoadingMore: true }));
+    rerender(table({ onLoadMore, isLoadingMore: true }));
     expect(screen.getByRole("status").textContent).toBe(`4 rows. ${en.table.loadingMore}`);
+  });
+
+  it("shows its count line only while a part of the result is shown, and announces it always", () => {
+    const countText = (shown: number, total: number) =>
+      `${String(shown)} of ${String(total)} lines`;
+    const hidden = (element: HTMLElement) => getComputedStyle(element).position === "absolute";
+    const { rerender } = render(table({ totalRows: 4, countText }));
+    // Every row is there: the line is heard and describes the grid, but is not seen.
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("4 of 4 lines");
+    expect(screen.getByRole("grid")).toHaveAccessibleDescription("4 of 4 lines");
+    expect(hidden(status)).toBe(true);
+
+    rerender(table({ totalRows: 3612, countText }));
+    expect(screen.getByRole("status")).toHaveTextContent("4 of 3612 lines");
+    expect(hidden(screen.getByRole("status"))).toBe(false);
+
+    // No row: the empty state says so, and no count line stands under it.
+    rerender(table({ rows: [], totalRows: 0, countText, emptyState: <p>No line matches.</p> }));
+    expect(screen.getByText("No line matches.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("0 of 0 lines");
+    expect(hidden(screen.getByRole("status"))).toBe(true);
   });
 
   it(
@@ -1108,5 +1133,29 @@ describe("DataTable in a scroller that grows", () => {
     size.height = 400;
     sizes.resize();
     expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("DataTable's pinned column", () => {
+  it("reaches a hairline past its edge with a strip that changes fill with the cell", () => {
+    // A shadow would jump to the new fill while the cell fades to it, and a shadow may not be
+    // animated: the strip is an element that carries the row's fill and its transition.
+    const stylesheet = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
+    const rule = (selector: string) =>
+      new RegExp(`(^|\\n)${selector.replace(/[.[\]:]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+        stylesheet,
+      )?.[2] ?? "";
+    const cell = rule(".cell[data-pinned]");
+    expect(cell).toMatch(
+      /transition:\s*background-color var\(--duration-fast\) var\(--ease-out\);/,
+    );
+    expect(cell).not.toMatch(/box-shadow/);
+    const strip = rule(".cell[data-pinned]::before");
+    expect(strip).toMatch(/inset-inline-start:\s*calc\(-1 \* var\(--border-width-thin\)\);/);
+    expect(strip).toMatch(/inline-size:\s*var\(--border-width-thin\);/);
+    expect(strip).toMatch(/background-color:\s*var\(--row-fill\);/);
+    expect(strip).toMatch(
+      /transition:\s*background-color var\(--duration-fast\) var\(--ease-out\);/,
+    );
   });
 });

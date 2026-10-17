@@ -643,6 +643,11 @@ export function DataTable<Item>({
   // two: read aloud, and as the description of the grid, it must not run together.
   const status = loadingMore ? t("table.countLoadingMore", { line: count }) : count;
   const isEmpty = !loading && rows.length === 0;
+  // The line is seen only under a part of a longer result: a table that shows every row, or
+  // none, says its count without showing it. It is a live region only on a table whose rows the
+  // page counts or loads in pages; a read-only table keeps its count as the grid's description.
+  const countShown = countText !== undefined && !loading && rows.length < total;
+  const countLive = countText !== undefined || totalRows !== undefined || onLoadMore !== undefined;
 
   return (
     <div
@@ -787,14 +792,14 @@ export function DataTable<Item>({
       {isEmpty && emptyState !== undefined ? (
         <div className={styles.empty}>{emptyState}</div>
       ) : null}
-      {countText === undefined ? (
-        <VisuallyHidden id={countId} role="status">
-          {status}
-        </VisuallyHidden>
-      ) : (
+      {countShown ? (
         <p id={countId} role="status" className={styles.count}>
           {status}
         </p>
+      ) : (
+        <VisuallyHidden id={countId} {...(countLive ? { role: "status" } : {})}>
+          {status}
+        </VisuallyHidden>
       )}
     </div>
   );

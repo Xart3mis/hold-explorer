@@ -31,6 +31,37 @@ describe("FactList", () => {
     ]);
   });
 
+  it("keeps two rows of the same label apart", () => {
+    // An export may name two columns alike, and the panel lists such columns by their header.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { rerender } = render(
+      <FactList
+        aria-label="Other columns"
+        items={[
+          { label: "Remark", value: "first" },
+          { label: "Remark", value: "second" },
+        ]}
+      />,
+    );
+    const values = () =>
+      within(screen.getByRole("list", { name: "Other columns" }))
+        .getAllByRole("listitem")
+        .map((item) => item.textContent);
+    expect(values()).toEqual(["Remarkfirst", "Remarksecond"]);
+    rerender(
+      <FactList
+        aria-label="Other columns"
+        items={[
+          { label: "Remark", value: "second" },
+          { label: "Remark", value: "third" },
+        ]}
+      />,
+    );
+    expect(values()).toEqual(["Remarksecond", "Remarkthird"]);
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
   it("marks an identifier, so it is written as the source wrote it", () => {
     render(
       <FactList

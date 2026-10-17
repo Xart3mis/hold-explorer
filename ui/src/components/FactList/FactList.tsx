@@ -47,8 +47,9 @@ export function FactList({ items, isLoading, className, ...props }: FactListProp
       aria-busy={loading ? "true" : undefined}
       className={cx(styles.list, className)}
     >
-      {items.map((item) => (
-        <div key={item.label} role="listitem" className={styles.row}>
+      {items.map((item, index) => (
+        // Two columns of an export may share a header, so the label alone is no key.
+        <div key={`${String(index)}:${item.label}`} role="listitem" className={styles.row}>
           <span className={styles.label}>{item.label}</span>
           {loading ? (
             <span className={styles.value}>

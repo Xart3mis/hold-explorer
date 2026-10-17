@@ -64,7 +64,9 @@ export function StatTile({ label, value, delta, onPress, isLoading, unavailable 
   const content = (
     <>
       <span className={styles.label}>
-        {label}
+        <span data-part="label-text" className={styles.labelText}>
+          {label}
+        </span>
         {/* A tile that opens a screen says so before it is hovered: the ink of what acts, and a chevron. */}
         {pressable ? <Icon icon={ChevronRight} /> : null}
       </span>{" "}

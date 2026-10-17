@@ -229,11 +229,22 @@
 /*
  * The pinned column is placed on whole pixels while what scrolls beneath it may stand between two,
  * so at its leading edge a hairline of the cells beneath could show. Its fill reaches one hairline
- * past that edge, without a shadow's blur: a copy of the cell's box, moved a hairline to the start.
+ * past that edge: a strip of the row's fill, which fades with the cell when the fill changes. The
+ * cell lets the strip show outside it; what it holds is cut by its value, as in every cell.
  */
 .cell[data-pinned] {
+  overflow: visible;
   background-color: var(--row-fill);
-  box-shadow: calc(-1 * var(--border-width-thin)) 0 0 0 var(--row-fill);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.cell[data-pinned]::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc(-1 * var(--border-width-thin));
+  inline-size: var(--border-width-thin);
+  background-color: var(--row-fill);
+  content: "";
   transition: background-color var(--duration-fast) var(--ease-out);
 }
 

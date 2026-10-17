@@ -40,6 +40,9 @@ function widthOf(name: keyof CharWidths): number {
 }
 
 function measure(): void {
+  // A late `fonts.ready` may come after the last table went: there is nothing to measure then,
+  // and what was measured stays for the next table.
+  if (probe === null) return;
   const next = { text: widthOf("text"), mono: widthOf("mono") };
   if (next.text === current.text && next.mono === current.mono) return;
   current = next;

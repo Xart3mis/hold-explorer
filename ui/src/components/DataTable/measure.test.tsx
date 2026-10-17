@@ -78,6 +78,34 @@ describe("useCharWidths", () => {
     expect(screen.getByRole("status")).toHaveTextContent("7.25 7.8");
   });
 
+  it("keeps what it measured when the fonts are ready only after the last table went", async () => {
+    let ready: () => void = () => undefined;
+    const fonts = Object.assign(new EventTarget(), {
+      ready: new Promise<void>((resolve) => {
+        ready = resolve;
+      }),
+    });
+    Object.defineProperty(document, "fonts", { configurable: true, value: fonts });
+    layOut(7.25, 7.8);
+    const { unmount } = render(<Widths />);
+    expect(screen.getByRole("status")).toHaveTextContent("7.25 7.8");
+    unmount();
+
+    await act(async () => {
+      ready();
+      await fonts.ready;
+    });
+    // The next table starts with what was measured, not with the stand-ins.
+    const first: string[] = [];
+    function Next() {
+      const widths = useCharWidths();
+      first.push(`${String(widths.text)} ${String(widths.mono)}`);
+      return null;
+    }
+    render(<Next />);
+    expect(first[0]).toBe("7.25 7.8");
+  });
+
   it("keeps one measurement for every table, and leaves nothing behind when the last one goes", () => {
     const { unmount } = render(
       <>

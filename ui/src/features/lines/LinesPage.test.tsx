@@ -123,6 +123,10 @@ function countLine(): HTMLElement {
   return must(document.querySelector<HTMLElement>("[data-part='lines-table'] p[role='status']"));
 }
 
+function visibleCountLine(): HTMLElement | null {
+  return document.querySelector<HTMLElement>("[data-part='lines-table'] p[role='status']");
+}
+
 describe("Lines", () => {
   it("asks first for the lines with the default query at offset 0, and shows them", async () => {
     const { lines, holds } = renderLines();
@@ -173,12 +177,17 @@ describe("Lines", () => {
     expect(preset(text.presets.all)).toBeChecked();
   });
 
-  it("says how many lines there are when they are all loaded", async () => {
+  it("says how many lines there are when they are all loaded, without a count line", async () => {
     renderLines();
-    await grid();
+    const table = await grid();
     await waitFor(() => {
-      expect(countLine()).toHaveTextContent(/^3 lines$/);
+      expect(table).toHaveAccessibleDescription(/3 lines$/);
     });
+    // Heard, as the grid's description and politely, but not seen: every row is there.
+    expect(
+      within(must(table.closest<HTMLElement>("[data-part='lines-table']"))).getByRole("status"),
+    ).toHaveTextContent(/^3 lines$/);
+    expect(visibleCountLine()).toBeNull();
   });
 
   it("shows a skeleton on a first load", async () => {
@@ -569,6 +578,8 @@ describe("Lines", () => {
       await waitFor(() => {
         expect(within(table).queryAllByRole("rowheader")).toHaveLength(0);
       });
+      // The empty state says that nothing matches: no count line stands under it.
+      expect(visibleCountLine()).toBeNull();
       const empty = must(
         screen.getByRole("heading", { level: 2, name: text.noneTitleLines }).parentElement,
       );
