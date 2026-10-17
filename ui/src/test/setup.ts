@@ -7,7 +7,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import { afterEach, vi } from "vitest";
-import { resetThemeChanges } from "../app/actions/theme";
 import { queryClient } from "../app/query";
 import { checkUnhandledCommands } from "./ipc";
 import { testLimits } from "./limits";
@@ -78,8 +77,6 @@ afterEach(() => {
   for (const region of document.querySelectorAll("[data-live-announcer]")) region.remove();
   // The query client is shared by the whole app, so what one test loaded must not reach the next.
   queryClient.clear();
-  // What the theme action counted of the changes on their way is kept beside that client.
-  resetThemeChanges(queryClient);
   // Last, so that everything above is put back also when this fails the test: a command the
   // test sent and gave no handler for. See ui/src/test/ipc.ts.
   checkUnhandledCommands();

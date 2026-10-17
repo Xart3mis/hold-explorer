@@ -7,6 +7,8 @@ import { changeStart } from "./start";
 
 /** Changes of the settings are sent one after another as well, so the last one asked for is the last one saved. */
 const SETTINGS_SCOPE = { id: "settings" };
+/** The changes of the theme in the mutation cache, which says how many are still on their way. */
+const THEME_CHANGE = ["themeChange"];
 
 /**
  * What is known about the changes of the theme that are on their way. The cached start shows the
@@ -16,8 +18,6 @@ const SETTINGS_SCOPE = { id: "settings" };
 interface ThemeChanges {
   /** The number of the change that was asked for last. */
   latest: number;
-  /** How many changes have been asked for and not yet answered. */
-  waiting: number;
   /** The theme the settings file holds, as far as the answers say. */
   saved: Theme | undefined;
 }
@@ -27,19 +27,10 @@ const themeChanges = new WeakMap<QueryClient, ThemeChanges>();
 function themeChangesOf(client: QueryClient): ThemeChanges {
   let changes = themeChanges.get(client);
   if (!changes) {
-    changes = { latest: 0, waiting: 0, saved: undefined };
+    changes = { latest: 0, saved: undefined };
     themeChanges.set(client, changes);
   }
   return changes;
-}
-
-/**
- * Forgets the changes of the theme counted for `client`. The app has one client for its whole
- * life and never needs this; the tests share that client and clear it after each test, and a test
- * that ended with a change on its way would leave it counted for the next.
- */
-export function resetThemeChanges(client: QueryClient): void {
-  themeChanges.delete(client);
 }
 
 /**
@@ -51,14 +42,17 @@ export function useThemeSetting() {
 
   const setTheme = useMutation({
     scope: SETTINGS_SCOPE,
+    mutationKey: THEME_CHANGE,
     mutationFn: (theme: Theme) => api.setTheme(theme),
     // The theme is applied at once: AppProviders applies whatever theme the cached start holds.
     onMutate: (theme) => {
       const changes = themeChangesOf(client);
-      if (changes.waiting === 0) {
+      // This change is in the cache already; with no other on its way, the theme on screen is the
+      // saved one. The cache says so, not a count of this module, so a cache that was cleared
+      // (as the tests clear it after each) leaves nothing counted behind.
+      if (client.isMutating({ mutationKey: THEME_CHANGE }) <= 1) {
         changes.saved = client.getQueryData<AppStart>(keys.start)?.settings.theme;
       }
-      changes.waiting += 1;
       changes.latest += 1;
       changeStart(client, (state) => ({ ...state, settings: { ...state.settings, theme } }));
       return { change: changes.latest };
@@ -81,9 +75,6 @@ export function useThemeSetting() {
       const { latest, saved } = themeChangesOf(client);
       if (asked?.change !== latest || saved === undefined) return;
       changeStart(client, (state) => ({ ...state, settings: { ...state.settings, theme: saved } }));
-    },
-    onSettled: (_settings, _error, _theme, asked) => {
-      if (asked !== undefined) themeChangesOf(client).waiting -= 1;
     },
   });
 

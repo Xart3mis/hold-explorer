@@ -586,7 +586,6 @@ describe("The panel and the snapshot in view", () => {
       pages: { lines: <p />, overview: <p />, settings: <p /> },
       handlers: {
         hold_detail: hold,
-        filter_options: () => filterOptions(),
         workspace_current: () => opened({ selected: 1 }),
       },
     });

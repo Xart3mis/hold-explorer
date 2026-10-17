@@ -5,6 +5,7 @@ import { workspaceApi } from "../api/workspace-commands";
 import type { LineQuery } from "../bindings/LineQuery";
 import { renderApp } from "./app";
 import { opened, openStart, workspace } from "./fixtures";
+import { overviewOf } from "./overview";
 
 const query: LineQuery = {
   sort: "HoldsDesc",
@@ -30,5 +31,9 @@ describe("renderApp's own answers", () => {
     await workspaceApi.snapshotSelect(1);
     await expect(lines(1)).resolves.toBeDefined();
     await expect(lines(2)).rejects.toMatchObject({ kind: "ViewChanged" });
+    // The overview is the one of the snapshot the mock holds now, not of the start's.
+    const now = overviewOf(opened({ selected: 1 }));
+    expect(now).not.toEqual(overviewOf(openStart().open));
+    await expect(api.overview(openHoldsFilter(), at(1))).resolves.toEqual(now);
   });
 });

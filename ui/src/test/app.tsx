@@ -35,7 +35,7 @@ export interface RenderAppOptions {
 /**
  * Renders the whole app, with its providers, on a router that keeps its history in memory. The
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`,
- * `overview` with the overview of the snapshot `start` has selected, `filter_options` with the
+ * `overview` with the overview of the snapshot the mock holds, `filter_options` with the
  * options of the default filter, `filter_values` with three values whatever the dimension, and
  * `lines` and `holds` with the three lines and the three holds of a small snapshot, and
  * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, unless the
@@ -51,7 +51,8 @@ export function renderApp(options: RenderAppOptions = {}) {
   // The view the mocked Rust side holds: the start's, then the one each command that opens a
   // workspace or selects a snapshot answered with. The data commands answered here refuse any
   // other, with the kind `ViewChanged`, as the Rust side does.
-  let held = viewOf(start.open);
+  let heldOpen = start.open;
+  let held = viewOf(heldOpen);
   const given = options.handlers ?? {};
   /** A handler of the test that changes the view, made to move the view the mock holds. */
   function follow<Args, Result>(
@@ -60,7 +61,8 @@ export function renderApp(options: RenderAppOptions = {}) {
   ) {
     return async (args: Args) => {
       const result = await handler(args);
-      held = viewOf(openOf(result));
+      heldOpen = openOf(result);
+      held = viewOf(heldOpen);
       return result;
     };
   }
@@ -94,7 +96,7 @@ export function renderApp(options: RenderAppOptions = {}) {
   mockCommands({
     app_start: () => start,
     workspace_list: () => start.list,
-    overview: inView(() => overviewOf(start.open)),
+    overview: inView(() => overviewOf(heldOpen)),
     filter_options: inView(() => filterOptions()),
     filter_values: inView(() => valuePage()),
     lines: inView(() => linePage()),

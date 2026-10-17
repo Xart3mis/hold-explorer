@@ -1338,7 +1338,7 @@ mod tests {
             h.name = name.to_string();
             h
         };
-        // Position 1 is blank for all four sorts; 0 and 3 tie on every value.
+        // Positions 1 and 4 are blank for all four sorts; 0 and 3 tie on every value.
         let ds = Dataset::build(
             vec![
                 make("Civil", "b", "bob"),
