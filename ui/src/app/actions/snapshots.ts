@@ -1,8 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate } from "react-router";
 import { workspaceApi } from "../../api/workspace-commands";
-import { searchForAnotherSnapshot } from "../selection";
 import { workspaceAction } from "../view";
+import { useLeaveSelection } from "./selection";
 import { showOpened } from "./start";
 
 /**
@@ -16,15 +15,13 @@ import { showOpened } from "./start";
  */
 export function useSnapshotActions() {
   const client = useQueryClient();
-  const navigate = useNavigate();
-  const { pathname, search } = useLocation();
+  const leave = useLeaveSelection();
 
   const selectSnapshot = useMutation(
     workspaceAction(client, {
       kind: "switching",
       mutationFn: (id: number) => {
-        const next = searchForAnotherSnapshot(search);
-        if (next !== null) void navigate({ pathname, search: next }, { replace: true });
+        leave.forSnapshot();
         return workspaceApi.snapshotSelect(id);
       },
       onSuccess: (open) => {

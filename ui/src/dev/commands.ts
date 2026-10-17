@@ -747,7 +747,9 @@ export function installDevCommands(state: DevState, theme: Theme): string {
             { min_days: 60, max_days: 89 },
             { min_days: 90, max_days: null },
           ],
-          custom_dims: state === "filters-many" ? ["Area"] : [],
+          // The states of Lines and of the panel answer from holds that carry two columns
+          // the mapping did not know, and the bar offers them.
+          custom_dims: isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [],
           absent:
             selected === undefined
               ? []

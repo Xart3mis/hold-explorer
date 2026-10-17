@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } fr
 import { asCommandError } from "../../api/error";
 import type { Field } from "../../bindings/Field";
 import { ErrorState, IconButton, SectionTitle, Skeleton, VisuallyHidden } from "../../components";
-import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
 import styles from "./Detail.module.css";
 import { useDetailFocus } from "./selection";
@@ -152,7 +151,7 @@ export function SkeletonRows({ count = 2, lines = 2 }: { count?: number; lines?:
   return (
     <div data-part="detail-skeleton" aria-hidden="true" className={styles.rows}>
       {Array.from({ length: count }, (_, row) => (
-        <div key={row} className={cx(styles.skeletonRow)}>
+        <div key={row} className={styles.skeletonRow}>
           {Array.from({ length: lines }, (_, line) => (
             <span key={line} className={styles.skeletonLine}>
               <Skeleton width={line === 0 ? "40%" : `${String(85 - row * 10)}%`} />

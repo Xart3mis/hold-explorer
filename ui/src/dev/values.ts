@@ -33,9 +33,14 @@ function lineIds(count: number): Weighted[] {
 /** The values of a dimension. A snapshot of the state that looks at many has 1,500 line IDs. */
 function valuesOf(dim: Dim, manyLines: boolean): Weighted[] {
   if (typeof dim !== "string") {
-    return dim.Custom === "Area"
-      ? even("North rack", "South rack", "Tank farm", "Jetty", "Unspecified")
-      : even("Unspecified");
+    // The values the made-up holds of Lines carry (ui/src/dev/lines.ts).
+    if (dim.Custom === "Area") {
+      return even("North rack", "South rack", "Pump house", "Tank farm", "Unspecified");
+    }
+    if (dim.Custom === "Work pack") {
+      return even("WP-500-1", "WP-501-2", "WP-502-3", "WP-503-4", "Unspecified");
+    }
+    return even("Unspecified");
   }
   switch (dim) {
     case "Discipline":

@@ -2,7 +2,8 @@
 // line, `hold=<position>` for a hold. One at most is named; every other part of the address is
 // left as it is. The detail panel and the pages that open it read and write it through
 // `useSelection` (ui/src/features/detail/selection.ts); the action that selects another snapshot
-// takes a hold out of it here, because a position means nothing in another snapshot.
+// takes a hold out of it here, because a position means nothing in another snapshot, and the
+// actions that open another workspace take out both.
 
 /** What the detail panel shows: a line, a hold by its position in the snapshot, or nothing. */
 export type Selection =
@@ -48,4 +49,13 @@ export function searchWithSelection(search: string, next: Selection): string {
  */
 export function searchForAnotherSnapshot(search: string): string | null {
   return selectionOf(search)?.kind === "hold" ? searchWithSelection(search, null) : null;
+}
+
+/**
+ * The search text as it is to be after another workspace was opened, created, or built: nothing
+ * is selected, since neither a line nor a position of one workspace names anything in another.
+ * `null` when nothing is to change.
+ */
+export function searchForAnotherWorkspace(search: string): string | null {
+  return selectionOf(search) === null ? null : searchWithSelection(search, null);
 }

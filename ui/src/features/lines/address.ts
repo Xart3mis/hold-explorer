@@ -6,6 +6,7 @@
 // A part that is missing is the default: the lines, with the All preset. A part that cannot be
 // read is the default as well, and no error. The row selected for the detail panel is in the
 // address too, as `line=<id>` or `hold=<position>`, and every other part is kept as it is.
+import { searchWithSelection, selectionOf as selectionOfAddress } from "../../app/selection";
 import type { HoldSort } from "../../bindings/HoldSort";
 import type { LineQuery } from "../../bindings/LineQuery";
 import type { LineSort } from "../../bindings/LineSort";
@@ -52,9 +53,6 @@ export const DEFAULT_HOLDS_STATE: LinesState = { rows: "holds", sort: "FileOrder
 
 /** The parts of the address this page writes. Every other part is kept. */
 const OWN = ["rows", "sort", "reverse", "single", "mismatch"] as const;
-
-/** The parts that name the selected row, one for each mode. */
-const SELECTED: Record<LinesMode, string> = { lines: "line", holds: "hold" };
 
 /** The parts of a search text, or of an address that has one. */
 function partsOf(search: string): URLSearchParams {
@@ -112,13 +110,13 @@ export function linesAddress(state: LinesState, keep = ""): string {
 
 /**
  * The key of the row an address selects in a mode: the line ID in the lines, the position of the
- * hold in the holds. `null` when it selects none, or a position that is no number.
+ * hold in the holds. `null` when it selects none, or a row of the other mode. The address is read
+ * as the detail panel reads it (ui/src/app/selection.ts), so the row marked is the one it shows.
  */
 export function selectionOf(search: string, mode: LinesMode): string | null {
-  const value = partsOf(search).get(SELECTED[mode]);
-  if (value === null || value === "") return null;
-  if (mode === "holds" && !/^\d+$/.test(value)) return null;
-  return value;
+  const selection = selectionOfAddress(search);
+  if (mode === "lines") return selection?.kind === "line" ? selection.lineId : null;
+  return selection?.kind === "hold" ? String(selection.position) : null;
 }
 
 /**
@@ -126,8 +124,8 @@ export function selectionOf(search: string, mode: LinesMode): string | null {
  * mode is taken out, and every other part stays as it was.
  */
 export function withSelection(search: string, mode: LinesMode, key: string): string {
-  const parts = partsOf(search);
-  parts.delete(SELECTED[mode === "lines" ? "holds" : "lines"]);
-  parts.set(SELECTED[mode], key);
-  return `?${parts.toString()}`;
+  return searchWithSelection(
+    search,
+    mode === "lines" ? { kind: "line", lineId: key } : { kind: "hold", position: Number(key) },
+  );
 }

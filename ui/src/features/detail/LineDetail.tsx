@@ -36,8 +36,31 @@ import {
 } from "./parts";
 import { useDetailFocus, useSelection } from "./selection";
 
-/** What the copy of the line ID came to: nothing yet, done, or refused with the reason. */
-type Copied = { state: "idle" } | { state: "done" } | { state: "refused"; reason: string };
+/** Stands for the line ID in a text of the catalog, until the ID is put in as an element. */
+const MARK = "\u0000";
+
+/**
+ * A sentence of the catalog with the line ID in it, written as an identifier: in the monospace,
+ * and never broken at one of its hyphens. The sentence is translated whole; only the place of
+ * the ID is filled with an element.
+ */
+function WithLineId({ text, lineId }: { text: string; lineId: string }) {
+  const [before = "", after = ""] = text.split(MARK);
+  return (
+    <>
+      {before}
+      <span className={styles.identifier}>{lineId}</span>
+      {after}
+    </>
+  );
+}
+
+/**
+ * What the copy of the line ID came to: nothing yet, done (counted, so that each copy is said
+ * anew), or refused with what to say.
+ */
+type Copied =
+  { state: "idle" } | { state: "done"; count: number } | { state: "refused"; message: string };
 
 /** The button that copies the line ID, what it came to, and, when it was refused, why. */
 function CopyLineId({ lineId }: { lineId: string }) {
@@ -47,17 +70,22 @@ function CopyLineId({ lineId }: { lineId: string }) {
     // web view without it, or a system that refuses, is said so beside the button.
     const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
     if (clipboard === undefined) {
-      setCopied({ state: "refused", reason: "no clipboard" });
+      setCopied({ state: "refused", message: t("detail.noClipboard") });
       return;
     }
     clipboard.writeText(lineId).then(
       () => {
-        setCopied({ state: "done" });
+        setCopied((before) => ({
+          state: "done",
+          count: before.state === "done" ? before.count + 1 : 1,
+        }));
       },
       (error: unknown) => {
         setCopied({
           state: "refused",
-          reason: error instanceof Error ? error.message : String(error),
+          message: t("detail.copyFailed", {
+            reason: error instanceof Error ? error.message : String(error),
+          }),
         });
       },
     );
@@ -69,12 +97,13 @@ function CopyLineId({ lineId }: { lineId: string }) {
           {t("detail.copyLineId")}
         </Button>
         <span role="status" className={styles.copyStatus}>
-          {copied.state === "done" ? t("detail.copied") : ""}
+          {/* A new element for each copy, so the same words are announced again. */}
+          {copied.state === "done" ? <span key={copied.count}>{t("detail.copied")}</span> : null}
         </span>
       </div>
       {copied.state === "refused" ? (
         <Notice tone="danger" title={t("detail.copyFailedTitle")}>
-          {t("detail.copyFailed", { reason: copied.reason })}
+          {copied.message}
         </Notice>
       ) : null}
     </>
@@ -251,7 +280,7 @@ export function LineDetail({
             placement="table"
             action={<Button onPress={onClose}>{t("detail.closePanel")}</Button>}
           >
-            {t("detail.lineMissingText", { lineId })}
+            <WithLineId text={t("detail.lineMissingText", { lineId: MARK })} lineId={lineId} />
           </EmptyState>
         </PanelBody>
       </>

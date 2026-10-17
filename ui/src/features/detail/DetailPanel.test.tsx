@@ -7,7 +7,7 @@ import { held } from "../../test/actions";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
-import { opened, openStart, workspace } from "../../test/fixtures";
+import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { holdRef, lineDetail, lineId } from "../../test/lines";
 import { SLOW } from "../../test/slow";
@@ -152,8 +152,14 @@ describe("The panel of a line", () => {
     const write = vi.spyOn(navigator.clipboard, "writeText");
     await user.click(within(region).getByRole("button", { name: text.copyLineId }));
     expect(write).toHaveBeenCalledWith(LINE);
-    expect(await within(region).findByText(text.copied)).toHaveAttribute("role", "status");
+    const status = await within(region).findByText(text.copied);
+    expect(status.closest("[role='status']")).not.toBeNull();
     expect(await navigator.clipboard.readText()).toBe(LINE);
+    // A second copy is said again: the live region is written anew, not left as it was.
+    await user.click(within(region).getByRole("button", { name: text.copyLineId }));
+    expect(write).toHaveBeenCalledTimes(2);
+    const again = await within(region).findByText(text.copied);
+    expect(again).not.toBe(status);
   });
 
   it("says why the line ID could not be copied when the system refuses", async () => {
@@ -169,6 +175,22 @@ describe("The panel of a line", () => {
     expect(within(region).queryByText(text.copied)).not.toBeInTheDocument();
   });
 
+  it("says that the web view has no clipboard, in the words of the catalog", async () => {
+    const { user } = renderDetail();
+    const region = await panel();
+    const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
+    try {
+      await user.click(within(region).getByRole("button", { name: text.copyLineId }));
+      const alert = await within(region).findByRole("alert");
+      expect(alert).toHaveTextContent(text.copyFailedTitle);
+      expect(alert).toHaveTextContent(text.noClipboard);
+    } finally {
+      if (clipboard === undefined) Reflect.deleteProperty(navigator, "clipboard");
+      else Object.defineProperty(navigator, "clipboard", clipboard);
+    }
+  });
+
   it("says that a line is not in the snapshot, and closes", async () => {
     const { user, router } = renderDetail({
       path: "/lines?line=78B99-000-NOPE",
@@ -179,6 +201,17 @@ describe("The panel of a line", () => {
       await within(region).findByRole("heading", { name: text.lineMissingTitle }),
     ).toBeInTheDocument();
     expect(within(region).queryByRole("alert")).not.toBeInTheDocument();
+    // The line ID in the sentence is an identifier: monospace, and never broken at a hyphen.
+    const id = must(
+      within(region)
+        .getAllByText("78B99-000-NOPE")
+        .find((element) => element.tagName === "SPAN"),
+      "the line ID in the sentence",
+    );
+    expect(id.parentElement).toHaveTextContent(
+      fill(text.lineMissingText, { lineId: "78B99-000-NOPE" }),
+    );
+    expect(id.textContent).toBe("78B99-000-NOPE");
     // The close button of the head, and the action of the empty state.
     const closes = within(region).getAllByRole("button", { name: text.closePanel });
     expect(closes).toHaveLength(2);
@@ -370,6 +403,9 @@ describe("The panel and the keyboard", () => {
       const region = await panel(lineId(2));
       await within(region).findByRole("list", { name: text.lineFacts });
       expect(await rowOf(lineId(2))).toHaveFocus();
+      // The focus moves to another row without choosing it; Escape takes it back to the opener.
+      await user.keyboard("{ArrowUp}");
+      expect(await rowOf(lineId(1))).toHaveFocus();
       await user.keyboard("{Escape}");
       await waitFor(() => {
         expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
@@ -433,6 +469,28 @@ describe("The panel and the snapshot in view", () => {
     await screen.findByText(
       fill(en.snapshots.older, { date: formatDateTime("2026-09-30T14:05:00") }),
     );
+  });
+
+  it("closes on a hold or a line when another workspace is opened", SLOW, async () => {
+    for (const selected of ["hold=1", `line=${LINE}`]) {
+      const { user, router, unmount } = renderDetail({
+        path: `/lines?rows=holds&${selected}`,
+        handlers: { workspace_open: () => opened({ workspace: otherWorkspace }) },
+      });
+      await panel(selected.startsWith("hold") ? text.holdTitle : LINE);
+      await user.click(
+        await screen.findByRole("button", {
+          name: `${en.workspaces.switcher} ${workspace().name}`,
+        }),
+      );
+      const menu = await screen.findByRole("menu", { name: en.workspaces.switcher });
+      await user.click(within(menu).getByRole("menuitem", { name: otherWorkspace.name }));
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("?rows=holds");
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      unmount();
+    }
   });
 
   it("reads a line again for the other snapshot, dimmed meanwhile", SLOW, async () => {

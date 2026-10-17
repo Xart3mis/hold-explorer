@@ -5,6 +5,7 @@ import type { AppStart } from "../../bindings/AppStart";
 import type { CommandError } from "../../bindings/CommandError";
 import { t } from "../../text/i18n";
 import { workspaceAction } from "../view";
+import { useLeaveSelection } from "./selection";
 import { changeStart, listed, readList, showOpened } from "./start";
 
 /** The kind of the error a rename fails with when its workspace is no longer the open one. */
@@ -23,11 +24,16 @@ export interface Rename {
  */
 export function useWorkspaceActions() {
   const client = useQueryClient();
+  // Neither a line nor a hold of one workspace names anything in another.
+  const leave = useLeaveSelection();
 
   const openWorkspace = useMutation(
     workspaceAction(client, {
       kind: "switching",
-      mutationFn: (id: string) => workspaceApi.workspaceOpen(id),
+      mutationFn: (id: string) => {
+        leave.forWorkspace();
+        return workspaceApi.workspaceOpen(id);
+      },
       onSuccess: (open) => {
         showOpened(client, open);
       },
@@ -37,7 +43,10 @@ export function useWorkspaceActions() {
   const createWorkspace = useMutation(
     workspaceAction(client, {
       kind: "changing",
-      mutationFn: (name: string) => workspaceApi.workspaceCreate(name),
+      mutationFn: (name: string) => {
+        leave.forWorkspace();
+        return workspaceApi.workspaceCreate(name);
+      },
       onSuccess: (open) => {
         showOpened(client, open);
         return readList(client);

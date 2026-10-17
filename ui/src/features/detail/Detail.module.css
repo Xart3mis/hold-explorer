@@ -67,6 +67,15 @@
   user-select: text;
 }
 
+/* A line ID inside a sentence: written as the export wrote it, and never broken at a hyphen. */
+.identifier {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: inherit;
+  white-space: nowrap;
+}
+
 .copyRow {
   display: flex;
   gap: var(--space-2);

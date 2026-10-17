@@ -145,7 +145,8 @@ function generate(snapshot: SnapshotInfo, matchingSizes: boolean): readonly Hold
             model_size: model,
             ldt_size: ldt,
             stress_calc: stress,
-            // Two columns the mapping did not know: one most holds fill, one few do.
+            // Two columns the mapping did not know: one most holds fill, one few do. The filter
+            // bar of the states of Lines and of the panel offers both (see commands.ts).
             extra: {
               Area: pick(random, AREAS, ""),
               "Work pack": random() < 0.2 ? `WP-${String(unit)}-${String(1 + (line % 40))}` : "",
@@ -177,7 +178,7 @@ function holdsOf(snapshot: SnapshotInfo, matchingSizes: boolean): readonly HoldR
 
 /** The value of a hold for a dimension, as the filter compares it. */
 function valueOf({ row }: HoldRef, dim: Dim): string {
-  if (typeof dim !== "string") return "";
+  if (typeof dim !== "string") return row.hold.extra[dim.Custom] ?? "";
   switch (dim) {
     case "Discipline":
       return row.hold.discipline === "Unspecified" ? "" : row.hold.discipline;

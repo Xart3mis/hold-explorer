@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { expect, vi } from "vitest";
 import { useStart } from "../app/actions/start";
 import { queryClient } from "../app/query";
@@ -13,24 +13,36 @@ import { mockCommands, type Handlers } from "./ipc";
  * may change the address, as selecting a snapshot does when a hold is open.
  */
 export function wrapper({ children }: { children: ReactNode }) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
-  );
+  return wrapperAt("/")({ children });
+}
+
+/** The same, on a router at `path`. */
+function wrapperAt(path: string) {
+  return function At({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[path]}>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+  };
 }
 
 /**
  * The application start beside the actions a test is about (the hooks of ui/src/app/actions/),
- * once the start has answered, with a workspace open.
+ * once the start has answered, with a workspace open. The router is at `path`, and `search` is
+ * the search text of the address the router is at.
  */
 export async function loaded<Actions extends object>(
   useActions: () => Actions,
   handlers: Handlers,
+  path = "/",
 ) {
   const start = openStart();
   mockCommands({ app_start: () => start, workspace_list: () => start.list, ...handlers });
-  const hook = renderHook(() => ({ ...useStart(), ...useActions() }), { wrapper });
+  const hook = renderHook(
+    () => ({ ...useStart(), ...useActions(), search: useLocation().search }),
+    { wrapper: wrapperAt(path) },
+  );
   await waitFor(() => {
     expect(hook.result.current.start).toBeDefined();
   });

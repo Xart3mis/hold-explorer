@@ -635,6 +635,7 @@
     "copied": "Line ID copied",
     "copyFailedTitle": "The line ID could not be copied",
     "copyFailed": "The system did not let Hold Explorer write to the clipboard ({{reason}}). Select the line ID in the title and press Ctrl+C.",
+    "noClipboard": "This window gives Hold Explorer no clipboard to write to. Select the line ID in the title and press Ctrl+C.",
     "lineFacts": "Line facts",
     "holdFacts": "Hold facts",
     "facts": "Facts",

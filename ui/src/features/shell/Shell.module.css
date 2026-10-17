@@ -11,6 +11,8 @@
     "sidebar content detail" minmax(0, 1fr)
     / auto minmax(0, 1fr) auto;
   block-size: 100%;
+  /* The detail panel slides in from beyond the trailing edge; the window does not scroll to it. */
+  overflow-x: clip;
   background-color: var(--color-surface-app);
 }
 

@@ -52,9 +52,16 @@ function onResize(changed: () => void): () => void {
  */
 function useIsWide(): boolean {
   return useSyncExternalStore(onResize, () => {
-    const wide = lengthToken("--layout-breakpoint-wide");
+    const wide = wideBreakpoint();
     return wide !== null && window.innerWidth >= wide;
   });
+}
+
+/** The wide breakpoint in pixels, read from its token once; `null` while it cannot be read. */
+let breakpoint: number | null = null;
+function wideBreakpoint(): number | null {
+  breakpoint ??= lengthToken("--layout-breakpoint-wide");
+  return breakpoint;
 }
 
 /** The top bar before anything is known: the name of the app, and blocks where its controls go. */

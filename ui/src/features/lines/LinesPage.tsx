@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
@@ -236,39 +236,57 @@ export function LinesPage() {
   // What the table is told by the keyboard, learned around it: the table answers Enter and
   // Escape itself. Enter selects a row, and a row selected with it opens the panel with the
   // focus on its heading; Enter on the row that is open already takes the focus there. Escape
-  // on the table closes the panel and leaves the focus where it is, on the table.
-  const selectedKey = selectionOf(location.search, mode);
-  const isOpen = selection !== null;
+  // on the table closes the panel, as Escape in the panel does, and the focus goes back to the
+  // row that opened it. The listeners are attached once, to the box of the table, and read what
+  // the page shows now.
+  const latest = useRef({
+    isOpen: selection !== null,
+    selectedKey: selectionOf(location.search, mode),
+    close,
+  });
   useEffect(() => {
-    const area = tableArea.current;
-    if (area === null) return;
-    const learn = (event: KeyboardEvent) => {
-      byEnter.current = event.key === "Enter";
-    };
-    const forget = () => {
-      byEnter.current = false;
-    };
-    const answer = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen && !event.defaultPrevented) {
-        event.preventDefault();
-        close();
-        return;
-      }
-      const key = rowKeyOf(event.target);
-      if (event.key === "Enter" && key !== null && key === selectedKey) {
-        opener.current = key;
-        focus.focusHeading();
-      }
-    };
-    area.addEventListener("keydown", learn, { capture: true });
-    area.addEventListener("pointerdown", forget, { capture: true });
-    area.addEventListener("keydown", answer);
-    return () => {
-      area.removeEventListener("keydown", learn, { capture: true });
-      area.removeEventListener("pointerdown", forget, { capture: true });
-      area.removeEventListener("keydown", answer);
+    latest.current = {
+      isOpen: selection !== null,
+      selectedKey: selectionOf(location.search, mode),
+      close,
     };
   });
+  const listenTo = useCallback(
+    (area: HTMLDivElement | null) => {
+      tableArea.current = area;
+      if (area === null) return;
+      const learn = (event: KeyboardEvent) => {
+        byEnter.current = event.key === "Enter";
+      };
+      const forget = () => {
+        byEnter.current = false;
+      };
+      const answer = (event: KeyboardEvent) => {
+        const now = latest.current;
+        if (event.key === "Escape" && now.isOpen && !event.defaultPrevented) {
+          event.preventDefault();
+          now.close();
+          focus.giveBack();
+          return;
+        }
+        const key = rowKeyOf(event.target);
+        if (event.key === "Enter" && key !== null && key === now.selectedKey) {
+          opener.current = key;
+          focus.focusHeading();
+        }
+      };
+      area.addEventListener("keydown", learn, { capture: true });
+      area.addEventListener("pointerdown", forget, { capture: true });
+      area.addEventListener("keydown", answer);
+      return () => {
+        area.removeEventListener("keydown", learn, { capture: true });
+        area.removeEventListener("pointerdown", forget, { capture: true });
+        area.removeEventListener("keydown", answer);
+        tableArea.current = null;
+      };
+    },
+    [focus],
+  );
 
   const options = useSnapshotQuery({
     name: "filterOptions",
@@ -441,7 +459,7 @@ export function LinesPage() {
           />
         )}
         {hasTable ? (
-          <div ref={tableArea} data-part="lines-table" className={styles.table}>
+          <div ref={listenTo} data-part="lines-table" className={styles.table}>
             {shownMode === "holds" ? (
               <DataTable
                 // A table of the other kind of row is another table: its rows are built anew.
