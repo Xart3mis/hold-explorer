@@ -187,7 +187,26 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 3: Chart foundations and the two charts
+### Task 3: Adaptive layout, and the owner's design answers
+
+**Why:** the owner answered the four open design questions of M1c-1 on 2026-10-17: keep the filter bar's total everywhere (no change); at 1280 px the app must be generally more responsive and adaptive; change the font of the blocker column (blocker items are words such as "Stress" as often as tags, so they take the body face; line IDs stay monospace); and make sortable headers more obvious. Doing the layout now means Breakdown and Blockers are built on it.
+
+**Files:** `DESIGN.md` (shell layout, Table, a new "Adapting to the window" rule); `ui/src/app/shell/`, `ui/src/features/shell/`; `ui/src/components/DataTable/*` (column priority, sortable header look); `ui/src/features/lines/*`, `ui/src/features/detail/*`, `ui/src/features/filters/*`, `ui/src/features/overview/*`; tests; gallery and development states.
+
+**Rules and targets:**
+- Design the layout for window widths from 1024 to 1920 and record it in `DESIGN.md` as breakpoints with tokens, not as one-off media queries. What adapts is the designer's call within the rules (for example: a sidebar the user can collapse to a narrow rail whose items keep their names for assistive technology and show them in text on focus and hover, never by hover alone; tighter page padding below 1440; tables giving each column a priority so the lowest-priority columns leave the table, and their values stay reachable in the detail panel, when the content area is narrow).
+- Targets, checked in the browser at 1280 by 800 and 1024 by 640, both themes, both densities: Lines in line rows has no sideways scroll at 1280 (columns that leave are in the line panel); hold rows keep Age (or Duration) in view at 1280; Overview's tiles and bars fit without clipping; the detail panel beside or over the content as today; nothing the user needs is cut.
+- The blocker column (and the blocker in the panel and in the picker) uses the body face; line IDs stay monospace. `DESIGN.md`'s rule on identifiers says which values are monospace and why.
+- A sortable header looks pressable before it is sorted: an affordance at rest (for example a muted sort mark showing the direction a press will give), hover, focus, and pressed states; the sorted header keeps its stronger mark. Written in the Table section.
+- The filter bar's total stays on every data screen (owner's answer); no change.
+
+**Tests:** column priority (which columns leave at which width, and that a dropped column's value is in the panel); the collapsed sidebar's names for assistive technology and keyboard; the sortable header's attributes at rest, hover, focus, sorted; the blocker column's class; screenshots before and after at 1280 and 1024 compared in the report.
+
+**Commit:** `feat(ui): adapt the layout to the window, and make sortable headers plain to see`
+
+---
+
+### Task 4: Chart foundations and the two charts
 
 **Files:** `DESIGN.md` (new sections: Chart foundations, Heatmap, Legend, Line chart, Chart focus and tooltip, Chart table view); `ui/src/components/charts/{Heatmap.tsx, LineChart.tsx, ChartTooltip.tsx, ChartTable.tsx, scale.ts}` with tests and stylesheets; gallery entries; `tools/design/` if the checker needs the new pairs.
 
@@ -212,7 +231,7 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 4: Expandable table rows, and Breakdown list mode
+### Task 5: Expandable table rows, and Breakdown list mode
 
 **Files:** `ui/src/components/DataTable/*` (expandable rows) and the Table section of `DESIGN.md`; new `ui/src/features/breakdown/{BreakdownPage.tsx, ListMode.tsx, dims.ts, address.ts}` with tests; `ui/src/app/{destinations.ts, router.tsx}`; `ui/src/locales/en.json`; development mocks.
 
@@ -228,7 +247,7 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 5: Breakdown, matrix mode
+### Task 6: Breakdown, matrix mode
 
 **Files:** `ui/src/features/breakdown/{MatrixMode.tsx}` with tests; `address.ts`; catalog; mocks.
 
@@ -242,11 +261,11 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 6: Blockers destination
+### Task 7: Blockers destination
 
 **Files:** new `ui/src/features/blockers/{BlockersPage.tsx, columns.tsx, address.ts}` with tests; destinations and router; catalog; mocks.
 
-**What it shows:** header "Blockers"; the filter bar; the cumulative curve (lines freed against step, y up to `lines_on_hold`, with the line "N of M lines freed after K steps" for the focused point); the steps table: step, blocker (label, identifier), type, discipline, holds, lines freed, cumulative; a line under the table when `unranked` is not zero ("N blockers free no line on their own and are not ranked"). Selecting a step opens the blocker panel (Task 7).
+**What it shows:** header "Blockers"; the filter bar; the cumulative curve (lines freed against step, y up to `lines_on_hold`, with the line "N of M lines freed after K steps" for the focused point); the steps table: step, blocker (label, identifier), type, discipline, holds, lines freed, cumulative; a line under the table when `unranked` is not zero ("N blockers free no line on their own and are not ranked"). Selecting a step opens the blocker panel (Task 8).
 
 **Rules:** the curve's point press selects that step's blocker; table and curve share the selection; no paging (the steps of one snapshot are at most a few thousand); the table uses `DataTable` with a fill height.
 
@@ -256,7 +275,7 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 7: The blocker in the detail panel
+### Task 8: The blocker in the detail panel
 
 **Files:** `ui/src/features/detail/{BlockerDetail.tsx, selection.ts, LineDetail.tsx}`; `ui/src/app/selection.ts`; `DESIGN.md` (Detail panel section); catalog; mocks.
 
@@ -270,7 +289,7 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 8: The full Overview
+### Task 9: The full Overview
 
 **Files:** `ui/src/features/overview/*` with tests; `DESIGN.md` (Overview: naming by status, the attention list); catalog; mocks.
 
@@ -284,7 +303,7 @@ Commands: `breakdown { spec, dim, view }`, `matrix { spec, rowDim, colDim, view 
 
 ---
 
-### Task 9: Carry-over items from M1c-1
+### Task 10: Carry-over items from M1c-1
 
 **Files:** as each item needs.
 
@@ -301,7 +320,7 @@ Items listed as "later" by the M1c-1 reviews that touch what this plan builds on
 
 ---
 
-### Task 10: Whole-plan verification and design audit
+### Task 11: Whole-plan verification and design audit
 
 As M1c-1's Task 11: every verification step (Rust, interface, bindings, tokens, build, `check:dist`, binary size, release performance with timings, parity, no data files); the design audit of Breakdown (both modes, groups expanded), Blockers, the blocker panel, and Overview, in both themes and densities at 1280 and 1920; the palette validator for the heatmap ramp; a keyboard-only walk (Overview to a top blocker, its linked blocker, a line it frees; Breakdown matrix cell to Lines; back); the spec (9.2 Breakdown, Blockers, Overview; 8.5 to 8.7 as far as built), the README, and the plan's post-review corrections.
 
@@ -317,9 +336,9 @@ Breakdown in two modes with groups that expand to their lines, Blockers with the
 
 | Spec | Covered by | Left |
 |---|---|---|
-| 9.2 Overview: tiles, bars by discipline, hold type, role; top blockers and lines; attention list; drill-through | Tasks 1, 2, 8 | deltas, trend, released since previous (M2); overdue follow-ups, watchlist (M4) |
-| 9.2 Breakdown: group-by switcher, list with bars and counts, matrix heatmap, cell opens its lines | Tasks 1 to 5 | deltas (M2) |
-| 8.5 solve order, complete, gain per step, cumulative curve | Tasks 1, 2, 6 | |
-| 8.7 blocker detail: frees alone, still blocked, linked, oldest hold | Tasks 1, 2, 7 | change since previous (M2); line chain links (done in 7) |
+| 9.2 Overview: tiles, bars by discipline, hold type, role; top blockers and lines; attention list; drill-through | Tasks 1, 2, 9 | deltas, trend, released since previous (M2); overdue follow-ups, watchlist (M4) |
+| 9.2 Breakdown: group-by switcher, list with bars and counts, matrix heatmap, cell opens its lines | Tasks 1 to 6 | deltas (M2) |
+| 8.5 solve order, complete, gain per step, cumulative curve | Tasks 1, 2, 7 | |
+| 8.7 blocker detail: frees alone, still blocked, linked, oldest hold | Tasks 1, 2, 8 | change since previous (M2); line chain links (done in 8) |
 | 8.6 graph, 8.8 what-if, 8.1 to 8.4 rules editor, overrides, clean-up | | M3 |
-| 13.2 charts: tooltip, keyboard, table view, one axis, ramp, validator | Task 3 | |
+| 13.2 charts: tooltip, keyboard, table view, one axis, ramp, validator | Task 4 | |
