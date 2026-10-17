@@ -118,9 +118,9 @@
 }
 
 /*
- * A sortable header is a button, and looks it before it is pressed: at rest its arrow is muted
- * and points the way a press sorts. Hover and the keyboard's focus raise the arrow to the
- * secondary ink; the sorted header has the label and the arrow in the primary ink.
+ * A sortable header is a button, and looks it before it is pressed: at rest it has a muted
+ * two-way mark. Hover and the keyboard's focus raise the mark to the secondary ink. The sorted
+ * header alone has an arrow, and it differs by more than ink: its label is heavier as well.
  */
 .mark {
   display: inline-flex;
@@ -137,6 +137,11 @@
 
 .column .mark[data-mark="sorted"] {
   color: var(--color-text-primary);
+}
+
+.column[aria-sort="ascending"] .label,
+.column[aria-sort="descending"] .label {
+  font-weight: var(--font-weight-semibold);
 }
 
 .column[data-allows-sorting][data-hovered] {
@@ -430,7 +435,7 @@
   padding: var(--space-2) var(--density-cell-padding-x);
   color: var(--color-text-muted);
   font: var(--text-caption);
-  font-variant-numeric: var(--font-numeric-tabular);
+  font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-normal);
   text-align: end;
 }

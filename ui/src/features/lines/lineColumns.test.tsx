@@ -33,13 +33,11 @@ describe("lineColumns", () => {
     ]);
   });
 
-  it("writes the line ID in the monospace, and sorts the way the header shows at rest", () => {
+  it("writes the line ID in the monospace, and no other column of the lines", () => {
     const columns = lineColumns(20, []);
     expect(columns.find((column) => column.id === "line")?.kind).toBe("identifier");
     expect(columns.filter((column) => column.kind === "identifier")).toHaveLength(1);
-    const first = (id: string) => columns.find((column) => column.id === id)?.firstSortDirection;
-    expect(first("holds")).toBe("descending");
-    expect(first("line")).toBe("ascending");
+    expect(columns.find((column) => column.id === "holds")?.allowsSorting).toBe(true);
     expect(columns.find((column) => column.id === "holdTypes")?.allowsSorting).toBe(false);
   });
 

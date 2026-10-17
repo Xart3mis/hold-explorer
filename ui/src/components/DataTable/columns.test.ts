@@ -99,6 +99,15 @@ describe("leavingColumns", () => {
     expect(leaving(500, table, 50)).toEqual(["sizes"]);
   });
 
+  it("keeps the last column that takes a share of the width, whatever its priority", () => {
+    const shared = table.map((column) =>
+      column.id === "types" || column.id === "stress" ? { ...column, takesShare: true } : column,
+    );
+    // Of the two that take a share, the one of the higher priority may leave; the other stays.
+    expect(leaving(299, shared)).toEqual(["sizes", "stress"]);
+    expect(leaving(120, shared)).toEqual(["sizes", "stress"]);
+  });
+
   it("lets every column stay while the width is not known", () => {
     expect(leaving(0)).toEqual([]);
     expect(leaving(Number.NaN)).toEqual([]);

@@ -10,8 +10,8 @@
 // once, to look at the table with all of them loaded.
 //
 // The window can be made narrower to see the columns of least priority leave the table and be
-// named under it. The headers of Holds and Oldest can be pressed: they mark the sort they ask
-// for, and the made-up rows keep their order.
+// named under it. The headers of Holds and Oldest can be pressed: the sorted one shows its arrow
+// and the other its two-way mark at rest, and the made-up rows keep their order.
 //
 // Every time the rows change, what that change cost is written beside the filter and kept in
 // `window.hxTableRenders`, newest last.
@@ -29,7 +29,7 @@ import {
   DataTable,
   EmptyState,
   TextField,
-  type DataTableColumn,
+  type LeavingColumn,
   type DataTableSort,
 } from "../components";
 import { formatCount } from "../text/format";
@@ -83,7 +83,8 @@ function allLines(): readonly DevLine[] {
 /** The widest line ID of the whole list, as the commands send it with each page. */
 const WIDEST_ID = 22;
 
-const columns: DataTableColumn<DevLine>[] = [
+/** The columns of the lines; the four with a priority leave a narrow window, the highest first. */
+const columns: LeavingColumn<DevLine>[] = [
   {
     id: "id",
     header: "Line",
@@ -98,7 +99,6 @@ const columns: DataTableColumn<DevLine>[] = [
     kind: "number",
     size: { chars: 3 },
     allowsSorting: true,
-    firstSortDirection: "descending",
     cell: (line) => formatCount(line.holds),
   },
   {
@@ -135,7 +135,6 @@ const columns: DataTableColumn<DevLine>[] = [
     kind: "number",
     size: { chars: 5 },
     allowsSorting: true,
-    firstSortDirection: "descending",
     cell: (line) => `${formatCount(line.oldest)} d`,
   },
   {
@@ -302,7 +301,7 @@ export function TablePage() {
             onSelectionChange={setSelected}
             sort={sort}
             onSortChange={({ column }) => {
-              // A header that is not the sorted one asks for the order its mark shows.
+              // Holds and Oldest come largest first; the sorted one turns round.
               setSort((before) => ({
                 column,
                 direction:
@@ -310,8 +309,7 @@ export function TablePage() {
                     ? "ascending"
                     : before.column === column
                       ? "descending"
-                      : (columns.find((entry) => entry.id === column)?.firstSortDirection ??
-                        "ascending"),
+                      : "descending",
               }));
             }}
             leftOutText={(headers) => `Not shown at this width: ${headers.join(", ")}.`}

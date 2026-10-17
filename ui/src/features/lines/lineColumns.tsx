@@ -1,13 +1,13 @@
 import { TriangleAlert } from "lucide-react";
 import type { Field } from "../../bindings/Field";
 import type { LineRow } from "../../bindings/LineRow";
-import { Tag, textChars, type DataTableColumn } from "../../components";
+import { Tag, textChars, type LeavingColumn } from "../../components";
 import { formatCount, formatDays, formatList, formatSize, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
 import { LINE_SORTS, type SortEntry } from "./sorts";
 
 /** A column of the table, with the fields of the export it needs to have values. */
-export interface NeedingColumn<Row> extends DataTableColumn<Row> {
+export interface NeedingColumn<Row> extends LeavingColumn<Row> {
   /** The column is left out when the snapshot has no value in one of these. */
   needs: readonly Field[];
 }
@@ -32,16 +32,13 @@ function given(items: readonly string[]): string {
 export function present<Row>(
   columns: readonly NeedingColumn<Row>[],
   absent: readonly Field[],
-): DataTableColumn<Row>[] {
+): LeavingColumn<Row>[] {
   return columns.filter((column) => !column.needs.some((field) => absent.includes(field)));
 }
 
-/** Whether a press on a column's header sorts, and in which direction a first press sorts. */
+/** Whether a press on a column's header asks for a sort. */
 export function sorting(table: readonly SortEntry<unknown>[], id: string) {
-  const entry = table.find((candidate) => candidate.column === id);
-  return entry === undefined
-    ? { allowsSorting: false }
-    : { allowsSorting: true, firstSortDirection: entry.natural };
+  return { allowsSorting: table.some((entry) => entry.column === id) };
 }
 
 /** Room for the widest age the table may show: four figures of days. */

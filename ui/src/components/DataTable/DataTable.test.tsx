@@ -9,7 +9,12 @@ import { expectAccessible } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
 import { Button } from "../Button/Button";
-import { DataTable, type DataTableColumn } from "./DataTable";
+import {
+  DataTable,
+  type DataTableColumn,
+  type DataTableProps,
+  type LeavingColumn,
+} from "./DataTable";
 
 interface Line {
   id: string;
@@ -59,14 +64,28 @@ const columns: DataTableColumn<Line>[] = [
   },
 ];
 
-function table(props: Partial<Parameters<typeof DataTable<Line>>[0]> = {}) {
+/** What a test may change of the table: anything, and the columns with what names those that leave. */
+type TableOptions = Partial<Omit<DataTableProps<Line>, "columns" | "leftOutText">> &
+  (
+    | { columns?: readonly DataTableColumn<Line>[]; leftOutText?: undefined }
+    | {
+        columns: readonly LeavingColumn<Line>[];
+        leftOutText: (headers: readonly string[]) => string;
+      }
+  );
+
+function table({ columns: shown = columns, leftOutText, ...props }: TableOptions = {}) {
+  const fitting =
+    leftOutText === undefined
+      ? { columns: shown as readonly DataTableColumn<Line>[] }
+      : { columns: shown, leftOutText };
   return (
     <DataTable
       aria-label="Lines on hold"
-      columns={columns}
       rows={lines}
       rowKey={(line) => line.id}
       {...props}
+      {...fitting}
     />
   );
 }
@@ -1077,9 +1096,12 @@ describe("DataTable narrower than its columns", () => {
   });
 });
 
-/** The columns of the test, where the first blocker and then the holds may leave a narrow table. */
-const leaving: DataTableColumn<Line>[] = columns.map((column) =>
-  column.id === "blocker"
+/**
+ * The columns of the test, where Oldest and then Holds may leave a narrow table. The first
+ * blocker takes the share of the width that is left.
+ */
+const leaving: LeavingColumn<Line>[] = columns.map((column) =>
+  column.id === "oldest"
     ? { ...column, priority: 2 }
     : column.id === "holds"
       ? { ...column, priority: 1 }
@@ -1096,28 +1118,28 @@ function headers(): string[] {
 describe("DataTable narrower than its columns, whose columns may leave", () => {
   // The stand-in widths of a test: Line ID 192 px, Holds 74, Oldest 80, First blocker at least
   // 136, which is 482 together.
-  const size = { width: 400, height: 400 };
+  const size = { width: 420, height: 400 };
   tableViewport(size);
   afterEach(() => {
-    size.width = 400;
+    size.width = 420;
   });
 
   it("takes out the column of the highest priority first, and names it under the table", () => {
     render(table({ columns: leaving, leftOutText }));
-    expect(headers()).toEqual(["Line ID", "Holds", "Oldest"]);
-    const note = screen.getByText("Not shown at this width: First blocker.");
+    expect(headers()).toEqual(["Line ID", "Holds", "First blocker"]);
+    const note = screen.getByText("Not shown at this width: Oldest.");
     // It describes the table, and is no live region: a resize is not news.
     expect(screen.getByRole("grid").getAttribute("aria-describedby")).toContain(note.id);
     expect(note).not.toHaveAttribute("role");
-    expect(within(dataRow(0)).queryByText(lines[0]?.blocker ?? "")).not.toBeInTheDocument();
+    expect(within(dataRow(0)).queryByText(lines[0]?.oldest ?? "")).not.toBeInTheDocument();
   });
 
   it("takes out the next one where the table is narrower still, and gives both back with room", () => {
     const sizes = observeSizes();
-    size.width = 300;
+    size.width = 400;
     const { rerender } = render(table({ columns: leaving, leftOutText }));
-    expect(headers()).toEqual(["Line ID", "Oldest"]);
-    expect(screen.getByText("Not shown at this width: Holds, First blocker.")).toBeInTheDocument();
+    expect(headers()).toEqual(["Line ID", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Holds, Oldest.")).toBeInTheDocument();
 
     size.width = 600;
     act(() => {
@@ -1129,7 +1151,7 @@ describe("DataTable narrower than its columns, whose columns may leave", () => {
   });
 
   it("keeps the column the rows are sorted by, and scrolls sideways when the rest do not fit", () => {
-    size.width = 300;
+    size.width = 400;
     render(
       table({
         columns: leaving,
@@ -1137,59 +1159,91 @@ describe("DataTable narrower than its columns, whose columns may leave", () => {
         sort: { column: "holds", direction: "descending" },
       }),
     );
-    expect(headers()).toEqual(["Line ID", "Holds", "Oldest"]);
-    expect(screen.getByText("Not shown at this width: First blocker.")).toBeInTheDocument();
+    expect(headers()).toEqual(["Line ID", "Holds", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Oldest.")).toBeInTheDocument();
+  });
+
+  it("keeps the last column that takes a share, so the rows reach the edge of the table", () => {
+    size.width = 300;
+    const shared = leaving.map((column) =>
+      column.id === "blocker" ? { ...column, priority: 3 } : column,
+    );
+    render(table({ columns: shared, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Holds, Oldest.")).toBeInTheDocument();
   });
 
   it("keeps every column of a table that gives none a priority", () => {
-    render(table({ leftOutText }));
+    render(table());
     expect(headers()).toEqual(["Line ID", "Holds", "Oldest", "First blocker"]);
     expect(screen.queryByText(/Not shown at this width/)).not.toBeInTheDocument();
+  });
+
+  it("gives the focus of a cell that leaves to the cell that names its row", SLOW, async () => {
+    const sizes = observeSizes();
+    size.width = 600;
+    const user = userEvent.setup();
+    const { rerender } = render(table({ columns: leaving, leftOutText }));
+    await user.tab();
+    // The row, its name, Holds, Oldest.
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
+    const oldest = within(dataRow(0)).getByText(lines[0]?.oldest ?? "");
+    expect(oldest.closest("[role='gridcell']")).toHaveFocus();
+
+    size.width = 420;
+    act(() => {
+      sizes.resize();
+    });
+    rerender(table({ columns: leaving, leftOutText }));
+    expect(headers()).not.toContain("Oldest");
+    await waitFor(() => {
+      expect(within(dataRow(0)).getByRole("rowheader")).toHaveFocus();
+    });
   });
 });
 
 describe("DataTable's sortable headers", () => {
-  const firstDown = columns.map((column) =>
-    column.id === "holds" ? { ...column, firstSortDirection: "descending" as const } : column,
-  );
   const mark = (header: HTMLElement) => header.querySelector<HTMLElement>("[data-mark]");
+  const glyph = (header: HTMLElement) => mark(header)?.querySelector("svg")?.getAttribute("class");
 
-  it("show at rest a mark that points the way a press sorts, and the sorted one its order", () => {
-    render(table({ columns: firstDown, sort: { column: "oldest", direction: "ascending" } }));
+  it("show at rest a two-way mark, and only the sorted one an arrow that says its order", () => {
+    render(table({ sort: { column: "oldest", direction: "ascending" } }));
     const holds = screen.getByRole("columnheader", { name: "Holds" });
     const oldest = screen.getByRole("columnheader", { name: "Oldest" });
     expect(mark(holds)).toHaveAttribute("data-mark", "rest");
-    expect(mark(holds)).toHaveAttribute("data-direction", "descending");
+    expect(glyph(holds)).toContain("lucide-chevrons-up-down");
+    expect(mark(holds)).not.toHaveAttribute("data-direction");
     expect(mark(oldest)).toHaveAttribute("data-mark", "sorted");
     expect(mark(oldest)).toHaveAttribute("data-direction", "ascending");
+    expect(glyph(oldest)).toContain("lucide-arrow-up");
     expect(oldest).toHaveAttribute("aria-sort", "ascending");
-    // A header that cannot be sorted has no mark, and a first load sorts nothing.
+    // A header that cannot be sorted has no mark.
     expect(mark(screen.getByRole("columnheader", { name: "Line ID" }))).toBeNull();
     expect(mark(screen.getByRole("columnheader", { name: "First blocker" }))).toBeNull();
   });
 
   it("shows no mark while the rows are loading", () => {
-    render(table({ columns: firstDown, isLoading: true }));
+    render(table({ isLoading: true }));
     expect(document.querySelector("[data-mark]")).toBeNull();
   });
 
   it("answers the pointer and the keyboard as a button does", SLOW, async () => {
     const user = userEvent.setup();
-    render(table({ columns: firstDown, onSortChange: vi.fn() }));
+    render(table({ onSortChange: vi.fn() }));
     const holds = screen.getByRole("columnheader", { name: "Holds" });
     await user.hover(holds);
     expect(holds).toHaveAttribute("data-hovered");
     await user.unhover(holds);
     expect(holds).not.toHaveAttribute("data-hovered");
 
-    // From the first row, up to its header row, and along it.
+    // From the first row, along it, and up to its header row.
     await user.tab();
     await user.keyboard("{ArrowRight}{ArrowRight}{ArrowUp}");
     expect(holds).toHaveFocus();
     expect(holds).toHaveAttribute("data-focus-visible");
   });
 
-  it("are drawn by state: a muted mark at rest, a stronger one on hover and focus, full ink sorted", () => {
+  it("are drawn by state: a muted mark at rest, a stronger one on hover and focus, the sorted one heavier", () => {
     const stylesheet = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
     const rule = (selector: string) =>
       new RegExp(`(^|\\n)${selector.replace(/[.[\]:="]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
@@ -1204,6 +1258,10 @@ describe("DataTable's sortable headers", () => {
     expect(rule('.column .mark[data-mark="sorted"]')).toMatch(
       /color:\s*var\(--color-text-primary\);/,
     );
+    // Not by ink alone: the label of the sorted header is heavier.
+    expect(
+      rule('.column[aria-sort="ascending"] .label,\n.column[aria-sort="descending"] .label'),
+    ).toMatch(/font-weight:\s*var\(--font-weight-semibold\);/);
     expect(rule(".column[data-allows-sorting][data-hovered]")).toMatch(
       /background-color:\s*var\(--color-surface-hover\);/,
     );

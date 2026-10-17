@@ -28,8 +28,9 @@ function readBreakpoints(): { wide: number; roomy: number } | null {
 /** The size of the window of a width, by the breakpoints of DESIGN.md. */
 export function windowSizeOf(width: number): WindowSize {
   const known = readBreakpoints();
-  // A build that cannot read its tokens keeps the layout it was designed for first.
-  if (known === null) return "large";
+  // A build that cannot read its tokens lays the panel over the content, as below the wide
+  // breakpoint: the layout that needs the least room.
+  if (known === null) return "small";
   if (width < known.wide) return "small";
   return width < known.roomy ? "medium" : "large";
 }

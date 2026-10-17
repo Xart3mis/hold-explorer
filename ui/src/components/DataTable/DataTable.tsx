@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import {
   createContext,
   memo,
@@ -43,7 +43,8 @@ import { useCharWidths, useTableMetrics } from "./measure";
 
 export { textChars, type ColumnSize, type DataTableColumnKind } from "./columns";
 
-export interface DataTableColumn<Item> {
+/** What every column declares, whether or not it may leave a narrow table. */
+interface ColumnBase<Item> {
   id: string;
   /** The column header, in sentence case. */
   header: string;
@@ -69,17 +70,24 @@ export interface DataTableColumn<Item> {
   isRowHeader?: boolean;
   /** The header is a button that asks for a sort by this column. */
   allowsSorting?: boolean;
+}
+
+/** A column of a table. It stays whatever the width of the table. */
+export interface DataTableColumn<Item> extends ColumnBase<Item> {
+  /** It has none: a column with a priority is a `LeavingColumn`. */
+  priority?: never;
+}
+
+/**
+ * A column that may leave a table that is too narrow for all of its columns. A table of such
+ * columns says under itself which have left (`leftOutText`).
+ */
+export interface LeavingColumn<Item> extends ColumnBase<Item> {
   /**
-   * The direction a press on the header sorts in while the column is not the sorted one. Its
-   * header shows it at rest, as a muted arrow, so a header that can be sorted looks pressable
-   * before it is pressed. `ascending` unless the column comes largest or newest first.
-   */
-  firstSortDirection?: "ascending" | "descending";
-  /**
-   * May the column leave a table that is too narrow for all of its columns: the higher the
-   * number, the sooner it leaves. Give one only to a column whose value can be read elsewhere,
-   * such as in the detail panel of the row. A column without one always stays, and so do the
-   * column that names the row and the column the rows are sorted by.
+   * The higher the number, the sooner the column leaves. Give one only to a column whose value
+   * can be read elsewhere, such as in the detail panel of the row. A column without one always
+   * stays, and so do the column that names the row, the column the rows are sorted by, and the
+   * last column that takes a share of the width.
    */
   priority?: number;
 }
@@ -90,10 +98,24 @@ export interface DataTableSort {
   direction: "ascending" | "descending";
 }
 
-export interface DataTableProps<Item> {
+/**
+ * The columns of a table, and the sentence that names those that left. Columns that may leave are
+ * always named when they do (DESIGN.md, Table), so a table of them must be given the sentence.
+ */
+type Fitting<Item> =
+  | { columns: readonly DataTableColumn<Item>[]; leftOutText?: undefined }
+  | {
+      columns: readonly LeavingColumn<Item>[];
+      /**
+       * The sentence under the table that names the columns that left it for want of room, and
+       * says where their values are read. Written by the caller from the catalog.
+       */
+      leftOutText: (headers: readonly string[]) => string;
+    };
+
+interface TableProps<Item> {
   /** The name of the table. */
   "aria-label": string;
-  columns: readonly DataTableColumn<Item>[];
   /** The rows, in the order to show them. The table sorts nothing itself. */
   rows: readonly Item[];
   /** A stable key for a row. */
@@ -150,14 +172,10 @@ export interface DataTableProps<Item> {
    * keep their place, and without a key the table never takes its rows for another result.
    */
   resultKey?: string;
-  /**
-   * The sentence under the table that names the columns that left it for want of room, and says
-   * where their values are read. Written by the caller from the catalog. Without it the table
-   * says nothing of them.
-   */
-  leftOutText?: (headers: readonly string[]) => string;
   className?: string | undefined;
 }
+
+export type DataTableProps<Item> = TableProps<Item> & Fitting<Item>;
 
 const ACTIONS = "data-table-actions";
 
@@ -379,7 +397,7 @@ function warnOfUnboundedHeight(): void {
  * rows: nothing in them takes focus, and assistive technology is told once that rows are loading.
  */
 export function DataTable<Item>({
-  columns: allColumns,
+  columns: given,
   rows,
   rowKey,
   selectedKey,
@@ -405,6 +423,8 @@ export function DataTable<Item>({
 }: DataTableProps<Item>) {
   const countId = useId();
   const leftOutId = useId();
+  // A column that cannot leave is one whose priority is not there.
+  const allColumns: readonly LeavingColumn<Item>[] = given;
   const scroller = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [scrolledAcross, setScrolledAcross] = useState(false);
@@ -421,7 +441,7 @@ export function DataTable<Item>({
   const shown = loading ? NO_ROWS : rows;
   const total = totalRows ?? rows.length;
 
-  const widthOf = (column: DataTableColumn<Item>): Width => {
+  const widthOf = (column: LeavingColumn<Item>): Width => {
     const sized = columnWidth(column.size, column.kind ?? "text", chars, metrics.paddingX);
     const least = headerWidth(
       column.header,
@@ -445,6 +465,7 @@ export function DataTable<Item>({
         least: widthOf(column).minWidth,
         priority: column.priority,
         stays: column.isRowHeader === true || column.id === sort?.column,
+        takesShare: "flex" in column.size,
       })),
       measured.width,
       hasActions ? actionsWidth.minWidth : 0,
@@ -455,6 +476,27 @@ export function DataTable<Item>({
     return allColumns.filter((column) => !gone.has(column.id));
   }, [allColumns, leaving]);
   const leftOut = allColumns.filter((column) => !columns.includes(column));
+  // Where the focus was last in the table: the column, and the row when it was not the header. A
+  // cell or a header that leaves gives its focus to the cell that names the same row, or to the
+  // header of that column, so the focus is never left on the page behind.
+  const focused = useRef<{ column: string; row: string | null } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const last = focused.current;
+    const root = box.current;
+    if (last === null || root === null || !leaving.split("\n").includes(last.column)) return;
+    const active = document.activeElement;
+    // The focus is still in the table, on an element the library gave to another cell, or on the
+    // page behind. Focus that went elsewhere is left there.
+    if (active !== null && active !== document.body && !root.contains(active)) return;
+    const pinned =
+      last.row === null
+        ? root.querySelector<HTMLElement>('[role="columnheader"][data-pinned]')
+        : [...root.querySelectorAll<HTMLElement>('[role="row"][data-key]')]
+            .find((row) => row.dataset.key === last.row)
+            ?.querySelector<HTMLElement>('[role="rowheader"]');
+    pinned?.focus();
+  }, [leaving]);
   const widths = columns.map(widthOf);
   const placeholderWidths = hasActions ? [...widths, actionsWidth] : widths;
   // The rows are built again only when what a row is made of changes: which columns, of which
@@ -488,6 +530,7 @@ export function DataTable<Item>({
       ...cells.map((cell, index) => (
         <Cell
           key={cell.id}
+          data-column={cell.id}
           data-kind={cell.kind}
           data-supporting={cell.isSupporting ? "" : undefined}
           data-pinned={cell.isPinned ? "" : undefined}
@@ -707,6 +750,13 @@ export function DataTable<Item>({
 
   return (
     <div
+      ref={box}
+      onFocus={(event) => {
+        const cell = (event.target as Element).closest<HTMLElement>("[data-column]");
+        if (cell === null) return;
+        const row = cell.closest<HTMLElement>('[role="row"][data-key]');
+        focused.current = { column: cell.dataset.column ?? "", row: row?.dataset.key ?? null };
+      }}
       data-density={density}
       data-height={height === "fill" ? "fill" : Number.isFinite(maxRows) ? "rows" : "all"}
       data-empty={isEmpty ? "" : undefined}
@@ -777,29 +827,31 @@ export function DataTable<Item>({
                   textValue={column.header}
                   width={widths[index]?.width ?? null}
                   minWidth={widths[index]?.minWidth ?? null}
+                  data-column={column.id}
                   data-kind={column.kind ?? "text"}
                   data-pinned={column.isRowHeader === true ? "" : undefined}
                   className={cx(styles.column)}
                 >
-                  {({ sortDirection, allowsSorting }) => {
-                    // The sorted header's arrow says the order of the rows; the muted one of a
-                    // header at rest says the order a press gives.
-                    const direction = sortDirection ?? column.firstSortDirection ?? "ascending";
-                    return (
-                      <>
-                        <span className={styles.label}>{column.header}</span>
-                        {allowsSorting ? (
-                          <span
-                            data-mark={sortDirection === undefined ? "rest" : "sorted"}
-                            data-direction={direction}
-                            className={styles.mark}
-                          >
-                            <Icon icon={direction === "ascending" ? ArrowUp : ArrowDown} />
-                          </span>
-                        ) : null}
-                      </>
-                    );
-                  }}
+                  {({ sortDirection, allowsSorting }) => (
+                    <>
+                      <span className={styles.label}>{column.header}</span>
+                      {/* At rest a muted two-way mark says the header sorts; the sorted header
+                          alone has an arrow, which says the order of the rows. */}
+                      {!allowsSorting ? null : sortDirection === undefined ? (
+                        <span data-mark="rest" className={styles.mark}>
+                          <Icon icon={ChevronsUpDown} />
+                        </span>
+                      ) : (
+                        <span
+                          data-mark="sorted"
+                          data-direction={sortDirection}
+                          className={styles.mark}
+                        >
+                          <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
+                        </span>
+                      )}
+                    </>
+                  )}
                 </Column>
               ))}
               {hasActions ? (

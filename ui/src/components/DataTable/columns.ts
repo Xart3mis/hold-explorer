@@ -72,14 +72,17 @@ export interface FitColumn {
   priority?: number | undefined;
   /** The column names the row, or the rows are sorted by it: it always stays. */
   stays: boolean;
+  /** The column takes a share of the width that is left; the last such column stays. */
+  takesShare?: boolean;
 }
 
 /**
  * The columns that leave a table of this width, so that the rest fit: the one of the highest
  * priority first, and of two with the same priority the later one, until the least widths of the
- * others and of the room that is kept besides (`kept`: the row actions) fit in the width. A width
- * that is not known (zero, where nothing is laid out) lets every column stay. When no column is
- * left that may leave, the rest stay, and the table scrolls sideways.
+ * others and of the room that is kept besides (`kept`: the row actions) fit in the width. The last
+ * column that takes a share of the width stays, so the rows reach the edge of a wider table. A
+ * width that is not known (zero, where nothing is laid out) lets every column stay. When no column
+ * is left that may leave, the rest stay, and the table scrolls sideways.
  */
 export function leavingColumns(
   columns: readonly FitColumn[],
@@ -89,6 +92,7 @@ export function leavingColumns(
   const leaving = new Set<string>();
   if (!(width > 0)) return leaving;
   let needed = kept + columns.reduce((sum, column) => sum + column.least, 0);
+  let shares = columns.filter((column) => column.takesShare === true).length;
   const candidates = columns
     .map((column, index) => ({ column, index }))
     .filter(({ column }) => column.priority !== undefined && !column.stays)
@@ -98,6 +102,10 @@ export function leavingColumns(
     );
   for (const { column } of candidates) {
     if (needed <= width) break;
+    if (column.takesShare === true) {
+      if (shares === 1) continue;
+      shares -= 1;
+    }
     leaving.add(column.id);
     needed -= column.least;
   }

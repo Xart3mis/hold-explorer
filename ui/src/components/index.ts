@@ -18,6 +18,7 @@ export {
   type DataTableColumnKind,
   type DataTableProps,
   type DataTableSort,
+  type LeavingColumn,
 } from "./DataTable/DataTable";
 export {
   Disclosure,

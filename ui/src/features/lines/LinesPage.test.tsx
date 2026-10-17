@@ -235,6 +235,11 @@ describe("Lines", () => {
       });
       expect(headers()).toEqual([column.line, column.remark, column.blocker, column.age]);
       expect(leftOut()).toHaveTextContent(/Open a hold to read them\.$/);
+      // The blocker is written in the face of the body in the table, the line ID in the monospace.
+      const table = await grid(text.holdsTable);
+      const blocker = within(table).getAllByText("577-PK-400")[0];
+      expect(blocker?.closest("[role='gridcell']")).toHaveAttribute("data-kind", "text");
+      expect(within(table).getAllByRole("rowheader")[0]).toHaveAttribute("data-kind", "identifier");
       const panel = await screen.findByRole("complementary");
       const facts = await within(panel).findByRole("list", { name: en.detail.holdFacts });
       expect(facts).toHaveTextContent(en.detail.fact.name);

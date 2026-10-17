@@ -39,7 +39,6 @@ describe("holdColumns", () => {
     const columns = holdColumns(20, [], "Open");
     expect(columns.find((column) => column.id === "blocker")?.kind).toBeUndefined();
     expect(columns.find((column) => column.id === "line")?.kind).toBe("identifier");
-    expect(columns.find((column) => column.id === "days")?.firstSortDirection).toBe("descending");
   });
 
   it("writes a blank name, role, or hold type as the table's mark for no value", () => {

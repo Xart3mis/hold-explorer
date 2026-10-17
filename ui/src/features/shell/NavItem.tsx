@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import { Link } from "react-aria-components";
-import { Icon, Tag, Tooltip } from "../../components";
+import { Icon, Tag, Tooltip, VisuallyHidden } from "../../components";
 import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
 import { ariaKeyShortcuts, formatShortcut } from "./shortcuts";
@@ -60,11 +60,18 @@ export function NavItem({
       }
     >
       <Icon icon={icon} />
-      <span className={styles.navLabel}>{label}</span>
-      {tag === undefined ? null : (
+      {isRail ? (
+        // In the rail the label and the tag are not shown, and stay the name of the item.
+        <VisuallyHidden>{tag === undefined ? label : `${label} ${tag}`}</VisuallyHidden>
+      ) : (
         <>
-          {/* A space, so the name reads "Lines Soon" and not as one word. It takes no room. */}{" "}
-          <Tag className={styles.tag}>{tag}</Tag>
+          <span className={styles.navLabel}>{label}</span>
+          {tag === undefined ? null : (
+            <>
+              {/* A space, so the name reads "Lines Soon" and not as one word. It takes no room. */}{" "}
+              <Tag className={styles.tag}>{tag}</Tag>
+            </>
+          )}
         </>
       )}
     </Link>

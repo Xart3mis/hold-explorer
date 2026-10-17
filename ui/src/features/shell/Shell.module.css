@@ -176,7 +176,7 @@
 
 /*
  * The rail: the icons of the destinations alone, each centered in its item. The label and the
- * tag leave the screen and stay in the accessible name of the item, as visually hidden text does;
+ * tag are visually hidden text there (NavItem), so they stay in the accessible name of the item;
  * the tooltip of the item shows them.
  */
 .sidebar[data-form="rail"] {
@@ -186,19 +186,6 @@
 .sidebar[data-form="rail"] .navItem {
   justify-content: center;
   padding: 0;
-}
-
-.sidebar[data-form="rail"] .navLabel,
-.sidebar[data-form="rail"] .tag {
-  position: absolute;
-  inline-size: var(--size-pixel);
-  block-size: var(--size-pixel);
-  margin: calc(-1 * var(--size-pixel));
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  white-space: nowrap;
-  clip-path: inset(50%);
 }
 
 .sidebar[data-form="rail"] .sidebarToggle {
