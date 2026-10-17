@@ -840,7 +840,7 @@ Two to four views of one content: on Lines, a row per line or a row per hold. It
 - **Anatomy:** a row with a bottom hairline in `--color-border-default`, directly under the page header. Each view is a label: height `--density-control-height`, horizontal padding `--space-3`, text `--text-label` in `--color-text-secondary`, corners `--radius-sm` at the top.
 - **Chosen:** text `--color-text-primary` and a `--border-width-thick` indicator in `--color-accent-text` on the hairline, as wide as the view. The indicator appears in place, fading in over `--duration-fast`; it does not travel.
 - **Hover:** text `--color-text-primary`, fill `--color-surface-hover`. **Active:** fill `--color-surface-pressed`.
-- **Focus:** the inset focus ring. To assistive technology it is a named radio group: one stop for Tab, and the arrow keys move to the next or the previous view and choose it.
+- **Focus:** the inset focus ring. It is a named radio group: one stop for Tab, and the arrow keys move to the next or the previous view and choose it, so the content follows the focus; Space and Enter choose the view that has the focus, as on a button.
 - **Disabled, loading, error:** not applicable. A view applies at once; what loads and fails is the content, which keeps the rows of before, dimmed, until the rows of the chosen view are there.
 
 ### Preset row
@@ -848,9 +848,10 @@ Two to four views of one content: on Lines, a row per line or a row per hold. It
 The questions asked of a table most often, each one press away: on Lines, All, Single hold, Easiest to release, Oldest first, Size mismatch. It stands under the filter bar, at the leading edge, above the table.
 
 - **Anatomy:** quiet buttons in one row, `--space-1` apart: height `--density-control-height`, horizontal padding `--space-3`, corner `--radius-sm` (square: a preset is a query, not a filter that can be removed), text `--text-label` in `--color-text-secondary`. The row wraps when it is narrower than its presets.
-- **Marked:** the preset that is the query of the page has fill `--color-accent-subtle` and text `--color-text-primary`; hover `--color-accent-subtle-hover`. One preset is marked when the query is exactly that preset; none is when the user sorted by a header, so the arrow in the header is the one mark of the sort.
+- **Marked:** the preset that is the query of the page has fill `--color-accent-subtle` and text `--color-text-primary`; hover `--color-accent-subtle-hover`. One preset is marked when the query is exactly that preset, and none otherwise, as after a sort by a header that no preset has. A preset whose sort is a column's also shows that column's arrow (All marks Holds, Oldest first marks Oldest), so a press on that header turns the order round at once and the preset is no longer marked.
 - **Hover:** fill `--color-surface-hover`, text `--color-text-primary`. **Active:** fill `--color-surface-pressed`.
-- **Focus:** the focus ring. To assistive technology it is a named radio group, one stop for Tab, the arrow keys moving between presets and choosing them. Choosing the marked preset again changes nothing.
+- **Focus:** the focus ring. It is a named radio group: one stop for Tab, and the arrow keys move to the next or the previous preset and choose it, so the table follows the focus; Space and Enter choose the preset that has the focus, as on a button. Choosing the marked preset again changes nothing.
+- **Waiting:** until the options of the snapshot are read, the row keeps its height and shows no preset, so none appears that will go.
 - **Missing data:** a preset that needs a column the snapshot has no value in is not offered (Size mismatch without the model or the LDT size); the filter bar says once which columns are missing.
 - **Empty:** a preset that keeps no row has the empty state of the table say which preset it is, and offer All.
 - **Loading and error:** belong to the table.
@@ -954,7 +955,7 @@ An empty state teaches the next action. It is never "Nothing here".
 - **Anatomy:** a title (`--text-section-title`, `--color-text-primary`) that says what is absent, one or two sentences (`--text-body`, `--color-text-secondary`, at most `--layout-prose-max-width` wide) that say why and what to do, and one action button. No illustration and no icon.
 - **Placement:** left-aligned in the normal layout, where the content would be, `--space-12` below the page header on an otherwise empty page and `--space-6` inside a table area.
 - **Action:** a secondary button, or a primary button when it is the main action of the screen (for example "Import" in a workspace without snapshots).
-- **Filtered to nothing:** when filters hide every row, the title says so and the action is "Clear all".
+- **Filtered to nothing:** when filters hide every row, the title says so and the action is "Clear all". When the default filters keep nothing, because no hold of the snapshot is open, the action is "Show all holds", which sets the status to all holds.
 
 ### Coming soon screen
 

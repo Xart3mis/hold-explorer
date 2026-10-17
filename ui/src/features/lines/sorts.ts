@@ -7,7 +7,7 @@ import type { DataTableSort } from "../../components";
 type Direction = DataTableSort["direction"];
 
 /** A sortable column: the sort it asks for, and the direction that sort is in as it comes. */
-interface SortEntry<Sort> {
+export interface SortEntry<Sort> {
   column: string;
   sort: Sort;
   /** The direction of the sort without `reverse`. A first press of the header asks for it. */
@@ -90,23 +90,23 @@ export function holdTableSort(sort: HoldSort, reverse: boolean): DataTableSort |
   return tableSort(HOLD_SORTS, sort, reverse);
 }
 
-/** The direction a column's sort is in as it comes: the order a first press asks for. */
-function naturalOf(column: string): Direction {
-  const entry = [...LINE_SORTS, ...HOLD_SORTS].find((candidate) => candidate.column === column);
-  return entry?.natural ?? "ascending";
-}
-
 /**
- * The sort a pressed header asks for. A header that is not the sorted one asks for its column's
- * own order, whatever the table suggests: the most holds, the oldest age, the largest size first.
- * The sorted header, pressed again, turns its order round.
+ * The sort a pressed header of a table asks for, by that table's sorts (`LINE_SORTS` or
+ * `HOLD_SORTS`). A header that is not the sorted one asks for its column's own order, whatever the
+ * table suggests: the most holds, the oldest age, the largest size first. The sorted header,
+ * pressed again, turns its order round.
  */
-export function pressedSort(current: DataTableSort | undefined, column: string): DataTableSort {
+export function pressedSort<Sort>(
+  table: readonly SortEntry<Sort>[],
+  current: DataTableSort | undefined,
+  column: string,
+): DataTableSort {
   if (current?.column === column) {
     return {
       column,
       direction: current.direction === "ascending" ? "descending" : "ascending",
     };
   }
-  return { column, direction: naturalOf(column) };
+  const natural = table.find((entry) => entry.column === column)?.natural ?? "ascending";
+  return { column, direction: natural };
 }

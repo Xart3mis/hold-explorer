@@ -28,6 +28,7 @@ export {
   type DisclosureStatementProps,
 } from "./Disclosure/Disclosure";
 export { DropZone, type DropZoneProps } from "./DropZone/DropZone";
+export { useEnterChooses } from "./enterChooses";
 export { EmptyState, type EmptyStateProps } from "./EmptyState/EmptyState";
 export { ErrorState, type ErrorStateProps } from "./ErrorState/ErrorState";
 export { FactList, type Fact, type FactListProps } from "./FactList/FactList";

@@ -1,5 +1,7 @@
-import { ToggleButton, ToggleButtonGroup } from "react-aria-components";
+import { useRef } from "react";
+import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { cx } from "../cx";
+import { useEnterChooses } from "../enterChooses";
 import styles from "./ViewSwitch.module.css";
 
 export interface View {
@@ -25,29 +27,30 @@ export interface ViewSwitchProps {
  * Two to four views of one content, such as the lines and the holds of the same table: a row
  * that looks like a tab list, under the page header. It is a choice and not a set of tabs,
  * because every view shows the same place of the page in another way; there is no panel per view.
- * To assistive technology it is a radio group: one stop for Tab, and the arrow keys move to the
- * next or the previous view and choose it.
+ * It is a radio group: one stop for Tab, and the arrow keys move to the next or the previous view
+ * and choose it, as they do in any radio group; Space and Enter choose the view that has the focus.
  */
 export function ViewSwitch({ views, value, onChange, className, ...props }: ViewSwitchProps) {
+  const group = useRef<HTMLDivElement>(null);
+  useEnterChooses(group);
   return (
     <div className={cx(styles.row, className)}>
-      <ToggleButtonGroup
+      <RadioGroup
+        ref={group}
         aria-label={props["aria-label"]}
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={[value]}
-        onSelectionChange={(keys) => {
-          const [id] = keys;
-          if (typeof id === "string" && id !== value) onChange(id);
+        orientation="horizontal"
+        value={value}
+        onChange={(id) => {
+          if (id !== value) onChange(id);
         }}
         className={cx(styles.list)}
       >
         {views.map((view) => (
-          <ToggleButton key={view.id} id={view.id} className={cx(styles.view)}>
-            {view.label}
-          </ToggleButton>
+          <RadioField key={view.id} value={view.id} className={cx(styles.field)}>
+            <RadioButton className={cx(styles.view)}>{view.label}</RadioButton>
+          </RadioField>
         ))}
-      </ToggleButtonGroup>
+      </RadioGroup>
     </div>
   );
 }

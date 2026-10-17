@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import en from "../../locales/en.json";
 import { must, renderApp } from "../../test/app";
@@ -97,19 +97,52 @@ describe("the Overview leads to Lines", () => {
     // The tile of the holds and the one of the age have no screen behind them yet.
     expect(within(figures).getByText(text.openHolds).closest("button")).toBeNull();
     expect(within(figures).getByText(text.medianAge).closest("button")).toBeNull();
-    const first = must(tiles[0]);
-    first.focus();
+    // Tab from the title of the page walks the bar, the two tiles, and then every bar of each
+    // group after its switch; the figures without a screen are not stops.
+    const bars = [
+      ...within(screen.getByRole("list", { name: text.byDiscipline })).getAllByRole("button"),
+      ...within(screen.getByRole("list", { name: text.byHoldType })).getAllByRole("button"),
+    ];
+    const reached: Element[] = [];
+    screen.getByRole("heading", { level: 1, name: en.destinations.name.overview }).focus();
+    for (let presses = 0; presses < 40; presses += 1) {
+      await user.tab();
+      if (document.activeElement !== null) reached.push(document.activeElement);
+    }
+    const at = (element: Element) => reached.indexOf(element);
+    expect(at(must(tiles[0]))).toBeGreaterThan(-1);
+    expect(at(must(tiles[1]))).toBe(at(must(tiles[0])) + 1);
+    for (const bar of bars.slice(0, 13)) expect(at(bar)).toBeGreaterThan(at(must(tiles[1])));
+    expect(
+      reached.some(
+        (element) => figures.contains(element) && !tiles.includes(element as HTMLElement),
+      ),
+    ).toBe(false);
+
+    // Enter on a tile reached by Tab opens Lines.
+    screen.getByRole("heading", { level: 1, name: en.destinations.name.overview }).focus();
+    while (document.activeElement !== tiles[0]) await user.tab();
     await user.keyboard("{Enter}");
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/lines");
     });
-    router.navigate("/overview").catch(() => undefined);
-    const bars = await screen.findByRole("list", { name: text.byDiscipline });
-    const civil = within(bars).getByRole("button", { name: /^Civil / });
-    civil.focus();
+    // Space on a bar reached by Tab filters by it and opens Lines.
+    await act(() => router.navigate("/overview"));
+    const list = await screen.findByRole("list", { name: text.byDiscipline });
+    const civil = await within(list).findByRole("button", { name: /^Civil / });
+    for (let presses = 0; presses < 40 && document.activeElement !== civil; presses += 1) {
+      await user.tab();
+    }
+    expect(civil).toHaveFocus();
     await user.keyboard(" ");
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/lines");
     });
+    expect(
+      await within(await screen.findByRole("group", { name: en.filters.bar })).findByRole(
+        "button",
+        { name: "Discipline Civil" },
+      ),
+    ).toBeInTheDocument();
   });
 });

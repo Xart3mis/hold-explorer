@@ -1618,7 +1618,19 @@ describe("useSnapshotPages", () => {
 
   it("names the result its rows belong to: the same while the rows of before stand in, another with the first new page", async () => {
     const { read, waiting } = heldPages();
-    const { result, rerender } = tableWith(read);
+    // Every render of the screen, as the hook gave it: the key and the rows it was rendered with.
+    const seen: { key: string; rows: readonly string[] }[] = [];
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ sort }: { sort: string }) => {
+        const pages = useSnapshotPages({ name: "lines", params: [sort], read });
+        seen.push({ key: pages.resultKey, rows: pages.rows });
+        return pages;
+      },
+      { sort: "oldest" },
+      start,
+      () => start.open,
+    );
     await waitFor(() => {
       expect(waiting).toHaveLength(1);
     });
@@ -1648,10 +1660,7 @@ describe("useSnapshotPages", () => {
 
     // Another order: while its first page is on its way the rows of before stand in, and the key
     // still names them, at every render.
-    const seen: { key: string; rows: readonly string[] }[] = [];
-    const watch = setInterval(() => {
-      seen.push({ key: result.current.lines.resultKey, rows: result.current.lines.rows });
-    }, 2);
+    seen.length = 0;
     rerender({ sort: "newest" });
     await waitFor(() => {
       expect(waiting).toHaveLength(3);
@@ -1672,13 +1681,15 @@ describe("useSnapshotPages", () => {
     await waitFor(() => {
       expect(result.current.lines.rows).toEqual(["largest 2:0", "largest 2:1"]);
     });
-    clearInterval(watch);
     const largest = result.current.lines.resultKey;
     expect(largest).not.toBe(oldest);
     // The key changed in the same render as the rows, never before and never after them.
     for (const { key, rows } of seen) {
       expect(key).toBe(rows[0]?.startsWith("largest") === true ? largest : oldest);
     }
+    // Renders with the rows of before and with the new rows were both seen.
+    expect(seen.some(({ key }) => key === oldest)).toBe(true);
+    expect(seen.some(({ key }) => key === largest)).toBe(true);
 
     // Back to an order whose pages are kept: its key comes back with its rows.
     rerender({ sort: "oldest" });

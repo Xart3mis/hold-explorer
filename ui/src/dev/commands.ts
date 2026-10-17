@@ -30,7 +30,7 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
-import { devHolds, devLines } from "./lines";
+import { devHoldCount, devHolds, devLines } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
 
@@ -706,9 +706,15 @@ export function installDevCommands(state: DevState, theme: Theme): string {
         );
       }
       return later(120, () => {
-        // Each count is the filter with that one part replaced, as the command counts them.
+        // Each count is the filter with that one part replaced, as the command counts them. The
+        // states of Lines count the made-up holds their tables show, so the two agree.
+        const isLines = state.startsWith("lines-");
         const kept = (part: Partial<FilterSpec>) =>
-          selected === undefined ? 0 : devKept(selected, { ...spec, ...part });
+          selected === undefined
+            ? 0
+            : isLines
+              ? devHoldCount(selected, { ...spec, ...part }, state === "lines-matching-sizes")
+              : devKept(selected, { ...spec, ...part });
         const total = kept({});
         const bands = [0.08, 0.13, 0.22, 0.2, 0.37];
         const mismatch = Math.round(kept({ size_mismatch: null }) * 0.06);

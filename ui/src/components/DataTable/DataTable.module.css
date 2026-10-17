@@ -220,9 +220,19 @@
   position: relative;
 }
 
+/*
+ * The pinned column is placed on whole pixels while what scrolls beneath it may stand between two,
+ * so at its leading edge a hairline of the cells beneath could show. Its fill reaches one hairline
+ * past that edge, without a shadow's blur: a copy of the cell's box, moved a hairline to the start.
+ */
 .cell[data-pinned] {
   background-color: var(--row-fill);
+  box-shadow: calc(-1 * var(--border-width-thin)) 0 0 0 var(--row-fill);
   transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.column[data-pinned] {
+  box-shadow: calc(-1 * var(--border-width-thin)) 0 0 0 var(--color-surface-raised);
 }
 
 .cell[data-pinned]::after,

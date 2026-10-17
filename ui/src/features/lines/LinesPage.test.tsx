@@ -337,6 +337,7 @@ describe("Lines", () => {
   it("sends the sort of a pressed header, and its reverse on a second press", SLOW, async () => {
     const { user, lines, router } = renderLines();
     const table = await grid();
+    await within(table).findByRole("columnheader", { name: column.oldest });
     await user.click(within(table).getByRole("columnheader", { name: column.oldest }));
     await waitFor(() => {
       expect(lines).toHaveBeenLastCalledWith(
@@ -372,6 +373,7 @@ describe("Lines", () => {
   it("sends the sort of a pressed header of the holds", SLOW, async () => {
     const { user, holds } = renderLines({ path: "/lines?rows=holds" });
     const table = await grid(text.holdsTable);
+    await within(table).findByRole("columnheader", { name: column.name });
     await user.click(within(table).getByRole("columnheader", { name: column.name }));
     await waitFor(() => {
       expect(holds).toHaveBeenLastCalledWith(
@@ -388,7 +390,7 @@ describe("Lines", () => {
 
   it("sends the query of a preset that is chosen, and marks it", SLOW, async () => {
     const { user, lines, router } = renderLines();
-    await grid();
+    await screen.findByRole("radiogroup", { name: text.presets.label });
     const queries = {
       [text.presets.single]: { ...ALL, single_hold_only: true },
       [text.presets.easiest]: { ...ALL, sort: "Easiest" },
@@ -414,6 +416,23 @@ describe("Lines", () => {
     preset(text.presets.all).focus();
     await user.keyboard("{ArrowRight}");
     expect(preset(text.presets.single)).toHaveFocus();
+    expect(preset(text.presets.single)).toBeChecked();
+    // Its lines were read above and are kept: the page shows them under its address.
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?single=1");
+    });
+    // Sorted by a header, no preset is marked; Tab reaches the first, and Enter chooses it.
+    await user.click(within(await grid()).getByRole("columnheader", { name: column.line }));
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?sort=LineId&single=1");
+    });
+    for (const radio of within(presets()).getAllByRole("radio")) expect(radio).not.toBeChecked();
+    preset(text.presets.all).focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("");
+    });
+    expect(preset(text.presets.all)).toBeChecked();
   });
 
   it("sends a new filter, dims the rows of before, and replaces them", SLOW, async () => {
@@ -454,6 +473,45 @@ describe("Lines", () => {
     expect(tableBox()).not.toHaveAttribute("data-stale");
   });
 
+  it("shows no column and no preset that may not be there before the options of the snapshot are read", async () => {
+    const options = held<ReturnType<typeof filterOptions>>();
+    renderLines({ handlers: { filter_options: options.handler } });
+    const table = await grid();
+    // The rows may be there; the columns wait for what the snapshot lacks.
+    await waitFor(() => {
+      expect(options.waiting.length).toBeGreaterThan(0);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(tableBox()).toHaveAttribute("aria-busy", "true");
+    expect(within(table).queryByRole("columnheader", { name: column.modelSize })).toBeNull();
+    expect(within(table).queryByRole("rowheader", { name: lineId(0) })).toBeNull();
+    expect(screen.queryByRole("radio", { name: text.presets.mismatch })).toBeNull();
+    act(() => {
+      for (const waiting of options.waiting) {
+        waiting.resolve(filterOptions({ absent: ["ModelSize", "LdtSize", "StressCalc"] }));
+      }
+    });
+    await within(table).findByRole("rowheader", { name: lineId(0) });
+    expect(within(table).queryByRole("columnheader", { name: column.modelSize })).toBeNull();
+    expect(screen.queryByRole("radio", { name: text.presets.mismatch })).toBeNull();
+    expect(within(table).getByRole("columnheader", { name: column.oldest })).toBeInTheDocument();
+  });
+
+  it("shows no optional column when the options of the snapshot cannot be read", async () => {
+    renderLines({
+      handlers: {
+        filter_options: () => {
+          throw commandFailure("Io", "The workspace file could not be read.");
+        },
+      },
+    });
+    const table = await grid();
+    await within(table).findByRole("rowheader", { name: lineId(0) });
+    // Only what an import cannot be without: the line, the remark, the hold type.
+    expect(headers(table)).toEqual([column.line, column.holds, column.holdTypes, column.blockers]);
+    expect(screen.queryByRole("radio", { name: text.presets.mismatch })).toBeNull();
+  });
+
   it("leaves out the columns and the preset of what the snapshot lacks", async () => {
     renderLines({
       handlers: {
@@ -475,7 +533,7 @@ describe("Lines", () => {
     expect(
       within(presets())
         .getAllByRole("radio")
-        .map((radio) => radio.textContent),
+        .map((radio) => radio.closest("label")?.textContent),
     ).toEqual([text.presets.all, text.presets.single, text.presets.easiest, text.presets.oldest]);
   });
 
@@ -535,11 +593,21 @@ describe("Lines", () => {
       expect(preset(text.presets.all)).toBeChecked();
     });
 
-    it("says when the snapshot has no open hold at all", async () => {
-      renderLines({ lines: () => ({ total: 0, widest_line_id: 0, rows: [] }) });
-      expect(
-        await screen.findByRole("heading", { level: 2, name: text.noOpenTitle }),
-      ).toBeInTheDocument();
+    it("says when the snapshot has no open hold at all, and offers all holds", async () => {
+      const { user, lines } = renderLines({
+        lines: ({ spec }) =>
+          spec.status === "Open" ? { total: 0, widest_line_id: 0, rows: [] } : linePage(),
+      });
+      const title = await screen.findByRole("heading", { level: 2, name: text.noOpenTitle });
+      const empty = must(title.parentElement);
+      await user.click(within(empty).getByRole("button", { name: text.noOpenAction }));
+      await waitFor(() => {
+        expect(lines).toHaveBeenLastCalledWith(
+          expect.objectContaining({ spec: specWith({ status: "All" }) }),
+        );
+      });
+      expect(must(probe.filters).filters.status).toBe("All");
+      expect(await within(await grid()).findByRole("rowheader", { name: lineId(0) })).toBeVisible();
     });
   });
 
@@ -579,6 +647,101 @@ describe("Lines", () => {
         expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       });
       expect(lines.mock.calls.length).toBe(calls + 1);
+      expect(tableBox()).not.toHaveAttribute("data-stale");
+    },
+  );
+
+  it("leaves the table out after a first load failed, until it has something to show", async () => {
+    let fail = true;
+    const { user } = renderLines({
+      lines: () => {
+        if (fail) throw commandFailure("Io", "The workspace file could not be read.");
+        return linePage();
+      },
+    });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(text.errorLines);
+    expect(screen.queryByRole("grid")).not.toBeInTheDocument();
+    fail = false;
+    await user.click(within(alert).getByRole("button", { name: en.common.retry }));
+    expect(await within(await grid()).findByRole("rowheader", { name: lineId(0) })).toBeVisible();
+  });
+
+  it(
+    "keeps the lines on screen when a reading fails after a visit to the holds",
+    SLOW,
+    async () => {
+      let fail = false;
+      const { user } = renderLines({
+        lines: () => {
+          if (fail) throw commandFailure("Io", "The workspace file could not be read.");
+          return linePage();
+        },
+      });
+      await within(await grid()).findByRole("rowheader", { name: lineId(0) });
+      await user.click(screen.getByRole("radio", { name: text.modeHolds }));
+      await within(await grid(text.holdsTable)).findAllByRole("rowheader");
+      await user.click(screen.getByRole("radio", { name: text.modeLines }));
+      const table = await grid();
+      await within(table).findByRole("rowheader", { name: lineId(1) });
+
+      fail = true;
+      set(civil);
+      expect(await screen.findByRole("alert")).toHaveTextContent(text.errorLines);
+      // The lines that were on screen stay, dimmed: not the holds read before.
+      expect(screen.queryByRole("grid", { name: text.holdsTable })).not.toBeInTheDocument();
+      const lines = screen.getByRole("grid", { name: text.linesTable });
+      expect(within(lines).getByRole("rowheader", { name: lineId(1) })).toBeInTheDocument();
+      expect(within(lines).getByRole("columnheader", { name: column.disciplines })).toBeVisible();
+      expect(tableBox()).toHaveAttribute("data-stale");
+    },
+  );
+
+  it(
+    "shows the lines of before while the holds are on their way, never holds of an earlier filter",
+    SLOW,
+    async () => {
+      const later = held<ReturnType<typeof holdsView>>();
+      let first = true;
+      const { user } = renderLines({
+        lines: ({ spec }) =>
+          spec.fields.length === 0
+            ? linePage()
+            : { total: 1, widest_line_id: 12, rows: [lineRow("78B09-573-CW")] },
+        holds: () => {
+          if (first) {
+            first = false;
+            return holdsView();
+          }
+          return later.handler();
+        },
+      });
+      await within(await grid()).findByRole("rowheader", { name: lineId(0) });
+      await user.click(screen.getByRole("radio", { name: text.modeHolds }));
+      await within(await grid(text.holdsTable)).findByRole("rowheader", { name: lineId(2) });
+      await user.click(screen.getByRole("radio", { name: text.modeLines }));
+      await within(await grid()).findByRole("rowheader", { name: lineId(0) });
+      set(civil);
+      await within(await grid()).findByRole("rowheader", { name: "78B09-573-CW" });
+
+      await user.click(screen.getByRole("radio", { name: text.modeHolds }));
+      await waitFor(() => {
+        expect(later.waiting).toHaveLength(1);
+      });
+      // The lines of the filter in view stay, dimmed, and no hold of the filter of before shows.
+      const table = screen.getByRole("grid", { name: text.linesTable });
+      expect(within(table).getByRole("rowheader", { name: "78B09-573-CW" })).toBeInTheDocument();
+      expect(screen.queryByRole("grid", { name: text.holdsTable })).not.toBeInTheDocument();
+      expect(tableBox()).toHaveAttribute("data-stale");
+      act(() => {
+        later.waiting[0]?.resolve({
+          total: 1,
+          widest_line_id: 12,
+          rows: [holdRef(40, { line_id: "78B09-573-CW", discipline: "Civil" })],
+        });
+      });
+      const holds = await grid(text.holdsTable);
+      expect(within(holds).getByRole("rowheader", { name: "78B09-573-CW" })).toBeInTheDocument();
       expect(tableBox()).not.toHaveAttribute("data-stale");
     },
   );

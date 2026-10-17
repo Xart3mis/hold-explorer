@@ -78,23 +78,48 @@ describe("the sorts of the Lines destination", () => {
   });
 
   it("asks for a column's own order on a first press, and reverses it on the next", () => {
+    // The order is the one of the table the header belongs to.
+    expect(pressedSort(LINE_SORTS, undefined, "line")).toEqual({
+      column: "line",
+      direction: "ascending",
+    });
+    expect(pressedSort(HOLD_SORTS, undefined, "holds")).toEqual({
+      column: "holds",
+      direction: "ascending",
+    });
     // A descending column comes descending, whatever the table suggests.
-    expect(pressedSort(undefined, "holds")).toEqual({ column: "holds", direction: "descending" });
-    expect(pressedSort({ column: "line", direction: "ascending" }, "oldest")).toEqual({
+    expect(pressedSort(LINE_SORTS, undefined, "holds")).toEqual({
+      column: "holds",
+      direction: "descending",
+    });
+    expect(pressedSort(LINE_SORTS, { column: "line", direction: "ascending" }, "oldest")).toEqual({
       column: "oldest",
       direction: "descending",
     });
-    expect(pressedSort(undefined, "line")).toEqual({ column: "line", direction: "ascending" });
+    expect(pressedSort(LINE_SORTS, undefined, "line")).toEqual({
+      column: "line",
+      direction: "ascending",
+    });
     // The sorted column, pressed again, turns round, and again.
-    expect(pressedSort({ column: "oldest", direction: "descending" }, "oldest")).toEqual({
+    expect(
+      pressedSort(LINE_SORTS, { column: "oldest", direction: "descending" }, "oldest"),
+    ).toEqual({
       column: "oldest",
       direction: "ascending",
     });
-    expect(pressedSort({ column: "oldest", direction: "ascending" }, "oldest")).toEqual({
-      column: "oldest",
+    expect(pressedSort(LINE_SORTS, { column: "oldest", direction: "ascending" }, "oldest")).toEqual(
+      {
+        column: "oldest",
+        direction: "descending",
+      },
+    );
+    expect(pressedSort(HOLD_SORTS, undefined, "name")).toEqual({
+      column: "name",
+      direction: "ascending",
+    });
+    expect(pressedSort(HOLD_SORTS, undefined, "days")).toEqual({
+      column: "days",
       direction: "descending",
     });
-    expect(pressedSort(undefined, "name")).toEqual({ column: "name", direction: "ascending" });
-    expect(pressedSort(undefined, "days")).toEqual({ column: "days", direction: "descending" });
   });
 });

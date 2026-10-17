@@ -22,15 +22,31 @@ describe("ViewSwitch", () => {
   it("is one stop for Tab; the arrow keys move between the views and choose them", async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();
-    render(
+    const { rerender } = render(
       <ViewSwitch aria-label="Rows to show" views={views} value="lines" onChange={onChange} />,
     );
     await user.tab();
     expect(screen.getByRole("radio", { name: "Lines" })).toHaveFocus();
+    // The view reached is the view chosen.
     await user.keyboard("{ArrowRight}");
     expect(screen.getByRole("radio", { name: "Holds" })).toHaveFocus();
-    await user.keyboard("{Enter}");
     expect(onChange).toHaveBeenLastCalledWith("holds");
+    rerender(
+      <ViewSwitch aria-label="Rows to show" views={views} value="holds" onChange={onChange} />,
+    );
+    expect(screen.getByRole("radio", { name: "Holds" })).toBeChecked();
+    await user.keyboard("{ArrowLeft}");
+    expect(onChange).toHaveBeenLastCalledWith("lines");
+    rerender(
+      <ViewSwitch aria-label="Rows to show" views={views} value="lines" onChange={onChange} />,
+    );
+    // Enter on the view in view chooses nothing new.
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledTimes(2);
+    // Tab leaves the group: it is one stop.
+    await user.tab();
+    expect(screen.getByRole("radio", { name: "Holds" })).not.toHaveFocus();
+    expect(screen.getByRole("radio", { name: "Lines" })).not.toHaveFocus();
   });
 
   it("reports a view that is pressed, and nothing for the view in view", async () => {

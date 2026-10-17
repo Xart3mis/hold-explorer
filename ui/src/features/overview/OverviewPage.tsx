@@ -3,6 +3,7 @@ import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
+import { isSameDim } from "../../app/filters/dims";
 import { useFilters, withValues, type Filters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
@@ -192,7 +193,9 @@ interface GroupSectionProps {
 function isFilteredBy(filters: Filters, dim: Dim, group: Group): boolean {
   return filters.fields.some(
     (entry) =>
-      entry.dim === dim && !entry.negate && entry.values.some((value) => value.key === group.key),
+      isSameDim(entry.dim, dim) &&
+      !entry.negate &&
+      entry.values.some((value) => value.key === group.key),
   );
 }
 

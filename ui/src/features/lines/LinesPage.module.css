@@ -20,6 +20,11 @@
   align-items: center;
 }
 
+.presetField {
+  display: flex;
+  flex: none;
+}
+
 .preset {
   display: inline-flex;
   align-items: center;
@@ -68,4 +73,10 @@
 .table {
   flex: 1 1 0;
   min-block-size: 0;
+}
+
+/* Where the presets will be, as tall as they are, while it is not known which can be offered. */
+.presetsWaiting {
+  flex: none;
+  block-size: var(--density-control-height);
 }

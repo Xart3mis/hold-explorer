@@ -294,6 +294,14 @@ function kept(snapshot: SnapshotInfo, spec: FilterSpec, matchingSizes: boolean):
   );
 }
 
+/**
+ * How many holds of a snapshot a filter keeps on the development page, counted from the same
+ * holds the lines and the holds are read from.
+ */
+export function devHoldCount(snapshot: SnapshotInfo, spec: FilterSpec, matchingSizes = false) {
+  return kept(snapshot, spec, matchingSizes).length;
+}
+
 const widest = (ids: readonly string[]) => ids.reduce((most, id) => Math.max(most, id.length), 0);
 
 /** What `holds` answers on the development page. */
