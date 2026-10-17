@@ -65,6 +65,8 @@ export function OptionList({
         aria-label={props["aria-label"]}
         selectionMode={selectionMode}
         selectedKeys={selectedKeys}
+        // Escape belongs to what holds the list, a popover that closes on it, and never unticks.
+        escapeKeyBehavior="none"
         onSelectionChange={(chosen) => {
           onSelectionChange(
             chosen === "all" ? options.map((option) => option.key) : [...chosen].map(String),

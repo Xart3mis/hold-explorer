@@ -107,6 +107,26 @@ describe("OptionList", () => {
     expect(onSelectionChange).toHaveBeenLastCalledWith(["civil"]);
   });
 
+  it("unticks nothing on Escape, and lets the key go on to what holds the list", async () => {
+    const onSelectionChange = vi.fn();
+    // What the list lets through reaches the document.
+    const passed: string[] = [];
+    const listen = (event: KeyboardEvent) => {
+      passed.push(event.key);
+    };
+    document.addEventListener("keydown", listen);
+    const user = userEvent.setup();
+    render(<Held initial={["civil", "piping"]} onSelectionChange={onSelectionChange} />);
+    await user.tab();
+    expect(screen.getByRole("option", { name: "Civil" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("option", { name: "Civil" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("option", { name: "Piping" })).toHaveAttribute("aria-selected", "true");
+    expect(passed).toContain("Escape");
+    document.removeEventListener("keydown", listen);
+  });
+
   it("holds one value when the choice is single: another replaces it, and the same one clears it", async () => {
     const onSelectionChange = vi.fn();
     const user = userEvent.setup();

@@ -36,7 +36,7 @@ export interface DateRangeFieldsProps {
  * date, and a bound is removed when its field is emptied. While a field holds text that is not a
  * date, the bound of before stays in force, and the field says so once it is left. A range whose
  * first day is after its last is not sent: the field that was changed last says which day is on
- * the wrong side of the other.
+ * the wrong side of the other, or the other field does while the one changed last holds no day.
  */
 export function DateRangeFields({ kind }: DateRangeFieldsProps) {
   const { filters, update } = useFilters();
@@ -66,6 +66,11 @@ export function DateRangeFields({ kind }: DateRangeFieldsProps) {
     update((current) => ({ ...current, [kind]: days }));
   };
 
+  // Where a reversed range is said: at the field changed last, or, while that one holds no
+  // whole day and so asks for the bound of before, at the other one, whose day is out of order.
+  const other: Bound = changed === "from" ? "to" : "from";
+  const blamed: Bound = read(typed[changed]) === undefined ? other : changed;
+
   const field = (bound: Bound) => {
     const day = read(typed[bound]);
     const error =
@@ -73,7 +78,7 @@ export function DateRangeFields({ kind }: DateRangeFieldsProps) {
         ? left[bound]
           ? t("filters.picker.date.invalid")
           : undefined
-        : !reversed || changed !== bound
+        : !reversed || blamed !== bound
           ? undefined
           : bound === "from"
             ? t("filters.picker.date.fromAfterTo", { to: formatDate(now.to ?? "") })

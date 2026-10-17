@@ -58,6 +58,12 @@ export interface FilterChipProps {
    */
   isExpanded?: boolean;
   /**
+   * A popover the screen holds is open over the page, as the picker of the filter bar is. The
+   * page is hidden behind it then, so the tooltip of the X is off: a chip drawn meanwhile, by what
+   * is chosen in the popover, would otherwise describe a button that cannot take the focus yet.
+   */
+  isUnderPopover?: boolean;
+  /**
    * The filters cannot be changed for the moment. The chip takes no focus and no press and has
    * no remove button. Its X stays as a picture, so the chip keeps its width and nothing beside
    * it moves; the bar says why.
@@ -78,6 +84,7 @@ export function FilterChip({
   onPress,
   onRemove,
   isExpanded,
+  isUnderPopover = false,
   isDisabled = false,
   className,
 }: FilterChipProps) {
@@ -106,13 +113,13 @@ export function FilterChip({
           <Icon icon={X} />
         </span>
       ) : (
-        <Tooltip text={remove}>
+        <Tooltip text={remove} isDisabled={isUnderPopover}>
           {/*
             A plain button, on purpose. A button of the component library takes the press of
             whatever the chip is the trigger of, and the X would open the popover it stands
             beside. This one hears its own click and nothing else.
           */}
-          <Focusable>
+          <Focusable isDisabled={isUnderPopover}>
             <button
               type="button"
               aria-label={remove}

@@ -123,7 +123,7 @@
         "to": "To",
         "placeholder": "2026-10-01",
         "help": "Year, month, day",
-        "invalid": "Enter the date as year, month, day, for example 2026-10-01.",
+        "invalid": "This is not a date. Enter it as year, month, day, for example 2026-10-01.",
         "fromAfterTo": "This day is after the last day, {{to}}. Enter that day or an earlier one.",
         "toBeforeFrom": "This day is before the first day, {{from}}. Enter that day or a later one."
       },

@@ -31,8 +31,6 @@ interface Picker {
   from: string;
   /** Where the control that opened it was, from the top left corner of the bar, in pixels. */
   place: { left: number; top: number; width: number; height: number };
-  /** It was closed after the chip that opened it had gone: the focus goes to "Add filter". */
-  focusAdd: boolean;
 }
 
 const CLOSED: Picker = {
@@ -40,7 +38,6 @@ const CLOSED: Picker = {
   field: null,
   from: ADD,
   place: { left: 0, top: 0, width: 0, height: 0 },
-  focusAdd: false,
 };
 
 /**
@@ -70,10 +67,11 @@ export function FilterBar() {
   });
   const bar = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLSpanElement>(null);
-  const [held, setPicker] = useState(CLOSED);
+  const [picker, setPicker] = useState(CLOSED);
   // Nothing can be changed while an action runs, so the picker is closed for as long as it does.
-  const picker = isBusy && held.isOpen ? { ...held, isOpen: false } : held;
-  if (picker !== held) setPicker(picker);
+  if (isBusy && picker.isOpen) setPicker({ ...picker, isOpen: false });
+  /** Whether the picker was open when the bar was drawn last: its closing gives the focus back. */
+  const wasOpen = useRef(false);
 
   const chips = chipsOf(filters);
   const counted = options.isError ? undefined : options.data;
@@ -110,18 +108,32 @@ export function FilterBar() {
         width: at.width,
         height: at.height,
       },
-      focusAdd: false,
     });
   };
 
-  // A picker that closes gives the focus back to the control that had it. When that was a chip
-  // that has gone meanwhile, "Add filter" takes it, as it does when a chip is removed.
-  const { isOpen, focusAdd } = picker;
+  // A picker that closes gives the focus back to the chip of its field, which may have gone and
+  // come back as another element while it was open, or to "Add filter" when it was opened there
+  // or its chip is gone, as when a chip is removed. Closed because an action started, it gives
+  // the focus to the bar, since every control in it is disabled then.
+  const isOpen = picker.isOpen && !isBusy;
+  const { from } = picker;
   useEffect(() => {
-    if (!isOpen && focusAdd) {
-      bar.current?.querySelector<HTMLElement>("[data-part='add-filter-chip']")?.focus();
+    if (isOpen) {
+      wasOpen.current = true;
+      return;
     }
-  }, [isOpen, focusAdd]);
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const held = bar.current;
+    if (held === null) return;
+    if (isBusy) {
+      held.focus();
+      return;
+    }
+    const index = chips.findIndex((chip) => chip.id === from);
+    const pill = held.querySelectorAll("[data-part='filter-chip']")[index];
+    (pill?.querySelector<HTMLElement>("button") ?? addFilter())?.focus();
+  });
 
   /**
    * Removes a filter. The focus moves to the chip after it, or to "Add filter" when it was the
@@ -139,6 +151,8 @@ export function FilterBar() {
       ref={bar}
       role="group"
       aria-label={t("filters.bar")}
+      // It holds the focus while an action runs that closed its picker.
+      tabIndex={-1}
       data-part="filter-bar"
       className={styles.bar}
     >
@@ -162,6 +176,7 @@ export function FilterBar() {
               isNegated={chip.isNegated}
               isDisabled={isBusy}
               isExpanded={expanded === chip.id}
+              isUnderPopover={isOpen}
               onPress={() => {
                 const pills = bar.current?.querySelectorAll("[data-part='filter-chip']");
                 open(chip.field, chip.id, pills?.[index]);
@@ -254,18 +269,14 @@ export function FilterBar() {
       />
       <FilterPicker
         anchor={anchor}
-        isOpen={picker.isOpen}
+        isOpen={isOpen}
         field={picker.field}
         options={options}
         onChoose={(field) => {
           setPicker((current) => ({ ...current, field }));
         }}
         onClose={() => {
-          setPicker((current) => ({
-            ...current,
-            isOpen: false,
-            focusAdd: !fromChip && current.from !== ADD,
-          }));
+          setPicker((current) => ({ ...current, isOpen: false }));
         }}
       />
     </div>

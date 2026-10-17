@@ -8,7 +8,9 @@ import { AddFilterChip, FilterChip } from "./FilterChip";
 
 const removeDiscipline = en.filterChip.remove.replace("{{field}}", "Discipline");
 
-function setup(props: { isNegated?: boolean; isDisabled?: boolean } = {}) {
+function setup(
+  props: { isNegated?: boolean; isDisabled?: boolean; isUnderPopover?: boolean } = {},
+) {
   const onPress = vi.fn();
   const onRemove = vi.fn();
   const user = userEvent.setup();
@@ -83,6 +85,18 @@ describe("FilterChip", () => {
     await user.tab();
     expect(screen.getByRole("button", { name: removeDiscipline })).toHaveFocus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent(removeDiscipline);
+  });
+
+  it("has no tooltip on its remove button while a popover of the screen is open over it, and still removes", async () => {
+    const { onRemove, user } = setup({ isUnderPopover: true });
+    await user.tab();
+    await user.tab();
+    const remove = screen.getByRole("button", { name: removeDiscipline });
+    expect(remove).toHaveFocus();
+    // Keyboard focus shows a tooltip at once; there is none.
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await user.keyboard("{Delete}");
+    expect(onRemove).toHaveBeenCalledTimes(1);
   });
 
   it("when disabled, has no remove button, takes no focus, and neither opens nor is removed", async () => {

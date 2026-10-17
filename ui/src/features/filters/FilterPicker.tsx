@@ -121,7 +121,8 @@ function SizeMismatch({ options }: { options: Options }) {
             sizeMismatch: chosen === undefined ? null : chosen === "differ",
           }));
         }}
-        isLoading={facets !== undefined && options.isPlaceholderData}
+        // Read for the first time, or again; without counts that could not be read.
+        isLoading={!options.isError && (options.data === undefined || options.isPlaceholderData)}
         // The list always holds its two values.
         emptyText=""
       />

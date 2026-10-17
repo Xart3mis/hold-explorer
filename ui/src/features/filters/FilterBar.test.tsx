@@ -750,6 +750,59 @@ describe("FilterBar", () => {
     expect(chips(region)).toEqual(["Discipline Civil"]);
   });
 
+  it("stands the picker under the place its chip had when it opened, and keeps it there when the chip widens", async () => {
+    const { user } = renderBar();
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    const discipline = await within(region).findByRole("button", { name: "Discipline Civil" });
+    const pill = must(discipline.closest<HTMLElement>("[data-part='filter-chip']"), "the chip");
+    const rect = (left: number, top: number, width: number, height: number) =>
+      new DOMRect(left, top, width, height);
+    vi.spyOn(region, "getBoundingClientRect").mockReturnValue(rect(200, 100, 1000, 80));
+    const placed = vi.spyOn(pill, "getBoundingClientRect").mockReturnValue(rect(340, 112, 120, 24));
+
+    await user.click(discipline);
+    await screen.findByRole("dialog", {
+      name: text.picker.filterBy.replace("{{field}}", "Discipline"),
+    });
+    const anchor = must(
+      region.querySelector<HTMLElement>("[data-part='filter-picker-anchor']"),
+      "the anchor",
+    );
+    const at = { left: "140px", top: "12px", width: "120px", height: "24px" };
+    expect(anchor.style).toMatchObject(at);
+
+    // A second value widens the chip, and moves what comes after it; the anchor stays.
+    placed.mockReturnValue(rect(340, 112, 190, 24));
+    await user.click(await screen.findByRole("option", { name: "Piping" }));
+    await waitFor(() => {
+      expect(chips(region)).toEqual(["Discipline Civil, Piping"]);
+    });
+    expect(anchor.style).toMatchObject(at);
+  });
+
+  it("closes the picker when an action on the workspace starts, and gives the focus to the bar", async () => {
+    const select = held<WorkspaceOpen>();
+    const { user } = renderBar(undefined, { snapshot_select: select.handler });
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    await user.click(await within(region).findByRole("button", { name: "Discipline Civil" }));
+    await screen.findByRole("dialog");
+
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    // Every control of the bar is disabled now: the bar itself holds the focus, and says why.
+    await waitFor(() => {
+      expect(region).toHaveFocus();
+    });
+    expect(chip(region, "Discipline Civil")).toBeDisabled();
+    expect(within(region).getByRole("status")).toHaveTextContent(text.busySwitching);
+  });
+
   it("does not open the picker from the remove button of a chip", async () => {
     const { user } = renderBar();
     const region = await bar();

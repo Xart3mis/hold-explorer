@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { defaultFilters, useFilters, type Filters } from "../../app/filters/state";
 import { Page } from "../../app/shell/Page";
+import type { FilterOptions } from "../../bindings/FilterOptions";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { ValuePage } from "../../bindings/ValuePage";
 import en from "../../locales/en.json";
@@ -370,6 +371,34 @@ describe("the editor of a field of values", () => {
     expect(add).toHaveAttribute("aria-expanded", "false");
   });
 
+  it("gives the focus back to the chip of its field when that chip went and came back while it was open", async () => {
+    const { user } = renderBar();
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    await user.click(await within(region).findByRole("button", { name: "Discipline Civil" }));
+    await screen.findByRole("dialog", { name: filterBy("Discipline") });
+    await user.click(await screen.findByRole("option", { name: "Civil" }));
+    await waitFor(() => {
+      expect(chips(region)).toEqual([]);
+    });
+    await user.click(option("Process"));
+    await waitFor(() => {
+      expect(chips(region)).toEqual(["Discipline Process"]);
+    });
+    // A new chip, drawn while the page behind the picker is hidden from assistive technology.
+    const chip = within(region).getByRole("button", { name: "Discipline Process", hidden: true });
+    expect(chip).toHaveAttribute("aria-expanded", "true");
+    // The keyboard is on the ticked option: Escape closes the picker and unticks nothing.
+    expect(option("Process")).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    await closed();
+    await waitFor(() => {
+      expect(chip).toHaveFocus();
+    });
+    expect(chips(region)).toEqual(["Discipline Process"]);
+  });
+
   it("shows a ticked value the answer no longer lists first, with the count 0, so it can be unticked", async () => {
     const { user } = renderBar();
     const region = await bar();
@@ -591,9 +620,9 @@ describe("the other editors", () => {
     ]);
     expect(count("0 to 13 days")).toBe("412");
     expect(count("90 days or more")).toBe("1,886");
-    // Without a field to type in, the list has the focus.
+    // Without a field to type in, the list has the focus, on its first band.
     await waitFor(() => {
-      expect(list).toContainElement(document.activeElement as HTMLElement);
+      expect(option("0 to 13 days")).toHaveFocus();
     });
 
     await user.click(option("90 days or more"));
@@ -732,6 +761,33 @@ describe("the other editors", () => {
     expect(now().spec).toEqual(spec({ created: { from: null, to: "2026-09-30" } }));
   });
 
+  it("says the range is reversed at the other field while the field changed last holds no whole day", async () => {
+    const { user } = renderBar();
+    const region = await bar();
+    set({ created: { from: "2026-09-01", to: "2026-09-30" } });
+    await user.click(await within(region).findByRole("button", { name: /^Creation date/ }));
+    const dialog = await screen.findByRole("dialog", { name: filterBy("Creation date") });
+    const from = within(dialog).getByRole("textbox", { name: picker.date.from });
+    const to = within(dialog).getByRole("textbox", { name: picker.date.to });
+
+    await user.clear(from);
+    await user.type(from, "2026-10-05");
+    await waitFor(() => {
+      expect(from).toBeInvalid();
+    });
+    // To is typed over: while it holds no whole day, its bound of before is the one in force.
+    await user.tripleClick(to);
+    await user.keyboard("2026-10-");
+    expect(to).toHaveValue("2026-10-");
+    expect(to).toBeValid();
+    expect(from).toBeInvalid();
+    expect(from).toHaveAccessibleDescription(
+      picker.date.fromAfterTo.replace("{{to}}", formatDate("2026-09-30")),
+    );
+    // From was emptied on the way and that was sent; nothing reversed was.
+    expect(now().spec).toEqual(spec({ created: { from: null, to: "2026-09-30" } }));
+  });
+
   it("says that a date cannot be read once the field is left, sends nothing for it, and keeps the bound of before", async () => {
     const { user } = renderBar();
     const region = await bar();
@@ -781,6 +837,28 @@ describe("the other editors", () => {
       expect(chips(region)).toEqual([]);
     });
     expect(now().spec).toEqual(openHoldsFilter());
+  });
+
+  it("shows the sizes as being read until the counts are there for the first time", async () => {
+    const first = held<FilterOptions>();
+    const { user } = renderBar(undefined, { filter_options: first.handler });
+    const region = await screen.findByRole("group", { name: text.bar });
+    set({ sizeMismatch: true });
+    await user.click(
+      await within(region).findByRole("button", { name: "Model and LDT sizes differ" }),
+    );
+    const list = await screen.findByRole("listbox", { name: "Model and LDT sizes" });
+    expect(list).toHaveAttribute("aria-busy", "true");
+    expect(count(picker.size.differ)).toBeNull();
+
+    await act(async () => {
+      for (const waiting of first.waiting) waiting.resolve(filterOptions());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(count(picker.size.differ)).toBe("318");
+    });
+    expect(list).not.toHaveAttribute("aria-busy");
   });
 
   it("applies the text on Enter, not at every key, and removes the filter when the field is emptied", async () => {
