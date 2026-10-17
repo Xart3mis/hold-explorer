@@ -87,7 +87,7 @@ export const DEV_STATES = [
   "lines-loading",
   // The detail panel: every state answers a line and a hold from the same made-up holds. Open a
   // line or a hold by its address, and a line that is in no snapshot the same way:
-  //   dev.html?state=open#/lines?line=78B01-500-00001-FW-001
+  //   dev.html?state=open#/lines?line=78B02-501-00002-PL-002
   //   dev.html?state=open#/lines?rows=holds&hold=3
   //   dev.html?state=open#/lines?line=78B99-000-00000-XX-000
   // These add a newest snapshot that is limited (no released column, no hold ID), answers that
