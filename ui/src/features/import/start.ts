@@ -42,6 +42,17 @@ type Opener = (request: ImportRequest) => void;
 
 let opener: Opener | null = null;
 
+/** How many imports were started since the app was loaded. */
+let started = 0;
+
+/**
+ * How many imports were started since the app was loaded. A cancel compares it with what it was
+ * when the cancel was pressed: an import started since then is not the one it was pressed for.
+ */
+export function startedImports(): number {
+  return started;
+}
+
 /**
  * Tells `startImport` how the import page is opened. The shell calls it with a function that
  * navigates; it returns the function that takes the connection back.
@@ -67,6 +78,7 @@ export async function startImport(path?: string, others = 0): Promise<void> {
   }
   const open = opener;
   if (path !== undefined) {
+    started += 1;
     open({ path, others });
     return;
   }
@@ -77,7 +89,10 @@ export async function startImport(path?: string, others = 0): Promise<void> {
     open({ others: 0, error: { ...asCommandError(error), kind: "Dialog" } });
     return;
   }
-  if (chosen !== null) open({ path: chosen, others: 0 });
+  if (chosen !== null) {
+    started += 1;
+    open({ path: chosen, others: 0 });
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

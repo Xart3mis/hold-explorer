@@ -76,6 +76,29 @@ describe("the sheet page", () => {
     }
   });
 
+  it("while the import is cancelled, shows the spinner on Cancel alone and keeps the sheets inert", async () => {
+    const { user } = openFlow("/import/sheet", {
+      draft: workbook(),
+      handlers: { import_cancel: () => new Promise<null>(() => undefined) },
+    });
+    const main = await pageTitled(text.title);
+    const cancel = within(main).getByRole("button", { name: en.common.cancel });
+    await user.click(cancel);
+    await waitFor(() => {
+      expect(cancel.querySelector('[data-part="spinner"]')).not.toBeNull();
+    });
+    const others = [
+      within(main).getByRole("button", { name: use("info") }),
+      within(main).getByRole("button", { name: use("Sheet3") }),
+      within(main).getByRole("button", { name: text.keep.replace("{{sheet}}", "data") }),
+    ];
+    for (const other of others) {
+      expect(other).toHaveAttribute("data-inert");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(other.querySelector('[data-part="spinner"]')).toBeNull();
+    }
+  });
+
   it("names the step in the breadcrumb, under Import", async () => {
     openFlow("/import/sheet", { draft: workbook() });
     await pageTitled(text.title);

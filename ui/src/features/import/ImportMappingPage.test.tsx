@@ -310,6 +310,34 @@ describe("the mapping page", () => {
       expect(other).not.toBeDisabled();
       expect(other.querySelector('[data-part="spinner"]')).toBeNull();
     }
+    // The selects of the fields wait as well: they keep their look and do not open.
+    const select = within(main).getByRole("button", { name: lineId });
+    expect(select).toHaveAttribute("data-inert");
+    expect(select).toHaveAttribute("aria-busy", "true");
+    expect(select).not.toBeDisabled();
+  });
+
+  it("while the import is cancelled, shows the spinner on Cancel alone and keeps the other buttons inert", async () => {
+    const { user } = openFlow("/import/mapping", {
+      draft: exportDraft(),
+      handlers: { import_cancel: () => new Promise<null>(() => undefined) },
+    });
+    const main = await mapping();
+    const cancel = within(main).getByRole("button", { name: en.common.cancel });
+    await user.click(cancel);
+    await waitFor(() => {
+      expect(cancel.querySelector('[data-part="spinner"]')).not.toBeNull();
+    });
+    const others = [
+      within(main).getByRole("button", { name: text.continue }),
+      within(main).getByRole("button", { name: en.import.chooseSheet }),
+      within(main).getByRole("button", { name: text.reset }),
+    ];
+    for (const other of others) {
+      expect(other).toHaveAttribute("data-inert");
+      expect(other).toHaveAttribute("aria-busy", "true");
+      expect(other.querySelector('[data-part="spinner"]')).toBeNull();
+    }
   });
 
   it("offers another sheet only for a workbook that has several", async () => {

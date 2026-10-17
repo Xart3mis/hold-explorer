@@ -47,6 +47,12 @@ export interface SelectProps {
   isRequired?: boolean;
   /** Shows the spinner in place of the chevron while the options are read. */
   isPending?: boolean;
+  /**
+   * While true the select waits for an action that another control started and that a choice
+   * here would conflict with. It keeps its look, its chevron, and its place in the Tab order,
+   * does not open by pointer or key, and is announced as busy. It shows no spinner.
+   */
+  isInert?: boolean;
   /** The name of the value in a form. */
   name?: string;
   className?: string | undefined;
@@ -69,9 +75,11 @@ export function Select({
   isDisabled = false,
   isRequired = false,
   isPending = false,
+  isInert = false,
   name,
   className,
 }: SelectProps) {
+  const inert = isInert && !isDisabled;
   const invalid = errorMessage !== undefined && errorMessage !== "";
   const offset = lengthToken("--space-1");
   // Said to assistive technology after the helper line or after the error, whichever shows.
@@ -98,7 +106,14 @@ export function Select({
       {({ isOpen }) => (
         <>
           <Label className={cx(styles.label)}>{label}</Label>
-          <RacButton className={cx(styles.trigger)}>
+          <RacButton
+            // The component library's pending button is what an inert trigger needs: it keeps the
+            // focus and its look, and no press or key reaches it.
+            isPending={inert}
+            data-inert={inert ? "" : undefined}
+            className={cx(styles.trigger)}
+            render={(domProps) => <button {...domProps} aria-busy={inert ? "true" : undefined} />}
+          >
             <SelectValue className={cx(styles.value)}>
               {({ selectedText, isPlaceholder, defaultChildren }) =>
                 isPlaceholder ? defaultChildren : selectedText

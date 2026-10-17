@@ -62,8 +62,6 @@ export const keys = {
    * they are kept here for the session so that every data screen shows the same ones.
    */
   workspaceFilters: (workspaceId: string) => ["filters", workspaceId] as const,
-  /** Every reading of a file for import. */
-  importOpens: ["import", "open"] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

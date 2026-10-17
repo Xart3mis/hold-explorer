@@ -746,6 +746,7 @@ Plain and rectangular. A button names its action with a verb.
 - **List:** a menu on `--color-surface-overlay` with a `--border-width-thin` border in `--color-border-default`, corner `--radius-md`, `--shadow-overlay`, padding `--space-1`, at `--z-dropdown`. It opens as a menu does: it fades in and moves `--space-1` toward its place over `--duration-base`, and leaves by fading over `--duration-fast`, without moving.
 - **Option:** height `--density-row-height`, horizontal padding `--space-2`, corner `--radius-sm`, text `--text-body`. Highlighted by pointer or arrow keys: fill `--color-surface-overlay-hover`. Chosen: text in `--font-weight-medium` with a check icon in `--color-accent-text` at the trailing edge. Disabled: `--color-text-disabled`.
 - **Behavior:** a listbox, not the system control, so it looks the same on Windows and Linux. Arrow keys move, Enter chooses, Esc closes, typing jumps to a match.
+- **Waiting for another control:** while an action that a choice here would conflict with runs, the select is inert, as a button is: it keeps its fill, border, value, chevron, and place in the Tab order, takes no hover border, does not open by pointer or by key, and has `aria-busy`. It shows no spinner; the control that started the action has it. To assistive technology it is announced as unavailable and busy (`aria-disabled` and `aria-busy`).
 
 ### Menu
 

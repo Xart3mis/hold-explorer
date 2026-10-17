@@ -245,7 +245,7 @@ export function ImportMappingPage() {
           selectedKey={column === undefined ? (isRequired ? null : NONE) : String(column)}
           placeholder={t("import.mapping.placeholder")}
           isRequired={isRequired}
-          isDisabled={review.isPending}
+          isInert={busy}
           onSelectionChange={(id) => {
             assign(field, id);
           }}

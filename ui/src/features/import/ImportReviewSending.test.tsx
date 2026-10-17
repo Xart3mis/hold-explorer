@@ -9,6 +9,7 @@ import type { ImportDone } from "../../bindings/ImportDone";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import en from "../../locales/en.json";
+import { must } from "../../test/app";
 import { otherWorkspace } from "../../test/fixtures";
 import { choose } from "../../test/flow";
 import {
@@ -194,6 +195,8 @@ describe("a date or a time that is typed and not left", () => {
         });
       });
       expect(within(main).getByText("Tuesday, 20 October 2026")).toBeVisible();
+      // The page says why the press sent nothing.
+      expect(within(main).getByText(text.changedTitle)).toBeVisible();
 
       // Once the check has answered, the next press sends the date that is shown.
       expect(await press(user, main, commit)).toMatchObject({
@@ -222,6 +225,7 @@ describe("a date or a time that is typed and not left", () => {
           takenAt: "2026-10-20T08:00:00",
         });
       });
+      expect(within(main).getByText(text.changedTitle)).toBeVisible();
       expect(await press(user, main, commit)).toMatchObject({ taken_at: "2026-10-20T08:00:00" });
     },
   );
@@ -243,6 +247,7 @@ describe("a date or a time that is typed and not left", () => {
         takenAt: "2026-10-14T09:45:00",
       });
     });
+    expect(within(main).getByText(text.changedTitle)).toBeVisible();
     expect(await press(user, main, commit)).toMatchObject({
       taken_at: "2026-10-14T09:45:00",
       date_edited: true,
@@ -268,6 +273,8 @@ describe("a date or a time that is typed and not left", () => {
         expect(importButton(main)).toBeDisabled();
       });
       expect(within(main).getByText(text.blocked.date)).toBeVisible();
+      // The field says what is wrong; the choices did not change into anything that can be sent.
+      expect(within(main).queryByText(text.changedTitle)).not.toBeInTheDocument();
     },
   );
 
@@ -415,6 +422,9 @@ describe("a choice that changes in the moment Import is pressed", () => {
   async function saysWhy(main: HTMLElement) {
     expect(await within(main).findByText(changedTitle)).toBeVisible();
     expect(within(main).getByText(text.changedText)).toBeVisible();
+    // It is also said in the region beside Import that is always on the page, so it is announced.
+    const status = must(main.querySelector('[data-part="import-status"]'));
+    expect(status).toHaveTextContent(text.changedSaid);
   }
 
   it("sends nothing for another time, checks the workspace again, and says why", SLOW, async () => {
@@ -480,6 +490,15 @@ describe("a choice that changes in the moment Import is pressed", () => {
     expect(commit).not.toHaveBeenCalled();
     // The page now shows the choice to replace, and the next press sends it.
     expect(await press(user, main, commit)).toMatchObject({ replace: sameDaySnapshot.id });
+  });
+
+  it("sends the commit when a confirmation that is not asked for changes", SLOW, async () => {
+    const { main, commit } = await start(review());
+    changeAndPress(main, { confirmed: true });
+    await waitFor(() => {
+      expect(commit).toHaveBeenCalledTimes(1);
+    });
+    expect(within(main).queryByText(changedTitle)).not.toBeInTheDocument();
   });
 
   it("sends the commit as it is when nothing changed", SLOW, async () => {

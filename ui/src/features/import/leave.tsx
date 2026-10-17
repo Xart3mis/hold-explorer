@@ -6,6 +6,7 @@ import { keys } from "../../api/keys";
 import { IMPORT_PATH } from "../../app/destinations";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import { clearImport } from "./draft";
+import { startedImports } from "./start";
 
 /** Whether an address belongs to the import flow. */
 function inFlow(pathname: string): boolean {
@@ -37,22 +38,25 @@ export interface Leave {
  *
  * The answer may come after the user has left the import by another way. The draft is forgotten
  * all the same, and the user stays where they went: only a page of the flow is left for them.
- * It may also come after another file was opened, or while one is being read. The cancel was not
- * for that file: the Rust side keeps its draft, and the answer is ignored here.
+ * It may also come after another import was started, whether its file is still being read or
+ * already open. The cancel was not for that file: the Rust side keeps its draft, and the answer
+ * is ignored here.
  */
 export function useLeaveImport() {
   const client = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
     mutationFn: async (leave: Leave) => {
+      const imports = startedImports();
       await api.importCancel(leave.file);
-      return leave;
+      return { ...leave, imports };
     },
-    onSuccess: ({ to, file }) => {
+    onSuccess: ({ to, file, imports }) => {
+      // Another import was started while the cancel was on its way: the answer is not for it.
+      if (startedImports() !== imports) return;
       if (file !== null) {
         const open = client.getQueryData<ImportDraft>(keys.importDraft);
         if (open !== undefined && open.file.content_hash !== file) return;
-        if (client.isFetching({ queryKey: keys.importOpens }) > 0) return;
       }
       clearImport(client);
       if (onFlowPage) void navigate(to);

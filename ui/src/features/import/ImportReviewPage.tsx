@@ -178,9 +178,8 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
   const commit = () => {
     // A date or a time can be typed and Import activated without the field being left, as
     // some assistive tools do it. What is typed is then taken as leaving the field takes it,
-    // and nothing is sent: the workspace has not been asked about that date. Import is pressed
-    // again once the check has answered and the button stands for what is on screen.
-    if (dateFields.current?.commitTyped() === true) return;
+    // and goes through the comparison below like any other choice.
+    dateFields.current?.commitTyped();
     if (reasons.length > 0 || date.moment === null || target.id === null) return;
     // A press can also leave a field or change a choice in the same moment, before the page is
     // rendered again. So what was chosen is read as it is now, and compared with what the page
@@ -189,11 +188,14 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
     // Import has to be pressed again.
     const now = client.getQueryData<ImportChoices>(keys.importChoices) ?? choices;
     const nowMoment = readDate(review, now).moment;
+    // A date that cannot be read is said by its field, and there is nothing to check.
+    if (nowMoment === null) return;
     const nowTarget = readTarget(review, now).id;
     const nowReplace = sameDay.find((snapshot) => snapshot.id === now.replace)?.id ?? null;
     if (
       nowMoment !== date.moment ||
-      now.confirmed !== choices.confirmed ||
+      // A confirmation counts only where one is asked for.
+      (mustConfirm && now.confirmed !== choices.confirmed) ||
       nowTarget !== target.id ||
       nowReplace !== (replaced?.id ?? null)
     ) {
@@ -462,14 +464,21 @@ function Reviewed({ draft, review, from, choices, choose }: ReviewedProps) {
         <div id={statusId} role="status" data-part="import-status">
           {committing ? (
             <VisuallyHidden>{progress}</VisuallyHidden>
-          ) : reasons.length === 0 ? null : (
-            <ul className={styles.reasons}>
-              {reasons.map((reason) => (
-                <li key={reason} className={styles.text}>
-                  {reason}
-                </li>
-              ))}
-            </ul>
+          ) : (
+            <>
+              {/* Why the last press sent nothing, said here as well: this region is always on
+                the page, so a change of what it holds is announced. The notice shows it. */}
+              {changed ? <VisuallyHidden>{t("import.review.changedSaid")}</VisuallyHidden> : null}
+              {reasons.length === 0 ? null : (
+                <ul className={styles.reasons}>
+                  {reasons.map((reason) => (
+                    <li key={reason} className={styles.text}>
+                      {reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </div>
         {/*
