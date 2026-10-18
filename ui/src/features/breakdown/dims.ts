@@ -26,6 +26,12 @@ const OFFERED: readonly (readonly [NamedDim, Field])[] = [
 /** What the page groups by when its address names nothing it offers. */
 export const DEFAULT_DIM: Dim = "Discipline";
 
+/** The rows of the matrix when its address names nothing it offers. */
+export const DEFAULT_ROWS: Dim = "Discipline";
+
+/** The columns of the matrix when its address names nothing it offers. */
+export const DEFAULT_COLS: Dim = "HoldType";
+
 /**
  * The dimensions the page offers for a snapshot: those of the export whose field the snapshot has
  * a value in (`absent` lists those it has none in), then the extra columns of its export.

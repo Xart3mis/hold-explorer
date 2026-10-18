@@ -1,10 +1,12 @@
 import { Table2 } from "lucide-react";
+import { useId, useMemo, useRef, type SyntheticEvent } from "react";
 import { ToggleButton } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { DataTable, textChars, type DataTableColumn } from "../DataTable/DataTable";
 import { Icon } from "../Icon/Icon";
 import styles from "./ChartTable.module.css";
+import { ChartTooltip, useChartTooltip } from "./ChartTooltip";
 
 /** Which of its two forms a chart shows. */
 export type ChartView = "chart" | "table";
@@ -45,6 +47,20 @@ const TEXT_MOST = 48;
 const TABLE_ROWS = 12;
 
 /**
+ * The most characters of a header a column makes room for. The headers of a table view are
+ * values of the data, such as thirty long remarks; a longer one is cut at the end, and shows
+ * whole in a tooltip.
+ */
+const HEADER_MOST = 24;
+
+/** The column of a header an event happened in, by its id; `null` outside a header. */
+function headerOf(target: EventTarget | null): string | null {
+  const header =
+    target instanceof Element ? target.closest<HTMLElement>("[role='columnheader']") : null;
+  return header?.dataset.column ?? null;
+}
+
+/**
  * The table view of a chart: the same numbers, formatted the same, in a read-only table. Every
  * chart builds its rows from the data it draws, so the two cannot differ.
  */
@@ -57,6 +73,26 @@ export function ChartTable({
   className,
   ...props
 }: ChartTableProps) {
+  const area = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
+  const tip = useChartTooltip<string>();
+  // The headers that are cut, by column id, with their whole text.
+  const cut = useMemo(
+    () =>
+      new Map(
+        columns
+          .filter((column) => textChars(column.header) > HEADER_MOST)
+          .map((column) => [column.id, column.header]),
+      ),
+    [columns],
+  );
+  const shown = tip.active === null ? undefined : cut.get(tip.active);
+  const onHeader = (event: SyntheticEvent, show: (id: string) => void) => {
+    const id = headerOf(event.target);
+    if (id !== null && cut.has(id)) show(id);
+    else if (event.type === "focus") tip.blur();
+  };
+
   // The rows are all here, so each column is declared from the longest text it holds.
   const tableColumns: DataTableColumn<ChartTableRow>[] = columns.map((column, index) => {
     const longest = rows.reduce(
@@ -68,6 +104,7 @@ export function ChartTable({
       header: column.header,
       kind: column.isNumber === true ? "number" : "text",
       isRowHeader: column.isRowHeader === true,
+      headerChars: HEADER_MOST,
       size:
         column.isNumber === true
           ? { chars: Math.max(1, Math.ceil(longest)) }
@@ -76,16 +113,43 @@ export function ChartTable({
     };
   });
   return (
-    <DataTable
-      aria-label={props["aria-label"]}
-      columns={tableColumns}
-      rows={rows}
-      rowKey={(row) => row.key}
-      height={{ maxRows }}
-      isLoading={isLoading === true}
-      isStale={isStale === true}
-      className={className}
-    />
+    <div
+      ref={area}
+      className={styles.area}
+      onFocus={(event) => {
+        onHeader(event, tip.focus);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) tip.blur();
+      }}
+      onPointerOver={(event) => {
+        onHeader(event, tip.hover);
+      }}
+      onPointerLeave={tip.leave}
+    >
+      <DataTable
+        aria-label={props["aria-label"]}
+        columns={tableColumns}
+        rows={rows}
+        rowKey={(row) => row.key}
+        height={{ maxRows }}
+        isLoading={isLoading === true}
+        isStale={isStale === true}
+        className={className}
+      />
+      <ChartTooltip
+        id={tooltipId}
+        anchor={
+          shown === undefined || tip.active === null
+            ? null
+            : () =>
+                area.current?.querySelector(
+                  `[role='columnheader'][data-column='${CSS.escape(tip.active ?? "")}']`,
+                ) ?? null
+        }
+        rows={shown === undefined ? [] : [{ label: t("charts.column"), value: shown }]}
+      />
+    </div>
   );
 }
 

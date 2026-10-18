@@ -1,9 +1,10 @@
-// What the development page answers for the `lines`, `holds`, `breakdown`, and `group_detail` commands: holds made up by a
+// What the development page answers for the `lines`, `holds`, `breakdown`, `group_detail`, and `matrix` commands: holds made up by a
 // seeded generator, the same at every start, filtered, grouped into lines, sorted, and cut into
 // pages as the commands do it, closely enough to see the Lines destination work. For development
 // only; see ui/src/dev/app.tsx.
 import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { FoldedMatrix } from "../bindings/FoldedMatrix";
 import type { Group } from "../bindings/Group";
 import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
@@ -625,5 +626,59 @@ export function devGroupDetail(
       widest_line_id: widest(lines.map((line) => line.line_id)),
       rows: lines.slice(0, PAGE),
     },
+  };
+}
+
+/**
+ * What `matrix` answers on the development page: the `side` largest values of each dimension,
+ * the rest folded into one Other row and one Other column, as the core folds them.
+ */
+export function devMatrix(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  rowDim: Dim,
+  colDim: Dim,
+  side = 30,
+): FoldedMatrix {
+  const fold = (dim: Dim) => {
+    const groups = groupsOf(snapshot, spec, dim, false).map(({ group }) => group);
+    const keptGroups = groups.slice(0, side);
+    const index = new Map(keptGroups.map((group, at) => [group.key, at]));
+    return { kept: keptGroups, index, folded: groups.length - keptGroups.length };
+  };
+  const rows = fold(rowDim);
+  const cols = fold(colDim);
+  const rowCount = rows.kept.length + (rows.folded > 0 ? 1 : 0);
+  const colCount = cols.kept.length + (cols.folded > 0 ? 1 : 0);
+  const cells = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => 0));
+  const other = {
+    row: { holds: 0, lines: new Set<string>() },
+    col: { holds: 0, lines: new Set<string>() },
+  };
+  for (const held of kept(snapshot, spec, false)) {
+    const r = rows.index.get(valueOf(held, rowDim)) ?? rows.kept.length;
+    const c = cols.index.get(valueOf(held, colDim)) ?? cols.kept.length;
+    const line = cells[r];
+    if (line !== undefined) line[c] = (line[c] ?? 0) + 1;
+    if (r === rows.kept.length) {
+      other.row.holds += 1;
+      other.row.lines.add(held.row.hold.line_id);
+    }
+    if (c === cols.kept.length) {
+      other.col.holds += 1;
+      other.col.lines.add(held.row.hold.line_id);
+    }
+  }
+  const otherGroup = (folded: number, sum: { holds: number; lines: Set<string> }): Group | null =>
+    folded > 0 ? { key: "", label: "", holds: sum.holds, lines: sum.lines.size } : null;
+  return {
+    rows: rows.kept,
+    cols: cols.kept,
+    other_row: otherGroup(rows.folded, other.row),
+    other_col: otherGroup(cols.folded, other.col),
+    cells,
+    max_cell: Math.max(0, ...cells.flat()),
+    folded_rows: rows.folded,
+    folded_cols: cols.folded,
   };
 }

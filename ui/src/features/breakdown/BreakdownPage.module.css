@@ -23,6 +23,35 @@
   inline-size: var(--size-menu-min-width);
 }
 
+/* The table view toggle of the matrix, at the trailing edge of the row of its selects. */
+.trailing {
+  margin-inline-start: auto;
+}
+
+/* What a press on a cell does, and what the command folded into Other: one sentence a line. */
+.notes {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.notes p {
+  margin: 0;
+}
+
+/*
+ * The heatmap takes the height that is left and scrolls inside it, so its column labels stay in
+ * view over many rows; its table view keeps its own height.
+ */
+.matrix {
+  flex: 0 1 auto;
+}
+
 .table {
   display: flex;
   flex: 1 1 0;

@@ -23,6 +23,8 @@ export interface ChartTooltipProps {
    */
   anchor: (() => Element | null) | null;
   rows: readonly ChartTooltipRow[];
+  /** A last line under the facts, across the tooltip: what a press on the mark does. */
+  note?: string | undefined;
 }
 
 interface Place {
@@ -54,7 +56,7 @@ function placeBeside(mark: Element, tip: Element): Place | null {
  * over the mark. It takes no pointer and no focus. The chart decides when it shows, with
  * `useChartTooltip`.
  */
-export function ChartTooltip({ id, anchor, rows }: ChartTooltipProps) {
+export function ChartTooltip({ id, anchor, rows, note }: ChartTooltipProps) {
   const own = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<Place | null>(null);
   // Counts the scrolls and resizes while it shows: the mark moves in the window, so it does too.
@@ -87,7 +89,7 @@ export function ChartTooltip({ id, anchor, rows }: ChartTooltipProps) {
         ? previous
         : next,
     );
-  }, [anchor, rows, moves]);
+  }, [anchor, rows, note, moves]);
 
   if (!anchor) return null;
   return createPortal(
@@ -115,6 +117,7 @@ export function ChartTooltip({ id, anchor, rows }: ChartTooltipProps) {
           </span>
         </div>
       ))}
+      {note === undefined ? null : <div className={styles.note}>{note}</div>}
     </div>,
     document.body,
   );

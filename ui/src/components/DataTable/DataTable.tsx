@@ -86,6 +86,12 @@ interface ColumnBase<Item> {
   isRowHeader?: boolean;
   /** The header is a button that asks for a sort by this column. */
   allowsSorting?: boolean;
+  /**
+   * The most characters of the header the column makes room for; a longer header is cut at the
+   * end. Only for a header that is a value of the data, as in the table view of a chart, whose
+   * screen shows the whole text in another way. Other headers are never cut.
+   */
+  headerChars?: number;
 }
 
 /** A column of a table. It stays whatever the width of the table. */
@@ -788,6 +794,7 @@ export function DataTable<Item, Child = never>({
       chars,
       metrics.paddingX,
       metrics.arrow,
+      column.headerChars,
     );
     // In a table whose rows expand, the cell that names a row starts with the room of the
     // chevron, and the cells of child rows are indented as far: the column takes that room on top

@@ -196,6 +196,29 @@ describe("Heatmap", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("says in the tooltip of a cell that can be pressed what a press does, and not on Other", async () => {
+    const user = userEvent.setup();
+    const hint = "Press to open these holds in Lines";
+    render(heatmap({ onCellPress: () => undefined, pressHint: hint }));
+    await user.tab();
+    expect(screen.getByRole("tooltip")).toHaveTextContent(hint);
+    expect(cell(0, 0)).toHaveAccessibleDescription(new RegExp(hint));
+    await user.keyboard("{End}");
+    expect(cell(0, 2)).toHaveFocus();
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent(hint);
+    await user.keyboard("{Control>}{Home}{/Control}{ArrowDown}{ArrowDown}");
+    expect(cell(2, 0)).toHaveFocus();
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent(hint);
+    await expectAccessible();
+  });
+
+  it("says nothing of a press where the screen gives no action", async () => {
+    const user = userEvent.setup();
+    render(heatmap({ pressHint: "Press to open these holds in Lines" }));
+    await user.tab();
+    expect(screen.getByRole("tooltip")).not.toHaveTextContent("Press to open");
+  });
+
   it("shows the tooltip under the pointer only after the tooltip delay", () => {
     vi.useFakeTimers();
     render(heatmap());

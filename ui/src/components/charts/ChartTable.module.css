@@ -1,3 +1,10 @@
+/* The table view and the tooltip of its cut headers. It passes the height it is given on. */
+.area {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
 /* The toggle of the table view: a quiet button, marked as a preset is while the table shows. */
 .toggle {
   display: inline-flex;

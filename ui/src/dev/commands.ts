@@ -33,6 +33,7 @@ import {
 import {
   devBreakdown,
   devGroupDetail,
+  devMatrix,
   devHoldCount,
   devHoldDetail,
   devHolds,
@@ -112,6 +113,15 @@ export const DEV_STATES = [
   "breakdown-many",
   "breakdown-group-loading",
   "breakdown-group-error",
+  // The matrix of Breakdown answers from the same holds in every state, folded at thirty values
+  // a side as the command folds. These fold at six a side, so that disciplines by hold type has
+  // an Other row and an Other column; give a matrix that never comes (skeletons); and one that
+  // cannot be read (an error with a retry):
+  //   dev.html?state=open#/breakdown?mode=matrix
+  //   dev.html?state=breakdown-matrix-folded#/breakdown?mode=matrix
+  "breakdown-matrix-folded",
+  "breakdown-matrix-loading",
+  "breakdown-matrix-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -432,6 +442,9 @@ function world(state: DevState, theme: Theme): World {
     case "lines-loading":
     case "breakdown-group-loading":
     case "breakdown-group-error":
+    case "breakdown-matrix-folded":
+    case "breakdown-matrix-loading":
+    case "breakdown-matrix-error":
     case "detail-slow":
     case "detail-error":
     case "import-clean":
@@ -839,6 +852,27 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       if (state === "breakdown-group-error") throw failure("Io", LOCKED);
       return later(250, () =>
         selected === undefined ? null : devGroupDetail(selected, spec, dim, key),
+      );
+    },
+    matrix: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { rowDim, colDim } = payload as { rowDim: Dim; colDim: Dim };
+      if (state === "breakdown-matrix-loading") return new Promise(() => undefined);
+      if (state === "breakdown-matrix-error") throw failure("Io", LOCKED);
+      const side = state === "breakdown-matrix-folded" ? 6 : 30;
+      return later(200, () =>
+        selected === undefined
+          ? {
+              rows: [],
+              cols: [],
+              other_row: null,
+              other_col: null,
+              cells: [],
+              max_cell: 0,
+              folded_rows: 0,
+              folded_cols: 0,
+            }
+          : devMatrix(selected, spec, rowDim, colDim, side),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

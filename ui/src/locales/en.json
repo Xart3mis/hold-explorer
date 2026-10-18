@@ -45,6 +45,7 @@
     "legendMore": "More, up to {{max}}",
     "tableView": "Table view",
     "tableName": "{{name}}, table",
+    "column": "Column",
     "point": "{{label}}. {{xLabel}} {{x}}, {{yLabel}} {{y}}."
   },
   "toast": {
@@ -645,7 +646,20 @@
     "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them."
   },
   "breakdown": {
+    "modes": "Show the holds as",
+    "modeList": "List",
+    "modeMatrix": "Matrix",
     "groupBy": "Group by",
+    "rows": "Rows",
+    "cols": "Columns",
+    "swap": "Swap rows and columns",
+    "matrix": "Holds by {{rows}} and {{cols}}",
+    "other": "Other",
+    "pressHint": "Press a cell to open its holds in Lines. Other holds many values and does not open.",
+    "cellHint": "Press to open these holds in Lines",
+    "folded_one": "{{count, number}} more value of {{dim}} is in Other",
+    "folded_other": "{{count, number}} more values of {{dim}} are in Other",
+    "matrixError": "The matrix could not be loaded",
     "table": "Holds by {{dim}}",
     "column": {
       "share": "Share of holds",

@@ -48,10 +48,12 @@ export function textChars(text: string): number {
 }
 
 /**
- * The least width of a column, whatever it declares: the room of its header. A header is never
- * cut, also not one that is longer than the values under it or that grew in a translation. It
- * is counted from its text as `textChars` counts, and a header that can be sorted keeps the
- * room of the arrow (`arrow`: the icon and its gap).
+ * The least width of a column, whatever it declares: the room of its header. A header is not
+ * cut, also not one that is longer than the values under it or that grew in a translation,
+ * unless the column says how much of it to make room for (`most`, in characters): the table view
+ * of a chart, whose headers are values of the data. It is counted from its text as `textChars`
+ * counts, and a header that can be sorted keeps the room of the arrow (`arrow`: the icon and its
+ * gap).
  */
 export function headerWidth(
   header: string,
@@ -59,8 +61,10 @@ export function headerWidth(
   widths: CharWidths,
   paddingX: number,
   arrow: number,
+  most = Number.POSITIVE_INFINITY,
 ): number {
-  return room(textChars(header), "text", widths, paddingX) + (allowsSorting ? arrow : 0);
+  const chars = Math.min(textChars(header), most);
+  return room(chars, "text", widths, paddingX) + (allowsSorting ? arrow : 0);
 }
 
 /** What `leavingColumns` needs to know of a column. */

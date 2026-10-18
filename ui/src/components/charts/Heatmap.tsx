@@ -48,6 +48,11 @@ export interface HeatmapProps {
   otherCol?: string | undefined;
   /** Called with the keys of a cell that is pressed. Cells of Other are never pressed. */
   onCellPress?: (rowKey: string, colKey: string) => void;
+  /**
+   * What a press on a cell does, as the last line of the tooltip of every cell that can be
+   * pressed: "Press to open these holds in Lines". The screen also says it above the grid.
+   */
+  pressHint?: string | undefined;
   /** Formats a value, for the cells, the tooltip, the legend, and the table view alike. */
   formatCell: (value: number) => string;
   /** The name of the row dimension: the corner, the tooltip, the first column of the table. */
@@ -105,6 +110,7 @@ export function Heatmap({
   otherRow,
   otherCol,
   onCellPress,
+  pressHint,
   formatCell,
   rowsLabel,
   colsLabel,
@@ -168,6 +174,7 @@ export function Heatmap({
         cells={cells}
         max={max}
         onCellPress={onCellPress}
+        pressHint={pressHint}
         formatCell={formatCell}
         rowsLabel={rowsLabel}
         colsLabel={colsLabel}
@@ -184,6 +191,7 @@ interface GridProps {
   cells: readonly (readonly number[])[];
   max: number;
   onCellPress: ((rowKey: string, colKey: string) => void) | undefined;
+  pressHint: string | undefined;
   formatCell: (value: number) => string;
   rowsLabel: string;
   colsLabel: string;
@@ -197,6 +205,7 @@ function HeatmapGrid({
   cells,
   max,
   onCellPress,
+  pressHint,
   formatCell,
   rowsLabel,
   colsLabel,
@@ -270,10 +279,15 @@ function HeatmapGrid({
     event.stopPropagation();
   };
 
-  const tooltipRows = useMemo((): ChartTooltipRow[] => {
-    if (tip.active === null) return [];
+  const activeCell = useMemo(() => {
+    if (tip.active === null) return null;
     const [row, col] = tip.active.split(":").map(Number);
-    if (row === undefined || col === undefined) return [];
+    return row === undefined || col === undefined ? null : { row, col };
+  }, [tip.active]);
+
+  const tooltipRows = useMemo((): ChartTooltipRow[] => {
+    if (activeCell === null) return [];
+    const { row, col } = activeCell;
     const value = valueAt(row, col);
     return [
       { label: rowsLabel, value: down.all[row]?.label ?? "" },
@@ -281,7 +295,7 @@ function HeatmapGrid({
       { label: valueLabel, value: formatCell(value), mark: step(value, max, RAMP_STEPS) },
     ];
   }, [
-    tip.active,
+    activeCell,
     valueAt,
     rowsLabel,
     colsLabel,
@@ -386,6 +400,9 @@ function HeatmapGrid({
             : () => (tip.active === null ? null : (elements.current.get(tip.active) ?? null))
         }
         rows={tooltipRows}
+        note={
+          activeCell !== null && isPressable(activeCell.row, activeCell.col) ? pressHint : undefined
+        }
       />
     </div>
   );

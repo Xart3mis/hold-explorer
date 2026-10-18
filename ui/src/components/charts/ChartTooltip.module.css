@@ -42,6 +42,16 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
+/* What a press on the mark does, across both columns under the facts. */
+.note {
+  grid-column: 1 / -1;
+  margin-block-start: var(--space-1);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
 /* The value leads: the reader has the mark and wants its number. */
 .value {
   display: flex;
