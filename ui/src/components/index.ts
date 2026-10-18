@@ -53,6 +53,7 @@ export {
   type FilterChipProps,
 } from "./FilterChip/FilterChip";
 export { Icon, type IconProps } from "./Icon/Icon";
+export { IN_PAGE_ATTRIBUTE } from "./inPage";
 export {
   MenuButton,
   MenuItem,

@@ -14,6 +14,7 @@ import { lengthToken } from "../../design/token-values";
 import { formatCount } from "../../text/format";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
+import { IN_PAGE_ATTRIBUTE } from "../inPage";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
 import {
   ChartTable,
@@ -69,6 +70,11 @@ export interface LineChartProps {
   isStale?: boolean;
   /** What shows in the place of the chart when it has no point. */
   emptyState?: ReactNode;
+  /**
+   * What the numbers are a result of (the filter, the snapshot): when it changes, the table view
+   * returns to its top, as a table does with its rows (see `DataTable`'s `resultKey`).
+   */
+  resultKey?: string;
   className?: string | undefined;
 }
 
@@ -138,6 +144,7 @@ export function LineChart({
   tableRows,
   isLoading,
   isStale,
+  resultKey,
   emptyState,
   className,
   ...props
@@ -154,6 +161,7 @@ export function LineChart({
         {...(tableRows === undefined ? {} : { maxRows: tableRows })}
         isLoading={loading}
         isStale={stale}
+        {...(resultKey === undefined ? {} : { resultKey })}
         className={className}
       />
     );
@@ -343,7 +351,7 @@ function Plot({
       role="listbox"
       aria-label={name}
       // A list box of the page, not one that opens over it: the shortcuts stay on around it.
-      data-in-page=""
+      {...{ [IN_PAGE_ATTRIBUTE]: "" }}
       aria-activedescendant={`${optionId}-${String(keyIndex)}`}
       tabIndex={0}
       className={styles.box}

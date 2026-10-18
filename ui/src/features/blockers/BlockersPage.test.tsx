@@ -11,9 +11,11 @@ import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { solveView } from "../../test/blockers";
 import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
+import { selectOlderSnapshot } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { formatCount, formatDate } from "../../text/format";
+import { scrollTable } from "../../test/viewport";
+import { formatCount } from "../../text/format";
 
 const text = en.blockers;
 const VIEW = { workspace_id: workspace().id, snapshot_id: 2 };
@@ -267,13 +269,7 @@ describe("BlockersPage", () => {
       });
       expect(await stepRow(await stepTable(), 4)).toHaveAttribute("aria-selected", "true");
       // Another snapshot: a blocker is named by its text, so it stays selected there.
-      await user.click(
-        await screen.findByRole("button", {
-          name: fill(en.snapshots.trigger, { date: formatDate("2026-10-07T08:00:00") }),
-        }),
-      );
-      const snapshots = await screen.findByRole("menu", { name: en.snapshots.menu });
-      await user.click(must(within(snapshots).getAllByRole("menuitemradio")[1], "the older one"));
+      await selectOlderSnapshot(user);
       await waitFor(() => {
         expect(router.state.location.search).toBe("?blocker=Piping%7CClient");
         expect(screen.queryByText(en.snapshots.toNewest)).toBeInTheDocument();
@@ -289,6 +285,29 @@ describe("BlockersPage", () => {
       await user.click(within(workspaces).getByRole("menuitem", { name: otherWorkspace.name }));
       await waitFor(() => {
         expect(router.state.location.search).toBe("");
+      });
+    },
+  );
+
+  it(
+    "returns the steps and the table view of the curve to their tops for another snapshot",
+    SLOW,
+    async () => {
+      const { user } = renderBlockers({
+        handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
+      });
+      const table = await stepTable();
+      await stepRow(table, 1);
+      scrollTable(table, 3 * 36);
+      await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+      const view = await screen.findByRole("grid", {
+        name: fill(en.charts.tableName, { name: text.curve }),
+      });
+      scrollTable(view, 2 * 36);
+      await selectOlderSnapshot(user);
+      await waitFor(() => {
+        expect(table.scrollTop).toBe(0);
+        expect(view.scrollTop).toBe(0);
       });
     },
   );

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
+import { IN_PAGE_ATTRIBUTE } from "../../components";
 import {
   ariaKeyShortcuts,
   formatShortcut,
@@ -135,7 +136,7 @@ describe("handleShortcut", () => {
     const run = vi.fn();
     const chart = document.createElement("div");
     chart.setAttribute("role", "listbox");
-    chart.setAttribute("data-in-page", "");
+    chart.setAttribute(IN_PAGE_ATTRIBUTE, "");
     document.body.append(chart);
     try {
       const event = key({ key: "3", code: "Digit3", ctrlKey: true }, chart);

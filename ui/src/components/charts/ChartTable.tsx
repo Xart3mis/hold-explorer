@@ -49,6 +49,11 @@ export interface ChartTableProps {
   isLoading?: boolean;
   /** A refetch: the rows of before, dimmed. */
   isStale?: boolean;
+  /**
+   * What the numbers are a result of (the filter, the snapshot): when it changes, the table view
+   * returns to its top, as a table does with its rows (see `DataTable`'s `resultKey`).
+   */
+  resultKey?: string;
   className?: string | undefined;
 }
 
@@ -74,6 +79,7 @@ export function ChartTable({
   maxRows = TABLE_ROWS,
   isLoading,
   isStale,
+  resultKey,
   className,
   ...props
 }: ChartTableProps) {
@@ -150,6 +156,7 @@ export function ChartTable({
         height={{ maxRows }}
         isLoading={isLoading === true}
         isStale={isStale === true}
+        {...(resultKey === undefined ? {} : { resultKey })}
         className={className}
       />
       <ChartTooltip

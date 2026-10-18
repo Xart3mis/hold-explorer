@@ -69,6 +69,11 @@ export interface HeatmapProps {
   isStale?: boolean;
   /** What shows in the place of the grid when it has no row or no column. */
   emptyState?: ReactNode;
+  /**
+   * What the numbers are a result of (the filter, the snapshot): when it changes, the table view
+   * returns to its top, as a table does with its rows (see `DataTable`'s `resultKey`).
+   */
+  resultKey?: string;
   className?: string | undefined;
 }
 
@@ -118,6 +123,7 @@ export function Heatmap({
   view = "chart",
   isLoading,
   isStale,
+  resultKey,
   emptyState,
   className,
   ...props
@@ -145,6 +151,7 @@ export function Heatmap({
         )}
         isLoading={loading}
         isStale={stale}
+        {...(resultKey === undefined ? {} : { resultKey })}
         className={className}
       />
     );

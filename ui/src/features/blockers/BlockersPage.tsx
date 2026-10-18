@@ -6,7 +6,7 @@ import { asCommandError } from "../../api/error";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
-import { useSnapshotQuery } from "../../app/view";
+import { useSnapshotQuery, viewText } from "../../app/view";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SolveRow } from "../../bindings/SolveRow";
 import type { SolveView } from "../../bindings/SolveView";
@@ -119,8 +119,8 @@ export function BlockersPage() {
     enabled: hasSnapshot,
   });
   // What was read for the request on screen, kept while the next request is read, and after it
-  // failed.
-  const asked = JSON.stringify(spec);
+  // failed. Another snapshot is another result, as another filter is.
+  const asked = `${viewText(start.open)}\u0000${JSON.stringify(spec)}`;
   const [kept, setKept] = useState<Shown | null>(null);
   const own = query.data !== undefined && !query.isPlaceholderData;
   if (own && (kept?.key !== asked || kept.solve !== query.data)) {
@@ -225,6 +225,7 @@ export function BlockersPage() {
                 if (row !== undefined) selectStep(row.key);
               }}
               view={view}
+              resultKey={shown?.key ?? ""}
               // About the height of the curve, so the steps keep their room under it.
               tableRows={CURVE_TABLE_ROWS}
               isLoading={isLoading}

@@ -5,7 +5,8 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimId, dimName, isSameDim } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
-import { useSnapshotQuery } from "../../app/view";
+import { useShell } from "../../app/shell/context";
+import { useSnapshotQuery, viewText } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { FoldedMatrix } from "../../bindings/FoldedMatrix";
@@ -60,6 +61,7 @@ export interface MatrixModeProps {
  * and does not open. The two dimensions are in the address, and are never the same one.
  */
 export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
+  const { start } = useShell();
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
@@ -71,7 +73,8 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
     read: readMatrix,
   });
   // What was read for the request on screen, kept while the next request is read.
-  const asked = `${dimId(state.rows)}\u0000${dimId(state.cols)}\u0000${JSON.stringify(spec)}`;
+  // Another snapshot is another result, as other dimensions or another filter are.
+  const asked = `${viewText(start.open)}\u0000${dimId(state.rows)}\u0000${dimId(state.cols)}\u0000${JSON.stringify(spec)}`;
   const [kept, setKept] = useState<Shown | null>(null);
   const own = query.data !== undefined && !query.isPlaceholderData;
   if (own && (kept?.key !== asked || kept.matrix !== query.data)) {
@@ -205,6 +208,7 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
           colsLabel={dimName(colsDim)}
           valueLabel={t("breakdown.column.holds")}
           view={view}
+          resultKey={shown?.key ?? ""}
           isLoading={isLoading}
           isStale={isStale}
           emptyState={<NoHolds />}

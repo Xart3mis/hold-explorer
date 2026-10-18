@@ -11,10 +11,11 @@ import { must, renderApp } from "../../test/app";
 import { breakdownGroups, groupDetail } from "../../test/breakdown";
 import { filterOptions } from "../../test/filters";
 import { openStart, opened, workspace } from "../../test/fixtures";
-import { choose } from "../../test/flow";
+import { choose, selectOlderSnapshot } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { lineId, linePage } from "../../test/lines";
 import { SLOW } from "../../test/slow";
+import { scrollTable } from "../../test/viewport";
 
 const text = en.breakdown;
 const VIEW = { workspace_id: workspace().id, snapshot_id: 2 };
@@ -431,6 +432,19 @@ describe("BreakdownPage", () => {
     const table = await groupTable();
     await findRow(table, lineId(2));
     expect(table.querySelector("[data-part='more-row']")).toBeNull();
+  });
+
+  it("returns the groups to their top for another snapshot", SLOW, async () => {
+    const { user } = renderBreakdown({
+      handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
+    });
+    const table = await groupTable();
+    await findRow(table, "Piping");
+    scrollTable(table, 2 * 36);
+    await selectOlderSnapshot(user);
+    await waitFor(() => {
+      expect(table.scrollTop).toBe(0);
+    });
   });
 
   describe("without groups", () => {

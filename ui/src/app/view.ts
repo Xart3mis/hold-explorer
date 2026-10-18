@@ -144,6 +144,15 @@ function viewOf(open: WorkspaceOpen | null | undefined): ViewRef | null {
   return { workspace_id: open.workspace.id, snapshot_id: open.selected };
 }
 
+/**
+ * The view an open workspace shows, as text: a part of what a screen's rows are a result of, so
+ * that another snapshot, as another filter, is another result (`DataTable`'s `resultKey`).
+ */
+export function viewText(open: WorkspaceOpen | null): string {
+  const view = viewOf(open);
+  return view === null ? "" : `${view.workspace_id}:${String(view.snapshot_id)}`;
+}
+
 function isSameView(one: ViewRef | null, other: ViewRef | null): boolean {
   return one?.workspace_id === other?.workspace_id && one?.snapshot_id === other?.snapshot_id;
 }

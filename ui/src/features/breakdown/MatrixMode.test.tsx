@@ -9,11 +9,12 @@ import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { foldedMatrix } from "../../test/breakdown";
-import { openStart, workspace } from "../../test/fixtures";
-import { choose } from "../../test/flow";
+import { openStart, opened, workspace } from "../../test/fixtures";
+import { choose, selectOlderSnapshot } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { holdsView, lineId } from "../../test/lines";
 import { SLOW } from "../../test/slow";
+import { scrollTable } from "../../test/viewport";
 
 const text = en.breakdown;
 const VIEW = { workspace_id: workspace().id, snapshot_id: 2 };
@@ -255,6 +256,22 @@ describe("Breakdown, matrix", () => {
     expect(screen.getByRole("tooltip")).not.toHaveTextContent(text.cellHint);
     await user.keyboard("{ArrowLeft}");
     expect(screen.getByRole("tooltip")).toHaveTextContent(text.cellHint);
+  });
+
+  it("returns its table view to its top for another snapshot", SLOW, async () => {
+    const { user } = renderMatrix({
+      handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
+    });
+    await findGrid();
+    await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+    const table = await screen.findByRole("grid", {
+      name: en.charts.tableName.replace("{{name}}", gridName()),
+    });
+    scrollTable(table, 2 * 36);
+    await selectOlderSnapshot(user);
+    await waitFor(() => {
+      expect(table.scrollTop).toBe(0);
+    });
   });
 
   it("shows the same numbers in its table view, and the chart again", SLOW, async () => {
