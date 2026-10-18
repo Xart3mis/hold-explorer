@@ -550,6 +550,12 @@ export interface WorkspaceAction<Variables, Data> {
    */
   kind: "switching" | "changing";
   /**
+   * True for the action that selects another snapshot of the open workspace, a `switching` one:
+   * its key is then `keys.selectingSnapshot`, so a screen can tell it from one that opens another
+   * workspace.
+   */
+  selectsSnapshot?: boolean;
+  /**
    * Called when the action is asked for, also when it then waits its turn behind another: what
    * must change at once, such as the selection of the detail panel, which is taken out of the
    * address before anything of another view can be read.
@@ -572,10 +578,10 @@ export interface WorkspaceAction<Variables, Data> {
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
-  { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
+  { kind, selectsSnapshot = false, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
 ): UseMutationOptions<Data, Error, Variables> {
   return {
-    mutationKey: keys[kind],
+    mutationKey: kind === "switching" && selectsSnapshot ? keys.selectingSnapshot : keys[kind],
     scope: WORKSPACE_SCOPE,
     mutationFn,
     onMutate: (variables: Variables) => {

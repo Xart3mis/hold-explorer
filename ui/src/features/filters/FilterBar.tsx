@@ -57,8 +57,11 @@ const CLOSED: Picker = {
 export function FilterBar() {
   const { filters, update, clear } = useFilters();
   const { isBusy } = useStart();
-  // Another workspace or snapshot is on its way, or the one in view is being changed.
-  const isSwitching = useIsMutating({ mutationKey: keys.switching }) > 0;
+  // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
+  // workspace makes the bar wait for the workspace, also when a selection waits beside it.
+  const actions = useIsMutating({ mutationKey: keys.workspaceAction });
+  const selections = useIsMutating({ mutationKey: keys.selectingSnapshot });
+  const isSelecting = selections > 0 && selections === actions;
   const options = useFilterOptions();
   const bar = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLSpanElement>(null);
@@ -79,7 +82,7 @@ export function FilterBar() {
   const noReleased = absent.includes("Released");
   // What the sentence about the holds says is not said again as columns without values.
   const missing = noReleased ? absent.filter((field) => !RELEASE_FIELDS.has(field)) : absent;
-  const reason = !isBusy ? "" : t(isSwitching ? "filters.busySwitching" : "filters.busyChanging");
+  const reason = !isBusy ? "" : t(isSelecting ? "filters.busySnapshot" : "filters.busyWorkspace");
 
   /** "Add filter": where the focus goes when the control that had it is gone. */
   const addFilter = () =>

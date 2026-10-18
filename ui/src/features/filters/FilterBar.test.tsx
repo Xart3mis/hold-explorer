@@ -13,7 +13,7 @@ import { held } from "../../test/actions";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
-import { opened, openStart, workspace } from "../../test/fixtures";
+import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { SettingsPage } from "../settings/SettingsPage";
@@ -24,6 +24,7 @@ const text = en.filters;
 type Held = ReturnType<typeof useFilters> & {
   select: (id: number) => void;
   rename: (name: string) => void;
+  open: (id: string) => void;
 };
 
 /** What the page of the test reads: the filters, and two actions on the workspace. */
@@ -38,7 +39,7 @@ function now(): Held {
 function Screen() {
   const filters = useFilters();
   const { selectSnapshot } = useSnapshotActions();
-  const { renameWorkspace } = useWorkspaceActions();
+  const { renameWorkspace, openWorkspace } = useWorkspaceActions();
   useEffect(() => {
     probe.page = {
       ...filters,
@@ -47,6 +48,9 @@ function Screen() {
       },
       rename: (name) => {
         renameWorkspace.mutate({ id: workspace().id, name });
+      },
+      open: (id) => {
+        openWorkspace.mutate(id);
       },
     };
   });
@@ -437,7 +441,7 @@ describe("FilterBar", () => {
       now().select(1);
     });
     await waitFor(() => {
-      expect(reason).toHaveTextContent(text.busySwitching);
+      expect(reason).toHaveTextContent(text.busySnapshot);
     });
     // The sentence stands where the total stood, which says nothing certain meanwhile.
     expect(region.querySelector("[data-part='filter-total']")).toBeNull();
@@ -493,7 +497,7 @@ describe("FilterBar", () => {
       now().rename("Unit 573");
     });
     await waitFor(() => {
-      expect(reason).toHaveTextContent(text.busyChanging);
+      expect(reason).toHaveTextContent(text.busyWorkspace);
     });
     expect(region.querySelector("[data-part='filter-total']")).toBeNull();
     expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeDisabled();
@@ -507,10 +511,33 @@ describe("FilterBar", () => {
     });
   });
 
+  it("waits for the workspace, not for a snapshot, while another workspace opens", async () => {
+    const open = held<WorkspaceOpen>();
+    renderBar(undefined, { workspace_open: open.handler });
+    const region = await bar();
+    const reason = must(region.querySelector<HTMLElement>("[role='status']"), "the reason");
+
+    act(() => {
+      now().open(otherWorkspace.id);
+    });
+    await waitFor(() => {
+      expect(reason).toHaveTextContent(text.busyWorkspace);
+    });
+    expect(reason).not.toHaveTextContent(text.busySnapshot);
+
+    await act(async () => {
+      must(open.waiting[0], "the opening").resolve(opened({ workspace: otherWorkspace }));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(reason).toBeEmptyDOMElement();
+    });
+  });
+
   it("keeps the reason short: two lines of the trailing part hold it", () => {
     // The trailing part is as wide as about eighteen characters of the caption, and a control is
     // as tall as two of its lines. A longer sentence would make the bar taller while it shows.
-    for (const sentence of [text.busySwitching, text.busyChanging]) {
+    for (const sentence of [text.busySnapshot, text.busyWorkspace]) {
       const words = sentence.split(" ");
       expect(sentence.length).toBeLessThanOrEqual(30);
       expect(Math.max(...words.map((word) => word.length))).toBeLessThanOrEqual(16);
@@ -806,7 +833,7 @@ describe("FilterBar", () => {
       expect(region).toHaveFocus();
     });
     expect(chip(region, "Discipline Civil")).toBeDisabled();
-    expect(within(region).getByRole("status")).toHaveTextContent(text.busySwitching);
+    expect(within(region).getByRole("status")).toHaveTextContent(text.busySnapshot);
   });
 
   it("takes no focus from a click while no action runs", async () => {

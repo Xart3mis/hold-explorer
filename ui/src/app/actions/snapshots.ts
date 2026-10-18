@@ -21,6 +21,7 @@ export function useSnapshotActions() {
   const selectSnapshot = useMutation(
     workspaceAction(client, {
       kind: "switching",
+      selectsSnapshot: true,
       onAsk: () => {
         leave.forSnapshot();
       },

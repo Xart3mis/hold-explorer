@@ -1839,12 +1839,21 @@ describe("workspaceAction", () => {
       kind: "changing",
       mutationFn: () => Promise.resolve(null),
     });
+    const selecting = workspaceAction(queryClient, {
+      kind: "switching",
+      selectsSnapshot: true,
+      mutationFn: () => Promise.resolve(null),
+    });
     expect(switching.mutationKey).toEqual(keys.switching);
     expect(changing.mutationKey).toEqual(keys.changing);
+    expect(selecting.mutationKey).toEqual(keys.selectingSnapshot);
     expect(switching.scope).toBeDefined();
     expect(switching.scope).toEqual(changing.scope);
-    // Both are found by the key every action on the open workspace is under.
-    for (const options of [switching, changing]) {
+    expect(selecting.scope).toEqual(changing.scope);
+    // A selection is found by the key of the switching actions too.
+    expect(selecting.mutationKey?.slice(0, keys.switching.length)).toEqual(keys.switching);
+    // All are found by the key every action on the open workspace is under.
+    for (const options of [switching, changing, selecting]) {
       expect(options.mutationKey?.slice(0, keys.workspaceAction.length)).toEqual(
         keys.workspaceAction,
       );
