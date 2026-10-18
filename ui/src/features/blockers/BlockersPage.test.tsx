@@ -560,6 +560,41 @@ describe("BlockersPage", () => {
       },
     );
 
+    it("draws the head again for another result", SLOW, async () => {
+      const { user } = renderBlockers({ solveOrder: () => manySteps(40, 12) });
+      const chart = await curve();
+      await user.click(
+        screen.getByRole("button", { name: fill(text.showAll_other, { count: 40 }) }),
+      );
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "40");
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          status: "All",
+        });
+      });
+      await waitFor(() => {
+        expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "12");
+      });
+      expect(
+        screen.getByRole("button", { name: fill(text.showAll_other, { count: 40 }) }),
+      ).toBeInTheDocument();
+    });
+
+    it("names in its button the steps it would draw, up to a selected one", SLOW, async () => {
+      const { user } = renderBlockers({
+        path: "/blockers?blocker=Piping%7CItem%2030",
+        solveOrder: () => manySteps(40, 3),
+      });
+      const chart = await curve();
+      await user.click(
+        screen.getByRole("button", { name: fill(text.showAll_other, { count: 40 }) }),
+      );
+      const head = screen.getByRole("button", { name: fill(text.showHead_other, { count: 30 }) });
+      await user.click(head);
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "30");
+    });
+
     it("draws ten steps at least, and the steps up to one selected past them", SLOW, async () => {
       const { user } = renderBlockers({ solveOrder: () => manySteps(40, 3) });
       const chart = await curve();
@@ -615,7 +650,7 @@ describe("BlockersPage", () => {
     );
 
     it("hands over a step selected past those shown, with the steps before it", SLOW, async () => {
-      renderBlockers({
+      const { router } = renderBlockers({
         path: "/blockers?blocker=Piping%7CItem%20450",
         solveOrder: () => manySteps(5300, 100),
       });
@@ -629,7 +664,54 @@ describe("BlockersPage", () => {
       });
       scrollTable(table, table.scrollTop);
       expect(await stepRow(table, 450)).toHaveAttribute("aria-selected", "true");
+      // The panel closes: the steps handed over for it stay, so its row stays in the table.
+      await act(async () => {
+        await router.navigate("/blockers");
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(countLine()).toHaveTextContent("600 of 5,300 steps");
     });
+
+    it(
+      "keeps the curve's table view as it is when a step past the curve's head is selected",
+      SLOW,
+      async () => {
+        // A solve order whose steps past the first hundred count how often their label is read.
+        // None of them is in view, so a read is a rebuild of the rows that hold them.
+        let reads = 0;
+        const solve = manySteps(400, 3);
+        const rows = solve.rows.map((row, index) => {
+          if (index < 100) return row;
+          const { label, ...rest } = row;
+          return {
+            ...rest,
+            get label() {
+              reads += 1;
+              return label;
+            },
+          };
+        });
+        const { user, router } = renderBlockers({ solveOrder: () => ({ ...solve, rows }) });
+        const table = await stepTable();
+        await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+        await screen.findByRole("grid", { name: fill(en.charts.tableName, { name: text.curve }) });
+        reads = 0;
+        for (const step of [30, 31]) {
+          await act(async () => {
+            await router.navigate(`/blockers?blocker=Piping%7CItem%20${String(step)}`);
+          });
+          // The table brought the step into view; jsdom tells the rows of the scroll it made.
+          await waitFor(() => {
+            expect(table.scrollTop).toBeGreaterThan((step - 12) * 36);
+          });
+          scrollTable(table, table.scrollTop);
+          expect(await stepRow(table, step)).toHaveAttribute("aria-selected", "true");
+        }
+        expect(reads).toBe(0);
+      },
+    );
 
     it("starts again at 200 steps for another result", SLOW, async () => {
       renderBlockers({ solveOrder: () => manySteps(5300, 100) });

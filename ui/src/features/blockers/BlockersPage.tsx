@@ -184,14 +184,14 @@ export function BlockersPage() {
   }, [rows, selectedKey]);
 
   // How many steps the table is handed, for the result on screen: 200 more each time its end
-  // comes near, up to the limit, and always as many as cover the selected step.
+  // comes near, up to the limit, and always as many as cover the selected step. Those stay
+  // handed once the selection ends, so the row the user was on does not leave the table.
   const resultKey = shown?.key ?? "";
   const [handed, setHanded] = useState({ key: resultKey, count: STEP_ROWS });
   const handedCount = handed.key === resultKey ? handed.count : STEP_ROWS;
-  const tableCount = Math.min(
-    rows.length,
-    Math.max(handedCount, selectedIndex === null ? 0 : rowsFor(selectedIndex)),
-  );
+  const covering = selectedIndex === null ? 0 : Math.min(rows.length, rowsFor(selectedIndex));
+  if (covering > handedCount) setHanded({ key: resultKey, count: covering });
+  const tableCount = Math.min(rows.length, Math.max(handedCount, covering));
   const tableRows = useMemo(
     () => (tableCount >= rows.length ? rows : rows.slice(0, tableCount)),
     [rows, tableCount],
@@ -202,24 +202,25 @@ export function BlockersPage() {
   };
 
   // The steps the curve draws: those that free most lines, at least ten, up to the selected
-  // step, or all of them.
-  const [showAll, setShowAll] = useState(false);
+  // step, or all of them, for the result they were asked for; another result starts at its
+  // head again.
+  const [allFor, setAllFor] = useState<string | null>(null);
+  const showAll = allFor === resultKey;
   const head = Math.max(HEAD_LEAST, shown?.solve.steps_to_most ?? 0);
-  const drawn = showAll
-    ? rows.length
-    : Math.min(rows.length, Math.max(head, selectedIndex === null ? 0 : selectedIndex + 1));
-  const points = useMemo(
-    (): LinePoint[] =>
-      rows.slice(0, drawn).map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
-    [rows, drawn],
+  const headTo = Math.min(
+    rows.length,
+    Math.max(head, selectedIndex === null ? 0 : selectedIndex + 1),
   );
-  // The table view holds every step, whatever the curve draws.
+  const drawn = showAll ? rows.length : headTo;
+  // The table view holds every step, whatever the curve draws, and is built once for them: the
+  // curve's points are a part of them, so a selection that draws more builds no row of it again.
   const allPoints = useMemo(
-    (): LinePoint[] =>
-      drawn === rows.length
-        ? points
-        : rows.map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
-    [rows, drawn, points],
+    (): LinePoint[] => rows.map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
+    [rows],
+  );
+  const points = useMemo(
+    () => (drawn === allPoints.length ? allPoints : allPoints.slice(0, drawn)),
+    [allPoints, drawn],
   );
   const canShowAll = rows.length > Math.min(rows.length, head);
 
@@ -302,11 +303,11 @@ export function BlockersPage() {
                   <Button
                     variant="quiet"
                     onPress={() => {
-                      setShowAll((all) => !all);
+                      setAllFor(showAll ? null : resultKey);
                     }}
                   >
                     {showAll
-                      ? t("blockers.showHead", { count: Math.min(rows.length, head) })
+                      ? t("blockers.showHead", { count: headTo })
                       : t("blockers.showAll", { count: rows.length })}
                   </Button>
                 ) : null}
