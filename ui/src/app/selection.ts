@@ -41,7 +41,11 @@ export function selectionOf(search: string): Selection {
   return null;
 }
 
-/** The search text with `next` selected, or with no selection; every other part is kept. */
+/**
+ * The search text with `next` selected, or with no selection; every other part is kept. A line,
+ * a hold, or a blocker selected takes the place of the one before, of whichever kind: the panel
+ * shows one at a time.
+ */
 export function searchWithSelection(search: string, next: Selection): string {
   const parts = partsOf(search);
   parts.delete(LINE);

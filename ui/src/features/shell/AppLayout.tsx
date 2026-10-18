@@ -216,16 +216,13 @@ function LoadedShell({ start, destinations }: ShellProps) {
   );
   useShortcuts(bindings);
 
-  // The detail panel shows while the address of a data destination selects a line or a hold, and
-  // there is a snapshot to read it from. A blocker that is selected marks its step on Blockers.
+  // The detail panel shows while the address of a data destination selects a line, a hold, or a
+  // blocker, and there is a snapshot to read it from.
   const isDataPage = destinations.some(
     (destination) =>
       destination.group === "data" && destination.available && destination.path === pathname,
   );
-  const detail =
-    isDataPage && open?.selected != null && selection !== null && selection.kind !== "blocker"
-      ? selection
-      : null;
+  const detail = isDataPage && open?.selected != null ? selection : null;
 
   const selected = open?.snapshots.find((snapshot) => snapshot.id === open.selected);
   // The command lists the snapshots oldest first, so the last one is the newest.

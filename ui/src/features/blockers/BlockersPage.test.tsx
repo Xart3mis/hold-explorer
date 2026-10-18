@@ -257,9 +257,73 @@ describe("BlockersPage", () => {
     const option = within(await curve()).getByRole("option");
     expect(option).toHaveAttribute("aria-posinset", "2");
     expect(option).toHaveAttribute("aria-selected", "true");
-    // Nothing opens in the panel for a blocker yet: the step is marked, and that is all.
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    // The blocker opens in the panel, and the focus stays on the row that was pressed.
+    expect(
+      await screen.findByRole("complementary", { name: "Process / 577-PR-400" }),
+    ).toBeInTheDocument();
+    expect(await stepRow(table, 2)).toHaveFocus();
   });
+
+  it(
+    "opens a step's blocker on Enter with the focus on its heading, and Escape gives it back",
+    SLOW,
+    async () => {
+      const { user, router } = renderBlockers();
+      const table = await stepTable();
+      const row = await stepRow(table, 3);
+      act(() => {
+        row.focus();
+      });
+      await user.keyboard("{Enter}");
+      const region = await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      await waitFor(() => {
+        expect(
+          within(region).getByRole("heading", { level: 2, name: "Civil / Vendor data" }),
+        ).toHaveFocus();
+      });
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(router.state.location.search).toBe("");
+      expect(await stepRow(table, 3)).toHaveFocus();
+    },
+  );
+
+  it(
+    "closes the panel on Escape on the table, and gives the focus to the row that opened it",
+    SLOW,
+    async () => {
+      const { user } = renderBlockers();
+      const table = await stepTable();
+      await user.click(await stepRow(table, 2));
+      await screen.findByRole("complementary", { name: "Process / 577-PR-400" });
+      // The focus moves to another row without choosing it; Escape takes it back to the opener.
+      await user.keyboard("{ArrowDown}");
+      expect(await stepRow(table, 3)).toHaveFocus();
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(await stepRow(table, 2)).toHaveFocus();
+    },
+  );
+
+  it(
+    "shows in the panel the type, the discipline, and the holds a narrow table leaves out",
+    SLOW,
+    async () => {
+      const { user } = renderBlockers();
+      const table = await stepTable();
+      await user.click(await stepRow(table, 2));
+      const region = await screen.findByRole("complementary", { name: "Process / 577-PR-400" });
+      const facts = await within(region).findByRole("list", { name: en.detail.blockerFacts });
+      // The type, the discipline, and the holds: what the priorities of the columns let leave.
+      expect(within(region).getByText("PK")).toBeInTheDocument();
+      expect(within(facts).getByText(en.detail.fact.discipline)).toBeInTheDocument();
+      expect(within(facts).getByText(en.detail.fact.holds)).toBeInTheDocument();
+    },
+  );
 
   it("selects the blocker of a point pressed on the curve, and marks its row", SLOW, async () => {
     const { user, router } = renderBlockers();

@@ -32,7 +32,10 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       id: "blocker",
       header: t("blockers.column.blocker"),
       cell: (row) => row.label,
-      size: { flex: 1, minChars: 24 },
+      // At least as wide as a label such as "Piping / 577-PK-400". A longer label is cut, and read
+      // in full in the panel: at 1280 the panel beside the table leaves the four columns that
+      // stay no room for more.
+      size: { flex: 1, minChars: 20 },
     },
     {
       id: "kind",

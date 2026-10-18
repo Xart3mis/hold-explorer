@@ -2,6 +2,7 @@
 // `matrix`, and `solve_order` commands: holds made up by a seeded generator, the same at every
 // start, filtered, grouped into lines, sorted, and cut into pages as the commands do it, closely
 // enough to see the Lines destination work. For development only; see ui/src/dev/app.tsx.
+import type { BlockerDetail } from "../bindings/BlockerDetail";
 import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FoldedMatrix } from "../bindings/FoldedMatrix";
@@ -15,6 +16,7 @@ import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { LineRow } from "../bindings/LineRow";
+import type { LinkedBlocker } from "../bindings/LinkedBlocker";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { SolveRow } from "../bindings/SolveRow";
 import type { SolveView } from "../bindings/SolveView";
@@ -196,7 +198,8 @@ function valueOf({ row }: HoldRef, dim: Dim): string {
     case "BlockerType":
       return row.blocker.kind;
     case "Blocker":
-      return row.blocker.item;
+      // By its key, as the core filters a blocker: its item alone is not one blocker.
+      return `${row.hold.discipline}|${row.blocker.item}`;
     case "Remark":
       return row.hold.remark;
     case "LineId":
@@ -572,7 +575,15 @@ function groupsOf(
         const key = valueOf(held, dim);
         let entry = byKey.get(key);
         if (entry === undefined) {
-          const label = key === "" ? "(blank)" : dim === "Remark" ? held.row.hold.remark : key;
+          const { hold, blocker } = held.row;
+          const label =
+            key === ""
+              ? "(blank)"
+              : dim === "Remark"
+                ? hold.remark
+                : dim === "Blocker"
+                  ? `${hold.discipline} / ${blocker.item}`
+                  : key;
           entry = { group: { key, label, holds: 0, lines: 0 }, holds: [], lines: new Set() };
           byKey.set(key, entry);
         }
@@ -832,4 +843,79 @@ export function devSolveOrder(
       return { rows, lines_on_hold: onLine.length };
     },
   );
+}
+
+/**
+ * What `blocker_detail` answers on the development page: the blocker among the holds a filter
+ * keeps, as the core reads it, with its step in the solve order of the same holds; `null` when no
+ * kept hold waits for it.
+ */
+export function devBlockerDetail(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  key: string,
+  matchingSizes = false,
+): BlockerDetail | null {
+  const holds = kept(snapshot, spec, matchingSizes);
+  const keyOf = ({ row }: HoldRef) => `${row.hold.discipline}|${row.blocker.item}`;
+  const own = holds.filter((held) => keyOf(held) === key);
+  const first = own[0];
+  if (first === undefined) return null;
+  const lines: string[] = [];
+  const onBlocker = new Set<string>();
+  let oldest: HoldRef | null = null;
+  for (const held of own) {
+    const { hold } = held.row;
+    if (!onBlocker.has(hold.line_id)) {
+      onBlocker.add(hold.line_id);
+      lines.push(hold.line_id);
+    }
+    const age = held.row.age_days;
+    if (!hold.released && age !== null && (oldest?.row.age_days ?? -1) < age) oldest = held;
+  }
+  // Other blockers on the same lines, with the lines they share with this one.
+  const others = new Map<string, { linked: LinkedBlocker; lines: Set<string> }>();
+  for (const held of holds) {
+    const other = keyOf(held);
+    const { hold, blocker } = held.row;
+    if (other === key || !onBlocker.has(hold.line_id)) continue;
+    let entry = others.get(other);
+    if (entry === undefined) {
+      entry = {
+        linked: {
+          key: other,
+          label: `${hold.discipline} / ${blocker.item}`,
+          kind: blocker.kind,
+          shared_lines: 0,
+        },
+        lines: new Set(),
+      };
+      others.set(other, entry);
+    }
+    entry.lines.add(hold.line_id);
+  }
+  const heldByOthers = new Set([...others.values()].flatMap((entry) => [...entry.lines]));
+  const linked = [...others.values()]
+    .map((entry) => ({ ...entry.linked, shared_lines: entry.lines.size }))
+    .sort(
+      (a, b) =>
+        b.shared_lines - a.shared_lines || ascending(a.label, b.label) || ascending(a.key, b.key),
+    );
+  const step = devSolveOrder(snapshot, spec, matchingSizes).rows.findIndex(
+    (row) => row.key === key,
+  );
+  const { hold, blocker } = first.row;
+  return {
+    key,
+    label: `${hold.discipline} / ${blocker.item}`,
+    kind: blocker.kind,
+    discipline: hold.discipline,
+    item: blocker.item,
+    holds: own.length,
+    frees: lines.filter((line) => !heldByOthers.has(line)),
+    shared: lines.filter((line) => heldByOthers.has(line)),
+    linked,
+    oldest,
+    step: step === -1 ? null : step + 1,
+  };
 }

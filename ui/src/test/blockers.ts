@@ -1,6 +1,9 @@
-// Fixtures of the Blockers destination: what the `solve_order` command answers for a snapshot.
+// Fixtures of the Blockers destination: what the `solve_order` and `blocker_detail` commands
+// answer for a snapshot.
+import type { BlockerDetail } from "../bindings/BlockerDetail";
 import type { SolveRow } from "../bindings/SolveRow";
 import type { SolveView } from "../bindings/SolveView";
+import { holdRef, lineId } from "./lines";
 
 /** A step of the solve order, its numbers given and the rest written from its blocker. */
 function step(
@@ -37,5 +40,42 @@ export function solveView(): SolveView {
       step(4, "Piping", "Client", "Other", 7, 12, 1262),
     ],
     lines_on_hold: 1262,
+  };
+}
+
+/**
+ * What `blocker_detail` answers for a blocker, by its key (`<discipline>|<item>`): fourteen
+ * holds at step 3 of the solve order, two lines it frees on its own and one it shares with the
+ * blocker of the client's decision, and its oldest open hold, on the third line.
+ */
+export function blockerDetail(
+  key = "Piping|577-PK-400",
+  overrides: Partial<BlockerDetail> = {},
+): BlockerDetail {
+  const [discipline = "", item = ""] = key.split("|");
+  return {
+    key,
+    label: `${discipline} / ${item}`,
+    kind: "PK",
+    discipline,
+    item,
+    holds: 14,
+    frees: [lineId(0), lineId(2)],
+    shared: [lineId(1)],
+    linked: [
+      {
+        key: "Civil|Client decision",
+        label: "Civil / Client decision",
+        kind: "Other",
+        shared_lines: 1,
+      },
+    ],
+    oldest: holdRef(7, {
+      line_id: lineId(2),
+      remark: "HOLD FOR VENDOR DATA OF PACKAGE UNIT 577-PK-400, REV B",
+      created: "2026-05-02T00:00:00",
+    }),
+    step: 3,
+    ...overrides,
   };
 }

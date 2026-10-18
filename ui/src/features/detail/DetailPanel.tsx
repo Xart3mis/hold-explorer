@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useId, useRef } from "react";
 import { useFilterOptions } from "../../app/filters/options";
 import { cx } from "../../components/cx";
+import { BlockerDetail } from "./BlockerDetail";
 import styles from "./Detail.module.css";
 import { HoldDetail } from "./HoldDetail";
 import { LineDetail } from "./LineDetail";
 import { useDetailFocus, useSelection, type Selection } from "./selection";
 
-/** What the panel shows: a line or a hold. A blocker that is selected marks its step on Blockers. */
-export type PanelSelection = Extract<NonNullable<Selection>, { kind: "line" | "hold" }>;
+/** What the panel shows: a line, a hold, or a blocker. */
+export type PanelSelection = NonNullable<Selection>;
 
 export interface DetailPanelProps {
   /** What the panel shows: the selection the address names. */
@@ -18,9 +19,9 @@ export interface DetailPanelProps {
 const NONE: readonly never[] = [];
 
 /**
- * The detail panel: the line or the hold the address selects, in a region at the right of the
+ * The detail panel: the line, the hold, or the blocker the address selects, in a region at the right of the
  * shell, with its own scroll. It reads the snapshot in view, so another snapshot shows the same
- * line as that snapshot has it. Escape inside it, the close button, and the close action of its
+ * line or blocker as that snapshot has it. Escape inside it, the close button, and the close action of its
  * empty state close it, and the focus goes back to the row that opened it.
  *
  * Which sections a snapshot can fill is read as the filter bar reads it, from the options of the
@@ -73,11 +74,19 @@ export function DetailPanel({ selection, className }: DetailPanelProps) {
           absent={absent}
           onClose={onClose}
         />
-      ) : (
+      ) : selection.kind === "hold" ? (
         <HoldDetail
           key={`hold:${String(selection.position)}`}
           headingId={headingId}
           position={selection.position}
+          absent={absent}
+          onClose={onClose}
+        />
+      ) : (
+        <BlockerDetail
+          key={`blocker:${selection.key}`}
+          headingId={headingId}
+          blockerKey={selection.key}
           absent={absent}
           onClose={onClose}
         />

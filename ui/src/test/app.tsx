@@ -9,7 +9,7 @@ import type { AppStart } from "../bindings/AppStart";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { breakdownGroups, foldedMatrix, groupDetail } from "./breakdown";
-import { solveView } from "./blockers";
+import { blockerDetail, solveView } from "./blockers";
 import { filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { commandFailure, mockCommands, type Handlers } from "./ipc";
@@ -43,8 +43,8 @@ export interface RenderAppOptions {
  * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, `breakdown`
  * with three groups whatever the dimension, `group_detail` with three lines of the group asked
  * for, `matrix` with three rows and two columns and Other on both sides whatever the
- * dimensions, and `solve_order` with a solve order of four steps, unless the test gives its
- * own. Those answers are for the view the mocked Rust side holds, which is the one `start`
+ * dimensions, `solve_order` with a solve order of four steps, and `blocker_detail` with the
+ * detail of the blocker asked for, unless the test gives its own. Those answers are for the view the mocked Rust side holds, which is the one `start`
  * opens and then the one the test's own `workspace_open`, `workspace_create`,
  * `workspace_current`, `snapshot_select`, `demo_create`, or `import_commit` answered with: for
  * any other view they fail with the kind `ViewChanged`, as the Rust side does.
@@ -112,6 +112,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     group_detail: inView(({ key }) => groupDetail(key)),
     matrix: inView(() => foldedMatrix()),
     solve_order: inView(() => solveView()),
+    blocker_detail: inView(({ key }) => blockerDetail(key)),
     ...given,
     ...tracked,
   });

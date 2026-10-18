@@ -31,6 +31,7 @@ import {
   unmappedDraft,
 } from "../test/import";
 import {
+  devBlockerDetail,
   devBreakdown,
   devGroupDetail,
   devMatrix,
@@ -102,9 +103,18 @@ export const DEV_STATES = [
   //   dev.html?state=open#/lines?line=78B99-000-00000-XX-000
   // These add a newest snapshot that is limited (no released column, no hold ID), answers that
   // take two seconds (select another snapshot to see a re-read), and a reading that fails.
+  // A blocker opens the same way, from Blockers or from any other data destination; these add a
+  // first load that never ends, and filters that leave out the blocker (Clear filters in the panel
+  // brings it back). `blockers-many` has blockers of hundreds of lines:
+  //   dev.html?state=open#/blockers?blocker=Piping%7CStress
+  //   dev.html?state=detail-loading#/blockers?blocker=Piping%7CStress
+  //   dev.html?state=detail-filtered#/lines?blocker=Piping%7CStress
+  //   dev.html?state=blockers-many#/blockers?blocker=Piping%7CStress
   "detail-limited",
   "detail-slow",
   "detail-error",
+  "detail-loading",
+  "detail-filtered",
   // Breakdown: every state answers the groups and their lines from the same made-up holds. These
   // add a snapshot of 30,000 holds grouped by blocker, its first 1,500 groups, the largest with
   // more than 900 lines; lines of a group that are never read (a skeleton row stays); and lines
@@ -284,6 +294,14 @@ export function devFilters(state: DevState): { workspaceId: string; filters: Fil
       return { workspaceId: unit573.id, filters: MANY_FILTERS };
     case "lines-none":
       return { workspaceId: unit573.id, filters: { ...defaultFilters, text: "no such line" } };
+    case "detail-filtered":
+      return {
+        workspaceId: unit573.id,
+        filters: {
+          ...defaultFilters,
+          fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }],
+        },
+      };
     default:
       return null;
   }
@@ -461,6 +479,8 @@ function world(state: DevState, theme: Theme): World {
     case "blockers-error":
     case "detail-slow":
     case "detail-error":
+    case "detail-loading":
+    case "detail-filtered":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -837,6 +857,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     line_detail: (payload) => {
       const { selected } = inView(payload);
       const { lineId } = payload as { lineId: string };
+      if (state === "detail-loading") return new Promise(() => undefined);
       if (state === "detail-error") throw failure("Io", LOCKED);
       const matching = state === "lines-matching-sizes";
       return later(state === "detail-slow" ? 2000 : 120, () =>
@@ -846,10 +867,21 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     hold_detail: (payload) => {
       const { selected } = inView(payload);
       const { position } = payload as { position: number };
+      if (state === "detail-loading") return new Promise(() => undefined);
       if (state === "detail-error") throw failure("Io", LOCKED);
       const matching = state === "lines-matching-sizes";
       return later(state === "detail-slow" ? 2000 : 120, () =>
         selected === undefined ? null : devHoldDetail(selected, position, matching),
+      );
+    },
+    blocker_detail: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { key } = payload as { key: string };
+      if (state === "detail-loading") return new Promise(() => undefined);
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      return later(state === "detail-slow" ? 2000 : 150, () =>
+        selected === undefined ? null : devBlockerDetail(selected, spec, key, matching),
       );
     },
     breakdown: (payload) => {
