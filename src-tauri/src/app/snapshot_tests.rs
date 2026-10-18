@@ -415,19 +415,17 @@ fn the_columns_the_interface_takes_each_filter_to_need_are_the_engines() {
     }
     let json = include_str!("../../../ui/src/api/filter-needs.json");
     let needs: Needs = serde_json::from_str(json).unwrap();
-    // Every dimension but a custom column, which is needed by name.
-    let named = [
-        Dim::Discipline,
-        Dim::HoldType,
-        Dim::Role,
-        Dim::Name,
-        Dim::BlockerType,
-        Dim::Blocker,
-        Dim::Remark,
-        Dim::LineId,
-        Dim::ModelSize,
-        Dim::StressCalc,
-    ];
+    // Every dimension but a custom column, which is needed by name: the plain names of the
+    // generated type, so a new dimension is in the list without anyone adding it.
+    let declared = <Dim as ts_rs::TS>::inline(&ts_rs::Config::from_env());
+    let named: Vec<Dim> = declared
+        .split('|')
+        .map(str::trim)
+        .filter(|variant| variant.starts_with('"'))
+        .map(|variant| serde_json::from_str(variant).unwrap())
+        .collect();
+    assert!(named.contains(&Dim::Discipline) && named.contains(&Dim::StressCalc));
+    assert!(named.iter().all(|dim| !matches!(dim, Dim::Custom(_))));
     for dim in &named {
         let key = serde_json::to_value(dim).unwrap();
         let key = key.as_str().unwrap();

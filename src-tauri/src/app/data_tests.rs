@@ -661,6 +661,7 @@ fn matrix_folds_at_the_side_and_keeps_the_totals() {
     assert_eq!(matrix.rows.len(), MATRIX_SIDE);
     assert_eq!(matrix.cols.len(), MATRIX_SIDE);
     assert!(matrix.other_row.is_some() && matrix.folded_rows > 0);
+    assert!(matrix.other_col.is_some() && matrix.folded_cols > 0);
     assert_eq!(matrix.cells.len(), MATRIX_SIDE + 1);
     assert_eq!(matrix.cells.iter().flatten().sum::<usize>(), kept);
     assert_eq!(
@@ -705,6 +706,8 @@ fn a_blocker_detail_follows_the_filter_and_answers_none_when_the_filter_removes_
         hx_core::detail::blocker_detail(&ds, &spec, &plan, &key)
     );
     assert_eq!(detail.step, Some(1));
+    // The plan of the request is its own: the cached plan belongs to the line panel.
+    assert_eq!(state.plan_builds(), 0);
 
     let mut without = spec.clone();
     without.fields.push(hx_core::filter::FieldFilter {
@@ -714,6 +717,51 @@ fn a_blocker_detail_follows_the_filter_and_answers_none_when_the_filter_removes_
     });
     assert_eq!(state.blocker_detail(&without, &key, &view).unwrap(), None);
     assert_eq!(state.blocker_detail(&spec, "no|such", &view).unwrap(), None);
+    assert_eq!(state.plan_builds(), 0);
+}
+
+#[test]
+fn a_filter_that_narrows_the_plan_gives_the_blocker_its_step_in_the_narrowed_plan() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let step_in = |plan: &hx_core::solve::SolvePlan, key: &str| {
+        plan.steps
+            .iter()
+            .position(|step| step.key == key)
+            .map(|index| index + 1)
+    };
+    let full = hx_core::solve::solve_plan(&ds, &spec, None);
+    // A discipline and a blocker of it that ranks elsewhere among that discipline's holds alone.
+    let (narrowed, key, step) = query::group_by(&ds, &spec, &Dim::Discipline)
+        .into_iter()
+        .find_map(|group| {
+            let mut narrowed = spec.clone();
+            narrowed.fields.push(FieldFilter {
+                dim: Dim::Discipline,
+                values: vec![group.key],
+                negate: false,
+            });
+            let plan = hx_core::solve::solve_plan(&ds, &narrowed, None);
+            let (index, step) = plan
+                .steps
+                .iter()
+                .enumerate()
+                .find(|(index, step)| step_in(&full, &step.key) != Some(index + 1))?;
+            Some((narrowed, step.key.clone(), index + 1))
+        })
+        .unwrap();
+    assert_ne!(step_in(&full, &key), Some(step));
+
+    let detail = state
+        .blocker_detail(&narrowed, &key, &view)
+        .unwrap()
+        .unwrap();
+    assert_eq!(detail.step, Some(step));
+    let unfiltered = state.blocker_detail(&spec, &key, &view).unwrap().unwrap();
+    assert_eq!(unfiltered.step, step_in(&full, &key));
 }
 
 #[test]
