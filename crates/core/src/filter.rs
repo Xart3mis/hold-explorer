@@ -133,7 +133,7 @@ impl FilterPart {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Inactive {
-    /// The dimensions of the field filters left out, in the order of the filter.
+    /// The dimensions of the field filters left out, each once, in the order of the filter.
     pub dims: Vec<Dim>,
     /// The other parts left out, in the order of [`FilterPart::ALL`].
     pub parts: Vec<FilterPart>,
@@ -273,7 +273,7 @@ impl FilterSpec {
                 dim => lacks(dim.needs()),
             };
             let is_kept = filter.values.is_empty() || !is_absent;
-            if !is_kept {
+            if !is_kept && !inactive.dims.contains(&filter.dim) {
                 inactive.dims.push(filter.dim.clone());
             }
             is_kept
@@ -789,6 +789,21 @@ mod tests {
             role.applicable(&[Field::Role], &[]),
             (role.clone(), Inactive::default())
         );
+    }
+
+    #[test]
+    fn a_dimension_left_out_twice_is_named_once() {
+        let spec = FilterSpec {
+            fields: vec![
+                entry(Dim::Discipline, &["Civil"], false),
+                entry(Dim::Role, &["Lead"], false),
+                entry(Dim::Discipline, &["Piping"], true),
+            ],
+            ..Default::default()
+        };
+        let (applied, inactive) = spec.applicable(&[Field::Discipline, Field::Role], &[]);
+        assert!(applied.fields.is_empty());
+        assert_eq!(inactive.dims, vec![Dim::Discipline, Dim::Role]);
     }
 
     #[test]
