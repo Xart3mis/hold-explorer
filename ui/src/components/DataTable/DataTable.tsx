@@ -21,6 +21,7 @@ import {
   type CSSProperties,
   type ReactElement,
   type ReactNode,
+  type UIEvent,
 } from "react";
 import {
   Button as RacButton,
@@ -35,6 +36,8 @@ import {
   TableLoadMoreItem,
   Virtualizer,
   type Key,
+  type Selection as RacSelection,
+  type SortDescriptor,
   type TableLayoutProps,
 } from "react-aria-components";
 import { t } from "../../text/i18n";
@@ -815,8 +818,8 @@ export function DataTable<Item, Child = never>({
             ?.querySelector<HTMLElement>('[role="rowheader"]');
     pinned?.focus();
   }, [leaving]);
-  const widths = columns.map(widthOf);
-  const placeholderWidths = hasActions ? [...widths, actionsWidth] : widths;
+  // The widths in one word: what is built from them is built again only when one changes.
+  const widthsText = JSON.stringify(columns.map(widthOf));
   // The rows are built again only when what a row is made of changes: which columns, of which
   // kind, and whether there are actions. What a cell shows is not part of that.
   const shape = JSON.stringify(
@@ -1414,6 +1417,236 @@ export function DataTable<Item, Child = never>({
       ? null
       : leftOutText(leftOut.map((column) => column.header));
 
+  // The table and its rows, as the component library takes them. They are built again only when
+  // what they show changes: a render of the page for any other reason, with handlers written anew
+  // where it renders, does not reach the rows, each of which the library renders again whenever it
+  // renders the table.
+  const label = props["aria-label"];
+  const describedBy = leftOutLine === null ? countId : `${countId} ${leftOutId}`;
+  const selectedText = JSON.stringify(selectable ? selectedKeys : []);
+  const chosen = useMemo(() => JSON.parse(selectedText) as string[], [selectedText]);
+  const columnWidths = useMemo(() => JSON.parse(widthsText) as Width[], [widthsText]);
+  const actionsWidthValue = actionsWidth.width;
+  const actionsMinWidth = actionsWidth.minWidth;
+  const placeholders = useMemo(
+    (): Width[] =>
+      hasActions
+        ? [...columnWidths, { width: actionsWidthValue, minWidth: actionsMinWidth }]
+        : columnWidths,
+    [columnWidths, hasActions, actionsWidthValue, actionsMinWidth],
+  );
+  const sortColumn = sort?.column;
+  const sortDirection = sort?.direction;
+  const loadMoreShape = rows.length % TEXT_SHAPES;
+  const rowCount =
+    totalRows === undefined || loading || expandable ? undefined : totalRows + HEADER_ROWS;
+  const isPressable = selectable || (expandable && !loading);
+  // What the table answers is read when it answers: the page writes its handlers anew at every
+  // render, and the table is not built again for that.
+  const answers = useRef({
+    onSelectionChange,
+    onChildSelectionChange,
+    onExpandedChange,
+    onSortChange,
+    childByKey,
+    lookForEnd,
+  });
+  useLayoutEffect(() => {
+    answers.current = {
+      onSelectionChange,
+      onChildSelectionChange,
+      onExpandedChange,
+      onSortChange,
+      childByKey,
+      lookForEnd,
+    };
+  });
+  const answerSelection = useCallback((keys: RacSelection) => {
+    if (keys === "all") return;
+    const [key] = keys;
+    if (key === undefined) return;
+    const now = answers.current;
+    const child = now.childByKey.get(String(key));
+    // The items of child rows are children of this table, so they are `Child`s.
+    if (child !== undefined) now.onChildSelectionChange?.(child.item as Child);
+    else now.onSelectionChange?.(String(key));
+  }, []);
+  const answerExpanded = useCallback((keys: Set<Key>) => {
+    answers.current.onExpandedChange?.(new Set([...keys].map(String)));
+  }, []);
+  const answerSort = useCallback((descriptor: SortDescriptor) => {
+    answers.current.onSortChange?.({
+      column: String(descriptor.column),
+      direction: descriptor.direction,
+    });
+  }, []);
+  const answerScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    // The scroll that brought the table back to its top for another result has arrived.
+    if (event.currentTarget.scrollTop === 0) returning.current = false;
+    setScrolled(event.currentTarget.scrollTop > 0);
+    setScrolledAcross(event.currentTarget.scrollLeft > 0);
+    answers.current.lookForEnd();
+  }, []);
+  const virtualized = useMemo(
+    () => (
+      <Virtualizer layout={DataTableLayout} layoutOptions={layoutOptions}>
+        <Table
+          ref={scroller}
+          aria-label={label}
+          aria-describedby={describedBy}
+          // Rows that expand answer the pointer whether or not they can be selected.
+          data-selectable={isPressable ? "" : undefined}
+          selectionMode={selectable ? "single" : "none"}
+          selectionBehavior="toggle"
+          disallowEmptySelection
+          selectedKeys={chosen}
+          onSelectionChange={answerSelection}
+          {...(treeColumn === undefined || expandedKeys === undefined
+            ? {}
+            : {
+                treeColumn,
+                // A row that cannot be selected is disabled for the selection alone; a row
+                // that stands for children being read is disabled for all, so it takes no focus.
+                disabledBehavior: "all",
+                expandedKeys,
+                onExpandedChange: answerExpanded,
+              })}
+          {...(sortColumn === undefined || sortDirection === undefined
+            ? {}
+            : { sortDescriptor: { column: sortColumn, direction: sortDirection } })}
+          onSortChange={answerSort}
+          onScroll={answerScroll}
+          className={cx(styles.table)}
+          // The library counts the rows it was given. The rows of the whole result are more,
+          // and it passes no count of ours on, so the count is set where it draws.
+          render={(domProps) => (
+            <div {...domProps} {...(rowCount === undefined ? {} : { "aria-rowcount": rowCount })} />
+          )}
+        >
+          <TableHeader className={cx(styles.head)}>
+            {columns.map((column, index) => (
+              <Column
+                key={column.id}
+                id={column.id}
+                isRowHeader={column.isRowHeader === true}
+                allowsSorting={column.allowsSorting === true && !loading}
+                textValue={column.header}
+                width={columnWidths[index]?.width ?? null}
+                minWidth={columnWidths[index]?.minWidth ?? null}
+                data-column={column.id}
+                data-kind={column.kind ?? "text"}
+                data-pinned={column.isRowHeader === true ? "" : undefined}
+                className={cx(styles.column)}
+              >
+                {({ sortDirection, allowsSorting }) => (
+                  <>
+                    <span className={styles.label}>{column.header}</span>
+                    {/* At rest a muted two-way mark says the header sorts; the sorted header
+                          alone has an arrow, which says the order of the rows. */}
+                    {!allowsSorting ? null : sortDirection === undefined ? (
+                      <span data-mark="rest" className={styles.mark}>
+                        <Icon icon={ChevronsUpDown} />
+                      </span>
+                    ) : (
+                      <span
+                        data-mark="sorted"
+                        data-direction={sortDirection}
+                        className={styles.mark}
+                      >
+                        <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
+                      </span>
+                    )}
+                  </>
+                )}
+              </Column>
+            ))}
+            {hasActions ? (
+              <Column
+                id={ACTIONS}
+                textValue={t("table.actions")}
+                width={actionsWidthValue}
+                minWidth={actionsMinWidth}
+                className={cx(styles.column)}
+              >
+                <VisuallyHidden>{t("table.actions")}</VisuallyHidden>
+              </Column>
+            ) : null}
+          </TableHeader>
+          <TableBody
+            className={cx(styles.body)}
+            {...(loading
+              ? {
+                  renderEmptyState: () => (
+                    <>
+                      {/* The one line assistive technology reads in place of the rows. */}
+                      <VisuallyHidden>{t("table.loading")}</VisuallyHidden>
+                      <div aria-hidden="true">
+                        {Array.from({ length: skeletonRows }, (_, row) => (
+                          <PlaceholderRow
+                            key={row}
+                            part="skeleton-row"
+                            shape={row % TEXT_SHAPES}
+                            columns={cells}
+                            widths={placeholders}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ),
+                }
+              : {})}
+          >
+            {expandable ? treeBody : body}
+            {loadingMore ? (
+              <TableLoadMoreItem isLoading className={cx(styles.loadMore)}>
+                <VisuallyHidden>{t("table.loadingMore")}</VisuallyHidden>
+                <div aria-hidden="true">
+                  <PlaceholderRow
+                    part="load-more-row"
+                    shape={loadMoreShape}
+                    columns={cells}
+                    widths={placeholders}
+                  />
+                </div>
+              </TableLoadMoreItem>
+            ) : null}
+          </TableBody>
+        </Table>
+      </Virtualizer>
+    ),
+    [
+      layoutOptions,
+      label,
+      describedBy,
+      isPressable,
+      selectable,
+      chosen,
+      answerSelection,
+      treeColumn,
+      expandedKeys,
+      answerExpanded,
+      sortColumn,
+      sortDirection,
+      answerSort,
+      answerScroll,
+      rowCount,
+      columns,
+      columnWidths,
+      loading,
+      hasActions,
+      actionsWidthValue,
+      actionsMinWidth,
+      skeletonRows,
+      cells,
+      placeholders,
+      expandable,
+      treeBody,
+      body,
+      loadingMore,
+      loadMoreShape,
+    ],
+  );
+
   return (
     <div
       ref={box}
@@ -1441,156 +1674,7 @@ export function DataTable<Item, Child = never>({
     >
       <ContentContext value={content}>
         <ChildContentContext value={childContent}>
-          <TreeContext value={tree}>
-            <Virtualizer layout={DataTableLayout} layoutOptions={layoutOptions}>
-              <Table
-                ref={scroller}
-                aria-label={props["aria-label"]}
-                aria-describedby={leftOutLine === null ? countId : `${countId} ${leftOutId}`}
-                // Rows that expand answer the pointer whether or not they can be selected.
-                data-selectable={selectable || (expandable && !loading) ? "" : undefined}
-                selectionMode={selectable ? "single" : "none"}
-                selectionBehavior="toggle"
-                disallowEmptySelection
-                selectedKeys={selectable ? selectedKeys : []}
-                onSelectionChange={(keys) => {
-                  if (keys === "all") return;
-                  const [key] = keys;
-                  if (key === undefined) return;
-                  const child = childByKey.get(String(key));
-                  // The items of child rows are children of this table, so they are `Child`s.
-                  if (child !== undefined) onChildSelectionChange?.(child.item as Child);
-                  else onSelectionChange?.(String(key));
-                }}
-                {...(treeColumn === undefined || expandedKeys === undefined
-                  ? {}
-                  : {
-                      treeColumn,
-                      // A row that cannot be selected is disabled for the selection alone; a row
-                      // that stands for children being read is disabled for all, so it takes no focus.
-                      disabledBehavior: "all",
-                      expandedKeys,
-                      onExpandedChange: (keys: Set<Key>) => {
-                        onExpandedChange(new Set([...keys].map(String)));
-                      },
-                    })}
-                {...(sort === undefined ? {} : { sortDescriptor: sort })}
-                onSortChange={(descriptor) => {
-                  onSortChange?.({
-                    column: String(descriptor.column),
-                    direction: descriptor.direction,
-                  });
-                }}
-                onScroll={(event) => {
-                  // The scroll that brought the table back to its top for another result has arrived.
-                  if (event.currentTarget.scrollTop === 0) returning.current = false;
-                  setScrolled(event.currentTarget.scrollTop > 0);
-                  setScrolledAcross(event.currentTarget.scrollLeft > 0);
-                  lookForEnd();
-                }}
-                className={cx(styles.table)}
-                // The library counts the rows it was given. The rows of the whole result are more,
-                // and it passes no count of ours on, so the count is set where it draws.
-                render={(domProps) => (
-                  <div
-                    {...domProps}
-                    {...(totalRows === undefined || loading || expandable
-                      ? {}
-                      : { "aria-rowcount": totalRows + HEADER_ROWS })}
-                  />
-                )}
-              >
-                <TableHeader className={cx(styles.head)}>
-                  {columns.map((column, index) => (
-                    <Column
-                      key={column.id}
-                      id={column.id}
-                      isRowHeader={column.isRowHeader === true}
-                      allowsSorting={column.allowsSorting === true && !loading}
-                      textValue={column.header}
-                      width={widths[index]?.width ?? null}
-                      minWidth={widths[index]?.minWidth ?? null}
-                      data-column={column.id}
-                      data-kind={column.kind ?? "text"}
-                      data-pinned={column.isRowHeader === true ? "" : undefined}
-                      className={cx(styles.column)}
-                    >
-                      {({ sortDirection, allowsSorting }) => (
-                        <>
-                          <span className={styles.label}>{column.header}</span>
-                          {/* At rest a muted two-way mark says the header sorts; the sorted header
-                          alone has an arrow, which says the order of the rows. */}
-                          {!allowsSorting ? null : sortDirection === undefined ? (
-                            <span data-mark="rest" className={styles.mark}>
-                              <Icon icon={ChevronsUpDown} />
-                            </span>
-                          ) : (
-                            <span
-                              data-mark="sorted"
-                              data-direction={sortDirection}
-                              className={styles.mark}
-                            >
-                              <Icon icon={sortDirection === "ascending" ? ArrowUp : ArrowDown} />
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </Column>
-                  ))}
-                  {hasActions ? (
-                    <Column
-                      id={ACTIONS}
-                      textValue={t("table.actions")}
-                      width={actionsWidth.width}
-                      minWidth={actionsWidth.minWidth}
-                      className={cx(styles.column)}
-                    >
-                      <VisuallyHidden>{t("table.actions")}</VisuallyHidden>
-                    </Column>
-                  ) : null}
-                </TableHeader>
-                <TableBody
-                  className={cx(styles.body)}
-                  {...(loading
-                    ? {
-                        renderEmptyState: () => (
-                          <>
-                            {/* The one line assistive technology reads in place of the rows. */}
-                            <VisuallyHidden>{t("table.loading")}</VisuallyHidden>
-                            <div aria-hidden="true">
-                              {Array.from({ length: skeletonRows }, (_, row) => (
-                                <PlaceholderRow
-                                  key={row}
-                                  part="skeleton-row"
-                                  shape={row % TEXT_SHAPES}
-                                  columns={cells}
-                                  widths={placeholderWidths}
-                                />
-                              ))}
-                            </div>
-                          </>
-                        ),
-                      }
-                    : {})}
-                >
-                  {expandable ? treeBody : body}
-                  {loadingMore ? (
-                    <TableLoadMoreItem isLoading className={cx(styles.loadMore)}>
-                      <VisuallyHidden>{t("table.loadingMore")}</VisuallyHidden>
-                      <div aria-hidden="true">
-                        <PlaceholderRow
-                          part="load-more-row"
-                          shape={rows.length % TEXT_SHAPES}
-                          columns={cells}
-                          widths={placeholderWidths}
-                        />
-                      </div>
-                    </TableLoadMoreItem>
-                  ) : null}
-                </TableBody>
-              </Table>
-            </Virtualizer>
-          </TreeContext>
+          <TreeContext value={tree}>{virtualized}</TreeContext>
         </ChildContentContext>
       </ContentContext>
       {isEmpty && emptyState !== undefined ? (

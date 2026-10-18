@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { TableStateContext } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
@@ -151,6 +152,13 @@ function tableRoot(): HTMLElement {
   const root = screen.getByRole("grid").parentElement;
   if (!root) throw new Error("The grid has no parent.");
   return root;
+}
+
+/** The line ID of a row of `lines`. */
+function lineIdOf(index: number): string {
+  const line = lines[index];
+  if (!line) throw new Error(`There is no line ${String(index)}.`);
+  return line.id;
 }
 
 function dataRows() {
@@ -527,6 +535,60 @@ function lineId(number: number): string {
 
 /** Where a row starts under the header, at the comfortable density: 36 px for each. */
 const ROW = 36;
+
+describe("DataTable's renders", () => {
+  it(
+    "renders no row for a render of its page that changes nothing of it, and few for another selection",
+    SLOW,
+    () => {
+      // A cell that counts how often the table hands its rows a new state: once for each render
+      // of the table that reaches the rows.
+      let renders = 0;
+      function Probe() {
+        useContext(TableStateContext);
+        renders += 1;
+        return null;
+      }
+      const [first, ...rest] = columns;
+      if (!first) throw new Error("The table has no column.");
+      const probed: DataTableColumn<Line>[] = [
+        {
+          ...first,
+          cell: (line) => (
+            <>
+              {line.id}
+              <Probe />
+            </>
+          ),
+        },
+        ...rest,
+      ];
+      // A page writes its handlers where it renders: new functions every time.
+      function Page({ selected }: { selected: string; tick: number }) {
+        return (
+          <DataTable
+            aria-label="Lines on hold"
+            columns={probed}
+            rows={lines}
+            rowKey={(line) => line.id}
+            selectedKey={selected}
+            onSelectionChange={() => undefined}
+            onSortChange={() => undefined}
+          />
+        );
+      }
+      const { rerender } = render(<Page selected={lineIdOf(0)} tick={0} />);
+      renders = 0;
+      rerender(<Page selected={lineIdOf(0)} tick={1} />);
+      expect(renders).toBe(0);
+      rerender(<Page selected={lineIdOf(1)} tick={1} />);
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      // The table renders once for the selection, and the library hands its rows the state once
+      // more as it settles the selection: twice in all, where a page's render used to add more.
+      expect(renders).toBeLessThanOrEqual(2 * lines.length);
+    },
+  );
+});
 
 describe("DataTable in a viewport", () => {
   // Eleven rows fit under the header.
