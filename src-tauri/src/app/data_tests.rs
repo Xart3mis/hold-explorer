@@ -1,13 +1,16 @@
 use std::path::PathBuf;
 
-use hx_core::filter::{Dim, FilterSpec};
+use hx_core::dataset::Dataset;
+use hx_core::filter::{Dim, FieldFilter, FilterPart, FilterSpec, Inactive, Status};
 use hx_core::mapping::Field;
-use hx_core::query::{self, HoldQuery, HoldSort, LineQuery, LineSort};
+use hx_core::query::{self, ages_known, HoldQuery, HoldSort, LineQuery, LineSort};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
 use super::snapshot_tests::{import, open_holds, view_of, Fixture};
-use super::{AppState, ViewRef, PAGE_ROWS, PICKER_VALUES};
+use super::{
+    AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
+};
 
 /// The view the interface shows when it shows what the state holds.
 fn shown(state: &AppState) -> ViewRef {
@@ -69,6 +72,19 @@ fn outcomes(state: &mut AppState, view: &ViewRef) -> Vec<String> {
         kind(state.holds(&spec, &HoldQuery::default(), view).map(drop)),
         kind(state.line_detail("L-1", view).map(drop)),
         kind(state.hold_detail(0, view).map(drop)),
+        kind(state.breakdown(&spec, &Dim::Role, view).map(drop)),
+        kind(
+            state
+                .matrix(&spec, &Dim::Discipline, &Dim::HoldType, view)
+                .map(drop),
+        ),
+        kind(state.solve_order(&spec, view).map(drop)),
+        kind(state.blocker_detail(&spec, "A|b", view).map(drop)),
+        kind(
+            state
+                .group_detail(&spec, &Dim::Discipline, "A", view)
+                .map(drop),
+        ),
     ]
 }
 
@@ -78,7 +94,7 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     let mut state = fx.state();
     // Nothing is open.
     let none = view_of("0123456789abcdef", None);
-    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 6]);
+    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 11]);
 
     let mut state = small(&fx);
     let (workspace, snapshot) = (state.open_id(), state.selected_snapshot().unwrap());
@@ -89,12 +105,12 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     ] {
         assert_eq!(
             outcomes(&mut state, &stale),
-            ["ViewChanged"; 6],
+            ["ViewChanged"; 11],
             "{stale:?}"
         );
     }
     let view = shown(&state);
-    assert_eq!(outcomes(&mut state, &view), ["Ok"; 6]);
+    assert_eq!(outcomes(&mut state, &view), ["Ok"; 11]);
 }
 
 #[test]
@@ -128,6 +144,27 @@ fn a_workspace_without_snapshots_answers_as_for_an_empty_snapshot() {
     );
     assert_eq!(state.line_detail("L-1", &view).unwrap(), None);
     assert_eq!(state.hold_detail(0, &view).unwrap(), None);
+    assert!(state
+        .breakdown(&spec, &Dim::Role, &view)
+        .unwrap()
+        .is_empty());
+    let matrix = state
+        .matrix(&spec, &Dim::Discipline, &Dim::HoldType, &view)
+        .unwrap();
+    assert_eq!(
+        (matrix.rows.len(), matrix.cols.len(), matrix.max_cell),
+        (0, 0, 0)
+    );
+    assert!(matrix.cells.is_empty() && matrix.other_row.is_none());
+    let solve = state.solve_order(&spec, &view).unwrap();
+    assert_eq!((solve.rows.len(), solve.lines_on_hold), (0, 0));
+    assert_eq!(state.blocker_detail(&spec, "A|b", &view).unwrap(), None);
+    assert_eq!(
+        state
+            .group_detail(&spec, &Dim::Discipline, "A", &view)
+            .unwrap(),
+        None
+    );
     assert_eq!(state.dataset_builds(), 0);
 }
 
@@ -191,11 +228,204 @@ fn filter_values_never_return_more_than_the_picker_shows_and_report_the_true_tot
     let page = state.filter_values(&spec, &Dim::LineId, "", &view).unwrap();
     assert!(page.total > PICKER_VALUES, "{}", page.total);
     assert_eq!(page.values.len(), PICKER_VALUES);
+    assert_eq!(page.more, page.total - PICKER_VALUES);
 
     let narrow = state
         .filter_values(&spec, &Dim::LineId, "no such line anywhere", &view)
         .unwrap();
-    assert_eq!((narrow.total, narrow.values.len()), (0, 0));
+    assert_eq!((narrow.total, narrow.values.len(), narrow.more), (0, 0, 0));
+}
+
+#[test]
+fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let older = import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    // The newer snapshot has an extra column and lacks columns, so neither list is empty.
+    import(&mut state, &zoned(&fx), "2026-09-08 00:00:00", false);
+    let options = |state: &mut AppState, spec: &FilterSpec| {
+        let view = shown(state);
+        state.filter_options(spec, &view).unwrap()
+    };
+    let spec = open_holds();
+    let once = options(&mut state, &spec);
+    assert_eq!(state.column_builds(), 1);
+    let all = FilterSpec {
+        status: Status::All,
+        ..open_holds()
+    };
+    let again = options(&mut state, &all);
+    assert_eq!(state.column_builds(), 1);
+    let ds = dataset_of(&mut state);
+    assert_eq!(ds.custom_dims(), ["Zone"]);
+    assert!(ds.absent_fields().contains(&Field::Discipline));
+    for answer in [once, again] {
+        assert_eq!(
+            (answer.custom_dims, answer.absent),
+            (ds.custom_dims(), ds.absent_fields())
+        );
+    }
+
+    // Another snapshot finds them anew.
+    state.select_snapshot(older).unwrap();
+    options(&mut state, &spec);
+    assert_eq!(state.column_builds(), 2);
+}
+
+/// A file with an extra column `Zone` and no discipline, role, name, dates, release, or sizes.
+fn zoned(fx: &Fixture) -> PathBuf {
+    csv(
+        fx,
+        "zoned.csv",
+        "line_id,hold_remark,hold_type,Zone\nL-1,Pending 538-PR-100,MISC.,Z1\nL-2,b,P&ID,Z2\nL-2,c,MISC.,Z1\n",
+    )
+}
+
+/// A filter that sets, beside a filter the zoned file can apply, one on every column it lacks: a
+/// discipline, a custom column it does not have, the age, the creation and release dates, and
+/// the sizes.
+fn on_missing_columns() -> FilterSpec {
+    let date = |text: &str| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok();
+    FilterSpec {
+        status: Status::All,
+        fields: vec![
+            FieldFilter {
+                dim: Dim::Discipline,
+                values: vec!["Civil".into()],
+                negate: false,
+            },
+            FieldFilter {
+                dim: Dim::HoldType,
+                values: vec!["MISC.".into()],
+                negate: false,
+            },
+            FieldFilter {
+                dim: Dim::Custom("Area".into()),
+                values: vec!["North".into()],
+                negate: false,
+            },
+        ],
+        age_bands: vec![hx_core::filter::AgeBand {
+            min_days: Some(90),
+            max_days: None,
+        }],
+        created: hx_core::filter::DateRange {
+            from: date("2026-01-01"),
+            to: None,
+        },
+        released: hx_core::filter::DateRange {
+            from: None,
+            to: date("2026-09-30"),
+        },
+        size_mismatch: Some(true),
+        ..FilterSpec::default()
+    }
+}
+
+#[test]
+fn every_data_command_leaves_out_the_filters_on_columns_the_snapshot_lacks() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    import(&mut state, &zoned(&fx), "2026-09-29 00:00:00", true);
+    let view = shown(&state);
+    let full = on_missing_columns();
+    // What the zoned file can apply: the hold type and the status.
+    let applied = FilterSpec {
+        status: Status::All,
+        fields: vec![full.fields[1].clone()],
+        ..FilterSpec::default()
+    };
+    let ds = dataset_of(&mut state);
+    assert_eq!(
+        full.applicable(&ds.absent_fields(), &ds.custom_dims()).0,
+        applied
+    );
+    // Applied as it is, the filter would keep nothing.
+    assert_eq!(query::summary(&ds, &full).holds, 0);
+    assert_eq!(query::summary(&ds, &applied).holds, 2);
+
+    let mut answers = |spec: &FilterSpec| {
+        let options = state.filter_options(spec, &view).unwrap();
+        let blocker = query::group_by(&ds, &applied, &Dim::Blocker)[0].key.clone();
+        (
+            (options.total, options.facets),
+            state.filter_values(spec, &Dim::LineId, "", &view).unwrap(),
+            state.lines(spec, &LineQuery::default(), 0, &view).unwrap(),
+            state.holds(spec, &HoldQuery::default(), &view).unwrap(),
+            state.breakdown(spec, &Dim::Blocker, &view).unwrap(),
+            state
+                .matrix(spec, &Dim::LineId, &Dim::HoldType, &view)
+                .unwrap(),
+            state.solve_order(spec, &view).unwrap(),
+            state.blocker_detail(spec, &blocker, &view).unwrap(),
+            state
+                .group_detail(spec, &Dim::HoldType, "MISC.", &view)
+                .unwrap(),
+            state.overview(spec, &view).unwrap().map(|overview| {
+                (
+                    overview.summary,
+                    overview.by_discipline,
+                    overview.top_blockers,
+                    overview.top_lines,
+                    overview.stale,
+                )
+            }),
+        )
+    };
+    let with_all = answers(&full);
+    let with_applied = answers(&applied);
+    assert_eq!(with_all.0 .0, 2);
+    assert!(with_all.8.is_some(), "the group of the hold type is there");
+    assert_eq!(with_all, with_applied);
+}
+
+#[test]
+fn filter_options_name_the_filters_the_snapshot_cannot_apply() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let full_snapshot = import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    import(&mut state, &zoned(&fx), "2026-09-08 00:00:00", false);
+    let spec = on_missing_columns();
+    let options = state.filter_options(&spec, &shown(&state)).unwrap();
+    assert_eq!(
+        options.inactive,
+        Inactive {
+            dims: vec![Dim::Discipline, Dim::Custom("Area".into())],
+            parts: vec![
+                FilterPart::AgeBands,
+                FilterPart::Created,
+                FilterPart::Released,
+                FilterPart::SizeMismatch,
+            ],
+        }
+    );
+    assert_eq!(
+        state
+            .filter_options(&open_holds(), &shown(&state))
+            .unwrap()
+            .inactive,
+        Inactive::default()
+    );
+    // The synthetic file has every built-in column, but not the custom one.
+    state.select_snapshot(full_snapshot).unwrap();
+    let options = state.filter_options(&spec, &shown(&state)).unwrap();
+    assert_eq!(
+        options.inactive,
+        Inactive {
+            dims: vec![Dim::Custom("Area".into())],
+            parts: vec![],
+        }
+    );
 }
 
 #[test]
@@ -395,4 +625,347 @@ fn current_is_none_after_a_start_that_reopens_nothing() {
     state.settings.last_workspace = None;
     state.start();
     assert_eq!(state.current().unwrap(), None);
+}
+
+/// The dataset of the snapshot the state shows, built again without the app.
+fn dataset_of(state: &mut AppState) -> Dataset {
+    let selected = state.selected_snapshot().unwrap();
+    state.dataset(selected).unwrap().clone()
+}
+
+#[test]
+fn breakdown_equals_the_core_grouping() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    for dim in [Dim::Role, Dim::Blocker, Dim::Discipline] {
+        let groups = state.breakdown(&spec, &dim, &view).unwrap();
+        assert!(!groups.is_empty());
+        assert_eq!(groups, query::group_by(&ds, &spec, &dim), "{dim:?}");
+    }
+}
+
+#[test]
+fn matrix_folds_at_the_side_and_keeps_the_totals() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let kept = query::summary(&ds, &spec).holds;
+    let matrix = state
+        .matrix(&spec, &Dim::LineId, &Dim::Blocker, &view)
+        .unwrap();
+    assert_eq!(matrix.rows.len(), MATRIX_SIDE);
+    assert_eq!(matrix.cols.len(), MATRIX_SIDE);
+    assert!(matrix.other_row.is_some() && matrix.folded_rows > 0);
+    assert!(matrix.other_col.is_some() && matrix.folded_cols > 0);
+    assert_eq!(matrix.cells.len(), MATRIX_SIDE + 1);
+    assert_eq!(matrix.cells.iter().flatten().sum::<usize>(), kept);
+    assert_eq!(
+        matrix,
+        query::matrix_top(
+            &ds,
+            &spec,
+            &Dim::LineId,
+            &Dim::Blocker,
+            MATRIX_SIDE,
+            MATRIX_SIDE
+        )
+    );
+}
+
+#[test]
+fn the_solve_order_equals_the_core_view_and_leaves_the_cached_plan_alone() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let order = state.solve_order(&spec, &view).unwrap();
+    assert!(!order.rows.is_empty());
+    assert_eq!(
+        order,
+        hx_core::solve::solve_view(&hx_core::solve::solve_plan(&ds, &spec, None))
+    );
+    assert_eq!(state.plan_builds(), 0);
+}
+
+#[test]
+fn the_solve_order_and_a_blocker_detail_rank_the_open_holds_among_the_kept_ones() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let open = open_holds();
+    let all = FilterSpec {
+        status: Status::All,
+        ..FilterSpec::default()
+    };
+    let released = FilterSpec {
+        status: Status::Released,
+        ..FilterSpec::default()
+    };
+    let open_plan = hx_core::solve::solve_plan(&ds, &open, None);
+    // Some line has released holds only: planned with the open holds, it would count as held.
+    assert!(query::summary(&ds, &all).lines > query::summary(&ds, &open).lines);
+
+    let order = state.solve_order(&all, &view).unwrap();
+    assert_eq!(order, hx_core::solve::solve_view(&open_plan));
+    assert_eq!(order.lines_on_hold, query::summary(&ds, &open).lines);
+    for row in order.rows.iter().take(5) {
+        assert_eq!(
+            state.blocker_detail(&all, &row.key, &view).unwrap(),
+            hx_core::detail::blocker_detail(&ds, &open, &open_plan, &row.key)
+        );
+    }
+
+    // Released holds hold nothing: there is nothing to rank, even for their own blockers.
+    let nothing = state.solve_order(&released, &view).unwrap();
+    assert_eq!(
+        (
+            nothing.rows.len(),
+            nothing.lines_on_hold,
+            nothing.steps_to_most
+        ),
+        (0, 0, 0)
+    );
+    let of_released = query::group_by(&ds, &released, &Dim::Blocker)[0]
+        .key
+        .clone();
+    assert_eq!(
+        state
+            .blocker_detail(&released, &of_released, &view)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn the_solve_order_and_a_blocker_detail_of_one_filter_share_one_plan() {
+    let fx = Fixture::new();
+    let (first, second) = (fx.synth("a.xlsx", 1), fx.synth("b.xlsx", 2));
+    let mut state = fx.state();
+    let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
+    import(&mut state, &second, "2026-09-08 00:00:00", false);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    assert_eq!(state.filtered_plan_builds(), 0);
+
+    let order = state.solve_order(&spec, &view).unwrap();
+    let key = order.rows[0].key.clone();
+    let detail = state.blocker_detail(&spec, &key, &view).unwrap();
+    state.solve_order(&spec, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 1);
+    // All ranks the same open holds, so it plans nothing new; Released plans nothing at all.
+    let all = FilterSpec {
+        status: Status::All,
+        ..FilterSpec::default()
+    };
+    assert_eq!(state.solve_order(&all, &view).unwrap(), order);
+    let released = FilterSpec {
+        status: Status::Released,
+        ..FilterSpec::default()
+    };
+    state.solve_order(&released, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 1);
+
+    // Another filter plans anew, and only the last plan is kept.
+    let mut narrowed = spec.clone();
+    narrowed.fields.push(FieldFilter {
+        dim: Dim::Blocker,
+        values: vec![key.clone()],
+        negate: true,
+    });
+    let without = state.solve_order(&narrowed, &view).unwrap();
+    assert_eq!(
+        without,
+        hx_core::solve::solve_view(&hx_core::solve::solve_plan(&ds, &narrowed, None))
+    );
+    assert_eq!(state.blocker_detail(&narrowed, &key, &view).unwrap(), None);
+    assert_eq!(state.filtered_plan_builds(), 2);
+    assert_eq!(state.blocker_detail(&spec, &key, &view).unwrap(), detail);
+    assert_eq!(state.filtered_plan_builds(), 3);
+    assert_eq!(state.plan_builds(), 0);
+
+    // Another snapshot drops the plan with the dataset.
+    state.select_snapshot(older).unwrap();
+    let view = shown(&state);
+    state.solve_order(&spec, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 4);
+}
+
+#[test]
+fn a_blocker_detail_follows_the_filter_and_answers_none_when_the_filter_removes_it() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let order = state.solve_order(&spec, &view).unwrap();
+    let key = order.rows[0].key.clone();
+    let detail = state.blocker_detail(&spec, &key, &view).unwrap().unwrap();
+    let plan = hx_core::solve::solve_plan(&ds, &spec, None);
+    assert_eq!(
+        Some(detail.clone()),
+        hx_core::detail::blocker_detail(&ds, &spec, &plan, &key)
+    );
+    assert_eq!(detail.step, Some(1));
+    // The plan of the request is its own: the cached plan belongs to the line panel.
+    assert_eq!(state.plan_builds(), 0);
+
+    let mut without = spec.clone();
+    without.fields.push(hx_core::filter::FieldFilter {
+        dim: Dim::Blocker,
+        values: vec![key.clone()],
+        negate: true,
+    });
+    assert_eq!(state.blocker_detail(&without, &key, &view).unwrap(), None);
+    assert_eq!(state.blocker_detail(&spec, "no|such", &view).unwrap(), None);
+    assert_eq!(state.plan_builds(), 0);
+}
+
+#[test]
+fn a_filter_that_narrows_the_plan_gives_the_blocker_its_step_in_the_narrowed_plan() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let step_in = |plan: &hx_core::solve::SolvePlan, key: &str| {
+        plan.steps
+            .iter()
+            .position(|step| step.key == key)
+            .map(|index| index + 1)
+    };
+    let full = hx_core::solve::solve_plan(&ds, &spec, None);
+    // A discipline and a blocker of it that ranks elsewhere among that discipline's holds alone.
+    let (narrowed, key, step) = query::group_by(&ds, &spec, &Dim::Discipline)
+        .into_iter()
+        .find_map(|group| {
+            let mut narrowed = spec.clone();
+            narrowed.fields.push(FieldFilter {
+                dim: Dim::Discipline,
+                values: vec![group.key],
+                negate: false,
+            });
+            let plan = hx_core::solve::solve_plan(&ds, &narrowed, None);
+            let (index, step) = plan
+                .steps
+                .iter()
+                .enumerate()
+                .find(|(index, step)| step_in(&full, &step.key) != Some(index + 1))?;
+            Some((narrowed, step.key.clone(), index + 1))
+        })
+        .unwrap();
+    assert_ne!(step_in(&full, &key), Some(step));
+
+    let detail = state
+        .blocker_detail(&narrowed, &key, &view)
+        .unwrap()
+        .unwrap();
+    assert_eq!(detail.step, Some(step));
+    let unfiltered = state.blocker_detail(&spec, &key, &view).unwrap().unwrap();
+    assert_eq!(unfiltered.step, step_in(&full, &key));
+}
+
+#[test]
+fn a_group_detail_lists_at_most_the_group_lines_with_the_true_total() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+
+    // A group of the big file with more lines than the cap.
+    let (dim, largest) = [Dim::Discipline, Dim::Role, Dim::BlockerType, Dim::HoldType]
+        .into_iter()
+        .filter_map(|dim| {
+            let group = query::group_by(&ds, &spec, &dim).into_iter().next()?;
+            Some((dim, group))
+        })
+        .max_by_key(|(_, group)| group.lines)
+        .unwrap();
+    assert!(largest.lines > GROUP_LINES, "{}", largest.lines);
+    let detail = state
+        .group_detail(&spec, &dim, &largest.key, &view)
+        .unwrap()
+        .unwrap();
+    assert_eq!(detail.group, largest);
+    assert_eq!(detail.lines.total, largest.lines);
+    assert_eq!(detail.lines.rows.len(), GROUP_LINES);
+    let mut of_group = spec.clone();
+    of_group.fields.push(hx_core::filter::FieldFilter {
+        dim: dim.clone(),
+        values: vec![largest.key.clone()],
+        negate: false,
+    });
+    assert_eq!(
+        detail.lines,
+        query::line_page(&ds, &of_group, &LineQuery::default(), 0, Some(GROUP_LINES))
+    );
+
+    // A key the filter does not keep.
+    assert_eq!(
+        state
+            .group_detail(&spec, &dim, "no such value", &view)
+            .unwrap(),
+        None
+    );
+    let mut narrowed = spec.clone();
+    narrowed.fields.push(hx_core::filter::FieldFilter {
+        dim: dim.clone(),
+        values: vec![largest.key.clone()],
+        negate: true,
+    });
+    assert_eq!(
+        state
+            .group_detail(&narrowed, &dim, &largest.key, &view)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn the_overview_parts_equal_the_core_functions() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    let overview = state.overview(&spec, &view).unwrap().unwrap();
+    assert_eq!(overview.by_role, query::group_by(&ds, &spec, &Dim::Role));
+    let blockers = query::group_by(&ds, &spec, &Dim::Blocker);
+    assert!(blockers.len() > TOP_ITEMS);
+    assert_eq!(overview.top_blockers, blockers[..TOP_ITEMS]);
+    assert_eq!(
+        overview.top_lines,
+        query::line_page(&ds, &spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows
+    );
+    assert_eq!(overview.top_lines.len(), TOP_ITEMS);
+    assert_eq!(overview.stale.days, STALE_DAYS);
+    assert_eq!(
+        overview.stale.holds,
+        query::stale_count(&ds, &spec, STALE_DAYS)
+    );
+    // The open holds of the file have creation dates, so their ages are known.
+    assert!(overview.stale.ages_known);
+    assert_eq!(overview.stale.ages_known, ages_known(&ds, &spec));
+}
+
+#[test]
+fn the_overview_says_the_ages_are_unknown_for_a_snapshot_without_creation_dates() {
+    // The rule itself is tested in the core, beside `stale_count`; this is that the Overview
+    // answers with it.
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    import(&mut state, &zoned(&fx), "2026-09-29 00:00:00", true);
+    let view = shown(&state);
+    let spec = open_holds();
+    let stale = state.overview(&spec, &view).unwrap().unwrap().stale;
+    assert_eq!((stale.holds, stale.ages_known), (0, false));
+    assert_eq!(stale.ages_known, ages_known(&dataset_of(&mut state), &spec));
 }

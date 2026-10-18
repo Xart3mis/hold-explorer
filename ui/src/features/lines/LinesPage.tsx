@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
@@ -30,8 +30,9 @@ import {
   type DataTableSort,
 } from "../../components";
 import { cx } from "../../components/cx";
+import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
-import { useDetailFocus, useSelection } from "../detail/selection";
+import { useTableDetailFocus } from "../detail/tableFocus";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import {
@@ -104,12 +105,6 @@ async function readHolds(
 ): Promise<HoldsPage> {
   const page = await api.holds(spec, { ...order, offset }, view);
   return { ...page, status: spec.status };
-}
-
-/** The key the table gave the row an element is in; `null` outside a row. */
-function rowKeyOf(element: EventTarget | null): string | null {
-  const row = element instanceof Element ? element.closest<HTMLElement>("[role='row']") : null;
-  return row?.dataset.key ?? null;
 }
 
 /** The same list for as long as it has the same items, so what is built from it is kept. */
@@ -195,83 +190,10 @@ export function LinesPage() {
   const state = parseLinesAddress(location.search);
   const mode = state.rows;
   const { spec, isDefault, clear, update } = useFilters();
-  const { selection, close } = useSelection();
-  const focus = useDetailFocus();
-  const tableArea = useRef<HTMLDivElement>(null);
-  // The row that opened the detail panel, and whether the key that is down is Enter: a row
-  // chosen with Enter opens the panel with the focus on its heading, a row pressed keeps it.
-  const opener = useRef<string | null>(null);
-  const byEnter = useRef(false);
-
-  // When the panel closes, the focus goes back to the row that opened it, or to the table when
-  // that row is no longer there.
-  useEffect(() => {
-    focus.setGiveBack(() => {
-      const area = tableArea.current;
-      if (area === null) return;
-      const rows = [...area.querySelectorAll<HTMLElement>("[role='row'][data-key]")];
-      const row = rows.find((candidate) => candidate.dataset.key === opener.current);
-      (row ?? area.querySelector<HTMLElement>("[role='grid']"))?.focus();
-    });
-    return () => {
-      focus.setGiveBack(null);
-    };
-  }, [focus]);
-
-  // What the table is told by the keyboard, learned around it: the table answers Enter and
-  // Escape itself. Enter selects a row, and a row selected with it opens the panel with the
-  // focus on its heading; Enter on the row that is open already takes the focus there. Escape
-  // on the table closes the panel, as Escape in the panel does, and the focus goes back to the
-  // row that opened it. The listeners are attached once, to the box of the table, and read what
-  // the page shows now.
-  const latest = useRef({
-    isOpen: selection !== null,
+  // Enter, Escape, and the focus of the panel this table opens, as every such table has them.
+  const { listenTo, chosen } = useTableDetailFocus({
     selectedKey: selectionOf(location.search, mode),
-    close,
   });
-  useEffect(() => {
-    latest.current = {
-      isOpen: selection !== null,
-      selectedKey: selectionOf(location.search, mode),
-      close,
-    };
-  });
-  const listenTo = useCallback(
-    (area: HTMLDivElement | null) => {
-      tableArea.current = area;
-      if (area === null) return;
-      const learn = (event: KeyboardEvent) => {
-        byEnter.current = event.key === "Enter";
-      };
-      const forget = () => {
-        byEnter.current = false;
-      };
-      const answer = (event: KeyboardEvent) => {
-        const now = latest.current;
-        if (event.key === "Escape" && now.isOpen && !event.defaultPrevented) {
-          event.preventDefault();
-          now.close();
-          focus.giveBack();
-          return;
-        }
-        const key = rowKeyOf(event.target);
-        if (event.key === "Enter" && key !== null && key === now.selectedKey) {
-          opener.current = key;
-          focus.focusHeading();
-        }
-      };
-      area.addEventListener("keydown", learn, { capture: true });
-      area.addEventListener("pointerdown", forget, { capture: true });
-      area.addEventListener("keydown", answer);
-      return () => {
-        area.removeEventListener("keydown", learn, { capture: true });
-        area.removeEventListener("pointerdown", forget, { capture: true });
-        area.removeEventListener("keydown", answer);
-        tableArea.current = null;
-      };
-    },
-    [focus],
-  );
 
   const options = useFilterOptions({ enabled: hasSnapshot });
   // Which columns and presets the snapshot can fill is known once its options are read. Until then
@@ -316,9 +238,7 @@ export function LinesPage() {
     void navigate(linesAddress(next, location.search), { replace: true });
   };
   const select = (key: string) => {
-    opener.current = key;
-    if (byEnter.current) focus.askForHeading();
-    byEnter.current = false;
+    chosen(key);
     void navigate(
       { pathname: location.pathname, search: withSelection(location.search, shownMode, key) },
       { replace: true },
@@ -395,6 +315,11 @@ export function LinesPage() {
     ...(canLoad ? { onLoadMore: pages.loadMore } : {}),
     isLoadingMore: isOwn && pages?.isLoadingMore === true,
     ...(emptyState === undefined ? {} : { emptyState }),
+    // The columns that leave a narrow table are read in the panel of a row.
+    leftOutText: (headers: readonly string[]) =>
+      t(shownMode === "holds" ? "lines.leftOutHolds" : "lines.leftOutLines", {
+        columns: formatList(headers),
+      }),
     onSelectionChange: select,
     selectedKey: selectionOf(location.search, shownMode),
   } as const;

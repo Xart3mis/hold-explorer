@@ -168,6 +168,30 @@
   margin-inline-start: auto;
 }
 
+/* The last item of the sidebar: the button that collapses it to a rail and expands it again. */
+.sidebarToggle {
+  display: flex;
+  flex: none;
+}
+
+/*
+ * The rail: the icons of the destinations alone, each centered in its item. The label and the
+ * tag are visually hidden text there (NavItem), so they stay in the accessible name of the item;
+ * the tooltip of the item shows them.
+ */
+.sidebar[data-form="rail"] {
+  inline-size: var(--layout-rail-width);
+}
+
+.sidebar[data-form="rail"] .navItem {
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar[data-form="rail"] .sidebarToggle {
+  justify-content: center;
+}
+
 /* The content area: what the shell has to say first, then the page, which scrolls. */
 .content {
   position: relative;

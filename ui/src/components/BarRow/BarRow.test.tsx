@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { BarRow, BarRowGroup } from "./BarRow";
@@ -13,6 +13,11 @@ function bar(name: string): HTMLElement {
   if (!(found instanceof HTMLElement)) throw new Error(`The row ${name} has no bar.`);
   return found;
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("BarRow", () => {
   it("is a list for assistive technology: each row is an item that says its label and its values", () => {
@@ -86,6 +91,145 @@ describe("BarRow", () => {
     expect(onPress).toHaveBeenCalledTimes(3);
   });
 
+  it("opens what it names as a plain button, by Enter, Space, and a click, never pressed", async () => {
+    const onPress = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <BarRowGroup aria-label="Top lines">
+        <BarRow opens isIdentifier label="L-1001" value="4" fraction={1} onPress={onPress} />
+      </BarRowGroup>,
+    );
+    const row = screen.getByRole("button", { name: "L-1001 4" });
+    expect(row).not.toHaveAttribute("aria-pressed");
+    await user.tab();
+    expect(row).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(row);
+    expect(onPress).toHaveBeenCalledTimes(3);
+    expect(row).not.toHaveAttribute("aria-pressed");
+    expect(row).not.toHaveAttribute("data-selected");
+    // The label of an identifier is marked to be written as one; another label is not.
+    expect(row.querySelector("[data-part='bar-label']")).toHaveAttribute("data-identifier");
+  });
+
+  it("shows a label that is cut in full in a tooltip on focus, and no other label", async () => {
+    // jsdom lays nothing out, so the test says which label is cut: the long one.
+    const cut = "Instrumentation and control / Client";
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(80);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.textContent === cut ? 240 : 80;
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly changed: ResizeObserverCallback) {}
+        observe() {
+          this.changed([], this);
+        }
+        unobserve() {
+          return undefined;
+        }
+        disconnect() {
+          return undefined;
+        }
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <BarRowGroup aria-label="Top blockers">
+        <BarRow opens label="Piping / Client" value="207" fraction={1} onPress={vi.fn()} />
+        <BarRow opens label={cut} value="106" fraction={0.5} onPress={vi.fn()} />
+        <BarRow label={cut} value="106" fraction={0.5} onPress={vi.fn()} />
+      </BarRowGroup>,
+    );
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Piping / Client 207" })).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getAllByRole("button", { name: `${cut} 106` })[0]).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(cut);
+
+    // A row that filters says its label the same way.
+    await user.tab();
+    expect(screen.getAllByRole("button", { name: `${cut} 106` })[1]).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(cut);
+
+    await user.tab();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("measures its label again when the label changes or a font arrives, in a box of one size", async () => {
+    // jsdom lays nothing out: the label is cut while it is long, or once the font is wide.
+    const long = "Instrumentation and control / Client";
+    let wide = false;
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(80);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.textContent === long || wide ? 240 : 80;
+    });
+    // The box of a label keeps its size: the observer of sizes tells of it once, and never again.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly changed: ResizeObserverCallback) {}
+        observe() {
+          this.changed([], this);
+        }
+        unobserve() {
+          return undefined;
+        }
+        disconnect() {
+          return undefined;
+        }
+      },
+    );
+    const fonts = new EventTarget();
+    Object.defineProperty(document, "fonts", { value: fonts, configurable: true });
+    const user = userEvent.setup();
+    function Rows({ label }: { label: string }) {
+      return (
+        <BarRowGroup aria-label="Top blockers">
+          <BarRow opens label={label} value="106" fraction={0.5} onPress={vi.fn()} />
+          <BarRow opens label="Civil / Client" value="12" fraction={0.1} onPress={vi.fn()} />
+        </BarRowGroup>
+      );
+    }
+    try {
+      const { rerender } = render(<Rows label="Piping / Client" />);
+      rerender(<Rows label={long} />);
+      await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(long);
+
+      await user.tab();
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      wide = true;
+      act(() => {
+        fonts.dispatchEvent(new Event("loadingdone"));
+      });
+      await user.tab({ shift: true });
+      await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("Civil / Client");
+    } finally {
+      Reflect.deleteProperty(document, "fonts");
+    }
+  });
+
+  it("writes a label that is not an identifier in the body face", () => {
+    render(
+      <BarRowGroup aria-label="Holds by discipline">
+        <BarRow label="Civil" value="1,515" fraction={1} onPress={press} />
+      </BarRowGroup>,
+    );
+    const row = screen.getByRole("button", { name: "Civil 1,515" });
+    expect(row.querySelector("[data-part='bar-label']")).not.toHaveAttribute("data-identifier");
+  });
+
   it("says when its category is in the active filter", () => {
     render(
       <BarRowGroup aria-label="Holds by discipline">
@@ -152,7 +296,7 @@ describe("BarRow", () => {
     expect(screen.getByRole("button", { name: "Civil 1,515" })).toBeInTheDocument();
   });
 
-  it("has no accessibility violation at rest, selected, and loading", async () => {
+  it("has no accessibility violation at rest, selected, opening, and loading", async () => {
     const { container, rerender } = render(
       <BarRowGroup aria-label="Holds by discipline">
         <BarRow
@@ -170,6 +314,13 @@ describe("BarRow", () => {
           isSelected
           onPress={press}
         />
+      </BarRowGroup>,
+    );
+    await expectAccessible(container);
+    rerender(
+      <BarRowGroup aria-label="Top lines">
+        <BarRow opens isIdentifier label="L-1001" value="4" fraction={1} onPress={press} />
+        <BarRow opens isIdentifier label="L-1187" value="3" fraction={0.75} onPress={press} />
       </BarRowGroup>,
     );
     await expectAccessible(container);

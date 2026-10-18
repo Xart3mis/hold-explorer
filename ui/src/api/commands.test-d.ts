@@ -8,6 +8,11 @@ import type { WorkspaceView } from "../bindings/WorkspaceView";
 import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { BlockerDetail } from "../bindings/BlockerDetail";
+import type { FoldedMatrix } from "../bindings/FoldedMatrix";
+import type { Group } from "../bindings/Group";
+import type { GroupDetail } from "../bindings/GroupDetail";
+import type { SolveView } from "../bindings/SolveView";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { HoldRef } from "../bindings/HoldRef";
 import type { HoldsView } from "../bindings/HoldsView";
@@ -45,6 +50,11 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.lineDetail>, Promise<LineDetail | null>>>,
   Check<Equal<ReturnType<typeof api.holdDetail>, Promise<HoldRef | null>>>,
   Check<Equal<ReturnType<typeof api.workspaceCurrent>, Promise<WorkspaceOpen | null>>>,
+  Check<Equal<ReturnType<typeof api.breakdown>, Promise<Group[]>>>,
+  Check<Equal<ReturnType<typeof api.matrix>, Promise<FoldedMatrix>>>,
+  Check<Equal<ReturnType<typeof api.solveOrder>, Promise<SolveView>>>,
+  Check<Equal<ReturnType<typeof api.blockerDetail>, Promise<BlockerDetail | null>>>,
+  Check<Equal<ReturnType<typeof api.groupDetail>, Promise<GroupDetail | null>>>,
   Check<Equal<AppStart["list_error"], CommandError | null>>,
   Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];

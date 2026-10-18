@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
-import { ToggleButton } from "react-aria-components";
+import { useRef, type ReactNode } from "react";
+import { Button, ToggleButton } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Skeleton } from "../Skeleton/Skeleton";
+import { Tooltip } from "../Tooltip/Tooltip";
+import { useIsCut } from "../useIsCut";
 import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
 import styles from "./BarRow.module.css";
 
@@ -24,6 +26,12 @@ export interface BarRowGroupProps {
   skeletonRows?: number;
   /** A refetch: the previous rows stay, dimmed, until the new rows arrive. */
   isStale?: boolean;
+  /**
+   * `wide` for labels that are long names, such as the top blockers: the label column takes the
+   * room the bars do not need, and the bars keep a least width (DESIGN.md, Bar row, "Wide
+   * labels"). Otherwise every group has the label column of one width.
+   */
+  labels?: "fixed" | "wide";
   className?: string | undefined;
 }
 
@@ -36,6 +44,7 @@ export function BarRowGroup({
   isLoading,
   skeletonRows = SKELETON_SHAPES,
   isStale,
+  labels = "fixed",
   className,
   ...props
 }: BarRowGroupProps) {
@@ -44,6 +53,7 @@ export function BarRowGroup({
     <div
       role="list"
       {...props}
+      data-labels={labels === "wide" ? "wide" : undefined}
       aria-busy={loading ? "true" : undefined}
       data-stale={isStale === true && !loading ? "" : undefined}
       className={cx(styles.group, className)}
@@ -91,15 +101,30 @@ interface BarRowBase {
    * order takes it; every other bar is the neutral color of plain data.
    */
   ordinalStep?: 1 | 2 | 3 | 4 | 5;
+  /** The category is an identifier, a line ID: its label is written in the monospace face. */
+  isIdentifier?: boolean;
 }
 
 /** A row that filters by its category when it is pressed. */
 interface PressableBarRowProps extends BarRowBase {
   isStatic?: false;
+  opens?: false;
   /** Filters by the category, or removes it from the filter. */
   onPress: () => void;
   /** Whether the category is in the active filter. */
   isSelected?: boolean;
+}
+
+/**
+ * A row that opens what it names on another screen, in place of filtering by it: a blocker on
+ * Blockers, a line in Lines. It is a plain button: it is not on or off, so it is never selected.
+ */
+interface OpeningBarRowProps extends BarRowBase {
+  isStatic?: false;
+  opens: true;
+  /** Opens the category. */
+  onPress: () => void;
+  isSelected?: never;
 }
 
 /**
@@ -109,23 +134,35 @@ interface PressableBarRowProps extends BarRowBase {
  */
 interface StaticBarRowProps extends BarRowBase {
   isStatic: true;
+  opens?: never;
   onPress?: never;
   isSelected?: never;
 }
 
 /** A row is a button or it is not: a row that can be pressed has an action, a static row none. */
-export type BarRowProps = PressableBarRowProps | StaticBarRowProps;
+export type BarRowProps = PressableBarRowProps | OpeningBarRowProps | StaticBarRowProps;
 
 /**
  * One category as a row: its label, a bar as long as its share, and its value. An item of the
- * list its group is, and inside it a button, unless it is static.
+ * list its group is, and inside it a button, unless it is static: a toggle that filters by the
+ * category, or a plain button that opens it. A button whose label is cut says it in full in a
+ * tooltip.
  */
 export function BarRow(props: BarRowProps) {
-  const { label, value, secondaryValue, fraction, ordinalStep } = props;
+  const { label, value, secondaryValue, fraction, ordinalStep, isIdentifier } = props;
   const share = Math.min(1, Math.max(0, fraction));
+  const labelText = useRef<HTMLSpanElement>(null);
+  const cut = useIsCut(labelText, label);
   const content = (
     <>
-      <span className={styles.label}>{label}</span>{" "}
+      <span
+        ref={labelText}
+        data-part="bar-label"
+        data-identifier={isIdentifier === true ? "" : undefined}
+        className={styles.label}
+      >
+        {label}
+      </span>{" "}
       <span className={styles.track}>
         <span
           data-part="bar"
@@ -151,16 +188,29 @@ export function BarRow(props: BarRowProps) {
       </div>
     );
   }
+  if (props.opens === true) {
+    return (
+      <div role="listitem" className={styles.item}>
+        <Tooltip text={label} isDisabled={!cut}>
+          <Button onPress={props.onPress} data-part="bar-row" className={cx(styles.row)}>
+            {content}
+          </Button>
+        </Tooltip>
+      </div>
+    );
+  }
   return (
     <div role="listitem" className={styles.item}>
-      <ToggleButton
-        isSelected={props.isSelected === true}
-        onPress={props.onPress}
-        data-part="bar-row"
-        className={cx(styles.row)}
-      >
-        {content}
-      </ToggleButton>
+      <Tooltip text={label} isDisabled={!cut}>
+        <ToggleButton
+          isSelected={props.isSelected === true}
+          onPress={props.onPress}
+          data-part="bar-row"
+          className={cx(styles.row)}
+        >
+          {content}
+        </ToggleButton>
+      </Tooltip>
     </div>
   );
 }

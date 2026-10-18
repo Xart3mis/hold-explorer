@@ -1,9 +1,10 @@
-import { Plus, X } from "lucide-react";
+import { CircleSlash, Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button as RacButton, Focusable } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
+import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
 import { Tooltip } from "../Tooltip/Tooltip";
 import styles from "./FilterChip.module.css";
 
@@ -69,6 +70,17 @@ export interface FilterChipProps {
    * it moves; the bar says why.
    */
   isDisabled?: boolean;
+  /**
+   * The filter is kept but not applied: the snapshot in view lacks the column it needs. The chip
+   * is muted and shows a small icon before its field; its name says it is not in this snapshot.
+   * It opens and is removed as any chip.
+   */
+  isInactive?: boolean;
+  /**
+   * What the chip says is that of an answer for the filters or the view of before: it is shown
+   * at `--opacity-stale` until the new answer is there.
+   */
+  isStale?: boolean;
   className?: string | undefined;
 }
 
@@ -86,6 +98,8 @@ export function FilterChip({
   isExpanded,
   isUnderPopover = false,
   isDisabled = false,
+  isInactive = false,
+  isStale = false,
   className,
 }: FilterChipProps) {
   const remove = t("filterChip.remove", { field });
@@ -93,6 +107,8 @@ export function FilterChip({
     <span
       data-part="filter-chip"
       data-disabled={isDisabled ? "" : undefined}
+      data-inactive={isInactive ? "" : undefined}
+      data-stale={isStale ? "" : undefined}
       className={cx(styles.chip, className)}
     >
       <RacButton
@@ -105,7 +121,19 @@ export function FilterChip({
         }}
         className={cx(styles.body)}
       >
+        {isInactive ? (
+          <span aria-hidden="true" data-part="filter-chip-inactive" className={styles.inactive}>
+            <Icon icon={CircleSlash} />
+          </span>
+        ) : null}
         <span className={styles.text}>{reading(field, value, isNegated)}</span>
+        {isInactive ? (
+          // Its own word of the name, after the value; the space takes no room in the pill.
+          <>
+            {" "}
+            <VisuallyHidden>{t("filterChip.notInSnapshot")}</VisuallyHidden>
+          </>
+        ) : null}
       </RacButton>
       {isDisabled ? (
         // The X without its button: the same circle in the same place, and nothing to press.

@@ -4,10 +4,8 @@ import type { Status } from "../../bindings/Status";
 import { Tag, textChars } from "../../components";
 import { formatDate, formatDays, isBlank } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { missing, present, type NeedingColumn } from "./lineColumns";
+import { missing, present, sorting, type NeedingColumn } from "./lineColumns";
 import { HOLD_SORTS } from "./sorts";
-
-const sortable = (id: string) => HOLD_SORTS.some((entry) => entry.column === id);
 
 /** Room for a date as the table writes it: `30 Sept 2026`. */
 const DATE_CHARS = textChars(formatDate("2026-09-30"));
@@ -34,6 +32,11 @@ const DAYS_HEADER: Record<Status, MessageKey> = {
  * age; a released hold has the day it was released and how long it was held; among all holds,
  * each says which it is. The line ID is never cut, as in the lines. A column whose field the
  * snapshot has no value in is left out.
+ *
+ * A column whose value the hold panel shows has a priority, and leaves a table that is too narrow
+ * for all of them, the highest number first: role, created, name, blocker type, the release date,
+ * hold type, discipline, blocker. The line, the remark, the status, and the days always stay, so
+ * the age of a hold is in view at every width the app has.
  */
 export function holdColumns(widestLineId: number, absent: readonly Field[], status: Status) {
   const released = <Tag>{t("lines.statusReleased")}</Tag>;
@@ -53,6 +56,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       header: t("lines.column.discipline"),
       cell: ({ row }) => row.hold.discipline,
       size: { chars: 14 },
+      priority: 2,
       needs: ["Discipline"],
     },
     {
@@ -60,6 +64,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       header: t("lines.column.holdType"),
       cell: ({ row }) => given(row.hold.hold_type),
       size: { chars: 14 },
+      priority: 3,
       needs: ["HoldType"],
     },
     {
@@ -72,9 +77,11 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
     {
       id: "blocker",
       header: t("lines.column.blocker"),
+      // A blocker item is as often a word as a tag: it takes the face of the body, not the
+      // monospace of the line ID (DESIGN.md, the Identifier Rule).
       cell: ({ row }) => given(row.blocker.item),
-      kind: "identifier",
-      size: { chars: 16 },
+      size: { chars: 14 },
+      priority: 1,
       needs: ["Remark"],
     },
     {
@@ -83,6 +90,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       cell: ({ row }) => row.blocker.kind,
       isSupporting: true,
       size: { chars: 10 },
+      priority: 5,
       needs: ["Remark"],
     },
     {
@@ -90,6 +98,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       header: t("lines.column.name"),
       cell: ({ row }) => given(row.hold.name),
       size: { chars: 16 },
+      priority: 6,
       needs: ["Name"],
     },
     {
@@ -98,6 +107,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       cell: ({ row }) => given(row.hold.role),
       isSupporting: true,
       size: { chars: 14 },
+      priority: 8,
       needs: ["Role"],
     },
     {
@@ -106,6 +116,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
       cell: ({ row }) => date(row.hold.created),
       kind: "number",
       size: { chars: DATE_CHARS },
+      priority: 7,
       needs: ["Created"],
     },
   ];
@@ -124,6 +135,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
     cell: ({ row }) => date(row.hold.release_date),
     kind: "number",
     size: { chars: DATE_CHARS },
+    priority: 4,
     needs: ["ReleaseDate"],
   };
   const dayCount: NeedingColumn<HoldRef> = {
@@ -142,7 +154,7 @@ export function holdColumns(widestLineId: number, absent: readonly Field[], stat
   return present(
     [...columns, ...byStatus[status]].map((column) => ({
       ...column,
-      allowsSorting: sortable(column.id),
+      ...sorting(HOLD_SORTS, column.id),
     })),
     absent,
   );

@@ -62,6 +62,29 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   line_detail: () => api.lineDetail(fixture.line_detail.lineId, fixture.line_detail.view),
   hold_detail: () => api.holdDetail(fixture.hold_detail.position, fixture.hold_detail.view),
   workspace_current: () => api.workspaceCurrent(),
+  breakdown: () =>
+    api.breakdown(fixture.breakdown.spec, fixture.breakdown.dim, fixture.breakdown.view),
+  matrix: () =>
+    api.matrix(
+      fixture.matrix.spec,
+      fixture.matrix.rowDim,
+      fixture.matrix.colDim,
+      fixture.matrix.view,
+    ),
+  solve_order: () => api.solveOrder(fixture.solve_order.spec, fixture.solve_order.view),
+  blocker_detail: () =>
+    api.blockerDetail(
+      fixture.blocker_detail.spec,
+      fixture.blocker_detail.key,
+      fixture.blocker_detail.view,
+    ),
+  group_detail: () =>
+    api.groupDetail(
+      fixture.group_detail.spec,
+      fixture.group_detail.dim,
+      fixture.group_detail.key,
+      fixture.group_detail.view,
+    ),
 };
 
 const names = Object.keys(calls).sort() as CommandName[];

@@ -81,13 +81,18 @@ pub struct Group {
     pub lines: usize,
 }
 
+/// How a blocker is written for display: `<discipline> / <item>`.
+pub(crate) fn blocker_label(discipline: &str, item: &str) -> String {
+    format!("{discipline} / {item}")
+}
+
 pub(crate) fn label_for(dim: &Dim, key: &str, row: &Row) -> String {
     if key.is_empty() {
         return "(blank)".to_string();
     }
     match dim {
         Dim::Remark => row.hold.remark.clone(),
-        Dim::Blocker => format!("{} / {}", row.hold.discipline, row.blocker.item),
+        Dim::Blocker => row.blocker_label(),
         _ => key.to_string(),
     }
 }
@@ -165,6 +170,133 @@ pub fn matrix(ds: &Dataset, spec: &FilterSpec, row_dim: &Dim, col_dim: &Dim) -> 
         col_labels,
         cells,
     }
+}
+
+/// A matrix cut to the largest values of each dimension, the rest folded into "Other".
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct FoldedMatrix {
+    /// The kept row values, at most `max_rows`, ordered as `group_by` orders them.
+    pub rows: Vec<Group>,
+    /// The kept column values, at most `max_cols`.
+    pub cols: Vec<Group>,
+    /// The holds and lines of the folded row values; `None` when nothing was folded. Its key
+    /// and label are empty: the interface names it from its own catalog.
+    pub other_row: Option<Group>,
+    /// The holds and lines of the folded column values; `None` when nothing was folded. Its
+    /// key and label are empty: the interface names it from its own catalog.
+    pub other_col: Option<Group>,
+    /// `cells[r][c]` is the number of holds with row value r and column value c. When
+    /// `other_row` is `Some`, the last row of cells is "Other"; when `other_col` is `Some`, the
+    /// last column is.
+    pub cells: Vec<Vec<usize>>,
+    /// The largest entry of `cells`, for the colour scale; 0 when empty.
+    pub max_cell: usize,
+    /// How many row values were folded into "Other".
+    pub folded_rows: usize,
+    /// How many column values were folded into "Other".
+    pub folded_cols: usize,
+}
+
+/// One dimension of a folded matrix: the kept groups, the position of each kept key, and the
+/// folded remainder (holds and lines) when there is one.
+struct Fold {
+    kept: Vec<Group>,
+    index: HashMap<String, usize>,
+    folded: usize,
+    other_lines: BTreeSet<String>,
+}
+
+impl Fold {
+    fn new(mut groups: Vec<Group>, max: usize) -> Self {
+        let rest = groups.split_off(max.min(groups.len()));
+        let index = groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| (g.key.clone(), i))
+            .collect();
+        Fold {
+            kept: groups,
+            index,
+            folded: rest.len(),
+            other_lines: BTreeSet::new(),
+        }
+    }
+
+    /// The position of `key` in the cells: its own, or the last one for a folded value.
+    fn position(&self, key: &str) -> usize {
+        self.index.get(key).copied().unwrap_or(self.kept.len())
+    }
+
+    fn len(&self) -> usize {
+        self.kept.len() + usize::from(self.folded > 0)
+    }
+}
+
+/// Counts as `matrix` does for the `max_rows` largest row values and `max_cols` largest column
+/// values; every other value is folded into one "Other" row and one "Other" column that hold
+/// the sum of what they replace.
+pub fn matrix_top(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    row_dim: &Dim,
+    col_dim: &Dim,
+    max_rows: usize,
+    max_cols: usize,
+) -> FoldedMatrix {
+    let mut rows = Fold::new(group_by(ds, spec, row_dim), max_rows);
+    let mut cols = Fold::new(group_by(ds, spec, col_dim), max_cols);
+    let mut cells = vec![vec![0usize; cols.len()]; rows.len()];
+    let (mut other_row_holds, mut other_col_holds) = (0, 0);
+    for row in filtered(ds, spec) {
+        let r = rows.position(&row_dim.value(row));
+        let c = cols.position(&col_dim.value(row));
+        cells[r][c] += 1;
+        if r == rows.kept.len() {
+            other_row_holds += 1;
+            rows.other_lines.insert(row.hold.line_id.clone());
+        }
+        if c == cols.kept.len() {
+            other_col_holds += 1;
+            cols.other_lines.insert(row.hold.line_id.clone());
+        }
+    }
+    let other = |fold: &Fold, holds: usize| {
+        (fold.folded > 0).then(|| Group {
+            key: String::new(),
+            label: String::new(),
+            holds,
+            lines: fold.other_lines.len(),
+        })
+    };
+    FoldedMatrix {
+        other_row: other(&rows, other_row_holds),
+        other_col: other(&cols, other_col_holds),
+        max_cell: cells.iter().flatten().copied().max().unwrap_or(0),
+        folded_rows: rows.folded,
+        folded_cols: cols.folded,
+        rows: rows.kept,
+        cols: cols.kept,
+        cells,
+    }
+}
+
+/// Open holds the filter keeps whose age is at least `days`.
+pub fn stale_count(ds: &Dataset, spec: &FilterSpec, days: i64) -> usize {
+    filtered(ds, spec)
+        .filter(|row| !row.hold.released && row.age_days.is_some_and(|age| age >= days))
+        .count()
+}
+
+/// Whether it can be known which open holds the filter keeps are stale: false only when it keeps
+/// open holds and none of them has an age, because none has a creation date, so that
+/// [`stale_count`] is 0 for want of dates. True when it keeps no open hold, as there is nothing to
+/// know then. Only an open hold has an age.
+pub fn ages_known(ds: &Dataset, spec: &FilterSpec) -> bool {
+    let mut open = filtered(ds, spec)
+        .filter(|row| !row.hold.released)
+        .peekable();
+    open.peek().is_none() || open.any(|row| row.age_days.is_some())
 }
 
 /// One line of a view. Sizes, stress calc, and the mismatch flag come from the line's first
@@ -611,6 +743,8 @@ pub struct ValuePage {
     pub total: usize,
     /// The first `limit` of them, ordered as `group_by` orders groups.
     pub values: Vec<Group>,
+    /// How many values match `search` beyond those in `values`.
+    pub more: usize,
 }
 
 /// Groups the holds kept by `spec.without(dim)` by `dim`, keeps the groups whose label contains
@@ -631,6 +765,7 @@ pub fn value_page(
     matching.truncate(limit);
     ValuePage {
         total,
+        more: total - matching.len(),
         values: matching,
     }
 }
@@ -1053,10 +1188,13 @@ mod tests {
     fn value_page_total_counts_matches_before_the_limit() {
         let page = value_page(&sample(), &open(), &Dim::Discipline, "", 2);
         assert_eq!(page.total, 3);
+        assert_eq!(page.more, 1);
         assert_eq!(keys(&page.values), vec![("Civil", 2, 2), ("Piping", 1, 1)]);
         let none = value_page(&sample(), &open(), &Dim::Discipline, "", 0);
-        assert_eq!(none.total, 3);
+        assert_eq!((none.total, none.more), (3, 3));
         assert!(none.values.is_empty());
+        let all = value_page(&sample(), &open(), &Dim::Discipline, "", 10);
+        assert_eq!((all.total, all.more), (3, 0));
     }
 
     #[test]
@@ -1435,5 +1573,176 @@ mod tests {
         assert!(!line.reverse && !line.size_mismatch_only);
         let hold: HoldQuery = serde_json::from_str(r#"{"sort":"Name"}"#).unwrap();
         assert!(!hold.reverse);
+    }
+
+    /// Eight open holds: Civil (3), Piping (2), Process (2), Stress (1) by MISC., P&ID, VENDOR, OTHER.
+    fn folding() -> Dataset {
+        let hold_of = |line: &str, discipline: &str, hold_type: &str| {
+            hold(line, discipline, hold_type, "x", 1)
+        };
+        Dataset::build(
+            vec![
+                hold_of("L1", "Civil", "MISC."),
+                hold_of("L2", "Civil", "MISC."),
+                hold_of("L3", "Civil", "P&ID"),
+                hold_of("L4", "Piping", "MISC."),
+                hold_of("L5", "Piping", "P&ID"),
+                hold_of("L6", "Process", "MISC."),
+                hold_of("L6", "Process", "VENDOR"),
+                hold_of("L7", "Stress", "OTHER"),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        )
+    }
+
+    #[test]
+    fn a_folded_matrix_with_room_for_everything_equals_the_matrix() {
+        let ds = folding();
+        let full = matrix(&ds, &open(), &Dim::Discipline, &Dim::HoldType);
+        let top = matrix_top(&ds, &open(), &Dim::Discipline, &Dim::HoldType, 10, 10);
+        assert_eq!(
+            top.rows.iter().map(|g| g.key.clone()).collect::<Vec<_>>(),
+            full.rows
+        );
+        assert_eq!(
+            top.cols.iter().map(|g| g.key.clone()).collect::<Vec<_>>(),
+            full.cols
+        );
+        assert_eq!(
+            top.rows.iter().map(|g| g.label.clone()).collect::<Vec<_>>(),
+            full.row_labels
+        );
+        assert_eq!(top.cells, full.cells);
+        assert_eq!((top.other_row, top.other_col), (None, None));
+        assert_eq!((top.folded_rows, top.folded_cols), (0, 0));
+        assert_eq!(top.max_cell, 2);
+    }
+
+    #[test]
+    fn a_folded_matrix_sums_the_rest_into_other() {
+        let top = matrix_top(&folding(), &open(), &Dim::Discipline, &Dim::HoldType, 2, 2);
+        let keys: Vec<&str> = top.rows.iter().map(|g| g.key.as_str()).collect();
+        assert_eq!(keys, vec!["Civil", "Piping"]);
+        let keys: Vec<&str> = top.cols.iter().map(|g| g.key.as_str()).collect();
+        assert_eq!(keys, vec!["MISC.", "P&ID"]);
+        let other_row = top.other_row.clone().unwrap();
+        assert_eq!(
+            (
+                other_row.key.as_str(),
+                other_row.label.as_str(),
+                other_row.holds,
+                other_row.lines
+            ),
+            ("", "", 3, 2)
+        );
+        let other_col = top.other_col.clone().unwrap();
+        assert_eq!((other_col.holds, other_col.lines), (2, 2));
+        assert_eq!((top.folded_rows, top.folded_cols), (2, 2));
+        assert_eq!(top.cells, vec![vec![2, 1, 0], vec![1, 1, 0], vec![1, 0, 2]]);
+        assert_eq!(top.max_cell, 2);
+        let total: usize = top.cells.iter().flatten().sum();
+        assert_eq!(total, summary(&folding(), &open()).holds);
+    }
+
+    #[test]
+    fn a_folded_matrix_of_nothing_is_empty() {
+        let none = FilterSpec {
+            text: "no such remark".to_string(),
+            ..Default::default()
+        };
+        let top = matrix_top(&sample(), &none, &Dim::Discipline, &Dim::HoldType, 2, 2);
+        assert!(top.rows.is_empty() && top.cols.is_empty() && top.cells.is_empty());
+        assert_eq!((top.other_row, top.other_col), (None, None));
+        assert_eq!(top.max_cell, 0);
+    }
+
+    #[test]
+    fn stale_holds_start_at_the_given_age_and_are_open_only() {
+        let mut released = hold("R", "Civil", "MISC.", "x", 200);
+        released.released = true;
+        released.release_date = Some(snapshot());
+        let ds = Dataset::build(
+            vec![
+                hold("A", "Civil", "MISC.", "x", 89),
+                hold("B", "Civil", "MISC.", "x", 90),
+                hold("C", "Civil", "MISC.", "x", 300),
+                released,
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        assert_eq!(stale_count(&ds, &all(), 90), 2);
+        assert_eq!(stale_count(&ds, &all(), 91), 1);
+        assert_eq!(stale_count(&ds, &all(), 0), 3);
+    }
+
+    #[test]
+    fn ages_are_unknown_only_when_open_holds_are_kept_and_none_has_an_age() {
+        let mut released = hold("R", "Civil", "MISC.", "x", 200);
+        released.released = true;
+        released.release_date = Some(snapshot());
+        let dated = Dataset::build(
+            vec![hold("A", "Civil", "MISC.", "x", 30), released.clone()],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        assert!(ages_known(&dated, &open()));
+        assert!(ages_known(&dated, &all()));
+
+        // The same holds without their creation dates: no open hold has an age.
+        let mut dateless = dated.clone();
+        for row in &mut dateless.rows {
+            row.age_days = None;
+        }
+        assert!(!ages_known(&dateless, &open()));
+        assert!(!ages_known(&dateless, &all()));
+        // With no open hold kept there is nothing to know.
+        let released_only = FilterSpec {
+            status: Status::Released,
+            ..Default::default()
+        };
+        assert!(ages_known(&dateless, &released_only));
+        let nothing = FilterSpec {
+            text: "no hold has this text".to_owned(),
+            ..Default::default()
+        };
+        assert!(ages_known(&dateless, &nothing));
+
+        // One open hold with an age among the kept is enough.
+        let mut one = Dataset::build(
+            vec![
+                hold("A", "Civil", "MISC.", "x", 30),
+                hold("B", "Civil", "MISC.", "x", 40),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        one.rows[0].age_days = None;
+        assert!(ages_known(&one, &open()));
+    }
+
+    #[test]
+    fn folding_one_dimension_leaves_the_other_whole() {
+        let top = matrix_top(&folding(), &open(), &Dim::Discipline, &Dim::HoldType, 2, 10);
+        assert_eq!((top.rows.len(), top.cols.len()), (2, 4));
+        assert!(top.other_row.is_some() && top.other_col.is_none());
+        assert_eq!((top.folded_rows, top.folded_cols), (2, 0));
+        assert_eq!((top.cells.len(), top.cells[0].len()), (3, 4));
+        let total: usize = top.cells.iter().flatten().sum();
+        assert_eq!(total, 8);
+    }
+
+    #[test]
+    fn folding_to_no_rows_puts_everything_in_other() {
+        let top = matrix_top(&folding(), &open(), &Dim::Discipline, &Dim::HoldType, 0, 10);
+        assert!(top.rows.is_empty());
+        assert_eq!(
+            top.other_row.as_ref().map(|g| (g.holds, g.lines)),
+            Some((8, 7))
+        );
+        assert_eq!(top.cells.len(), 1);
+        assert_eq!(top.cells[0].iter().sum::<usize>(), 8);
+        assert_eq!(top.folded_rows, 4);
     }
 }

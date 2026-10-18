@@ -253,6 +253,47 @@ describe("useSnapshotQuery", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
+  it("reads nothing on a refetch while it is told that there is nothing to ask for, or while an action runs", async () => {
+    const read = vi.fn<Read>(() => Promise.resolve("lines of 2"));
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ enabled }: { enabled: boolean }) =>
+        useSnapshotQuery({ name: "lines", params: ["oldest"], read, enabled }),
+      { enabled: false },
+      start,
+      () => start.open,
+    );
+    await act(async () => {
+      await result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.lines.fetchStatus).toBe("idle");
+    // It is one function from render to render, as the library's own is.
+    const { refetch } = result.current.lines;
+    rerender({ enabled: false });
+    expect(result.current.lines.refetch).toBe(refetch);
+
+    rerender({ enabled: true });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 2");
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    await act(async () => {
+      await result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.data).toBe("lines of 2");
+  });
+
   it("reads again, for the new view, when another snapshot is the selected one", async () => {
     const { read, waiting } = heldRead();
     const start = openStart();
@@ -810,6 +851,70 @@ describe("useSnapshotQuery", () => {
     });
     expect(result.current.lines.error).toMatchObject({ kind: "Io" });
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the result its answer belongs to: the same while the answer of before stands in, another with the new one", async () => {
+    const waiting: { view: ViewRef; sort: string; resolve: (data: string) => void }[] = [];
+    const read = vi.fn<Read>(
+      (view, sort) =>
+        new Promise<string>((resolve) => {
+          waiting.push({ view, sort, resolve });
+        }),
+    );
+    // Every render of the screen, as the hook gave it: the key and the answer it was rendered with.
+    const seen: { key: string; data: string | undefined }[] = [];
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ sort }: { sort: string }) => {
+        const query = useSnapshotQuery({ name: "lines", params: [sort], read });
+        seen.push({ key: query.resultKey, data: query.data });
+        return query;
+      },
+      { sort: "oldest" },
+      start,
+      () => start.open,
+    );
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      waiting[0]?.resolve("oldest");
+    });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("oldest");
+    });
+    const oldest = result.current.lines.resultKey;
+    expect(oldest).not.toBe("");
+
+    // Another order, then another, before either answered: the answer of before stands in, and
+    // the key still names it.
+    rerender({ sort: "newest" });
+    rerender({ sort: "largest" });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(3);
+    });
+    expect(result.current.lines.isPlaceholderData).toBe(true);
+    expect(result.current.lines.resultKey).toBe(oldest);
+
+    act(() => {
+      waiting[2]?.resolve("largest");
+    });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("largest");
+    });
+    const largest = result.current.lines.resultKey;
+    expect(largest).not.toBe(oldest);
+    // The key changed in the same render as the answer, never before and never after it.
+    for (const { key, data } of seen) {
+      if (data !== undefined) expect(key).toBe(data === "largest" ? largest : oldest);
+    }
+
+    // Back to an order whose answer is kept: its key comes back with it.
+    rerender({ sort: "oldest" });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("oldest");
+    });
+    expect(result.current.lines.resultKey).toBe(oldest);
   });
 });
 
@@ -1751,6 +1856,45 @@ describe("useSnapshotPages", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(read).toHaveBeenCalledTimes(1);
   });
+
+  it("reads nothing on a retry while it is not enabled, or while an action runs", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ enabled }: { enabled: boolean }) =>
+        useSnapshotPages({ name: "lines", params: ["oldest"], read, enabled }),
+      { enabled: false },
+      start,
+      () => start.open,
+    );
+    act(() => {
+      result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.lines.isPending).toBe(true);
+
+    rerender({ enabled: true });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    act(() => {
+      result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.rows).toHaveLength(2);
+  });
 });
 
 describe("workspaceAction", () => {
@@ -1763,12 +1907,20 @@ describe("workspaceAction", () => {
       kind: "changing",
       mutationFn: () => Promise.resolve(null),
     });
+    const selecting = workspaceAction(queryClient, {
+      kind: "selecting",
+      mutationFn: () => Promise.resolve(null),
+    });
     expect(switching.mutationKey).toEqual(keys.switching);
     expect(changing.mutationKey).toEqual(keys.changing);
+    expect(selecting.mutationKey).toEqual(keys.selectingSnapshot);
     expect(switching.scope).toBeDefined();
     expect(switching.scope).toEqual(changing.scope);
-    // Both are found by the key every action on the open workspace is under.
-    for (const options of [switching, changing]) {
+    expect(selecting.scope).toEqual(changing.scope);
+    // A selection is found by the key of the switching actions too.
+    expect(selecting.mutationKey?.slice(0, keys.switching.length)).toEqual(keys.switching);
+    // All are found by the key every action on the open workspace is under.
+    for (const options of [switching, changing, selecting]) {
       expect(options.mutationKey?.slice(0, keys.workspaceAction.length)).toEqual(
         keys.workspaceAction,
       );

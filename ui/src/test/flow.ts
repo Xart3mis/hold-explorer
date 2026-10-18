@@ -1,8 +1,11 @@
 import { screen, within } from "@testing-library/react";
+import type { UserEvent } from "@testing-library/user-event";
 import { keys } from "../api/keys";
 import { queryClient } from "../app/query";
 import type { AppStart } from "../bindings/AppStart";
 import type { ImportDraft } from "../bindings/ImportDraft";
+import en from "../locales/en.json";
+import { formatDate } from "../text/format";
 import { renderApp } from "./app";
 import { openStart } from "./fixtures";
 import type { Handlers } from "./ipc";
@@ -47,4 +50,24 @@ export async function choose(
   await user.click(screen.getByRole("button", { name: label }));
   const list = await screen.findByRole("listbox");
   await user.click(within(list).getByRole("option", { name: option }));
+}
+
+/**
+ * Selects the snapshot before the newest in the top bar, as a user does: the trigger, then the
+ * second item of its menu. The app must be on the start of `openStart`, with a `snapshot_select`
+ * handler; the trigger is found by the date of the snapshot it selects, the newest.
+ */
+export async function selectOlderSnapshot(user: UserEvent): Promise<void> {
+  const open = openStart().open;
+  const selected = open?.snapshots.find((snapshot) => snapshot.id === open.selected);
+  if (selected === undefined) throw new Error("The start of openStart selects no snapshot.");
+  await user.click(
+    await screen.findByRole("button", {
+      name: en.snapshots.trigger.replace("{{date}}", formatDate(selected.taken_at)),
+    }),
+  );
+  const menu = await screen.findByRole("menu", { name: en.snapshots.menu });
+  const older = within(menu).getAllByRole("menuitemradio")[1];
+  if (older === undefined) throw new Error("The snapshot menu has no older snapshot.");
+  await user.click(older);
 }

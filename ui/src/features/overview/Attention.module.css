@@ -1,0 +1,63 @@
+/*
+ * What needs attention: a list ruled like a fact list, a hairline above its first entry and one
+ * under each. An entry is one button as wide as its column, the tag of its state first and a
+ * chevron at its end, in the ink of what can be acted on, saying that it opens a screen.
+ */
+.list {
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.item {
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.entry {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: var(--density-row-height);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.entry[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.entry[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+.entry[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.text {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--text-body-strong);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.chevron {
+  flex: none;
+  color: var(--color-accent-text);
+}
+
+/* A first load: one entry's height, with a block where its text will be. */
+.skeleton {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}

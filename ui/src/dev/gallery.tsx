@@ -29,6 +29,7 @@ import {
   BarRow,
   BarRowGroup,
   Button,
+  ChartViewToggle,
   Checkbox,
   ChoiceGroup,
   DataTable,
@@ -40,8 +41,10 @@ import {
   ErrorState,
   FactList,
   FilterChip,
+  Heatmap,
   Icon,
   IconButton,
+  LineChart,
   MenuButton,
   MenuItem,
   MenuSection,
@@ -67,7 +70,9 @@ import {
   useToast,
   VisuallyHidden,
   type ButtonVariant,
+  type ChartView,
   type DataTableColumn,
+  type LinePoint,
 } from "../components";
 import menuStyles from "../components/Menu/Menu.module.css";
 import popoverStyles from "../components/Popover/Popover.module.css";
@@ -1694,6 +1699,269 @@ function Bars() {
   );
 }
 
+// The charts' data: thirty disciplines by thirty hold remarks, some of them long, and the curve
+// of a solve order of 2,400 steps. Made up, and the same at every load.
+const DISCIPLINES = [
+  "Civil",
+  "Piping",
+  "Process",
+  "Instrumentation",
+  "Structural",
+  "Electrical",
+  "Mechanical",
+  "Stress",
+  "HVAC",
+  "Telecom",
+  "Safety",
+  "Architectural",
+  "Geotechnical",
+  "Materials",
+  "Corrosion",
+  "Fire protection",
+  "Layout",
+  "Vendor coordination",
+  "Construction",
+  "Commissioning",
+  "Operations",
+  "Insulation",
+  "Painting",
+  "Heat tracing",
+  "Supports",
+  "Pipeline",
+  "Subsea",
+  "Marine",
+  "Utilities",
+  "Quality",
+].map((label) => ({ key: label, label }));
+const REMARKS = Array.from({ length: 30 }, (_, index) => {
+  const label =
+    index % 4 === 1
+      ? `Vendor data for the compressor skid, revision ${String.fromCharCode(65 + (index % 26))}, to be confirmed`
+      : `577-PR-${String(400 + index * 7)}`;
+  return { key: label, label };
+});
+const MATRIX = Array.from({ length: 31 }, (_, r) =>
+  Array.from({ length: 31 }, (__, c) => {
+    const seed = (r * 37 + c * 61 + r * c * 7) % 101;
+    if (seed % 5 === 0) return 0;
+    return Math.round((seed * seed) / (r + c + 2) / 3);
+  }),
+);
+const MATRIX_MAX = Math.max(...MATRIX.flat());
+const SMALL = {
+  rows: DISCIPLINES.slice(0, 4),
+  cols: REMARKS.slice(0, 5),
+  cells: [
+    [12, 0, 3, 41, 1],
+    [70, 5, 1, 0, 22],
+    [2, 9, 40, 18, 0],
+    [0, 0, 6, 61, 33],
+    [8, 14, 0, 2, 57],
+  ],
+};
+const CURVE: LinePoint[] = Array.from({ length: 2400 }, (_, index) => ({
+  x: index + 1,
+  y: Math.round(3612 * (1 - Math.exp(-(index + 1) / 420))),
+  label: index % 3 === 0 ? `Civil / 577-PR-${String(400 + index)}` : `Vendor data ${String(index)}`,
+}));
+
+function heatmapLabels() {
+  return {
+    rowsLabel: "Discipline",
+    colsLabel: "Hold remark",
+    valueLabel: "Holds",
+    formatCell: formatCount,
+  };
+}
+
+function ChartsDemo() {
+  const [matrixView, setMatrixView] = useState<ChartView>("chart");
+  const [curveView, setCurveView] = useState<ChartView>("chart");
+  const [step, setStep] = useState<number | null>(119);
+  return (
+    <Section
+      title="Heatmap and line chart"
+      note="Cells take the step of their value in the blue ramp; an empty cell is the surface with a hairline. The grid scrolls sideways in its own region with the row labels kept in view. One stop for Tab: arrow keys, Home and End (with Ctrl for the grid). Focus shows the tooltip at once, the pointer after the tooltip delay. Other cells are never pressed. The line chart is one path; a marker shows only at the point under the pointer or the keyboard, and at the selected point."
+    >
+      <div className={styles.chartHead}>
+        <h3 className={styles.subTitle}>Many: 30 by 30 with Other, long labels cut</h3>
+        <ChartViewToggle view={matrixView} onChange={setMatrixView} />
+      </div>
+      <Heatmap
+        aria-label="Holds by discipline and hold remark"
+        rows={DISCIPLINES}
+        cols={REMARKS}
+        cells={MATRIX}
+        max={MATRIX_MAX}
+        otherRow="Other"
+        otherCol="Other"
+        onCellPress={() => undefined}
+        view={matrixView}
+        {...heatmapLabels()}
+      />
+      <h3 className={styles.subTitle}>
+        A few, without Other; focus a cell to see its ring and tooltip
+      </h3>
+      <Heatmap
+        aria-label="Holds by discipline and hold remark, few"
+        {...SMALL}
+        max={70}
+        onCellPress={() => undefined}
+        {...heatmapLabels()}
+      />
+
+      <div className={styles.twoColumns}>
+        <div>
+          <h3 className={styles.subTitle}>One cell</h3>
+          <Heatmap
+            aria-label="Holds, one cell"
+            rows={DISCIPLINES.slice(0, 1)}
+            cols={REMARKS.slice(0, 1)}
+            cells={[[4]]}
+            max={4}
+            {...heatmapLabels()}
+          />
+        </div>
+        <div>
+          <h3 className={styles.subTitle}>Table view</h3>
+          <Heatmap
+            aria-label="Holds by discipline and hold remark, table"
+            {...SMALL}
+            max={70}
+            view="table"
+            {...heatmapLabels()}
+          />
+        </div>
+      </div>
+      <div className={styles.twoColumns}>
+        <div>
+          <h3 className={styles.subTitle}>First load</h3>
+          <Heatmap
+            aria-label="Holds, loading"
+            rows={[]}
+            cols={[]}
+            cells={[]}
+            max={0}
+            isLoading
+            {...heatmapLabels()}
+          />
+        </div>
+        <div>
+          <h3 className={styles.subTitle}>Refetch, and empty</h3>
+          <Heatmap
+            aria-label="Holds, refetching"
+            {...SMALL}
+            max={70}
+            isStale
+            {...heatmapLabels()}
+          />
+          <Heatmap
+            aria-label="Holds, empty"
+            rows={[]}
+            cols={[]}
+            cells={[]}
+            max={0}
+            emptyState={
+              <EmptyState
+                title="No holds match these filters"
+                action={<Button variant="secondary">Clear all</Button>}
+              >
+                Clear a filter to see holds again.
+              </EmptyState>
+            }
+            {...heatmapLabels()}
+          />
+        </div>
+      </div>
+      <div className={styles.chartHead}>
+        <h3 className={styles.subTitle}>
+          Many: 2,400 points, step {step === null ? "none" : String(step + 1)} selected; press a
+          point
+        </h3>
+        <ChartViewToggle view={curveView} onChange={setCurveView} />
+      </div>
+      <LineChart
+        aria-label="Lines freed by the solve order"
+        points={CURVE}
+        yMax={3612}
+        xLabel="Step"
+        yLabel="Lines freed"
+        labelName="Blocker"
+        formatY={formatCount}
+        selectedIndex={step}
+        onPointPress={(_, index) => {
+          setStep(index);
+        }}
+        view={curveView}
+      />
+      <div className={styles.twoColumns}>
+        <div>
+          <h3 className={styles.subTitle}>Few points</h3>
+          <LineChart
+            aria-label="Lines freed, few"
+            points={CURVE.slice(0, 12).map((point) => ({ ...point, y: point.y * 10 }))}
+            yMax={3612}
+            xLabel="Step"
+            yLabel="Lines freed"
+            labelName="Blocker"
+            formatY={formatCount}
+          />
+        </div>
+        <div>
+          <h3 className={styles.subTitle}>One point</h3>
+          <LineChart
+            aria-label="Lines freed, one point"
+            points={[{ x: 1, y: 14, label: "Civil / 577-PR-400" }]}
+            yMax={37}
+            xLabel="Step"
+            yLabel="Lines freed"
+            labelName="Blocker"
+            formatY={formatCount}
+          />
+        </div>
+      </div>
+      <div className={styles.twoColumns}>
+        <div>
+          <h3 className={styles.subTitle}>First load</h3>
+          <LineChart
+            aria-label="Lines freed, loading"
+            points={[]}
+            yMax={0}
+            xLabel="Step"
+            yLabel="Lines freed"
+            labelName="Blocker"
+            formatY={formatCount}
+            isLoading
+          />
+        </div>
+        <div>
+          <h3 className={styles.subTitle}>Refetch, and table view</h3>
+          <LineChart
+            aria-label="Lines freed, refetching"
+            points={CURVE.slice(0, 12).map((point) => ({ ...point, y: point.y * 10 }))}
+            yMax={3612}
+            xLabel="Step"
+            yLabel="Lines freed"
+            labelName="Blocker"
+            formatY={formatCount}
+            isStale
+          />
+          <LineChart
+            aria-label="Lines freed, few"
+            points={CURVE.slice(0, 12)}
+            yMax={3612}
+            xLabel="Step"
+            yLabel="Lines freed"
+            labelName="Blocker"
+            formatY={formatCount}
+            view="table"
+          />
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function Notices() {
   return (
     <Section
@@ -2029,6 +2297,7 @@ function Page({ theme }: { theme: ThemeName }) {
           <TabsDemo />
           <Tiles />
           <Bars />
+          <ChartsDemo />
           <Notices />
           <Tags />
           <Chips />

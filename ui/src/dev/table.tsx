@@ -9,6 +9,10 @@
 // filter swaps the rows for the first page of what matches. "Load all" brings every row in at
 // once, to look at the table with all of them loaded.
 //
+// The window can be made narrower to see the columns of least priority leave the table and be
+// named under it. The headers of Holds and Oldest can be pressed: the sorted one shows its arrow
+// and the other its two-way mark at rest, and the made-up rows keep their order.
+//
 // Every time the rows change, what that change cost is written beside the filter and kept in
 // `window.hxTableRenders`, newest last.
 import {
@@ -20,7 +24,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Button, DataTable, EmptyState, TextField, type DataTableColumn } from "../components";
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  TextField,
+  type LeavingColumn,
+  type DataTableSort,
+} from "../components";
 import { formatCount } from "../text/format";
 import styles from "./gallery.module.css";
 
@@ -72,7 +83,8 @@ function allLines(): readonly DevLine[] {
 /** The widest line ID of the whole list, as the commands send it with each page. */
 const WIDEST_ID = 22;
 
-const columns: DataTableColumn<DevLine>[] = [
+/** The columns of the lines; the four with a priority leave a narrow window, the highest first. */
+const columns: LeavingColumn<DevLine>[] = [
   {
     id: "id",
     header: "Line",
@@ -86,6 +98,7 @@ const columns: DataTableColumn<DevLine>[] = [
     header: "Holds",
     kind: "number",
     size: { chars: 3 },
+    allowsSorting: true,
     cell: (line) => formatCount(line.holds),
   },
   {
@@ -98,13 +111,14 @@ const columns: DataTableColumn<DevLine>[] = [
     id: "types",
     header: "Hold types",
     size: { flex: 1, minChars: 14 },
+    priority: 2,
     cell: (line) => line.holdTypes,
   },
   {
     id: "blocker",
     header: "Blocker",
-    kind: "identifier",
     size: { chars: 12 },
+    priority: 1,
     cell: (line) => line.blocker,
   },
   {
@@ -112,6 +126,7 @@ const columns: DataTableColumn<DevLine>[] = [
     header: "Blocker type",
     isSupporting: true,
     size: { chars: 12 },
+    priority: 3,
     cell: (line) => line.blockerType,
   },
   {
@@ -119,6 +134,7 @@ const columns: DataTableColumn<DevLine>[] = [
     header: "Oldest",
     kind: "number",
     size: { chars: 5 },
+    allowsSorting: true,
     cell: (line) => `${formatCount(line.oldest)} d`,
   },
   {
@@ -127,6 +143,7 @@ const columns: DataTableColumn<DevLine>[] = [
     kind: "number",
     isSupporting: true,
     size: { chars: 4 },
+    priority: 4,
     cell: (line) => line.size,
   },
 ];
@@ -217,6 +234,7 @@ declare global {
 export function TablePage() {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
+  const [sort, setSort] = useState<DataTableSort>({ column: "holds", direction: "descending" });
   const lines = useLines(filter);
   const [measured, setMeasured] = useState<string>("");
   const rendered = useRef<readonly DevLine[]>(lines.rows);
@@ -281,6 +299,20 @@ export function TablePage() {
             resultKey={lines.resultKey}
             selectedKey={selected}
             onSelectionChange={setSelected}
+            sort={sort}
+            onSortChange={({ column }) => {
+              // Holds and Oldest come largest first; the sorted one turns round.
+              setSort((before) => ({
+                column,
+                direction:
+                  before.column === column && before.direction === "descending"
+                    ? "ascending"
+                    : before.column === column
+                      ? "descending"
+                      : "descending",
+              }));
+            }}
+            leftOutText={(headers) => `Not shown at this width: ${headers.join(", ")}.`}
             height="fill"
             isLoading={lines.isFirstLoad}
             isStale={lines.isStale}

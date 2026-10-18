@@ -13,17 +13,18 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use chrono::NaiveDateTime;
-use hx_core::detail::{HoldRef, LineDetail};
+use hx_core::detail::{BlockerDetail, HoldRef, LineDetail};
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
-use hx_core::query::{HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::solve::SolveView;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::app::{
-    AppStart, AppState, CommandError, FilterOptions, HoldsView, ImportCommit, ImportDone,
-    ImportDraft, ImportPhase, ImportReview, OverviewView, Settings, TargetCheck, TargetChoice,
-    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    AppStart, AppState, CommandError, FilterOptions, GroupDetail, HoldsView, ImportCommit,
+    ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView, Settings, TargetCheck,
+    TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -263,6 +264,68 @@ pub async fn hold_detail<R: Runtime>(
     blocking(app, move |state| state.hold_detail(position, &view)).await
 }
 
+/// The kept holds grouped by one dimension, when `view` is the view in the state.
+#[tauri::command]
+pub async fn breakdown<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    dim: Dim,
+    view: ViewRef,
+) -> Result<Vec<Group>, CommandError> {
+    blocking(app, move |state| state.breakdown(&spec, &dim, &view)).await
+}
+
+/// The kept holds crossed by two dimensions, when `view` is the view in the state.
+#[tauri::command]
+pub async fn matrix<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    row_dim: Dim,
+    col_dim: Dim,
+    view: ViewRef,
+) -> Result<FoldedMatrix, CommandError> {
+    blocking(app, move |state| {
+        state.matrix(&spec, &row_dim, &col_dim, &view)
+    })
+    .await
+}
+
+/// The solve order of the open holds among the kept ones, when `view` is the view in the state.
+#[tauri::command]
+pub async fn solve_order<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    view: ViewRef,
+) -> Result<SolveView, CommandError> {
+    blocking(app, move |state| state.solve_order(&spec, &view)).await
+}
+
+/// The detail of one blocker, when `view` is the view in the state.
+#[tauri::command]
+pub async fn blocker_detail<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    key: String,
+    view: ViewRef,
+) -> Result<Option<BlockerDetail>, CommandError> {
+    blocking(app, move |state| state.blocker_detail(&spec, &key, &view)).await
+}
+
+/// One group of a dimension with its first Lines, when `view` is the view in the state.
+#[tauri::command]
+pub async fn group_detail<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    dim: Dim,
+    key: String,
+    view: ViewRef,
+) -> Result<Option<GroupDetail>, CommandError> {
+    blocking(app, move |state| {
+        state.group_detail(&spec, &dim, &key, &view)
+    })
+    .await
+}
+
 /// The open workspace with the snapshot that is selected; nothing changes.
 #[tauri::command]
 pub async fn workspace_current<R: Runtime>(
@@ -393,10 +456,14 @@ mod tests {
             outcomes,
             [
                 ("app_start", "Ok"),
+                // Nothing is open yet.
+                ("blocker_detail", "NoWorkspace"),
+                ("breakdown", "NoWorkspace"),
                 ("demo_create", "Ok"),
                 // The view of the fixture is not the demo workspace.
                 ("filter_options", "ViewChanged"),
                 ("filter_values", "ViewChanged"),
+                ("group_detail", "ViewChanged"),
                 ("hold_detail", "ViewChanged"),
                 ("holds", "ViewChanged"),
                 ("import_cancel", "Ok"),
@@ -410,10 +477,12 @@ mod tests {
                 ("import_review", "NoDraft"),
                 ("line_detail", "ViewChanged"),
                 ("lines", "ViewChanged"),
+                ("matrix", "ViewChanged"),
                 ("overview", "ViewChanged"),
                 ("settings_set_theme", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),
+                ("solve_order", "ViewChanged"),
                 ("workspace_create", "Ok"),
                 ("workspace_current", "Ok"),
                 ("workspace_list", "Ok"),

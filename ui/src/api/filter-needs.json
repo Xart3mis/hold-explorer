@@ -1,0 +1,20 @@
+{
+  "dims": {
+    "Discipline": ["Discipline"],
+    "HoldType": [],
+    "Role": ["Role"],
+    "Name": ["Name"],
+    "BlockerType": [],
+    "Blocker": [],
+    "Remark": [],
+    "LineId": [],
+    "ModelSize": ["ModelSize"],
+    "StressCalc": ["StressCalc"]
+  },
+  "parts": {
+    "AgeBands": ["Created"],
+    "Created": ["Created"],
+    "Released": ["Released", "ReleaseDate"],
+    "SizeMismatch": ["ModelSize", "LdtSize"]
+  }
+}

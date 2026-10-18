@@ -1,0 +1,132 @@
+/*
+ * The tooltip of a chart: the shape of every tooltip, with a row per fact. It is placed in the
+ * window by script, under its mark, and is hidden until it has its place, so it never shows in
+ * the corner first.
+ */
+.tooltip {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: var(--z-tooltip);
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-2);
+  /* As wide as its text up to the limit, wherever it is placed. */
+  inline-size: max-content;
+  max-inline-size: var(--size-tooltip-max-width);
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-overlay);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  animation: fade-in var(--duration-fast) var(--ease-out);
+}
+
+.tooltip:not([data-placed]) {
+  visibility: hidden;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: baseline;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* What a press on the mark does, across both columns under the facts. */
+.note {
+  grid-column: 1 / -1;
+  margin-block-start: var(--space-1);
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The value leads: the reader has the mark and wants its number. */
+.value {
+  display: flex;
+  gap: var(--space-1);
+  align-items: baseline;
+  color: var(--color-text-primary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The key of a heatmap cell: a swatch in the cell's step, or the hairline of an empty cell. */
+.swatch {
+  flex: none;
+  align-self: center;
+  inline-size: var(--size-legend-swatch);
+  block-size: var(--size-legend-swatch);
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 var(--border-width-thin) var(--color-border-default);
+}
+
+.swatch[data-step="1"] {
+  background-color: var(--color-chart-seq-1);
+  box-shadow: none;
+}
+
+.swatch[data-step="2"] {
+  background-color: var(--color-chart-seq-2);
+  box-shadow: none;
+}
+
+.swatch[data-step="3"] {
+  background-color: var(--color-chart-seq-3);
+  box-shadow: none;
+}
+
+.swatch[data-step="4"] {
+  background-color: var(--color-chart-seq-4);
+  box-shadow: none;
+}
+
+.swatch[data-step="5"] {
+  background-color: var(--color-chart-seq-5);
+  box-shadow: none;
+}
+
+.swatch[data-step="6"] {
+  background-color: var(--color-chart-seq-6);
+  box-shadow: none;
+}
+
+.swatch[data-step="7"] {
+  background-color: var(--color-chart-seq-7);
+  box-shadow: none;
+}
+
+/* The key of a point: a short stroke of the line, not a box. */
+.lineKey {
+  flex: none;
+  align-self: center;
+  inline-size: var(--size-legend-swatch);
+  block-size: var(--size-chart-line);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-chart-neutral);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A chart has no transition under reduced motion, not even the fade. */
+@media (prefers-reduced-motion: reduce) {
+  .tooltip {
+    animation: none;
+  }
+}

@@ -1,10 +1,11 @@
 import { ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
 import { Breadcrumb as RacBreadcrumb, Breadcrumbs, Link } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Tooltip } from "../Tooltip/Tooltip";
+import { useIsCut } from "../useIsCut";
 import styles from "./Breadcrumb.module.css";
 
 /**
@@ -25,27 +26,10 @@ export interface BreadcrumbProps {
   className?: string | undefined;
 }
 
-/** Whether the text of an element is cut by its box, kept true to the element's size. */
-function useIsCut(element: React.RefObject<HTMLElement | null>): boolean {
-  const [cut, setCut] = useState(false);
-  useEffect(() => {
-    const node = element.current;
-    if (!node || typeof ResizeObserver === "undefined") return;
-    const sizes = new ResizeObserver(() => {
-      setCut(node.scrollWidth > node.clientWidth);
-    });
-    sizes.observe(node);
-    return () => {
-      sizes.disconnect();
-    };
-  }, [element]);
-  return cut;
-}
-
 /** One ancestor: a link. When the trail is too long and its label is cut, a tooltip gives it in full. */
 function Ancestor({ ancestor }: { ancestor: BreadcrumbAncestor }) {
   const link = useRef<HTMLAnchorElement>(null);
-  const cut = useIsCut(link);
+  const cut = useIsCut(link, ancestor.label);
   return (
     <Tooltip text={ancestor.label} isDisabled={!cut}>
       <Link

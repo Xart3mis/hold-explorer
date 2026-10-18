@@ -560,7 +560,13 @@ describe("The panel and the snapshot in view", () => {
         const { user, router, unmount } = renderApp({
           start: openStart(),
           path: `/lines?rows=holds&${selected}`,
-          pages: { lines: <Committing into={into} />, overview: <p />, settings: <p /> },
+          pages: {
+            lines: <Committing into={into} />,
+            breakdown: <p />,
+            blockers: <p />,
+            overview: <p />,
+            settings: <p />,
+          },
           handlers: { import_commit: () => ({ open: into, snapshot }) },
         });
         await panel(selected.startsWith("hold") ? text.holdTitle : LINE);
@@ -583,7 +589,7 @@ describe("The panel and the snapshot in view", () => {
     const { router } = renderApp({
       start: openStart(),
       path: "/lines?rows=holds&hold=1",
-      pages: { lines: <p />, overview: <p />, settings: <p /> },
+      pages: { lines: <p />, breakdown: <p />, blockers: <p />, overview: <p />, settings: <p /> },
       handlers: {
         hold_detail: hold,
         workspace_current: () => opened({ selected: 1 }),

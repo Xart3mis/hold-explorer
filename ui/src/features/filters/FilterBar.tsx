@@ -57,8 +57,11 @@ const CLOSED: Picker = {
 export function FilterBar() {
   const { filters, update, clear } = useFilters();
   const { isBusy } = useStart();
-  // Another workspace or snapshot is on its way, or the one in view is being changed.
-  const isSwitching = useIsMutating({ mutationKey: keys.switching }) > 0;
+  // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
+  // workspace makes the bar wait for the workspace, also when a selection waits beside it.
+  const actions = useIsMutating({ mutationKey: keys.workspaceAction });
+  const selections = useIsMutating({ mutationKey: keys.selectingSnapshot });
+  const isSelecting = selections > 0 && selections === actions;
   const options = useFilterOptions();
   const bar = useRef<HTMLDivElement>(null);
   const anchor = useRef<HTMLSpanElement>(null);
@@ -70,8 +73,13 @@ export function FilterBar() {
   /** Whether the picker was open when the bar was drawn last: its closing gives the focus back. */
   const wasOpen = useRef(false);
 
-  const chips = chipsOf(filters);
   const counted = options.isError ? undefined : options.data;
+  // The command says which filters the snapshot cannot apply, and their chips are marked. While
+  // the counts cannot be read, which those are is not known: no chip is marked, and the line
+  // under the controls says so.
+  const chips = chipsOf(filters, counted?.inactive);
+  const hasInactive = chips.some((chip) => chip.isInactive);
+  const isUnknown = options.isError && chips.length > 0;
   // What is shown was counted for the filters, the snapshot, or the workspace of before.
   const isStale = counted !== undefined && options.isPlaceholderData;
   const absent = counted?.absent ?? [];
@@ -79,7 +87,7 @@ export function FilterBar() {
   const noReleased = absent.includes("Released");
   // What the sentence about the holds says is not said again as columns without values.
   const missing = noReleased ? absent.filter((field) => !RELEASE_FIELDS.has(field)) : absent;
-  const reason = !isBusy ? "" : t(isSwitching ? "filters.busySwitching" : "filters.busyChanging");
+  const reason = !isBusy ? "" : t(isSelecting ? "filters.busySnapshot" : "filters.busyWorkspace");
 
   /** "Add filter": where the focus goes when the control that had it is gone. */
   const addFilter = () =>
@@ -178,6 +186,9 @@ export function FilterBar() {
               field={chip.name}
               value={chip.value}
               isNegated={chip.isNegated}
+              isInactive={chip.isInactive}
+              // A mark is that of the answer shown, which may be that of the view of before.
+              isStale={chip.isInactive && isStale}
               isDisabled={isBusy}
               isExpanded={expanded === chip.id}
               isUnderPopover={isOpen}
@@ -238,20 +249,36 @@ export function FilterBar() {
           )}
         </div>
       </div>
-      {noReleased || missing.length > 0 ? (
+      {noReleased || missing.length > 0 || hasInactive || isUnknown ? (
         <p data-part="filter-notes" data-stale={isStale ? "" : undefined} className={styles.notes}>
-          {noReleased ? (
-            <span data-part="filter-no-released">{t("filters.noReleased")}</span>
-          ) : null}
-          {noReleased && missing.length > 0 ? " " : null}
-          {missing.length === 0 ? null : (
-            <span data-part="filter-absent">
-              {t("filters.absent", {
-                count: missing.length,
-                columns: formatList(missing.map(exportColumn)),
-              })}
-            </span>
-          )}
+          {[
+            noReleased ? (
+              <span key="released" data-part="filter-no-released">
+                {t("filters.noReleased")}
+              </span>
+            ) : null,
+            missing.length === 0 ? null : (
+              <span key="absent" data-part="filter-absent">
+                {t("filters.absent", {
+                  count: missing.length,
+                  columns: formatList(missing.map(exportColumn)),
+                })}
+              </span>
+            ),
+            hasInactive ? (
+              <span key="inactive" data-part="filter-inactive">
+                {t("filters.inactiveKept")}
+              </span>
+            ) : null,
+            isUnknown ? (
+              <span key="unknown" data-part="filter-inactive-unknown">
+                {t("filters.inactiveUnknown")}
+              </span>
+            ) : null,
+          ]
+            .filter((sentence) => sentence !== null)
+            // One space between the sentences of the line.
+            .flatMap((sentence, index) => (index === 0 ? [sentence] : [" ", sentence]))}
         </p>
       ) : null}
       {options.isError ? (

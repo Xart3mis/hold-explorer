@@ -27,3 +27,22 @@ export const rows = [
   // @ts-expect-error a row that can be pressed needs its action
   <BarRow key="bare" label="Civil" value="1,515" fraction={1} />,
 ];
+
+// A row that opens what it names is a plain button: it has an action and is never selected.
+export const opening = [
+  <BarRow key="opens" opens label="L-1001" value="4" fraction={1} onPress={() => undefined} />,
+  // @ts-expect-error a row that opens is never in the active filter
+  <BarRow
+    key="opens-selected"
+    opens
+    isSelected
+    label="L-1001"
+    value="4"
+    fraction={1}
+    onPress={() => undefined}
+  />,
+  // @ts-expect-error a row that opens needs its action
+  <BarRow key="opens-bare" opens label="L-1001" value="4" fraction={1} />,
+  // @ts-expect-error a static row opens nothing
+  <BarRow key="static-opens" isStatic opens label="L-1001" value="4" fraction={1} />,
+];

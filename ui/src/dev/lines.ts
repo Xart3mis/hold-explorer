@@ -1,9 +1,13 @@
-// What the development page answers for the `lines` and `holds` commands: holds made up by a
-// seeded generator, the same at every start, filtered, grouped into lines, sorted, and cut into
-// pages as the commands do it, closely enough to see the Lines destination work. For development
-// only; see ui/src/dev/app.tsx.
+// What the development page answers for the `lines`, `holds`, `breakdown`, `group_detail`,
+// `matrix`, and `solve_order` commands: holds made up by a seeded generator, the same at every
+// start, filtered, grouped into lines, sorted, and cut into pages as the commands do it, closely
+// enough to see the Lines destination work. For development only; see ui/src/dev/app.tsx.
+import type { BlockerDetail } from "../bindings/BlockerDetail";
 import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { FoldedMatrix } from "../bindings/FoldedMatrix";
+import type { Group } from "../bindings/Group";
+import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { HoldRef } from "../bindings/HoldRef";
 import type { ChainLink } from "../bindings/ChainLink";
@@ -12,7 +16,10 @@ import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { LineRow } from "../bindings/LineRow";
+import type { LinkedBlocker } from "../bindings/LinkedBlocker";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
+import type { SolveRow } from "../bindings/SolveRow";
+import type { SolveView } from "../bindings/SolveView";
 import { DISCIPLINES, HOLD_TYPES } from "./overview";
 
 /** How many rows a command answers at most. */
@@ -191,7 +198,8 @@ function valueOf({ row }: HoldRef, dim: Dim): string {
     case "BlockerType":
       return row.blocker.kind;
     case "Blocker":
-      return row.blocker.item;
+      // By its key, as the core filters a blocker: its item alone is not one blocker.
+      return `${row.hold.discipline}|${row.blocker.item}`;
     case "Remark":
       return row.hold.remark;
     case "LineId":
@@ -308,6 +316,18 @@ function kept(snapshot: SnapshotInfo, spec: FilterSpec, matchingSizes: boolean):
  */
 export function devHoldCount(snapshot: SnapshotInfo, spec: FilterSpec, matchingSizes = false) {
   return kept(snapshot, spec, matchingSizes).length;
+}
+
+/**
+ * How many open holds a filter keeps that are at least `days` old, as the `overview` command
+ * counts its stale holds: from the same holds the lines and the holds are read from. Under the
+ * status All the open ones among them are counted; released holds have no age.
+ */
+export function devStaleCount(snapshot: SnapshotInfo, spec: FilterSpec, days: number): number {
+  if (spec.status === "Released") return 0;
+  return kept(snapshot, { ...spec, status: "Open" }, false).filter(
+    ({ row }) => row.age_days !== null && row.age_days >= days,
+  ).length;
 }
 
 const widest = (ids: readonly string[]) => ids.reduce((most, id) => Math.max(most, id.length), 0);
@@ -550,4 +570,371 @@ export function devHoldDetail(
   matchingSizes = false,
 ): HoldRef | null {
   return holdsOf(snapshot, matchingSizes)[position] ?? null;
+}
+
+/** The groups of a dimension among the holds a filter keeps, most holds first, as the core counts them. */
+function groupsOf(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  matchingSizes: boolean,
+): { group: Group; holds: HoldRef[] }[] {
+  return remembered(
+    `groups:${String(snapshot.id)}:${String(matchingSizes)}:${JSON.stringify(spec)}:${JSON.stringify(dim)}`,
+    () => {
+      const byKey = new Map<string, { group: Group; holds: HoldRef[]; lines: Set<string> }>();
+      for (const held of kept(snapshot, spec, matchingSizes)) {
+        const key = valueOf(held, dim);
+        let entry = byKey.get(key);
+        if (entry === undefined) {
+          const { hold, blocker } = held.row;
+          const label =
+            key === ""
+              ? "(blank)"
+              : dim === "Remark"
+                ? hold.remark
+                : dim === "Blocker"
+                  ? `${hold.discipline} / ${blocker.item}`
+                  : key;
+          entry = { group: { key, label, holds: 0, lines: 0 }, holds: [], lines: new Set() };
+          byKey.set(key, entry);
+        }
+        entry.holds.push(held);
+        entry.lines.add(held.row.hold.line_id);
+        entry.group.holds += 1;
+        entry.group.lines = entry.lines.size;
+      }
+      return [...byKey.values()]
+        .sort((a, b) => b.group.holds - a.group.holds || ascending(a.group.label, b.group.label))
+        .map(({ group, holds }) => ({ group, holds }));
+    },
+  );
+}
+
+/** What `breakdown` answers on the development page, at most `limit` groups of it. */
+export function devBreakdown(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  matchingSizes = false,
+  limit = Number.POSITIVE_INFINITY,
+): Group[] {
+  return groupsOf(snapshot, spec, dim, matchingSizes)
+    .slice(0, limit)
+    .map(({ group }) => group);
+}
+
+/**
+ * What `group_detail` answers on the development page: the group and its first lines, most holds
+ * first, with how many there are; `null` for a group the filter does not keep.
+ */
+export function devGroupDetail(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  dim: Dim,
+  key: string,
+  matchingSizes = false,
+): GroupDetail | null {
+  const found = groupsOf(snapshot, spec, dim, matchingSizes).find(({ group }) => group.key === key);
+  if (found === undefined) return null;
+  const lines = orderBy(
+    linesOf(found.holds),
+    (line) => line.holds,
+    descending,
+    false,
+    (a, b) => ascending(a.line_id, b.line_id),
+  );
+  return {
+    group: found.group,
+    lines: {
+      total: lines.length,
+      widest_line_id: widest(lines.map((line) => line.line_id)),
+      rows: lines.slice(0, PAGE),
+    },
+  };
+}
+
+/**
+ * What `matrix` answers on the development page: the `side` largest values of each dimension,
+ * the rest folded into one Other row and one Other column, as the core folds them.
+ */
+export function devMatrix(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  rowDim: Dim,
+  colDim: Dim,
+  side = 30,
+): FoldedMatrix {
+  const fold = (dim: Dim) => {
+    const groups = groupsOf(snapshot, spec, dim, false).map(({ group }) => group);
+    const keptGroups = groups.slice(0, side);
+    const index = new Map(keptGroups.map((group, at) => [group.key, at]));
+    return { kept: keptGroups, index, folded: groups.length - keptGroups.length };
+  };
+  const rows = fold(rowDim);
+  const cols = fold(colDim);
+  const rowCount = rows.kept.length + (rows.folded > 0 ? 1 : 0);
+  const colCount = cols.kept.length + (cols.folded > 0 ? 1 : 0);
+  const cells = Array.from({ length: rowCount }, () => Array.from({ length: colCount }, () => 0));
+  const other = {
+    row: { holds: 0, lines: new Set<string>() },
+    col: { holds: 0, lines: new Set<string>() },
+  };
+  for (const held of kept(snapshot, spec, false)) {
+    const r = rows.index.get(valueOf(held, rowDim)) ?? rows.kept.length;
+    const c = cols.index.get(valueOf(held, colDim)) ?? cols.kept.length;
+    const line = cells[r];
+    if (line !== undefined) line[c] = (line[c] ?? 0) + 1;
+    if (r === rows.kept.length) {
+      other.row.holds += 1;
+      other.row.lines.add(held.row.hold.line_id);
+    }
+    if (c === cols.kept.length) {
+      other.col.holds += 1;
+      other.col.lines.add(held.row.hold.line_id);
+    }
+  }
+  const otherGroup = (folded: number, sum: { holds: number; lines: Set<string> }): Group | null =>
+    folded > 0 ? { key: "", label: "", holds: sum.holds, lines: sum.lines.size } : null;
+  return {
+    rows: rows.kept,
+    cols: cols.kept,
+    other_row: otherGroup(rows.folded, other.row),
+    other_col: otherGroup(cols.folded, other.col),
+    cells,
+    max_cell: Math.max(0, ...cells.flat()),
+    folded_rows: rows.folded,
+    folded_cols: cols.folded,
+  };
+}
+
+/** A heap of the blockers by what a step of the solve order takes first; see `devSolveOrder`. */
+interface Candidate {
+  /** The index of the blocker. */
+  at: number;
+  /** Lines it alone holds when it was pushed. */
+  frees: number;
+  /** Lines it is on. */
+  lines: number;
+}
+
+/** Whether `one` is taken before `other`: more lines freed, then more lines, then first seen. */
+function before(one: Candidate, other: Candidate): boolean {
+  if (one.frees !== other.frees) return one.frees > other.frees;
+  if (one.lines !== other.lines) return one.lines > other.lines;
+  return one.at < other.at;
+}
+
+function push(heap: Candidate[], item: Candidate): void {
+  heap.push(item);
+  let index = heap.length - 1;
+  while (index > 0) {
+    const parent = (index - 1) >> 1;
+    const above = heap[parent];
+    if (above === undefined || !before(item, above)) break;
+    heap[index] = above;
+    heap[parent] = item;
+    index = parent;
+  }
+}
+
+function pop(heap: Candidate[]): Candidate | undefined {
+  const top = heap[0];
+  const last = heap.pop();
+  if (top === undefined || last === undefined || heap.length === 0) return top;
+  // The last item sinks from the top until neither child is taken before it.
+  let index = 0;
+  for (;;) {
+    let best = last;
+    let bestAt = -1;
+    for (const child of [2 * index + 1, 2 * index + 2]) {
+      const item = heap[child];
+      if (item !== undefined && before(item, best)) {
+        best = item;
+        bestAt = child;
+      }
+    }
+    if (bestAt === -1) break;
+    heap[index] = best;
+    index = bestAt;
+  }
+  heap[index] = last;
+  return top;
+}
+
+/**
+ * What `solve_order` answers on the development page: the blockers of the holds a filter keeps,
+ * each step taking the blocker that frees the most lines given the steps before it, as the core
+ * ranks them, closely enough to see the curve and the table. Ties go to the blocker on more
+ * lines, then to the one seen first, where the core weighs the lines a blocker advances.
+ */
+export function devSolveOrder(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  matchingSizes = false,
+): SolveView {
+  return remembered(
+    `solve:${String(snapshot.id)}:${String(matchingSizes)}:${JSON.stringify(spec)}`,
+    () => {
+      const index = new Map<string, number>();
+      const blockers: { row: Omit<SolveRow, "step" | "gain" | "cumulative">; lines: number[] }[] =
+        [];
+      const lineIndex = new Map<string, number>();
+      const onLine: Set<number>[] = [];
+      for (const { row } of kept(snapshot, spec, matchingSizes)) {
+        const key = `${row.hold.discipline}|${row.blocker.item}`;
+        let at = index.get(key);
+        if (at === undefined) {
+          at = blockers.length;
+          index.set(key, at);
+          blockers.push({
+            row: {
+              key,
+              label: `${row.hold.discipline} / ${row.blocker.item}`,
+              kind: row.blocker.kind,
+              discipline: row.hold.discipline,
+              holds: 0,
+            },
+            lines: [],
+          });
+        }
+        const blocker = blockers[at];
+        if (blocker === undefined) continue;
+        blocker.row.holds += 1;
+        let line = lineIndex.get(row.hold.line_id);
+        if (line === undefined) {
+          line = onLine.length;
+          lineIndex.set(row.hold.line_id, line);
+          onLine.push(new Set());
+        }
+        const set = onLine[line];
+        if (set !== undefined && !set.has(at)) {
+          set.add(at);
+          blocker.lines.push(line);
+        }
+      }
+      // Lines each blocker alone holds now, and the blockers that are solved.
+      const frees = blockers.map(() => 0);
+      for (const set of onLine) {
+        if (set.size !== 1) continue;
+        const [only] = set;
+        if (only !== undefined) frees[only] = (frees[only] ?? 0) + 1;
+      }
+      const heap: Candidate[] = [];
+      blockers.forEach((blocker, at) => {
+        push(heap, { at, frees: frees[at] ?? 0, lines: blocker.lines.length });
+      });
+      const solved = new Set<number>();
+      const rows: SolveRow[] = [];
+      let cumulative = 0;
+      for (let next = pop(heap); next !== undefined; next = pop(heap)) {
+        // An entry pushed before its blocker freed more lines, or after it was solved, is old.
+        if (solved.has(next.at) || next.frees !== frees[next.at]) continue;
+        const blocker = blockers[next.at];
+        if (blocker === undefined) continue;
+        solved.add(next.at);
+        let gain = 0;
+        for (const line of blocker.lines) {
+          const set = onLine[line];
+          if (set === undefined) continue;
+          set.delete(next.at);
+          if (set.size === 0) gain += 1;
+          if (set.size !== 1) continue;
+          const [only] = set;
+          if (only === undefined) continue;
+          frees[only] = (frees[only] ?? 0) + 1;
+          push(heap, {
+            at: only,
+            frees: frees[only] ?? 0,
+            lines: blockers[only]?.lines.length ?? 0,
+          });
+        }
+        cumulative += gain;
+        rows.push({ ...blocker.row, step: rows.length + 1, gain, cumulative });
+      }
+      const linesOnHold = onLine.length;
+      // As the core counts it: the first step whose cumulative count reaches 90 percent.
+      const most = rows.findIndex((row) => row.cumulative * 10 >= linesOnHold * 9);
+      return {
+        rows,
+        lines_on_hold: linesOnHold,
+        steps_to_most: most === -1 ? rows.length : most + 1,
+      };
+    },
+  );
+}
+
+/**
+ * What `blocker_detail` answers on the development page: the blocker among the holds a filter
+ * keeps, as the core reads it, with its step in the solve order of the same holds; `null` when no
+ * kept hold waits for it.
+ */
+export function devBlockerDetail(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  key: string,
+  matchingSizes = false,
+): BlockerDetail | null {
+  const holds = kept(snapshot, spec, matchingSizes);
+  const keyOf = ({ row }: HoldRef) => `${row.hold.discipline}|${row.blocker.item}`;
+  const own = holds.filter((held) => keyOf(held) === key);
+  const first = own[0];
+  if (first === undefined) return null;
+  const lines: string[] = [];
+  const onBlocker = new Set<string>();
+  let oldest: HoldRef | null = null;
+  for (const held of own) {
+    const { hold } = held.row;
+    if (!onBlocker.has(hold.line_id)) {
+      onBlocker.add(hold.line_id);
+      lines.push(hold.line_id);
+    }
+    const age = held.row.age_days;
+    if (!hold.released && age !== null && (oldest?.row.age_days ?? -1) < age) oldest = held;
+  }
+  // Other blockers on the same lines, with the lines they share with this one.
+  const others = new Map<string, { linked: LinkedBlocker; lines: Set<string> }>();
+  for (const held of holds) {
+    const other = keyOf(held);
+    const { hold, blocker } = held.row;
+    if (other === key || !onBlocker.has(hold.line_id)) continue;
+    let entry = others.get(other);
+    if (entry === undefined) {
+      entry = {
+        linked: {
+          key: other,
+          label: `${hold.discipline} / ${blocker.item}`,
+          kind: blocker.kind,
+          shared_lines: 0,
+        },
+        lines: new Set(),
+      };
+      others.set(other, entry);
+    }
+    entry.lines.add(hold.line_id);
+  }
+  const heldByOthers = new Set([...others.values()].flatMap((entry) => [...entry.lines]));
+  const linked = [...others.values()]
+    .map((entry) => ({ ...entry.linked, shared_lines: entry.lines.size }))
+    .sort(
+      (a, b) =>
+        b.shared_lines - a.shared_lines || ascending(a.label, b.label) || ascending(a.key, b.key),
+    );
+  const step = devSolveOrder(snapshot, spec, matchingSizes).rows.findIndex(
+    (row) => row.key === key,
+  );
+  const { hold, blocker } = first.row;
+  return {
+    key,
+    label: `${hold.discipline} / ${blocker.item}`,
+    kind: blocker.kind,
+    discipline: hold.discipline,
+    item: blocker.item,
+    holds: own.length,
+    frees: lines.filter((line) => !heldByOthers.has(line)),
+    shared: lines.filter((line) => heldByOthers.has(line)),
+    linked,
+    oldest,
+    step: step === -1 ? null : step + 1,
+  };
 }

@@ -104,5 +104,71 @@
     "position": 12,
     "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
   },
-  "workspace_current": {}
+  "workspace_current": {},
+  "breakdown": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "dim": "Role",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "matrix": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "rowDim": "Discipline",
+    "colDim": "HoldType",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "solve_order": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "blocker_detail": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "key": "Piping|PR-1001",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "group_detail": {
+    "spec": {
+      "status": "Open",
+      "fields": [],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "dim": "Discipline",
+    "key": "Piping",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  }
 }

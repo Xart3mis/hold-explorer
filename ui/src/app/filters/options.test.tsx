@@ -24,6 +24,8 @@ describe("useFilterOptions", () => {
             <Reader name="panel" />
           </>
         ),
+        breakdown: <p />,
+        blockers: <p />,
         lines: <p />,
         settings: <p />,
       },
@@ -43,7 +45,13 @@ describe("useFilterOptions", () => {
     renderApp({
       start: openStart(),
       path: "/overview",
-      pages: { overview: <Reader name="lines" enabled={false} />, lines: <p />, settings: <p /> },
+      pages: {
+        overview: <Reader name="lines" enabled={false} />,
+        breakdown: <p />,
+        blockers: <p />,
+        lines: <p />,
+        settings: <p />,
+      },
       handlers: { filter_options: options },
     });
     expect(await screen.findByText("lines waits")).toBeInTheDocument();

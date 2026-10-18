@@ -13,7 +13,7 @@ import { held } from "../../test/actions";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
-import { opened, openStart, workspace } from "../../test/fixtures";
+import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { SettingsPage } from "../settings/SettingsPage";
@@ -24,6 +24,7 @@ const text = en.filters;
 type Held = ReturnType<typeof useFilters> & {
   select: (id: number) => void;
   rename: (name: string) => void;
+  open: (id: string) => void;
 };
 
 /** What the page of the test reads: the filters, and two actions on the workspace. */
@@ -38,7 +39,7 @@ function now(): Held {
 function Screen() {
   const filters = useFilters();
   const { selectSnapshot } = useSnapshotActions();
-  const { renameWorkspace } = useWorkspaceActions();
+  const { renameWorkspace, openWorkspace } = useWorkspaceActions();
   useEffect(() => {
     probe.page = {
       ...filters,
@@ -47,6 +48,9 @@ function Screen() {
       },
       rename: (name) => {
         renameWorkspace.mutate({ id: workspace().id, name });
+      },
+      open: (id) => {
+        openWorkspace.mutate(id);
       },
     };
   });
@@ -62,7 +66,13 @@ function renderBar(answer: Answer = () => filterOptions(), handlers: Handlers = 
   const app = renderApp({
     start: openStart(),
     path: "/overview",
-    pages: { overview: <Screen />, lines: <Screen />, settings: <SettingsPage /> },
+    pages: {
+      overview: <Screen />,
+      breakdown: <Screen />,
+      blockers: <Screen />,
+      lines: <Screen />,
+      settings: <SettingsPage />,
+    },
     handlers: { ...handlers, filter_options: options },
   });
   return { ...app, options };
@@ -209,6 +219,79 @@ describe("FilterBar", () => {
       });
     });
     expect(chips(region)).toEqual(["Discipline Civil"]);
+  });
+
+  it("sends a filter on a column the snapshot lacks as it is, marks its chip from the answer, and says it is kept", async () => {
+    // Snapshot 2, the one in view, has no discipline; snapshot 1 has one. The command says which
+    // filters it left out.
+    const select = held<WorkspaceOpen>();
+    const { options } = renderBar(
+      ({ spec, view }) =>
+        filterOptions({
+          absent: view.snapshot_id === 2 ? ["Discipline"] : [],
+          inactive: {
+            dims:
+              view.snapshot_id === 2 && spec.fields.some((field) => field.dim === "Discipline")
+                ? ["Discipline"]
+                : [],
+            parts: [],
+          },
+        }),
+      { snapshot_select: select.handler },
+    );
+    const region = await bar();
+    set({
+      fields: [
+        { dim: "Discipline", values: [value("Civil")], negate: false },
+        { dim: "Role", values: [value("Lead")], negate: false },
+      ],
+    });
+    // The filter goes out whole: the command leaves out what the snapshot cannot apply.
+    const both = {
+      ...openHoldsFilter(),
+      fields: [
+        { dim: "Discipline", values: ["Civil"], negate: false },
+        { dim: "Role", values: ["Lead"], negate: false },
+      ],
+    };
+    await waitFor(() => {
+      expect(options).toHaveBeenLastCalledWith({
+        spec: both,
+        view: { workspace_id: workspace().id, snapshot_id: 2 },
+      });
+    });
+    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    // The chip stays, and says that its filter is not in this snapshot; the other one does not.
+    await waitFor(() => {
+      expect(chips(region)).toEqual([marked, "Role Lead"]);
+    });
+    expect(chip(region, marked)).toBeEnabled();
+    expect(removeButton(region, "Discipline")).toBeEnabled();
+    expect(region.querySelector("[data-part='filter-inactive']")).toHaveTextContent(
+      text.inactiveKept,
+    );
+    expect(now().spec).toEqual(both);
+
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(select.waiting).toHaveLength(1);
+    });
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(options).toHaveBeenLastCalledWith({
+        spec: both,
+        view: { workspace_id: workspace().id, snapshot_id: 1 },
+      });
+    });
+    await waitFor(() => {
+      expect(chips(region)).toEqual(["Discipline Civil", "Role Lead"]);
+    });
+    expect(region.querySelector("[data-part='filter-inactive']")).toBeNull();
   });
 
   it("removes a chip by its button, and moves the focus to the chip after it", async () => {
@@ -431,7 +514,7 @@ describe("FilterBar", () => {
       now().select(1);
     });
     await waitFor(() => {
-      expect(reason).toHaveTextContent(text.busySwitching);
+      expect(reason).toHaveTextContent(text.busySnapshot);
     });
     // The sentence stands where the total stood, which says nothing certain meanwhile.
     expect(region.querySelector("[data-part='filter-total']")).toBeNull();
@@ -487,7 +570,7 @@ describe("FilterBar", () => {
       now().rename("Unit 573");
     });
     await waitFor(() => {
-      expect(reason).toHaveTextContent(text.busyChanging);
+      expect(reason).toHaveTextContent(text.busyWorkspace);
     });
     expect(region.querySelector("[data-part='filter-total']")).toBeNull();
     expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeDisabled();
@@ -501,10 +584,33 @@ describe("FilterBar", () => {
     });
   });
 
+  it("waits for the workspace, not for a snapshot, while another workspace opens", async () => {
+    const open = held<WorkspaceOpen>();
+    renderBar(undefined, { workspace_open: open.handler });
+    const region = await bar();
+    const reason = must(region.querySelector<HTMLElement>("[role='status']"), "the reason");
+
+    act(() => {
+      now().open(otherWorkspace.id);
+    });
+    await waitFor(() => {
+      expect(reason).toHaveTextContent(text.busyWorkspace);
+    });
+    expect(reason).not.toHaveTextContent(text.busySnapshot);
+
+    await act(async () => {
+      must(open.waiting[0], "the opening").resolve(opened({ workspace: otherWorkspace }));
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(reason).toBeEmptyDOMElement();
+    });
+  });
+
   it("keeps the reason short: two lines of the trailing part hold it", () => {
     // The trailing part is as wide as about eighteen characters of the caption, and a control is
     // as tall as two of its lines. A longer sentence would make the bar taller while it shows.
-    for (const sentence of [text.busySwitching, text.busyChanging]) {
+    for (const sentence of [text.busySnapshot, text.busyWorkspace]) {
       const words = sentence.split(" ");
       expect(sentence.length).toBeLessThanOrEqual(30);
       expect(Math.max(...words.map((word) => word.length))).toBeLessThanOrEqual(16);
@@ -682,6 +788,59 @@ describe("FilterBar", () => {
     expect(within(full).getAllByRole("menuitemradio")).toHaveLength(3);
   });
 
+  it("dims the marks of the chips while they are those of the snapshot of before", async () => {
+    const select = held<WorkspaceOpen>();
+    renderBar(
+      ({ view }) =>
+        view.snapshot_id === 2
+          ? filterOptions({ absent: ["Discipline"], inactive: { dims: ["Discipline"], parts: [] } })
+          : new Promise<never>(() => undefined),
+      { snapshot_select: select.handler },
+    );
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const pill = () =>
+      must(chip(region, marked).closest("[data-part='filter-chip']"), "the marked chip");
+    // Once the answer for these filters is there, the mark is its own, and not dimmed.
+    await waitFor(() => {
+      expect(chips(region)).toEqual([marked]);
+      expect(pill()).not.toHaveAttribute("data-stale");
+    });
+
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(select.waiting).toHaveLength(1);
+    });
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
+      await Promise.resolve();
+    });
+    // The answer for snapshot 1 is on its way: the mark is the one of snapshot 2, dimmed.
+    await waitFor(() => {
+      expect(pill()).toHaveAttribute("data-stale");
+    });
+    expect(total(region)).toHaveAttribute("data-stale");
+  });
+
+  it("marks no chip and says so while the counts cannot be read", async () => {
+    renderBar(() => {
+      throw commandFailure("Io", "The workspace file could not be read. Try again.");
+    });
+    const region = await screen.findByRole("group", { name: text.bar });
+    await within(region).findByRole("alert");
+    expect(region.querySelector("[data-part='filter-inactive-unknown']")).toBeNull();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    await waitFor(() => {
+      expect(region.querySelector("[data-part='filter-inactive-unknown']")).toHaveTextContent(
+        text.inactiveUnknown,
+      );
+    });
+    expect(chips(region)).toEqual(["Discipline Civil"]);
+  });
+
   it("offers only the open holds, and the status in view, while the counts cannot be read", async () => {
     const { user } = renderBar(() => {
       throw commandFailure("Io", "The workspace file could not be read. Try again.");
@@ -800,7 +959,7 @@ describe("FilterBar", () => {
       expect(region).toHaveFocus();
     });
     expect(chip(region, "Discipline Civil")).toBeDisabled();
-    expect(within(region).getByRole("status")).toHaveTextContent(text.busySwitching);
+    expect(within(region).getByRole("status")).toHaveTextContent(text.busySnapshot);
   });
 
   it("takes no focus from a click while no action runs", async () => {
@@ -934,7 +1093,7 @@ describe("where the filter bar is", () => {
     await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines });
     expect(await screen.findByRole("group", { name: text.bar })).toBeInTheDocument();
 
-    for (const path of ["/settings", "/welcome", "/blockers", "/import"]) {
+    for (const path of ["/settings", "/welcome", "/history", "/import"]) {
       await act(() => router.navigate(path));
       await screen.findByRole("heading", { level: 1 });
       expect(router.state.location.pathname).toBe(path);

@@ -14,7 +14,7 @@ import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
 import { openStart, opened, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
-import { holdRef, holdsView, linePage, lineId, lineRow } from "../../test/lines";
+import { holdRef, holdsView, lineDetail, linePage, lineId, lineRow } from "../../test/lines";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
 import { LinesPage, MAX_LOADED_ROWS } from "./LinesPage";
@@ -192,6 +192,61 @@ describe("Lines", () => {
     expect(tableBox()).toHaveAttribute("aria-busy", "true");
     expect(within(table).queryByRole("rowheader", { name: lineId(0) })).not.toBeInTheDocument();
     expect(tableBox().querySelector("[data-part='skeleton-row']")).not.toBeNull();
+  });
+
+  describe("in a table too narrow for all of its columns", () => {
+    tableViewport({ width: 560, height: 400 });
+    const headers = () => screen.getAllByRole("columnheader").map((header) => header.textContent);
+    const leftOut = () =>
+      must(document.querySelector<HTMLElement>("[data-part='lines-table'] [data-part='left-out']"));
+
+    it("leaves out the lines' columns of least priority, and the panel of a line has their values", async () => {
+      renderLines({
+        path: `/lines?line=${lineId(0)}`,
+        handlers: { line_detail: ({ lineId: id }) => lineDetail(id) },
+      });
+      await grid();
+      // The line, its holds, and its oldest age stay; the sizes and the stress calc leave first.
+      await waitFor(() => {
+        expect(headers()).not.toContain(column.modelSize);
+      });
+      expect(headers()).toEqual(expect.arrayContaining([column.line, column.holds, column.oldest]));
+      for (const gone of [column.ldtSize, column.stressCalc, column.sizes]) {
+        expect(headers()).not.toContain(gone);
+        expect(leftOut()).toHaveTextContent(gone);
+      }
+      expect(leftOut()).toHaveTextContent(/Open a line to read them\.$/);
+      // What left is read in the panel of the line.
+      const panel = await screen.findByRole("complementary");
+      const facts = await within(panel).findByRole("list", { name: en.detail.lineFacts });
+      expect(facts).toHaveTextContent(en.detail.fact.modelSize);
+      expect(facts).toHaveTextContent(en.detail.fact.stressCalc);
+      expect(facts).toHaveTextContent("Required");
+    });
+
+    it("keeps the age of the holds in view, and the panel of a hold has what left", async () => {
+      renderLines({
+        path: "/lines?rows=holds&hold=0",
+        handlers: { hold_detail: ({ position }) => holdRef(position) },
+      });
+      await grid(text.holdsTable);
+      await waitFor(() => {
+        expect(headers()).not.toContain(column.name);
+      });
+      expect(headers()).toEqual([column.line, column.remark, column.blocker, column.age]);
+      expect(leftOut()).toHaveTextContent(/Open a hold to read them\.$/);
+      // The blocker is written in the face of the body in the table, the line ID in the monospace.
+      const table = await grid(text.holdsTable);
+      const blocker = within(table).getAllByText("577-PK-400")[0];
+      expect(blocker?.closest("[role='gridcell']")).toHaveAttribute("data-kind", "text");
+      expect(within(table).getAllByRole("rowheader")[0]).toHaveAttribute("data-kind", "identifier");
+      const panel = await screen.findByRole("complementary");
+      const facts = await within(panel).findByRole("list", { name: en.detail.holdFacts });
+      expect(facts).toHaveTextContent(en.detail.fact.name);
+      expect(facts).toHaveTextContent("A. Haddad");
+      // The blocker is written in the face of the body there as well.
+      expect(within(facts).getByText("577-PK-400")).not.toHaveAttribute("data-kind");
+    });
   });
 
   describe("in a window of the table", () => {

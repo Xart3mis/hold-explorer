@@ -52,7 +52,13 @@ function renderBar(answer: Values = () => valuePage(), handlers: Handlers = {}) 
   const app = renderApp({
     start: openStart(),
     path: "/overview",
-    pages: { overview: <Screen />, lines: <Screen />, settings: <SettingsPage /> },
+    pages: {
+      overview: <Screen />,
+      breakdown: <Screen />,
+      blockers: <Screen />,
+      lines: <Screen />,
+      settings: <SettingsPage />,
+    },
     handlers: { ...handlers, filter_values: values },
   });
   return { ...app, values };
@@ -473,6 +479,15 @@ describe("the editor of a field of values", () => {
     const dialog = await openEditor(user, region, "Line ID");
     await screen.findByRole("option", { name: "Civil" });
     expect(dialog).toHaveTextContent(picker.moreValues_other.replace("{{count, number}}", "1,497"));
+  });
+
+  it("shows the number of more values the command answers, without working it out", async () => {
+    // An answer whose numbers do not add up shows that the footer takes `more` as it is.
+    const { user } = renderBar(() => valuePage({ total: 1500, more: 12 }));
+    const region = await bar();
+    const dialog = await openEditor(user, region, "Line ID");
+    await screen.findByRole("option", { name: "Civil" });
+    expect(dialog).toHaveTextContent(picker.moreValues_other.replace("{{count, number}}", "12"));
   });
 
   it("writes one more value as one, and has no such line when every value is listed", async () => {

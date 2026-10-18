@@ -110,14 +110,43 @@
   justify-content: flex-end;
 }
 
-/* A column is never narrower than its header, so this cuts nothing; it is the safe side. */
+/*
+ * A column is never narrower than its header, so this cuts nothing, except a header that is a
+ * value of the data in the table view of a chart, which makes room for only so much of it.
+ */
 .label {
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* A sortable header is a button. The sorted one is written in the primary ink, with an arrow. */
+/*
+ * A sortable header is a button, and looks it before it is pressed: at rest it has a muted
+ * two-way mark. Hover and the keyboard's focus raise the mark to the secondary ink. The sorted
+ * header alone has an arrow, and it differs by more than ink: its label is heavier as well.
+ */
+.mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-text-muted);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.column[data-hovered] .mark,
+.column[data-pressed] .mark,
+.column[data-focus-visible] .mark {
+  color: var(--color-text-secondary);
+}
+
+.column .mark[data-mark="sorted"] {
+  color: var(--color-text-primary);
+}
+
+.column[aria-sort="ascending"] .label,
+.column[aria-sort="descending"] .label {
+  font-weight: var(--font-weight-semibold);
+}
+
 .column[data-allows-sorting][data-hovered] {
   background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
@@ -297,6 +326,103 @@
   pointer-events: none;
 }
 
+/*
+ * Rows that expand. The cell that names a row starts with a chevron, which points to the side
+ * while the row is collapsed and down while it is expanded; a row without children keeps its
+ * room, so every name starts in the same place. A child row is a row like the others, at the same
+ * height and with the same hairline; its first cell is indented by the room of the chevron, so a
+ * child's name starts under the name of its row.
+ */
+.chevronRoom {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-icon);
+  block-size: var(--size-icon);
+  margin-inline-end: var(--space-1);
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 100%;
+  block-size: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: default;
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.row[data-hovered] .chevron {
+  color: var(--color-text-primary);
+}
+
+.cell[data-expanded] .chevron {
+  transform: rotate(90deg);
+}
+
+.cell[data-level="2"][data-pinned] {
+  padding-inline-start: calc(var(--density-cell-padding-x) + var(--size-icon) + var(--space-1));
+}
+
+/* While the children are read: a skeleton line in each track, as on a first load. */
+.row[data-part="loading-row"] .placeholderLine {
+  inline-size: 16ch;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="identifier"] .placeholderLine {
+  inline-size: 21ch;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="number"] {
+  justify-content: flex-end;
+}
+
+.row[data-part="loading-row"] .cell[data-kind="number"] .placeholderLine {
+  inline-size: 3ch;
+}
+
+/*
+ * A row that says how the children are, across the tracks: that they could not be read, with a
+ * retry, or that there are more of them, and where to read them all. The second is an action, in
+ * the ink of what can be acted on.
+ */
+.status {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-inline-size: 0;
+  font-variant-numeric: var(--font-numeric-proportional);
+}
+
+.status[data-tone="danger"] .statusIcon {
+  color: var(--color-danger-text);
+}
+
+.status[data-tone="neutral"] {
+  color: var(--color-text-secondary);
+}
+
+.status[data-tone="action"] {
+  color: var(--color-accent-text);
+}
+
+.status .value {
+  flex: 0 1 auto;
+}
+
+.statusIcon {
+  flex: none;
+}
+
 /* A refetch keeps the previous rows, dimmed. */
 .body {
   transition: opacity var(--duration-fast) var(--ease-out);
@@ -377,10 +503,23 @@
 }
 
 /*
- * The count line: how many rows are loaded and how many there are. It stands under the scroller
- * and stays while the rows scroll. Under a table that fills its page a hairline closes the
- * scroller off, as the header does at its top.
+ * Under the scroller, and staying while the rows scroll: the count line, and at its trailing end
+ * the sentence that names the columns that left. Under a table that fills its page a hairline
+ * closes the scroller off, as the header does at its top.
  */
+.foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  column-gap: var(--space-4);
+  align-items: baseline;
+}
+
+.root[data-height="fill"] .foot {
+  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+}
+
+/* The count line: how many rows are loaded and how many there are. */
 .count {
   margin: 0;
   padding: var(--space-2) var(--density-cell-padding-x);
@@ -390,8 +529,15 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-.root[data-height="fill"] .count {
-  border-block-start: var(--border-width-thin) solid var(--color-border-default);
+.leftOut {
+  margin: 0;
+  margin-inline-start: auto;
+  padding: var(--space-2) var(--density-cell-padding-x);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: end;
 }
 
 /*
@@ -421,4 +567,10 @@
 .probeMono {
   font: var(--text-mono);
   font-variant-numeric: var(--font-numeric-tabular);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: color var(--duration-fast) var(--ease-out);
+  }
 }

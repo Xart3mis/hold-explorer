@@ -8,7 +8,7 @@ import { t } from "../../text/i18n";
 import styles from "./Detail.module.css";
 import { useDetailFocus } from "./selection";
 
-/** What the panel shows a line or a hold with. */
+/** What the panel shows a line, a hold, or a blocker with. */
 export interface DetailProps {
   /** The id the heading of the panel takes: the panel is named by it. */
   headingId: string;

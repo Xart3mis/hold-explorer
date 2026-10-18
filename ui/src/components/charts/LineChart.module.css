@@ -1,0 +1,145 @@
+/*
+ * The line chart: the name of the value above, the value axis at the leading side, the plot,
+ * the band of the x axis under it, and the name of x at its trailing end. The plot and the band
+ * together are as tall as the chart's height token, or as `--line-chart-height` where the screen
+ * sets it: a chart over a table gives way to it in a short window (DESIGN.md, "Line chart").
+ */
+.chart {
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.chart[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+.box {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--size-chart-axis-width) minmax(0, 1fr);
+  row-gap: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.box:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* The one option of the list box: the point the keyboard is on, read by assistive technology. */
+.option {
+  position: absolute;
+  overflow: hidden;
+  inline-size: var(--size-pixel);
+  block-size: var(--size-pixel);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.yName {
+  grid-column: 1 / -1;
+  padding-block-end: var(--space-1);
+}
+
+.frame {
+  display: grid;
+  grid-template-rows:
+    calc(
+      var(--line-chart-height, var(--size-line-chart-height)) - var(--line-height-tight) -
+        var(--space-1)
+    )
+    var(--line-height-tight);
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  row-gap: var(--space-1);
+}
+
+.yAxis {
+  position: relative;
+}
+
+/* A tick label is centered on its gridline, right-aligned in the axis. */
+.yTick {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.plot {
+  position: relative;
+  min-inline-size: 0;
+}
+
+.svg {
+  display: block;
+  overflow: visible;
+}
+
+.grid,
+.baseline,
+.crosshair {
+  stroke-width: var(--border-width-thin);
+  shape-rendering: crispedges;
+}
+
+.grid {
+  stroke: var(--color-chart-grid);
+}
+
+.baseline,
+.crosshair {
+  stroke: var(--color-chart-axis);
+}
+
+/* One path for the whole series: a thin neutral line, no fill under it. */
+.line {
+  fill: none;
+  stroke: var(--color-chart-neutral);
+  stroke-width: var(--size-chart-line);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A marker carries a ring of the surface, so it reads where it sits on the line. */
+.marker {
+  fill: var(--color-chart-neutral-hover);
+  stroke: var(--color-surface-app);
+}
+
+.marker[data-selected] {
+  fill: var(--color-chart-neutral-selected);
+}
+
+.xAxis {
+  position: relative;
+  grid-column: 2;
+}
+
+.xTick {
+  position: absolute;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.xName {
+  grid-column: 2;
+  text-align: end;
+}
+
+/* A first load: one block as large as the plot, without motion. */
+.skeleton {
+  block-size: var(--line-chart-height, var(--size-line-chart-height));
+  border-radius: var(--radius-xs);
+  background-color: var(--color-skeleton);
+}
+
+/* A chart has no transition under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .chart {
+    transition: none;
+  }
+}

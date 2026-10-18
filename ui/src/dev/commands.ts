@@ -1,10 +1,15 @@
 // Answers the commands from fixtures, so the app's pages can be opened in a plain browser. For
 // development only; see ui/src/dev/app.tsx.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { openHoldsFilter } from "../api/filter";
+import { dimNeeds, partNeeds } from "../api/filter-needs";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
 import type { Dim } from "../bindings/Dim";
+import type { Field } from "../bindings/Field";
+import type { FilterPart } from "../bindings/FilterPart";
+import type { Inactive } from "../bindings/Inactive";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { HoldQuery } from "../bindings/HoldQuery";
@@ -30,7 +35,18 @@ import {
   savedMappingDraft,
   unmappedDraft,
 } from "../test/import";
-import { devHoldCount, devHoldDetail, devHolds, devLineDetail, devLines } from "./lines";
+import {
+  devBlockerDetail,
+  devBreakdown,
+  devGroupDetail,
+  devMatrix,
+  devHoldCount,
+  devHoldDetail,
+  devHolds,
+  devLineDetail,
+  devLines,
+  devSolveOrder,
+} from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
 
@@ -65,7 +81,8 @@ export const DEV_STATES = [
   "overview-many",
   // The filter bar on the Overview: several filters set, more than fit in one line, a snapshot
   // whose export had no size columns, a selection that never ends (select another snapshot to see
-  // the bar wait), and counts that cannot be read. `overview-limited` shows the bar of a
+  // the bar wait), and counts that cannot be read. `filters-absent` also sets a filter on the
+  // sizes, which that snapshot lacks. `overview-limited` shows the bar of a
   // snapshot without its released column.
   "filters",
   "filters-many",
@@ -92,9 +109,46 @@ export const DEV_STATES = [
   //   dev.html?state=open#/lines?line=78B99-000-00000-XX-000
   // These add a newest snapshot that is limited (no released column, no hold ID), answers that
   // take two seconds (select another snapshot to see a re-read), and a reading that fails.
+  // A blocker opens the same way, from Blockers or from any other data destination; these add a
+  // first load that never ends, and filters that leave out the blocker (Clear filters in the panel
+  // brings it back). `blockers-many` has blockers of hundreds of lines:
+  //   dev.html?state=open#/blockers?blocker=Piping%7CStress
+  //   dev.html?state=detail-loading#/blockers?blocker=Piping%7CStress
+  //   dev.html?state=detail-filtered#/lines?blocker=Piping%7CStress
+  //   dev.html?state=blockers-many#/blockers?blocker=Piping%7CStress
   "detail-limited",
   "detail-slow",
   "detail-error",
+  "detail-loading",
+  "detail-filtered",
+  // Breakdown: every state answers the groups and their lines from the same made-up holds. These
+  // add a snapshot of 30,000 holds grouped by blocker, its first 1,500 groups, the largest with
+  // more than 900 lines; lines of a group that are never read (a skeleton row stays); and lines
+  // of a group that cannot be read (an error row with a retry). Open them on the page:
+  //   dev.html?state=breakdown-many#/breakdown?mode=list&by=Blocker
+  //   dev.html?state=breakdown-group-loading#/breakdown?mode=list&by=Discipline&open=Piping
+  "breakdown-many",
+  "breakdown-group-loading",
+  "breakdown-group-error",
+  // The matrix of Breakdown answers from the same holds in every state, folded at thirty values
+  // a side as the command folds. These fold at six a side, so that disciplines by hold type has
+  // an Other row and an Other column; give a matrix that never comes (skeletons); and one that
+  // cannot be read (an error with a retry):
+  //   dev.html?state=open#/breakdown?mode=matrix
+  //   dev.html?state=breakdown-matrix-folded#/breakdown?mode=matrix
+  "breakdown-matrix-folded",
+  "breakdown-matrix-loading",
+  "breakdown-matrix-error",
+  // Blockers: every state answers the solve order of the same made-up holds, a step for each of
+  // their blockers. These add the snapshot of 30,000 holds, whose solve order has thousands of
+  // steps; a first load that never ends (skeletons); and a reading that fails (an error with a
+  // retry). `lines-none` shows it under filters that keep no hold, and `empty` in a workspace
+  // without snapshots. Select a step by its address as well:
+  //   dev.html?state=open#/blockers
+  //   dev.html?state=blockers-many#/blockers?blocker=Piping%7CStress
+  "blockers-many",
+  "blockers-loading",
+  "blockers-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -124,6 +178,14 @@ const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
 /** What a reading answers when the workspace file is locked. */
 const LOCKED =
   "The workspace file could not be read (it is locked by another program). Close the other program, then try again.";
+
+/**
+ * The filter the solve order and a blocker's detail rank, as the desktop side's `open_only`
+ * leaves it: the open holds among those the filter keeps, and nothing under the status Released.
+ */
+function openOnly(spec: FilterSpec): FilterSpec | null {
+  return spec.status === "Released" ? null : { ...spec, status: "Open" };
+}
 
 function failure(kind: string, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
@@ -233,19 +295,67 @@ const MANY_FILTERS: Filters = {
   sizeMismatch: true,
 };
 
+/**
+ * The filter as the core's `FilterSpec::applicable` leaves it for a snapshot that lacks `absent`
+ * and names `customDims`, with what it left out.
+ */
+function devApplicable(
+  spec: FilterSpec,
+  absent: Field[],
+  customDims: string[],
+): { applied: FilterSpec; inactive: Inactive } {
+  const lacks = (needs: readonly Field[]) => needs.some((field) => absent.includes(field));
+  const isAbsent = (dim: Dim) =>
+    typeof dim === "string" ? lacks(dimNeeds(dim)) : !customDims.includes(dim.Custom);
+  const inactive: Inactive = {
+    dims: spec.fields
+      .filter((field) => field.values.length > 0 && isAbsent(field.dim))
+      .map((field) => field.dim),
+    parts: [],
+  };
+  const applied: FilterSpec = {
+    ...spec,
+    fields: spec.fields.filter((field) => field.values.length === 0 || !isAbsent(field.dim)),
+  };
+  const isBounded = (range: FilterSpec["created"]) => range.from !== null || range.to !== null;
+  const parts: [FilterPart, boolean, () => void][] = [
+    ["AgeBands", spec.age_bands.length > 0, () => (applied.age_bands = [])],
+    ["Created", isBounded(spec.created), () => (applied.created = { from: null, to: null })],
+    ["Released", isBounded(spec.released), () => (applied.released = { from: null, to: null })],
+    ["SizeMismatch", spec.size_mismatch !== null, () => (applied.size_mismatch = null)],
+  ];
+  for (const [part, isSet, clear] of parts) {
+    if (isSet && lacks(partNeeds(part))) {
+      inactive.parts.push(part);
+      clear();
+    }
+  }
+  return { applied, inactive };
+}
+
 /** The filters a state starts with, for the workspace it opens; `null` for the default. */
 export function devFilters(state: DevState): { workspaceId: string; filters: Filters } | null {
   switch (state) {
     case "filters":
-    case "filters-absent":
     case "filters-busy":
     case "filters-error":
     case "filters-picker":
       return { workspaceId: unit573.id, filters: SOME_FILTERS };
+    // A filter on the sizes, which the snapshot lacks: its chip stays, marked, and is not sent.
+    case "filters-absent":
+      return { workspaceId: unit573.id, filters: { ...SOME_FILTERS, sizeMismatch: true } };
     case "filters-many":
       return { workspaceId: unit573.id, filters: MANY_FILTERS };
     case "lines-none":
       return { workspaceId: unit573.id, filters: { ...defaultFilters, text: "no such line" } };
+    case "detail-filtered":
+      return {
+        workspaceId: unit573.id,
+        filters: {
+          ...defaultFilters,
+          fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }],
+        },
+      };
     default:
       return null;
   }
@@ -369,7 +479,9 @@ function world(state: DevState, theme: Theme): World {
       start.open = { ...opened(4, null), snapshots: held };
       break;
     }
-    case "lines-many": {
+    case "lines-many":
+    case "breakdown-many":
+    case "blockers-many": {
       // The newest export holds thirty thousand holds, six thousand of them released.
       const held = fourSnapshots.map((taken) =>
         taken.id === 4 ? { ...taken, row_count: 30_000, open_count: 24_000 } : taken,
@@ -412,8 +524,17 @@ function world(state: DevState, theme: Theme): World {
     case "lines-matching-sizes":
     case "lines-error":
     case "lines-loading":
+    case "breakdown-group-loading":
+    case "breakdown-group-error":
+    case "breakdown-matrix-folded":
+    case "breakdown-matrix-loading":
+    case "breakdown-matrix-error":
+    case "blockers-loading":
+    case "blockers-error":
     case "detail-slow":
     case "detail-error":
+    case "detail-loading":
+    case "detail-filtered":
     case "import-clean":
     case "import-findings":
     case "import-confirm":
@@ -517,8 +638,30 @@ export function installDevCommands(state: DevState, theme: Theme): string {
    * What a data command is asked with, once the view it names is the one held here. As the Rust
    * side does, a request for another view is refused.
    */
-  const inView = (payload: unknown): { spec: FilterSpec; selected: SnapshotInfo | undefined } => {
-    const { view, spec } = payload as { view?: ViewRef; spec: FilterSpec };
+  // The states of Lines and of the panel answer from holds that carry two columns the mapping
+  // did not know, and the bar offers them.
+  const isLines =
+    state.startsWith("lines-") ||
+    state.startsWith("detail-") ||
+    state.startsWith("breakdown-") ||
+    state.startsWith("blockers-");
+  const customDims = isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [];
+  const absentOf = (selected: SnapshotInfo): Field[] =>
+    selected.limited
+      ? ["Released", "ReleaseRemark", "ReleaseDate"]
+      : state === "filters-absent"
+        ? ["ModelSize", "LdtSize", "StressCalc"]
+        : [];
+
+  /**
+   * The snapshot a request names, once its view is checked, with its filter as the command
+   * applies it: without what the snapshot cannot apply, which `inactive` names.
+   */
+  const inView = (
+    payload: unknown,
+  ): { spec: FilterSpec; inactive: Inactive; selected: SnapshotInfo | undefined } => {
+    // The commands that read one line or one hold take no filter.
+    const { view, spec = openHoldsFilter() } = payload as { view?: ViewRef; spec?: FilterSpec };
     const held = start.open;
     if (!held) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
     if (view?.workspace_id !== held.workspace.id || view.snapshot_id !== held.selected) {
@@ -527,7 +670,12 @@ export function installDevCommands(state: DevState, theme: Theme): string {
         "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
       );
     }
-    return { spec, selected: held.snapshots.find(({ id }) => id === held.selected) };
+    const selected = held.snapshots.find(({ id }) => id === held.selected);
+    if (selected === undefined) {
+      return { spec, inactive: { dims: [], parts: [] }, selected };
+    }
+    const { applied, inactive } = devApplicable(spec, absentOf(selected), customDims);
+    return { spec: applied, inactive, selected };
   };
 
   const answers: Record<string, (payload: unknown) => unknown> = {
@@ -711,7 +859,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(200, () => devOverview(start.open, overviewShape(state), spec));
     },
     filter_options: (payload): Promise<FilterOptions> => {
-      const { spec, selected } = inView(payload);
+      const { spec, inactive, selected } = inView(payload);
       if (state === "filters-error") {
         throw failure(
           "Io",
@@ -721,7 +869,6 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(120, () => {
         // Each count is the filter with that one part replaced, as the command counts them. The
         // states of Lines count the made-up holds their tables show, so the two agree.
-        const isLines = state.startsWith("lines-") || state.startsWith("detail-");
         const kept = (part: Partial<FilterSpec>) =>
           selected === undefined
             ? 0
@@ -747,17 +894,9 @@ export function installDevCommands(state: DevState, theme: Theme): string {
             { min_days: 60, max_days: 89 },
             { min_days: 90, max_days: null },
           ],
-          // The states of Lines and of the panel answer from holds that carry two columns
-          // the mapping did not know, and the bar offers them.
-          custom_dims: isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [],
-          absent:
-            selected === undefined
-              ? []
-              : selected.limited
-                ? ["Released", "ReleaseRemark", "ReleaseDate"]
-                : state === "filters-absent"
-                  ? ["ModelSize", "LdtSize", "StressCalc"]
-                  : [],
+          custom_dims: customDims,
+          absent: selected === undefined ? [] : absentOf(selected),
+          inactive,
         };
       });
     },
@@ -786,6 +925,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     line_detail: (payload) => {
       const { selected } = inView(payload);
       const { lineId } = payload as { lineId: string };
+      if (state === "detail-loading") return new Promise(() => undefined);
       if (state === "detail-error") throw failure("Io", LOCKED);
       const matching = state === "lines-matching-sizes";
       return later(state === "detail-slow" ? 2000 : 120, () =>
@@ -795,10 +935,73 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     hold_detail: (payload) => {
       const { selected } = inView(payload);
       const { position } = payload as { position: number };
+      if (state === "detail-loading") return new Promise(() => undefined);
       if (state === "detail-error") throw failure("Io", LOCKED);
       const matching = state === "lines-matching-sizes";
       return later(state === "detail-slow" ? 2000 : 120, () =>
         selected === undefined ? null : devHoldDetail(selected, position, matching),
+      );
+    },
+    blocker_detail: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { key } = payload as { key: string };
+      if (state === "detail-loading") return new Promise(() => undefined);
+      if (state === "detail-error") throw failure("Io", LOCKED);
+      const matching = state === "lines-matching-sizes";
+      const ranked = openOnly(spec);
+      return later(state === "detail-slow" ? 2000 : 150, () =>
+        selected === undefined || ranked === null
+          ? null
+          : devBlockerDetail(selected, ranked, key, matching),
+      );
+    },
+    breakdown: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { dim } = payload as { dim: Dim };
+      const limit = state === "breakdown-many" ? 1500 : Number.POSITIVE_INFINITY;
+      return later(150, () =>
+        selected === undefined ? [] : devBreakdown(selected, spec, dim, false, limit),
+      );
+    },
+    group_detail: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { dim, key } = payload as { dim: Dim; key: string };
+      if (state === "breakdown-group-loading") return new Promise(() => undefined);
+      if (state === "breakdown-group-error") throw failure("Io", LOCKED);
+      return later(250, () =>
+        selected === undefined ? null : devGroupDetail(selected, spec, dim, key),
+      );
+    },
+    matrix: (payload) => {
+      const { spec, selected } = inView(payload);
+      const { rowDim, colDim } = payload as { rowDim: Dim; colDim: Dim };
+      if (state === "breakdown-matrix-loading") return new Promise(() => undefined);
+      if (state === "breakdown-matrix-error") throw failure("Io", LOCKED);
+      const side = state === "breakdown-matrix-folded" ? 6 : 30;
+      return later(200, () =>
+        selected === undefined
+          ? {
+              rows: [],
+              cols: [],
+              other_row: null,
+              other_col: null,
+              cells: [],
+              max_cell: 0,
+              folded_rows: 0,
+              folded_cols: 0,
+            }
+          : devMatrix(selected, spec, rowDim, colDim, side),
+      );
+    },
+    solve_order: (payload) => {
+      const { spec, selected } = inView(payload);
+      if (state === "blockers-loading") return new Promise(() => undefined);
+      if (state === "blockers-error") throw failure("Io", LOCKED);
+      const ranked = openOnly(spec);
+      return later(200, () =>
+        selected === undefined || ranked === null
+          ? { rows: [], lines_on_hold: 0, steps_to_most: 0 }
+          : devSolveOrder(selected, ranked),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

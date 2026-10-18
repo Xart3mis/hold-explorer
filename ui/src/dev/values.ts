@@ -61,7 +61,15 @@ function valuesOf(dim: Dim, manyLines: boolean): Weighted[] {
     case "BlockerType":
       return even("PR", "PK", "TIE-IN", "Vendor data", "Stress", "Other");
     case "Blocker":
-      return even("577-PK-400", "577-PR-1400", "577-TIE-12", "Vendor data", "Stress", "Other");
+      // Labelled as the core labels a blocker, `<discipline> / <item>`; keyed below.
+      return even(
+        "Piping / Client",
+        "Piping / Stress",
+        "Piping / Other",
+        "Process / Stress",
+        "Process / Client",
+        "Process / Other",
+      );
     case "Remark":
       return even(
         "HOLD FOR VENDOR DATA OF PACKAGE UNIT 577-PK-400",
@@ -99,12 +107,14 @@ export function devValues(
   const matching = values
     .filter(([label]) => label.toLowerCase().includes(needle))
     .map(([label, weight]): Group => ({
-      // A blank value has the empty key; the label is the one the core writes for it.
-      key: label === "Unspecified" ? "" : label,
+      // A blank value has the empty key; the label is the one the core writes for it. A blocker
+      // is keyed `<discipline>|<item>`, as the core filters it.
+      key: label === "Unspecified" ? "" : dim === "Blocker" ? label.replace(" / ", "|") : label,
       label,
       holds: Math.round((kept * weight) / sum),
       lines: Math.round((kept * weight) / sum / 1.4),
     }))
     .sort((a, b) => b.holds - a.holds);
-  return { total: matching.length, values: matching.slice(0, LIMIT) };
+  const shown = matching.slice(0, LIMIT);
+  return { total: matching.length, values: shown, more: matching.length - shown.length };
 }

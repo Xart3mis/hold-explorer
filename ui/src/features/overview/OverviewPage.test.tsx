@@ -155,7 +155,7 @@ const DISCIPLINE_ROWS = [
   "Unspecified 241 166 lines",
 ];
 
-/** Groups the command could send in any order, two of them with the same count. */
+/** Groups in an order other than largest first, two of them with the same count: shown as sent. */
 const TIED = [
   group("Process", 846, 398),
   group("Structural", 377, 190),
@@ -258,13 +258,13 @@ describe("the Overview with a snapshot", () => {
     expect(screen.getByRole("heading", { level: 2, name: text.byHoldType })).toBeInTheDocument();
   });
 
-  it("puts the rows in the order of their holds, and keeps the given order where two are equal", async () => {
+  it("keeps the rows in the order the command sends them, and sorts nothing itself", async () => {
     const { overview } = renderOverview(() => overviewView({ by_discipline: TIED }));
     await loaded(overview);
     expect(barRows(text.byDiscipline)).toEqual([
-      "Civil 1,515 612 lines",
       "Process 846 398 lines",
       "Structural 377 190 lines",
+      "Civil 1,515 612 lines",
       "Electrical 377 1 line",
       "Unspecified 241 166 lines",
     ]);
@@ -362,7 +362,8 @@ describe("the Overview with a snapshot", () => {
       );
       expect(control).not.toBeChecked();
     }
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    // The third switch is that of the roles, named as these are.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
   });
 
   it(
@@ -436,9 +437,9 @@ describe("the Overview with a snapshot", () => {
       const table = tableRows(text.byDiscipline);
       expect(table.map(([label]) => label)).toEqual(bars);
       expect(table).toEqual([
-        ["Civil", "1,515", "612"],
         ["Process", "846", "398"],
         ["Structural", "377", "190"],
+        ["Civil", "1,515", "612"],
         ["Electrical", "377", "1"],
         ["Unspecified", "241", "166"],
       ]);
@@ -472,10 +473,15 @@ describe("the Overview with a snapshot", () => {
       },
       by_discipline: [],
       by_hold_type: [],
+      by_role: [],
+      top_blockers: [],
+      top_lines: [],
+      stale: { holds: 0, days: 90, ages_known: true },
     }));
     await loaded(overview);
     expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 0`);
-    expect(screen.getAllByText(text.noOpenHolds)).toHaveLength(2);
+    // The three groups and the two lists of the most holds each say so.
+    expect(screen.getAllByText(text.noOpenHolds)).toHaveLength(5);
     // There are no rows to show as a table.
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -490,12 +496,9 @@ describe("the Overview with a snapshot", () => {
   it("refers to nothing the page does not show yet", async () => {
     const { overview } = renderOverview();
     const main = await loaded(overview);
-    expect(main.textContent).not.toMatch(
-      /previous|trend|blocker|attention|top lines|soon|not available/i,
-    );
-    expect(Object.values(text).join(" ")).not.toMatch(
-      /previous|trend|blocker|attention|top lines|soon|not available/i,
-    );
+    // The blockers, the lines, and what needs attention are shown now; the trend is not yet.
+    expect(main.textContent).not.toMatch(/previous|trend|soon|not available/i);
+    expect(Object.values(text).join(" ")).not.toMatch(/previous|trend|soon|not available/i);
   });
 });
 

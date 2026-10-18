@@ -15,6 +15,8 @@ export const keys = {
    * one runs, the shell keeps the page that was there, dimmed.
    */
   switching: ["app", "workspace", "switching"] as const,
+  /** The one of them that selects another snapshot of the open workspace. */
+  selectingSnapshot: ["app", "workspace", "switching", "snapshot"] as const,
   /** The others: a new workspace, another name, the demo. */
   changing: ["app", "workspace", "changing"] as const,
   /** The file that is open for import: the `ImportDraft` the pages of the import flow share. */

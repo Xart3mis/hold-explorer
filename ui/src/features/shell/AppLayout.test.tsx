@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import { destinationPages } from "../../app/router";
 import { useShell } from "../../app/shell/context";
@@ -13,13 +13,14 @@ import { durationToken } from "../../design/token-values";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
-import { opened, openStart, startState } from "../../test/fixtures";
+import { opened, openStart, otherWorkspace, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { overviewOf } from "../../test/overview";
 import { SLOW } from "../../test/slow";
 import { fileDrag, windowApi } from "../../test/window";
 import { formatDate } from "../../text/format";
 import { connectImportStart } from "../import/start";
+import { SIDEBAR_STORAGE_KEY } from "./window";
 
 const names = en.destinations.name;
 const soon = en.destinations.soon;
@@ -42,9 +43,9 @@ describe("the sidebar", () => {
         .map((link) => link.textContent),
     ).toEqual([
       names.overview,
-      `${names.breakdown} ${soon}`,
+      names.breakdown,
       names.lines,
-      `${names.blockers} ${soon}`,
+      names.blockers,
       `${names.history} ${soon}`,
       `${names.people} ${soon}`,
       `${names["follow-up"]} ${soon}`,
@@ -56,30 +57,25 @@ describe("the sidebar", () => {
     ).toEqual([`${names.rules} ${soon}`, names.settings]);
   });
 
-  it("puts the Soon tag in the accessible name of the six that are not built, and of no other", async () => {
+  it("puts the Soon tag in the accessible name of the four that are not built, and of no other", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
-    for (const id of [
-      "breakdown",
-      "blockers",
-      "history",
-      "people",
-      "follow-up",
-      "rules",
-    ] as const) {
+    for (const id of ["history", "people", "follow-up", "rules"] as const) {
       expect(within(nav).getByRole("link", { name: `${names[id]} ${soon}` })).toBeInTheDocument();
     }
     expect(within(nav).getByRole("link", { name: names.overview })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.breakdown })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.lines })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.blockers })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: names.settings })).toBeInTheDocument();
-    expect(within(nav).getAllByText(soon)).toHaveLength(6);
+    expect(within(nav).getAllByText(soon)).toHaveLength(4);
   });
 
   it("marks the current destination, and only it", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     const nav = await sidebar();
     const overview = within(nav).getByRole("link", { name: names.overview });
-    const blockers = within(nav).getByRole("link", { name: `${names.blockers} ${soon}` });
+    const history = within(nav).getByRole("link", { name: `${names.history} ${soon}` });
     expect(overview).toHaveAttribute("aria-current", "page");
     expect(
       within(nav)
@@ -87,8 +83,8 @@ describe("the sidebar", () => {
         .filter((link) => link.hasAttribute("aria-current")),
     ).toHaveLength(1);
 
-    await user.click(blockers);
-    expect(blockers).toHaveAttribute("aria-current", "page");
+    await user.click(history);
+    expect(history).toHaveAttribute("aria-current", "page");
     expect(overview).not.toHaveAttribute("aria-current");
   });
 
@@ -123,7 +119,7 @@ describe("the sidebar", () => {
     await user.tab();
     await user.tab();
     await user.tab();
-    expect(screen.getByRole("link", { name: `${names.breakdown} ${soon}` })).toHaveFocus();
+    expect(screen.getByRole("link", { name: names.breakdown })).toHaveFocus();
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip).toHaveTextContent(names.breakdown);
     expect(tooltip).toHaveTextContent("Ctrl+2");
@@ -179,6 +175,133 @@ describe("where toasts sit", () => {
     expect(toasts).toContain(
       "inset-inline-start: var(--toast-inset-inline-start, var(--layout-page-padding-x));",
     );
+  });
+});
+
+describe("the sidebar's rail", () => {
+  afterEach(() => {
+    window.localStorage.removeItem(SIDEBAR_STORAGE_KEY);
+  });
+
+  it("collapses to a rail and back by its last item, and keeps every name for assistive technology", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    const collapse = within(nav).getByRole("button", { name: en.destinations.collapse });
+    expect(collapse).toHaveAttribute("aria-expanded", "true");
+    expect(collapse).toHaveAttribute("aria-controls", nav.id);
+    expect(nav).toHaveAttribute("data-form", "full");
+
+    await user.click(collapse);
+    expect(nav).toHaveAttribute("data-form", "rail");
+    const expand = within(nav).getByRole("button", { name: en.destinations.expand });
+    expect(expand).toHaveAttribute("aria-expanded", "false");
+    // The names of the items are those of the full sidebar, the Soon tag included.
+    expect(within(nav).getByRole("link", { name: names.overview })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav).getByRole("link", { name: `${names.history} ${soon}` })).toBeInTheDocument();
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("rail");
+    expect(document.documentElement).toHaveAttribute("data-sidebar", "rail");
+
+    await user.click(expand);
+    expect(nav).toHaveAttribute("data-form", "full");
+    expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe("full");
+    expect(document.documentElement).toHaveAttribute("data-sidebar", "");
+  });
+
+  it("starts as the user left it", async () => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+    renderApp({ start: openStart(), path: "/overview" });
+    expect(await sidebar()).toHaveAttribute("data-form", "rail");
+  });
+
+  it(
+    "shows the name of an item in text on keyboard focus, with its tag and its shortcut",
+    SLOW,
+    async () => {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+      const { user } = renderApp({ start: openStart(), path: "/overview" });
+      const nav = await sidebar();
+      (document.activeElement as HTMLElement | null)?.blur();
+      const history = within(nav).getByRole("link", { name: `${names.history} ${soon}` });
+      for (let presses = 0; presses < 10 && document.activeElement !== history; presses += 1) {
+        await user.tab();
+      }
+      expect(history).toHaveFocus();
+      const tip = await screen.findByRole("tooltip");
+      expect(tip).toHaveTextContent(`${names.history}, ${soon}`);
+      expect(tip).toHaveTextContent("Ctrl+5");
+    },
+  );
+
+  it("moves the toasts to the edge of the rail", async () => {
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync(join(import.meta.dirname, "../../app.css"), "utf8");
+    document.head.append(sheet);
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "rail");
+      renderApp({ start: openStart(), path: "/overview" });
+      await sidebar();
+      expect(
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--toast-inset-inline-start")
+          .trim(),
+      ).toBe("calc(var(--layout-rail-width) + var(--space-6))");
+    } finally {
+      sheet.remove();
+    }
+  });
+});
+
+describe("the size of the window", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(window, "innerWidth");
+  });
+
+  function resize(width: number) {
+    act(() => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+      window.dispatchEvent(new Event("resize"));
+    });
+  }
+
+  it("marks the root element small, medium, or large by the two breakpoints, and the padding follows", async () => {
+    const sheet = document.createElement("style");
+    sheet.textContent = readFileSync(join(import.meta.dirname, "../../app.css"), "utf8");
+    document.head.append(sheet);
+    const root = document.documentElement;
+    const padding = () => getComputedStyle(root).getPropertyValue("--layout-page-padding-x").trim();
+    try {
+      resize(1024);
+      const app = renderApp({ start: openStart(), path: "/overview" });
+      await sidebar();
+      expect(root).toHaveAttribute("data-window", "small");
+      expect(padding()).toBe("var(--layout-page-padding-x-tight)");
+      resize(1279);
+      expect(root).toHaveAttribute("data-window", "small");
+      resize(1280);
+      expect(root).toHaveAttribute("data-window", "medium");
+      expect(padding()).toBe("var(--layout-page-padding-x-tight)");
+      resize(1439);
+      expect(root).toHaveAttribute("data-window", "medium");
+      resize(1440);
+      expect(root).toHaveAttribute("data-window", "large");
+      expect(padding()).toBe("24px");
+      app.unmount();
+      expect(root).not.toHaveAttribute("data-window");
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("never collapses or expands the sidebar by itself", async () => {
+    resize(1024);
+    renderApp({ start: openStart(), path: "/overview" });
+    const nav = await sidebar();
+    expect(nav).toHaveAttribute("data-form", "full");
+    resize(1920);
+    expect(nav).toHaveAttribute("data-form", "full");
   });
 });
 
@@ -383,6 +506,65 @@ describe("shortcuts", () => {
         await screen.findByRole("heading", { level: 1, name: names[destination.id] }),
       ).toBeInTheDocument();
     }
+  });
+
+  it(
+    "open each destination at the address it last had, with no row selected, as the sidebar does",
+    SLOW,
+    async () => {
+      const stub = <p />;
+      const { user, router } = renderApp({
+        start: openStart(),
+        path: "/breakdown?mode=matrix&rows=Role&cols=HoldType&line=L-1",
+        pages: {
+          ...destinationPages,
+          overview: stub,
+          breakdown: stub,
+          lines: stub,
+          blockers: stub,
+        },
+      });
+      const nav = await sidebar();
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      // Back to Breakdown by its shortcut: in the matrix it was left in, the line not selected.
+      await user.keyboard("{Control>}2{/Control}");
+      expect(router.state.location.pathname).toBe("/breakdown");
+      expect(router.state.location.search).toBe("?mode=matrix&rows=Role&cols=HoldType");
+      // And by its link in the sidebar.
+      await user.keyboard("{Control>}3{/Control}");
+      const breakdown = within(nav).getByRole("link", { name: names.breakdown });
+      expect(breakdown).toHaveAttribute("href", "/breakdown?mode=matrix&rows=Role&cols=HoldType");
+      await user.click(breakdown);
+      expect(router.state.location.search).toBe("?mode=matrix&rows=Role&cols=HoldType");
+      // A destination not visited yet opens at its own address.
+      expect(within(nav).getByRole("link", { name: names.blockers })).toHaveAttribute(
+        "href",
+        "/blockers",
+      );
+    },
+  );
+
+  it("forgets the addresses of the destinations when another workspace opens", SLOW, async () => {
+    const stub = <p />;
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: "/breakdown?mode=list&by=Role&open=Checker",
+      pages: { ...destinationPages, overview: stub, breakdown: stub, lines: stub, blockers: stub },
+      handlers: { workspace_open: () => opened({ workspace: otherWorkspace }) },
+    });
+    const nav = await sidebar();
+    await user.click(within(nav).getByRole("link", { name: names.lines }));
+    await user.click(await screen.findByRole("button", { name: switcher }));
+    const menu = await screen.findByRole("menu", { name: en.workspaces.switcher });
+    await user.click(within(menu).getByRole("menuitem", { name: otherWorkspace.name }));
+    await waitFor(() => {
+      expect(within(nav).getByRole("link", { name: names.breakdown })).toHaveAttribute(
+        "href",
+        "/breakdown",
+      );
+    });
+    expect(router.state.location.pathname).not.toBe("/breakdown");
   });
 
   it("Ctrl+, opens Settings", async () => {
@@ -851,7 +1033,7 @@ describe("a file dragged over the window", () => {
 
 describe("the keyboard", () => {
   it("walks the shell in reading order: top bar, sidebar, page", SLOW, async () => {
-    const { user } = renderApp({ start: openStart(), path: "/blockers" });
+    const { user } = renderApp({ start: openStart(), path: "/history" });
     const nav = await sidebar();
     // Start from the top of the document, as after a click on the window's background.
     (document.activeElement as HTMLElement | null)?.blur();
@@ -861,9 +1043,10 @@ describe("the keyboard", () => {
       screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
       screen.getByRole("button", { name: en.shell.import }),
       ...within(nav).getAllByRole("link"),
+      within(nav).getByRole("button", { name: en.destinations.collapse }),
       screen.getByRole("button", { name: en.comingSoon.action }),
     ];
-    expect(expected).toHaveLength(13);
+    expect(expected).toHaveLength(14);
     for (const element of expected) {
       await user.tab();
       expect(element).toHaveFocus();

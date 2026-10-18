@@ -11,6 +11,36 @@ function cellOf(id: string, item: ReturnType<typeof holdRef>) {
 }
 
 describe("holdColumns", () => {
+  it("lets only the columns the hold panel shows leave a narrow table, and keeps the age", () => {
+    for (const status of ["Open", "Released", "All"] as const) {
+      const columns = holdColumns(20, [], status);
+      const leaving = columns
+        .filter((column) => column.priority !== undefined)
+        .sort((one, other) => (other.priority ?? 0) - (one.priority ?? 0))
+        .map((column) => column.id);
+      // Each of these is a fact of the hold in its panel.
+      expect(leaving).toEqual([
+        "role",
+        "created",
+        "name",
+        "blockerType",
+        ...(status === "Open" ? [] : ["releasedOn"]),
+        "holdType",
+        "discipline",
+        "blocker",
+      ]);
+      // The line, the remark, the status, and the days always stay.
+      const staying = columns.filter((column) => column.priority === undefined).map((c) => c.id);
+      expect(staying).toEqual(["line", "remark", ...(status === "All" ? ["status"] : []), "days"]);
+    }
+  });
+
+  it("writes the blocker in the face of the body, and the line ID in the monospace", () => {
+    const columns = holdColumns(20, [], "Open");
+    expect(columns.find((column) => column.id === "blocker")?.kind).toBeUndefined();
+    expect(columns.find((column) => column.id === "line")?.kind).toBe("identifier");
+  });
+
   it("writes a blank name, role, or hold type as the table's mark for no value", () => {
     // The export's blank spelling is `—`; the table says "no value" in one way in every column.
     const blank = holdRef(0, { name: "—", role: " ", hold_type: "—" });

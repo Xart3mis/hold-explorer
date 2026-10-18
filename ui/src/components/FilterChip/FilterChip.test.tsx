@@ -9,7 +9,12 @@ import { AddFilterChip, FilterChip } from "./FilterChip";
 const removeDiscipline = en.filterChip.remove.replace("{{field}}", "Discipline");
 
 function setup(
-  props: { isNegated?: boolean; isDisabled?: boolean; isUnderPopover?: boolean } = {},
+  props: {
+    isNegated?: boolean;
+    isDisabled?: boolean;
+    isUnderPopover?: boolean;
+    isInactive?: boolean;
+  } = {},
 ) {
   const onPress = vi.fn();
   const onRemove = vi.fn();
@@ -32,6 +37,27 @@ describe("FilterChip", () => {
     expect(screen.getByRole("button", { name: "Discipline Civil" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: removeDiscipline })).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
+
+  it("says in its name that its filter is not in this snapshot, shows its field and value, and can still be opened and removed", async () => {
+    const { onPress, onRemove, user } = setup({ isInactive: true });
+    const name = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const body = screen.getByRole("button", { name });
+    const pill = body.closest<HTMLElement>("[data-part='filter-chip']");
+    if (pill === null) throw new Error("The chip holds its button.");
+    expect(pill).toHaveAttribute("data-inactive");
+    // No tag takes the room of the value: a small icon says it, hidden from assistive technology.
+    expect(pill.querySelector("[data-part='tag']")).toBeNull();
+    expect(pill.querySelector("[data-part='filter-chip-inactive']")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(body).toBeEnabled();
+    await user.click(body);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: removeDiscipline }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    await expectAccessible();
   });
 
   it("reads a negated filter as is not", () => {

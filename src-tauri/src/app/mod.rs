@@ -13,10 +13,12 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use hx_core::dataset::Dataset;
+use hx_core::filter::FilterSpec;
+use hx_core::mapping::Field;
 use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
-pub use data::{FilterOptions, HoldsView};
+pub use data::{FilterOptions, GroupDetail, HoldsView};
 pub use error::CommandError;
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
@@ -31,18 +33,45 @@ use settings::{load_settings_checked, save_settings, LoadedSettings};
 pub const PAGE_ROWS: usize = 200;
 /// Most values `filter_values` returns.
 pub const PICKER_VALUES: usize = 200;
+/// Most rows and most columns of a matrix before the rest is folded into "Other".
+pub const MATRIX_SIDE: usize = 30;
+/// Most Lines `group_detail` lists for one group.
+pub const GROUP_LINES: usize = 200;
+/// Most entries of the Overview's top blockers and top lines.
+pub const TOP_ITEMS: usize = 10;
+/// Age in days from which an open hold counts as stale.
+pub const STALE_DAYS: i64 = 90;
 
-/// The dataset that was built last, with the workspace and the snapshot it belongs to, and the
-/// solve plan of its open holds once one was asked for. Read it through [`AppState::dataset`]
-/// and [`AppState::plan`] only, which ask for the snapshot.
+/// The dataset that was built last, with the workspace and the snapshot it belongs to, the solve
+/// plan of its open holds once one was asked for, the plan of the last filter a solve order or a
+/// blocker detail asked for, and its columns once they were asked for. Read it through
+/// [`AppState::dataset`], [`AppState::plan`], [`AppState::filtered_plan`], and
+/// [`AppState::columns`] only, which ask for the snapshot.
 struct Cache {
     workspace_id: String,
     snapshot_id: i64,
     dataset: Dataset,
     plan: Option<SolvePlan>,
+    /// The plan of the last filter asked for, with that filter.
+    filtered: Option<(FilterSpec, SolvePlan)>,
+    columns: Option<Columns>,
     /// The count of the state, to add to where a plan is built.
     #[cfg(test)]
     plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// The count of the state, to add to where the columns are found.
+    #[cfg(test)]
+    column_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// The count of the state, to add to where a filtered plan is built.
+    #[cfg(test)]
+    filtered_plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// What the columns of a snapshot are, which every data command reads to apply its filter.
+struct Columns {
+    /// [`Dataset::custom_dims`].
+    custom_dims: Vec<String>,
+    /// [`Dataset::absent_fields`].
+    absent: Vec<Field>,
 }
 
 /// What the application holds between commands.
@@ -65,6 +94,12 @@ pub struct AppState {
     /// How many solve plans were built since the application started.
     #[cfg(test)]
     plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// How many times the columns of a snapshot were found since the application started.
+    #[cfg(test)]
+    column_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// How many plans of a filter were built since the application started.
+    #[cfg(test)]
+    filtered_plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl AppState {
@@ -86,6 +121,10 @@ impl AppState {
             dataset_builds: 0,
             #[cfg(test)]
             plan_builds: Default::default(),
+            #[cfg(test)]
+            column_builds: Default::default(),
+            #[cfg(test)]
+            filtered_plan_builds: Default::default(),
         }
     }
 

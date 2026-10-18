@@ -35,7 +35,7 @@ function optionsOf(answer: Answer | undefined, ticked: readonly FilterValue[]): 
   }));
   if (search !== "") return listed;
   const answered = new Set(page.values.map((group) => group.key));
-  const isComplete = page.total <= page.values.length;
+  const isComplete = page.more === 0;
   const gone = ticked
     .filter((value) => !answered.has(value.key))
     .map((value): Option => ({
@@ -139,13 +139,8 @@ export function FieldValues({ dim }: FieldValuesProps) {
               ? t("filters.picker.noMatch", { text: answer.search })
               : t("filters.picker.noValues")
           }
-          {...(answer !== undefined && answer.page.total > answer.page.values.length
-            ? {
-                footer: t("filters.picker.moreValues", {
-                  // How many values the answer leaves out: both numbers are the command's.
-                  count: answer.page.total - answer.page.values.length,
-                }),
-              }
+          {...(answer !== undefined && answer.page.more > 0
+            ? { footer: t("filters.picker.moreValues", { count: answer.page.more }) }
             : {})}
         />
       )}

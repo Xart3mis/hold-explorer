@@ -1,6 +1,8 @@
-import { dimId, dimName } from "../../app/filters/dims";
+import { dimId, dimName, isSameDim } from "../../app/filters/dims";
 import type { Filters } from "../../app/filters/state";
 import type { Dim } from "../../bindings/Dim";
+import type { FilterPart } from "../../bindings/FilterPart";
+import type { Inactive } from "../../bindings/Inactive";
 import { formatAgeBand, formatDateRange, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 
@@ -53,6 +55,8 @@ export interface Chip {
   value: string;
   /** The filter keeps what does not match. */
   isNegated: boolean;
+  /** The command left the filter out: the snapshot in view lacks a column it needs. */
+  isInactive: boolean;
   /** The filters without this one. */
   remove: (filters: Filters) => Filters;
 }
@@ -68,13 +72,33 @@ function summary(labels: readonly string[]): string {
   return t("filters.more", { first, more: others.length });
 }
 
+/** The part of the filter, as the command names it, that each field that is not a dimension is. */
+const PARTS: Record<Exclude<FilterField["kind"], "dim" | "text">, FilterPart> = {
+  ageBands: "AgeBands",
+  created: "Created",
+  released: "Released",
+  sizeMismatch: "SizeMismatch",
+};
+
+/** The part of the filter a field is, as the command names it; `null` for a dimension and text. */
+export function filterPart(field: FilterField): FilterPart | null {
+  return field.kind === "dim" || field.kind === "text" ? null : PARTS[field.kind];
+}
+
 /**
  * The chips of the filters: the fields first, in the order they were added, then the filters that
  * are not a field, in the order the picker lists them. An entry without values filters nothing
- * and has no chip, and neither has the status.
+ * and has no chip, and neither has the status. A filter the command says it left out
+ * (`FilterOptions.inactive`) keeps its chip, marked.
  */
-export function chipsOf(filters: Filters): Chip[] {
+export function chipsOf(filters: Filters, inactive?: Inactive): Chip[] {
   const chips: Chip[] = [];
+  const isInactive = (field: FilterField): boolean => {
+    if (inactive === undefined) return false;
+    if (field.kind === "dim") return inactive.dims.some((dim) => isSameDim(dim, field.dim));
+    const part = filterPart(field);
+    return part !== null && inactive.parts.includes(part);
+  };
   for (const entry of filters.fields) {
     if (entry.values.length === 0) continue;
     const field: FilterField = { kind: "dim", dim: entry.dim };
@@ -85,6 +109,7 @@ export function chipsOf(filters: Filters): Chip[] {
       name: fieldName(field),
       value: summary(entry.values.map((value) => value.label)),
       isNegated: entry.negate,
+      isInactive: isInactive(field),
       remove: (from) => ({
         ...from,
         fields: from.fields.filter((other) => fieldId({ kind: "dim", dim: other.dim }) !== id),
@@ -98,6 +123,7 @@ export function chipsOf(filters: Filters): Chip[] {
       name: fieldName(field),
       value,
       isNegated: false,
+      isInactive: isInactive(field),
       remove,
     });
   };

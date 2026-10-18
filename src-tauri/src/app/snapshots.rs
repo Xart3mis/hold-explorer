@@ -2,7 +2,9 @@
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
-use hx_core::query::{group_by, summary, Group, Summary};
+use hx_core::query::{
+    ages_known, group_by, line_page, stale_count, summary, Group, LineQuery, LineRow, Summary,
+};
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, SolvePlan};
 use hx_store::SnapshotInfo;
@@ -11,7 +13,7 @@ use ts_rs::TS;
 
 use super::error::CommandError;
 use super::workspaces::WorkspaceOpen;
-use super::{describe, AppState, Cache};
+use super::{describe, AppState, Cache, Columns, STALE_DAYS, TOP_ITEMS};
 
 /// The view the interface is showing when it asks for data. A command that reads the data in
 /// view answers only when this names the open workspace and the selected snapshot.
@@ -38,6 +40,29 @@ pub struct OverviewView {
     pub by_discipline: Vec<Group>,
     /// The kept holds by hold type, largest group first.
     pub by_hold_type: Vec<Group>,
+    /// The kept holds by role, largest group first.
+    pub by_role: Vec<Group>,
+    /// The blockers with the most kept holds, largest first, at most `TOP_ITEMS`.
+    pub top_blockers: Vec<Group>,
+    /// The first Lines in the default order, at most `TOP_ITEMS`.
+    pub top_lines: Vec<LineRow>,
+    /// The open holds the filter keeps that have waited long.
+    pub stale: StaleCount,
+}
+
+/// Open holds that have waited at least `days` days.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[ts(export)]
+pub struct StaleCount {
+    /// Open kept holds whose age is at least `days`.
+    pub holds: usize,
+    /// The age that makes a hold stale.
+    pub days: i64,
+    /// Whether it can be known which kept open holds are stale. False only when the filter keeps
+    /// open holds and none of them has an age, because none has a creation date: `holds` is then
+    /// 0 for want of dates, not because no hold has waited long. True when it keeps no open hold,
+    /// as there is nothing to know then.
+    pub ages_known: bool,
 }
 
 impl AppState {
@@ -99,8 +124,14 @@ impl AppState {
                     snapshot_id,
                     dataset,
                     plan: None,
+                    filtered: None,
+                    columns: None,
                     #[cfg(test)]
                     plan_builds: self.plan_builds.clone(),
+                    #[cfg(test)]
+                    column_builds: self.column_builds.clone(),
+                    #[cfg(test)]
+                    filtered_plan_builds: self.filtered_plan_builds.clone(),
                 }
             }
         };
@@ -129,6 +160,50 @@ impl AppState {
         Ok((&cache.dataset, plan))
     }
 
+    /// The dataset of this snapshot with the solve plan of the holds `spec` keeps. The plan of the
+    /// last filter is kept with the dataset, so a solve order and the detail of one of its
+    /// blockers for the same filter plan once; another filter plans anew and takes its place.
+    pub(super) fn filtered_plan(
+        &mut self,
+        snapshot_id: i64,
+        spec: &FilterSpec,
+    ) -> Result<(&Dataset, &SolvePlan), CommandError> {
+        let cache = self.cache(snapshot_id)?;
+        let filtered = cache
+            .filtered
+            .take()
+            .filter(|(kept, _)| kept == spec)
+            .unwrap_or_else(|| {
+                #[cfg(test)]
+                cache
+                    .filtered_plan_builds
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (spec.clone(), solve_plan(&cache.dataset, spec, None))
+            });
+        let (_, plan) = cache.filtered.insert(filtered);
+        Ok((&cache.dataset, plan))
+    }
+
+    /// The dataset of this snapshot with its extra columns and absent fields, which are found on
+    /// the first call for the snapshot and kept with the dataset.
+    pub(super) fn columns(
+        &mut self,
+        snapshot_id: i64,
+    ) -> Result<(&Dataset, &Columns), CommandError> {
+        let cache = self.cache(snapshot_id)?;
+        let columns = cache.columns.get_or_insert_with(|| {
+            #[cfg(test)]
+            cache
+                .column_builds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Columns {
+                custom_dims: cache.dataset.custom_dims(),
+                absent: cache.dataset.absent_fields(),
+            }
+        });
+        Ok((&cache.dataset, columns))
+    }
+
     /// The Overview of the selected snapshot for this filter; `None` when the workspace has no
     /// snapshot. `view` is what the interface shows; see [`AppState::check_view`].
     pub fn overview(
@@ -136,24 +211,36 @@ impl AppState {
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<Option<OverviewView>, CommandError> {
-        self.check_view(view)?;
-        let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
-        let Some(selected) = self.selected else {
+        let Some(selected) = self.snapshot_in_view(view)? else {
             return Ok(None);
         };
+        let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
         let snapshot = workspace.snapshot(selected)?;
         let is_latest = workspace
             .snapshots()?
             .last()
             .is_none_or(|latest| latest.id == selected);
-        let dataset = self.dataset(selected)?;
-        Ok(Some(OverviewView {
-            snapshot,
-            is_latest,
-            summary: summary(dataset, spec),
-            by_discipline: group_by(dataset, spec, &Dim::Discipline),
-            by_hold_type: group_by(dataset, spec, &Dim::HoldType),
-        }))
+        self.in_view(view, spec, |v| {
+            let (dataset, spec) = (v.dataset, &v.spec);
+            Some(OverviewView {
+                snapshot,
+                is_latest,
+                summary: summary(dataset, spec),
+                by_discipline: group_by(dataset, spec, &Dim::Discipline),
+                by_hold_type: group_by(dataset, spec, &Dim::HoldType),
+                by_role: group_by(dataset, spec, &Dim::Role),
+                top_blockers: group_by(dataset, spec, &Dim::Blocker)
+                    .into_iter()
+                    .take(TOP_ITEMS)
+                    .collect(),
+                top_lines: line_page(dataset, spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows,
+                stale: StaleCount {
+                    holds: stale_count(dataset, spec, STALE_DAYS),
+                    days: STALE_DAYS,
+                    ages_known: ages_known(dataset, spec),
+                },
+            })
+        })
     }
 
     /// How many datasets were built since the application started.
@@ -166,5 +253,19 @@ impl AppState {
     #[cfg(test)]
     pub(super) fn plan_builds(&self) -> usize {
         self.plan_builds.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// How many plans of a filter were built since the application started.
+    #[cfg(test)]
+    pub(super) fn filtered_plan_builds(&self) -> usize {
+        self.filtered_plan_builds
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// How many times the columns of a snapshot were found since the application started.
+    #[cfg(test)]
+    pub(super) fn column_builds(&self) -> usize {
+        self.column_builds
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }

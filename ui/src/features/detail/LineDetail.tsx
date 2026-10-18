@@ -4,7 +4,6 @@ import { Button as RacButton } from "react-aria-components";
 import { api } from "../../api/commands";
 import { useSnapshotQuery } from "../../app/view";
 import type { ChainLink } from "../../bindings/ChainLink";
-import type { HoldRef } from "../../bindings/HoldRef";
 import type { LineDetail as LineAnswer } from "../../bindings/LineDetail";
 import {
   Button,
@@ -17,10 +16,11 @@ import {
   Tag,
   type Fact,
 } from "../../components";
-import { formatDate, formatDays, formatList, formatSize, isBlank } from "../../text/format";
 import { cx } from "../../components/cx";
+import { formatSize } from "../../text/format";
 import { t } from "../../text/i18n";
 import styles from "./Detail.module.css";
+import { HoldList } from "./HoldList";
 import {
   has,
   Loading,
@@ -109,89 +109,34 @@ function CopyLineId({ lineId }: { lineId: string }) {
   );
 }
 
-/** One blocker of the line: its label, its type, its place in the solve order, the lines it blocks. */
+/**
+ * One blocker of the line: its label, its type, its place in the solve order, the lines it
+ * blocks. The whole row is the button that opens that blocker in the panel.
+ */
 function BlockerRow({ link }: { link: ChainLink }) {
-  return (
-    <li className={styles.row}>
-      <span className={styles.rowTitle}>{link.label}</span>
-      <span className={styles.rowFoot}>
-        <Tag>{link.kind}</Tag>
-        <span className={styles.caption}>
-          {link.step === null ? t("detail.noStep") : t("detail.step", { step: link.step })}
-        </span>
-        <span className={styles.trailing}>{t("detail.blocksLines", { count: link.lines })}</span>
-      </span>
-    </li>
-  );
-}
-
-/** What a hold is: its discipline and hold type, without what the export left blank. */
-function kindOf(discipline: string, holdType: string): string {
-  const kind = [discipline, holdType].filter((part) => !isBlank(part));
-  return kind.length === 0 ? notGiven().value : formatList(kind);
-}
-
-/** Who raised a hold and when, as far as the export says. */
-function raised({ row }: HoldRef, showsWho: boolean, showsWhen: boolean): string {
-  const who = showsWho
-    ? formatList([row.hold.name, row.hold.role].filter((part) => !isBlank(part)))
-    : "";
-  const date = showsWhen && row.hold.created !== null ? formatDate(row.hold.created) : "";
-  if (who !== "" && date !== "") return t("detail.raisedByOn", { who, date });
-  if (who !== "") return t("detail.raisedBy", { who });
-  if (date !== "") return t("detail.raisedOn", { date });
-  return t("detail.raisedUnknown");
-}
-
-/** The holds of a line, each a button that opens that hold in the panel. */
-function HoldList({
-  holds,
-  absent,
-  label,
-}: {
-  holds: readonly HoldRef[];
-  absent: DetailProps["absent"];
-  label: string;
-}) {
   const { select } = useSelection();
   const focus = useDetailFocus();
-  const showsWho = has(absent, "Name") || has(absent, "Role");
-  const showsWhen = has(absent, "Created");
   return (
-    <ul aria-label={label} className={styles.rows}>
-      {holds.map((hold) => {
-        const { row } = hold;
-        const days = row.hold.released ? row.duration_days : row.age_days;
-        return (
-          <li key={hold.position} className={styles.holdItem}>
-            <RacButton
-              data-part="hold-row"
-              className={cx(styles.holdRow)}
-              onPress={() => {
-                // The button is gone once the hold shows, so the focus goes to the heading.
-                focus.askForHeading();
-                select({ kind: "hold", position: hold.position });
-              }}
-            >
-              <span className={styles.holdHead}>
-                <span className={styles.holdKind}>
-                  {kindOf(row.hold.discipline, row.hold.hold_type)}
-                </span>
-                {days === null || !showsWhen ? null : (
-                  <span className={styles.trailing}>
-                    {t(row.hold.released ? "detail.duration" : "detail.age", {
-                      days: formatDays(days),
-                    })}
-                  </span>
-                )}
-              </span>
-              <span className={styles.remark}>{row.hold.remark}</span>
-              <span className={styles.caption}>{raised(hold, showsWho, showsWhen)}</span>
-            </RacButton>
-          </li>
-        );
-      })}
-    </ul>
+    <li className={styles.holdItem}>
+      <RacButton
+        data-part="blocker-row"
+        className={cx(styles.holdRow)}
+        onPress={() => {
+          // The button is gone once the blocker shows, so the focus goes to the heading.
+          focus.askForHeading();
+          select({ kind: "blocker", key: link.key });
+        }}
+      >
+        <span className={styles.rowTitle}>{link.label}</span>
+        <span className={styles.rowFoot}>
+          <Tag>{link.kind}</Tag>
+          <span className={styles.caption}>
+            {link.step === null ? t("detail.noStep") : t("detail.step", { step: link.step })}
+          </span>
+          <span className={styles.trailing}>{t("detail.blocksLines", { count: link.lines })}</span>
+        </span>
+      </RacButton>
+    </li>
   );
 }
 

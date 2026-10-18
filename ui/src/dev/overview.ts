@@ -1,12 +1,14 @@
 // What the development page answers for the `overview` command: made-up numbers of a plausible
 // size, so the Overview can be looked at with thirteen disciplines, with three, and with
-// twenty-five. For development only; see ui/src/dev/app.tsx.
+// twenty-five. Its top blockers, top lines, and stale holds are those of the made-up holds that
+// Blockers and Lines show, so a press on one opens what it names, as many as it says. For development only;
+// see ui/src/dev/app.tsx.
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
-import type { Status } from "../bindings/Status";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
+import { devBreakdown, devLines, devStaleCount } from "./lines";
 
 /** How many open holds the numbers below add up to. A snapshot with another count scales them. */
 const OPEN_HOLDS = 5042;
@@ -44,6 +46,19 @@ export const HOLD_TYPES: readonly Row[] = [
   ["Design change", 104, 88],
   ["Other", 45, 41],
 ];
+
+export const ROLES: readonly Row[] = [
+  ["Lead", 2470, 1760],
+  ["Checker", 1604, 1190],
+  ["Designer", 822, 601],
+  ["Unspecified", 146, 120],
+];
+
+/** How many blockers and lines the Overview lists, as the core sends them: `TOP_ITEMS`. */
+const TOP_ITEMS = 10;
+
+/** The age that makes a hold stale, as the core counts it. */
+const STALE_DAYS = 90;
 
 /** Twenty-five values with labels of every length, some too long for the label column. */
 const MANY: readonly Row[] = [
@@ -107,8 +122,9 @@ function overviewOfSnapshot(
   isLatest: boolean,
   shape: DevOverview,
   holds: number,
-  status: Status,
+  spec: FilterSpec,
 ): OverviewView {
+  const { status } = spec;
   const share = holds / OPEN_HOLDS;
   const disciplines =
     shape === "many" ? MANY : shape === "few" ? DISCIPLINES.slice(0, 3) : DISCIPLINES;
@@ -130,6 +146,22 @@ function overviewOfSnapshot(
     },
     by_discipline: scaled(disciplines, holds),
     by_hold_type: scaled(holdTypes, holds),
+    by_role: scaled(ROLES, holds),
+    top_blockers: devBreakdown(snapshot, spec, "Blocker", false, TOP_ITEMS),
+    top_lines: devLines(
+      snapshot,
+      spec,
+      { sort: "HoldsDesc", reverse: false, single_hold_only: false, size_mismatch_only: false },
+      0,
+    ).rows.slice(0, TOP_ITEMS),
+    // A hold has an age only when the snapshot has dates. Otherwise the stale holds are counted
+    // from the made-up holds Lines shows, so the press on them opens as many as it says.
+    stale: {
+      holds: shape === "no-dates" ? 0 : devStaleCount(snapshot, spec, STALE_DAYS),
+      days: STALE_DAYS,
+      // Without dates no open hold has an age; with no open hold kept there is nothing to know.
+      ages_known: shape !== "no-dates" || status === "Released" || holds === 0,
+    },
   };
 }
 
@@ -169,6 +201,6 @@ export function devOverview(
     selected.id === open?.snapshots.at(-1)?.id,
     shape,
     devKept(selected, spec),
-    spec.status,
+    spec,
   );
 }

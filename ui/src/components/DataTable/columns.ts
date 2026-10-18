@@ -47,11 +47,18 @@ export function textChars(text: string): number {
   return figures + (text.length - figures) * LETTER;
 }
 
+/** Whether a column that makes room for `most` characters of its header cuts this header. */
+export function isHeaderCut(header: string, most: number | undefined): boolean {
+  return most !== undefined && textChars(header) > most;
+}
+
 /**
- * The least width of a column, whatever it declares: the room of its header. A header is never
- * cut, also not one that is longer than the values under it or that grew in a translation. It
- * is counted from its text as `textChars` counts, and a header that can be sorted keeps the
- * room of the arrow (`arrow`: the icon and its gap).
+ * The least width of a column, whatever it declares: the room of its header. A header is not
+ * cut, also not one that is longer than the values under it or that grew in a translation,
+ * unless the column says how much of it to make room for (`most`, in characters): the table view
+ * of a chart, whose headers are values of the data. It is counted from its text as `textChars`
+ * counts, and a header that can be sorted keeps the room of the arrow (`arrow`: the icon and its
+ * gap).
  */
 export function headerWidth(
   header: string,
@@ -59,6 +66,57 @@ export function headerWidth(
   widths: CharWidths,
   paddingX: number,
   arrow: number,
+  most = Number.POSITIVE_INFINITY,
 ): number {
-  return room(textChars(header), "text", widths, paddingX) + (allowsSorting ? arrow : 0);
+  const chars = Math.min(textChars(header), most);
+  return room(chars, "text", widths, paddingX) + (allowsSorting ? arrow : 0);
+}
+
+/** What `leavingColumns` needs to know of a column. */
+export interface FitColumn {
+  id: string;
+  /** The least width the column takes, in pixels. */
+  least: number;
+  /** The higher, the sooner it leaves; a column without one always stays. */
+  priority?: number | undefined;
+  /** The column names the row, or the rows are sorted by it: it always stays. */
+  stays: boolean;
+  /** The column takes a share of the width that is left; the last such column stays. */
+  takesShare?: boolean;
+}
+
+/**
+ * The columns that leave a table of this width, so that the rest fit: the one of the highest
+ * priority first, and of two with the same priority the later one, until the least widths of the
+ * others and of the room that is kept besides (`kept`: the row actions) fit in the width. The last
+ * column that takes a share of the width stays, so the rows reach the edge of a wider table. A
+ * width that is not known (zero, where nothing is laid out) lets every column stay. When no column
+ * is left that may leave, the rest stay, and the table scrolls sideways.
+ */
+export function leavingColumns(
+  columns: readonly FitColumn[],
+  width: number,
+  kept = 0,
+): ReadonlySet<string> {
+  const leaving = new Set<string>();
+  if (!(width > 0)) return leaving;
+  let needed = kept + columns.reduce((sum, column) => sum + column.least, 0);
+  let shares = columns.filter((column) => column.takesShare === true).length;
+  const candidates = columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => column.priority !== undefined && !column.stays)
+    .sort(
+      (one, other) =>
+        (other.column.priority ?? 0) - (one.column.priority ?? 0) || other.index - one.index,
+    );
+  for (const { column } of candidates) {
+    if (needed <= width) break;
+    if (column.takesShare === true) {
+      if (shares === 1) continue;
+      shares -= 1;
+    }
+    leaving.add(column.id);
+    needed -= column.least;
+  }
+  return leaving;
 }

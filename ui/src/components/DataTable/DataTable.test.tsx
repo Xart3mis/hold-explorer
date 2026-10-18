@@ -2,14 +2,23 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { TableStateContext } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import { must } from "../../test/app";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
 import { Button } from "../Button/Button";
-import { DataTable, type DataTableColumn } from "./DataTable";
+import {
+  columnOfHeader,
+  DataTable,
+  headerOfColumn,
+  type DataTableColumn,
+  type DataTableProps,
+  type LeavingColumn,
+} from "./DataTable";
 
 interface Line {
   id: string;
@@ -59,14 +68,42 @@ const columns: DataTableColumn<Line>[] = [
   },
 ];
 
-function table(props: Partial<Parameters<typeof DataTable<Line>>[0]> = {}) {
+/** What a table whose rows expand is given besides; these tests give a table none of it. */
+type ExpandingProps = Pick<
+  Required<DataTableProps<Line, Line>>,
+  | "childRows"
+  | "childKey"
+  | "childColumns"
+  | "expandedKeys"
+  | "onExpandedChange"
+  | "selectedChildKey"
+  | "onChildSelectionChange"
+>;
+
+/** What a test may change of the table: anything, and the columns with what names those that leave. */
+type TableOptions = Partial<
+  Omit<DataTableProps<Line>, "columns" | "leftOutText" | keyof ExpandingProps>
+> &
+  (
+    | { columns?: readonly DataTableColumn<Line>[]; leftOutText?: undefined }
+    | {
+        columns: readonly LeavingColumn<Line>[];
+        leftOutText: (headers: readonly string[]) => string;
+      }
+  );
+
+function table({ columns: shown = columns, leftOutText, ...props }: TableOptions = {}) {
+  const fitting =
+    leftOutText === undefined
+      ? { columns: shown as readonly DataTableColumn<Line>[] }
+      : { columns: shown, leftOutText };
   return (
     <DataTable
       aria-label="Lines on hold"
-      columns={columns}
       rows={lines}
       rowKey={(line) => line.id}
       {...props}
+      {...fitting}
     />
   );
 }
@@ -118,6 +155,13 @@ function tableRoot(): HTMLElement {
   const root = screen.getByRole("grid").parentElement;
   if (!root) throw new Error("The grid has no parent.");
   return root;
+}
+
+/** The line ID of a row of `lines`. */
+function lineIdOf(index: number): string {
+  const line = lines[index];
+  if (!line) throw new Error(`There is no line ${String(index)}.`);
+  return line.id;
 }
 
 function dataRows() {
@@ -307,10 +351,14 @@ describe("DataTable", () => {
     const oldest = screen.getByRole("columnheader", { name: "Oldest" });
     const holds = screen.getByRole("columnheader", { name: "Holds" });
     expect(oldest).toHaveAttribute("aria-sort", "descending");
-    expect(oldest.querySelector("svg")).not.toBeNull();
+    expect(oldest.querySelector('[data-mark="sorted"] svg')).not.toBeNull();
     expect(holds).toHaveAttribute("aria-sort", "none");
-    expect(holds.querySelector("svg")).toBeNull();
-    expect(screen.getByRole("columnheader", { name: "Line ID" })).not.toHaveAttribute("aria-sort");
+    // A header that can be sorted shows its muted mark at rest, not the mark of the sorted one.
+    expect(holds.querySelector('[data-mark="sorted"]')).toBeNull();
+    expect(holds.querySelector('[data-mark="rest"] svg')).not.toBeNull();
+    const line = screen.getByRole("columnheader", { name: "Line ID" });
+    expect(line).not.toHaveAttribute("aria-sort");
+    expect(line.querySelector("svg")).toBeNull();
 
     await user.click(holds);
     expect(onSortChange).toHaveBeenCalledWith({ column: "holds", direction: "ascending" });
@@ -491,6 +539,72 @@ function lineId(number: number): string {
 /** Where a row starts under the header, at the comfortable density: 36 px for each. */
 const ROW = 36;
 
+describe("DataTable's headers", () => {
+  it("say the column they head, to a screen that shows something at a header", () => {
+    render(table());
+    const header = screen.getByRole("columnheader", { name: "Line ID" });
+    expect(columnOfHeader(header)).toBe("id");
+    expect(columnOfHeader(must(header.firstElementChild, "the label of the header"))).toBe("id");
+    expect(columnOfHeader(screen.getAllByRole("rowheader")[0] ?? null)).toBeNull();
+    expect(headerOfColumn(document, "id")).toBe(header);
+    expect(headerOfColumn(document, "none")).toBeNull();
+  });
+});
+
+describe("DataTable's renders", () => {
+  it(
+    "renders no row for a render of its page that changes nothing of it, and few for another selection",
+    SLOW,
+    () => {
+      // A cell that counts how often the table hands its rows a new state: once for each render
+      // of the table that reaches the rows.
+      let renders = 0;
+      function Probe() {
+        useContext(TableStateContext);
+        renders += 1;
+        return null;
+      }
+      const [first, ...rest] = columns;
+      if (!first) throw new Error("The table has no column.");
+      const probed: DataTableColumn<Line>[] = [
+        {
+          ...first,
+          cell: (line) => (
+            <>
+              {line.id}
+              <Probe />
+            </>
+          ),
+        },
+        ...rest,
+      ];
+      // A page writes its handlers where it renders: new functions every time.
+      function Page({ selected }: { selected: string; tick: number }) {
+        return (
+          <DataTable
+            aria-label="Lines on hold"
+            columns={probed}
+            rows={lines}
+            rowKey={(line) => line.id}
+            selectedKey={selected}
+            onSelectionChange={() => undefined}
+            onSortChange={() => undefined}
+          />
+        );
+      }
+      const { rerender } = render(<Page selected={lineIdOf(0)} tick={0} />);
+      renders = 0;
+      rerender(<Page selected={lineIdOf(0)} tick={1} />);
+      expect(renders).toBe(0);
+      rerender(<Page selected={lineIdOf(1)} tick={1} />);
+      expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
+      // The table renders once for the selection, and the library hands its rows the state once
+      // more as it settles the selection: twice in all. A render more of ours would show here.
+      expect(renders).toBe(2 * lines.length);
+    },
+  );
+});
+
 describe("DataTable in a viewport", () => {
   // Eleven rows fit under the header.
   tableViewport({ width: 1024, height: 400 + ROW });
@@ -516,6 +630,109 @@ describe("DataTable in a viewport", () => {
       ).toHaveAttribute("aria-rowindex", "3001");
     },
   );
+
+  it("brings a row selected outside it into view at the nearer edge, when asked to", SLOW, () => {
+    const page = many.slice(0, 400);
+    const at = (number: number) => ({
+      rows: page,
+      onSelectionChange: () => undefined,
+      selectedKey: lineId(number),
+      revealSelected: true,
+    });
+    // Selected before the table is there: it is brought into view when it arrives.
+    const { rerender } = render(table(at(300)));
+    const grid = screen.getByRole("grid");
+    // The header (36 px) and 300 rows end at 10,836 px; the view is 436 px tall.
+    expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+    scrollTable(grid, grid.scrollTop);
+    expect(screen.getByRole("rowheader", { name: lineId(300) })).toBeInTheDocument();
+    // Below the view: its lower edge comes to the lower edge of the view.
+    rerender(table(at(320)));
+    expect(grid.scrollTop).toBe(ROW + 320 * ROW - (400 + ROW));
+    // Above it: its upper edge comes under the header.
+    rerender(table(at(50)));
+    expect(grid.scrollTop).toBe(49 * ROW);
+    scrollTable(grid, grid.scrollTop);
+    // In view: nothing moves, and the user may scroll away from a row that was brought.
+    rerender(table(at(55)));
+    expect(grid.scrollTop).toBe(49 * ROW);
+    scrollTable(grid, 0);
+    rerender(table({ ...at(55), rows: [...page] }));
+    expect(grid.scrollTop).toBe(0);
+  });
+
+  it(
+    "brings the selected row of another result into view, in place of returning to its top",
+    SLOW,
+    async () => {
+      const page = many.slice(0, 400);
+      const at = (number: number, resultKey: string) => ({
+        rows: [...page],
+        onSelectionChange: () => undefined,
+        selectedKey: lineId(number),
+        revealSelected: true,
+        resultKey,
+      });
+      const { rerender } = render(table(at(300, "all")));
+      const grid = screen.getByRole("grid");
+      const brought = ROW + 300 * ROW - (400 + ROW);
+      expect(grid.scrollTop).toBe(brought);
+      // The user scrolls away from it; another filter keeps it: it is brought again.
+      scrollTable(grid, 100 * ROW);
+      rerender(table(at(300, "civil")));
+      expect(grid.scrollTop).toBe(brought);
+      // And it stays there: nothing returns the table to its top on a later frame.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(brought);
+      // Another result without the selected row returns to its top, as before.
+      scrollTable(grid, brought);
+      rerender(table({ ...at(300, "piping"), rows: page.slice(0, 200) }));
+      // Within the frames of the return: fewer rows may have the library place it first.
+      await waitFor(() => {
+        expect(grid.scrollTop).toBe(0);
+      });
+    },
+  );
+
+  it(
+    "brings the selected row into view in another result of another length, and keeps it there",
+    SLOW,
+    async () => {
+      const selected = {
+        onSelectionChange: () => undefined,
+        selectedKey: lineId(300),
+        revealSelected: true,
+      };
+      const { rerender } = render(
+        table({ ...selected, rows: many.slice(0, 400), resultKey: "all" }),
+      );
+      const grid = screen.getByRole("grid");
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+      // Another filter keeps fewer rows, the selected one at row 200 of them, above the view.
+      rerender(table({ ...selected, rows: many.slice(100, 450), resultKey: "civil" }));
+      expect(grid.scrollTop).toBe(199 * ROW);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(199 * ROW);
+      scrollTable(grid, grid.scrollTop);
+      expect(screen.getByRole("rowheader", { name: lineId(300) })).toBeInTheDocument();
+      // And more rows, the selected one further down, below the view.
+      rerender(table({ ...selected, rows: many.slice(0, 1000), resultKey: "all" }));
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+    },
+  );
+
+  it("does not move for a row selected outside it unless it is asked to", SLOW, () => {
+    const page = many.slice(0, 400);
+    const { rerender } = render(
+      table({ rows: page, onSelectionChange: () => undefined, selectedKey: null }),
+    );
+    const grid = screen.getByRole("grid");
+    scrollTable(grid, 0);
+    rerender(table({ rows: page, onSelectionChange: () => undefined, selectedKey: lineId(300) }));
+    expect(grid.scrollTop).toBe(0);
+  });
 
   it("gives the header its shadow once rows are scrolled beneath it", SLOW, () => {
     render(table({ rows: many.slice(0, 200) }));
@@ -1070,6 +1287,181 @@ describe("DataTable narrower than its columns", () => {
       scrollTable(grid, 0);
     });
     expect(grid.closest("[data-scrolled-x]")).not.toBeNull();
+  });
+});
+
+/**
+ * The columns of the test, where Oldest and then Holds may leave a narrow table. The first
+ * blocker takes the share of the width that is left.
+ */
+const leaving: LeavingColumn<Line>[] = columns.map((column) =>
+  column.id === "oldest"
+    ? { ...column, priority: 2 }
+    : column.id === "holds"
+      ? { ...column, priority: 1 }
+      : column,
+);
+
+const leftOutText = (headers: readonly string[]) =>
+  `Not shown at this width: ${headers.join(", ")}.`;
+
+function headers(): string[] {
+  return screen.getAllByRole("columnheader").map((header) => header.textContent);
+}
+
+describe("DataTable narrower than its columns, whose columns may leave", () => {
+  // The stand-in widths of a test: Line ID 192 px, Holds 74, Oldest 80, First blocker at least
+  // 136, which is 482 together.
+  const size = { width: 420, height: 400 };
+  tableViewport(size);
+  afterEach(() => {
+    size.width = 420;
+  });
+
+  it("takes out the column of the highest priority first, and names it under the table", () => {
+    render(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Holds", "First blocker"]);
+    const note = screen.getByText("Not shown at this width: Oldest.");
+    // It describes the table, and is no live region: a resize is not news.
+    expect(screen.getByRole("grid").getAttribute("aria-describedby")).toContain(note.id);
+    expect(note).not.toHaveAttribute("role");
+    expect(within(dataRow(0)).queryByText(lines[0]?.oldest ?? "")).not.toBeInTheDocument();
+  });
+
+  it("takes out the next one where the table is narrower still, and gives both back with room", () => {
+    const sizes = observeSizes();
+    size.width = 400;
+    const { rerender } = render(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Holds, Oldest.")).toBeInTheDocument();
+
+    size.width = 600;
+    act(() => {
+      sizes.resize();
+    });
+    rerender(table({ columns: leaving, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest", "First blocker"]);
+    expect(screen.queryByText(/Not shown at this width/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the column the rows are sorted by, and scrolls sideways when the rest do not fit", () => {
+    size.width = 400;
+    render(
+      table({
+        columns: leaving,
+        leftOutText,
+        sort: { column: "holds", direction: "descending" },
+      }),
+    );
+    expect(headers()).toEqual(["Line ID", "Holds", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Oldest.")).toBeInTheDocument();
+  });
+
+  it("keeps the last column that takes a share, so the rows reach the edge of the table", () => {
+    size.width = 300;
+    const shared = leaving.map((column) =>
+      column.id === "blocker" ? { ...column, priority: 3 } : column,
+    );
+    render(table({ columns: shared, leftOutText }));
+    expect(headers()).toEqual(["Line ID", "First blocker"]);
+    expect(screen.getByText("Not shown at this width: Holds, Oldest.")).toBeInTheDocument();
+  });
+
+  it("keeps every column of a table that gives none a priority", () => {
+    render(table());
+    expect(headers()).toEqual(["Line ID", "Holds", "Oldest", "First blocker"]);
+    expect(screen.queryByText(/Not shown at this width/)).not.toBeInTheDocument();
+  });
+
+  it("gives the focus of a cell that leaves to the cell that names its row", SLOW, async () => {
+    const sizes = observeSizes();
+    size.width = 600;
+    const user = userEvent.setup();
+    const { rerender } = render(table({ columns: leaving, leftOutText }));
+    await user.tab();
+    // The row, its name, Holds, Oldest.
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowRight}");
+    const oldest = within(dataRow(0)).getByText(lines[0]?.oldest ?? "");
+    expect(oldest.closest("[role='gridcell']")).toHaveFocus();
+
+    size.width = 420;
+    act(() => {
+      sizes.resize();
+    });
+    rerender(table({ columns: leaving, leftOutText }));
+    expect(headers()).not.toContain("Oldest");
+    await waitFor(() => {
+      expect(within(dataRow(0)).getByRole("rowheader")).toHaveFocus();
+    });
+  });
+});
+
+describe("DataTable's sortable headers", () => {
+  const mark = (header: HTMLElement) => header.querySelector<HTMLElement>("[data-mark]");
+  const glyph = (header: HTMLElement) => mark(header)?.querySelector("svg")?.getAttribute("class");
+
+  it("show at rest a two-way mark, and only the sorted one an arrow that says its order", () => {
+    render(table({ sort: { column: "oldest", direction: "ascending" } }));
+    const holds = screen.getByRole("columnheader", { name: "Holds" });
+    const oldest = screen.getByRole("columnheader", { name: "Oldest" });
+    expect(mark(holds)).toHaveAttribute("data-mark", "rest");
+    expect(glyph(holds)).toContain("lucide-chevrons-up-down");
+    expect(mark(holds)).not.toHaveAttribute("data-direction");
+    expect(mark(oldest)).toHaveAttribute("data-mark", "sorted");
+    expect(mark(oldest)).toHaveAttribute("data-direction", "ascending");
+    expect(glyph(oldest)).toContain("lucide-arrow-up");
+    expect(oldest).toHaveAttribute("aria-sort", "ascending");
+    // A header that cannot be sorted has no mark.
+    expect(mark(screen.getByRole("columnheader", { name: "Line ID" }))).toBeNull();
+    expect(mark(screen.getByRole("columnheader", { name: "First blocker" }))).toBeNull();
+  });
+
+  it("shows no mark while the rows are loading", () => {
+    render(table({ isLoading: true }));
+    expect(document.querySelector("[data-mark]")).toBeNull();
+  });
+
+  it("answers the pointer and the keyboard as a button does", SLOW, async () => {
+    const user = userEvent.setup();
+    render(table({ onSortChange: vi.fn() }));
+    const holds = screen.getByRole("columnheader", { name: "Holds" });
+    await user.hover(holds);
+    expect(holds).toHaveAttribute("data-hovered");
+    await user.unhover(holds);
+    expect(holds).not.toHaveAttribute("data-hovered");
+
+    // From the first row, along it, and up to its header row.
+    await user.tab();
+    await user.keyboard("{ArrowRight}{ArrowRight}{ArrowUp}");
+    expect(holds).toHaveFocus();
+    expect(holds).toHaveAttribute("data-focus-visible");
+  });
+
+  it("are drawn by state: a muted mark at rest, a stronger one on hover and focus, the sorted one heavier", () => {
+    const stylesheet = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
+    const rule = (selector: string) =>
+      new RegExp(`(^|\\n)${selector.replace(/[.[\]:="]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+        stylesheet,
+      )?.[2] ?? "";
+    expect(rule(".mark")).toMatch(/color:\s*var\(--color-text-muted\);/);
+    expect(
+      rule(
+        ".column[data-hovered] .mark,\n.column[data-pressed] .mark,\n.column[data-focus-visible] .mark",
+      ),
+    ).toMatch(/color:\s*var\(--color-text-secondary\);/);
+    expect(rule('.column .mark[data-mark="sorted"]')).toMatch(
+      /color:\s*var\(--color-text-primary\);/,
+    );
+    // Not by ink alone: the label of the sorted header is heavier.
+    expect(
+      rule('.column[aria-sort="ascending"] .label,\n.column[aria-sort="descending"] .label'),
+    ).toMatch(/font-weight:\s*var\(--font-weight-semibold\);/);
+    expect(rule(".column[data-allows-sorting][data-hovered]")).toMatch(
+      /background-color:\s*var\(--color-surface-hover\);/,
+    );
+    expect(rule(".column[data-allows-sorting][data-pressed]")).toMatch(
+      /background-color:\s*var\(--color-surface-pressed\);/,
+    );
   });
 });
 

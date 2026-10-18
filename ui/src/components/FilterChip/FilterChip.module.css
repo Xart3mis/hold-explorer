@@ -18,7 +18,8 @@
   transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
 }
 
 /* The field and the value: the button that opens the filter. */
@@ -109,13 +110,56 @@
   outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
+/*
+ * A filter that is kept but not applied, for the snapshot in view lacks its column: the muted
+ * look of a disabled chip, still pressable and removable, with a small icon before the field.
+ */
+.chip[data-inactive] {
+  border-color: var(--color-border-default);
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-muted);
+}
+
+.chip[data-inactive] .field,
+.chip[data-inactive] .remove {
+  color: var(--color-text-muted);
+}
+
+.inactive {
+  display: inline-flex;
+  flex: none;
+  margin-inline-end: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+/* A mark of an answer for the filters or the view of before, as the total is while it is read. */
+.chip[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+.chip[data-inactive]:has(.body[data-hovered]),
+.chip[data-inactive]:has(.body[data-pressed]),
+.chip[data-inactive]:has(.body[aria-expanded="true"]) {
+  background-color: var(--color-surface-hover);
+}
+
+.chip[data-inactive]:not([data-disabled]) .remove:hover,
+.chip[data-inactive]:not([data-disabled]) .remove:active,
+.chip[data-inactive]:not([data-disabled]) .remove[data-hovered],
+.chip[data-inactive]:not([data-disabled]) .remove[data-pressed] {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
 .chip[data-disabled] {
   border-color: var(--color-border-default);
   background-color: var(--color-surface-disabled);
   color: var(--color-text-disabled);
 }
 
-.chip[data-disabled] .field {
+.chip[data-disabled] .field,
+.chip[data-disabled] .inactive {
   color: var(--color-text-disabled);
 }
 

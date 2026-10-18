@@ -1,12 +1,51 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { keys } from "../../api/keys";
+import { defaultFilters, type Filters } from "../../app/filters/state";
+import { queryClient } from "../../app/query";
 import en from "../../locales/en.json";
 import { must, renderApp } from "../../test/app";
-import { openStart } from "../../test/fixtures";
+import { openStart, workspace } from "../../test/fixtures";
 import { overviewView } from "../../test/overview";
 import { SLOW } from "../../test/slow";
+import { selectedBlocker } from "../blockers/address";
+import { parseLinesAddress, selectionOf } from "../lines/address";
 
 const text = en.overview;
+
+/** The filters of the workspace the tests open, as every data screen reads them. */
+function filters(): Filters | undefined {
+  return queryClient.getQueryData<Filters>(keys.workspaceFilters(workspace().id));
+}
+
+/** Sets the filters of the workspace the tests open, as the filter bar does. */
+function setFilters(change: Partial<Filters>): void {
+  act(() => {
+    queryClient.setQueryData<Filters>(keys.workspaceFilters(workspace().id), {
+      ...defaultFilters,
+      ...change,
+    });
+  });
+}
+
+const CIVIL = {
+  dim: "Discipline",
+  values: [{ key: "Civil", label: "Civil" }],
+  negate: false,
+} as const;
+
+/** Goes back to the Overview by the sidebar. */
+async function backToOverview(user: Awaited<ReturnType<typeof overview>>["user"]) {
+  await user.click(
+    within(screen.getByRole("navigation", { name: en.destinations.label })).getByRole("link", {
+      name: en.destinations.name.overview,
+    }),
+  );
+  await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+  await waitFor(() => {
+    expect(document.querySelector("[data-part='overview']")).not.toHaveAttribute("aria-busy");
+  });
+}
 
 /** The Overview of the workspace the tests open, once its figures are read. */
 async function overview() {
@@ -154,4 +193,170 @@ describe("the Overview leads to Lines", () => {
       ),
     ).toBeInTheDocument();
   });
+});
+
+describe("the lists of the Overview lead to what they name", () => {
+  it(
+    "opens Lines with a Role chip when a role bar is pressed, in place of the role before",
+    SLOW,
+    async () => {
+      const { user, router } = await overview();
+      await user.click(
+        within(screen.getByRole("list", { name: text.byRole })).getByRole("button", {
+          name: /^Checker /,
+        }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      expect(router.state.location.search).toBe("");
+      const bar = await screen.findByRole("group", { name: en.filters.bar });
+      expect(within(bar).getByRole("button", { name: "Role Checker" })).toBeInTheDocument();
+
+      await backToOverview(user);
+      const roles = screen.getByRole("list", { name: text.byRole });
+      expect(within(roles).getByRole("button", { name: /^Checker / })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await user.click(within(roles).getByRole("button", { name: /^Lead / }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      const roleEntries = filters()?.fields.filter((entry) => entry.dim === "Role") ?? [];
+      expect(roleEntries).toEqual([
+        { dim: "Role", values: [{ key: "Lead", label: "Lead" }], negate: false },
+      ]);
+    },
+  );
+
+  it(
+    "opens Blockers with the blocker of a top blocker selected, and keeps the filters",
+    SLOW,
+    async () => {
+      const { user, router } = await overview();
+      setFilters({ fields: [CIVIL] });
+      await user.click(
+        within(screen.getByRole("list", { name: text.topBlockers })).getByRole("button", {
+          name: /^Civil \/ DWG-220 /,
+        }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      expect(selectedBlocker(router.state.location.search)).toBe("Civil|DWG-220");
+      expect(
+        await screen.findByRole("heading", { level: 1, name: en.destinations.name.blockers }),
+      ).toBeInTheDocument();
+      // The blocker is selected, not filtered by: the filters are as they were.
+      expect(filters()?.fields).toEqual([CIVIL]);
+    },
+  );
+
+  it("opens Lines with a top line selected in the panel", SLOW, async () => {
+    const { user, router } = await overview();
+    await user.click(
+      within(screen.getByRole("list", { name: text.topLines })).getByRole("button", {
+        name: /^L-1187 /,
+      }),
+    );
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/lines");
+    });
+    const { search } = router.state.location;
+    expect(selectionOf(search, "lines")).toBe("L-1187");
+    expect(parseLinesAddress(search)).toEqual(parseLinesAddress(""));
+    expect(await screen.findByRole("complementary", { name: "L-1187" })).toBeInTheDocument();
+  });
+
+  it(
+    "opens the stale holds in Lines: a row per hold, oldest first, aged 90 days or more",
+    SLOW,
+    async () => {
+      const { user, router } = await overview();
+      // A filter set before stays; only the age takes the band of the stale holds.
+      await user.click(
+        within(screen.getByRole("list", { name: text.byDiscipline })).getByRole("button", {
+          name: /^Civil /,
+        }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      await backToOverview(user);
+      const attention = screen.getByRole("list", { name: text.attention });
+      await user.click(
+        within(attention).getByRole("button", { name: /903 holds open for 90 days/ }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      expect(parseLinesAddress(router.state.location.search)).toEqual({
+        rows: "holds",
+        sort: "OldestFirst",
+        reverse: false,
+      });
+      expect(filters()?.ageBands).toEqual([{ min_days: 90, max_days: null }]);
+      expect(filters()?.fields).toEqual([
+        { dim: "Discipline", values: [{ key: "Civil", label: "Civil" }], negate: false },
+      ]);
+      expect(
+        await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("reaches the new lists by the keyboard and opens them with Enter", SLOW, async () => {
+    const { user, router } = await overview();
+    const stale = within(screen.getByRole("list", { name: text.attention })).getByRole("button");
+    const firstLine = within(screen.getByRole("list", { name: text.topLines })).getAllByRole(
+      "button",
+    )[0];
+    screen.getByRole("heading", { level: 1, name: en.destinations.name.overview }).focus();
+    const reached: Element[] = [];
+    for (let presses = 0; presses < 60 && document.activeElement !== stale; presses += 1) {
+      await user.tab();
+      if (document.activeElement !== null) reached.push(document.activeElement);
+    }
+    expect(stale).toHaveFocus();
+    expect(reached).toContain(must(firstLine, "the first top line"));
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(router.state.location.search).toContain("rows=holds");
+    });
+  });
+});
+
+describe("the stale holds lead to exactly the holds they count", () => {
+  it.each(["All", "Released"] as const)(
+    "opens only open holds when the status is %s",
+    SLOW,
+    async (status) => {
+      // The command counts open holds only; whatever it answers, the press shows open holds.
+      const { user, router } = renderApp({
+        start: openStart(),
+        path: "/overview",
+        handlers: {
+          overview: () => overviewView({ stale: { holds: 12, days: 90, ages_known: true } }),
+        },
+      });
+      await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+      setFilters({ status, fields: [CIVIL] });
+      const attention = await screen.findByRole("list", { name: text.attention });
+      await user.click(
+        within(attention).getByRole("button", { name: /12 holds open for 90 days/ }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      expect(parseLinesAddress(router.state.location.search)).toEqual({
+        rows: "holds",
+        sort: "OldestFirst",
+        reverse: false,
+      });
+      expect(filters()?.status).toBe("Open");
+      expect(filters()?.ageBands).toEqual([{ min_days: 90, max_days: null }]);
+      expect(filters()?.fields).toEqual([CIVIL]);
+    },
+  );
 });

@@ -1,0 +1,318 @@
+/*
+ * The heatmap: its legend, then the grid in a region of its own that scrolls sideways when the
+ * columns do not fit, and down when the screen gives it less height than its rows need. The row
+ * labels and the column labels stay in view while the cells scroll under them.
+ */
+.heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+  min-block-size: 0;
+  max-block-size: 100%;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.heatmap[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+.region {
+  /* The containing block of the hidden values of empty cells, so the region clips them too. */
+  position: relative;
+  min-block-size: 0;
+
+  /* A flex item would otherwise be as wide as the whole grid and push the page sideways. */
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: auto;
+
+  /* A cell that takes the focus is scrolled clear of the labels that stay in view. */
+  scroll-padding-block-start: calc(var(--size-heatmap-header-height) + var(--space-0-5));
+  scroll-padding-inline-start: calc(var(--size-bar-label-width) + var(--space-0-5));
+}
+
+/*
+ * The grid owns the columns and every row takes them over. The cells are a surface gap apart in
+ * both directions, and the grid keeps that gap around itself, so the ring of a cell at its edge
+ * is not cut by the region.
+ */
+.grid {
+  display: grid;
+  grid-template-columns:
+    var(--size-bar-label-width)
+    repeat(var(--heatmap-cols), var(--size-heatmap-cell-width));
+  gap: var(--space-0-5);
+  inline-size: max-content;
+  padding: var(--space-0-5);
+
+  /* The layers below are the grid's own and never reach above the page around it. */
+  isolation: isolate;
+}
+
+/* Other stands a further gap from the columns before it, so the fold is seen. */
+.grid[data-other-col] {
+  grid-template-columns:
+    var(--size-bar-label-width)
+    repeat(var(--heatmap-cols), var(--size-heatmap-cell-width))
+    calc(var(--size-heatmap-cell-width) + var(--space-0-5));
+}
+
+.headRow,
+.row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+}
+
+.row[data-other] {
+  margin-block-start: var(--space-0-5);
+}
+
+/*
+ * The column labels stay at the top. Their fill covers the gaps around them as well, so a cell
+ * scrolled beneath never shows through; the row labels do the same.
+ */
+.headRow {
+  position: sticky;
+  inset-block-start: 0;
+
+  /* Above the row labels, which scroll under it when the grid scrolls down. */
+  z-index: calc(var(--z-sticky) + 1);
+  block-size: var(--size-heatmap-header-height);
+  background-color: var(--color-surface-app);
+  box-shadow: 0 0 0 var(--space-0-5) var(--color-surface-app);
+}
+
+.corner,
+.rowLabel {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: var(--z-sticky);
+  background-color: var(--color-surface-app);
+  box-shadow: 0 0 0 var(--space-0-5) var(--color-surface-app);
+}
+
+.corner {
+  display: flex;
+  align-items: flex-end;
+  padding-inline-end: var(--space-2);
+}
+
+.cornerLabel,
+.upright {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colLabel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-inline-size: 0;
+}
+
+.colLabel[data-other] {
+  margin-inline-start: var(--space-0-5);
+}
+
+/* Upright, read from bottom to top, and cut at the end where the row is too short. */
+.upright {
+  max-inline-size: var(--size-heatmap-header-height);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.rowLabel {
+  overflow: hidden;
+  align-self: stretch;
+  padding-inline-end: var(--space-2);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  line-height: var(--density-row-height);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row[data-other] .rowLabel,
+.colLabel[data-other] .upright {
+  color: var(--color-text-secondary);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  block-size: var(--density-row-height);
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  outline: var(--border-width-thin) solid transparent;
+  outline-offset: 0;
+  color: var(--color-text-primary);
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  transition: outline-color var(--duration-fast) var(--ease-out);
+}
+
+.cell[data-other] {
+  margin-inline-start: var(--space-0-5);
+}
+
+/* An empty cell is the surface with a hairline inside its edge: "none", not "a few". */
+.cell[data-step="0"] {
+  box-shadow: inset 0 0 0 var(--border-width-thin) var(--color-border-default);
+}
+
+.cell[data-step="1"] {
+  background-color: var(--color-chart-seq-1);
+}
+
+.cell[data-step="2"] {
+  background-color: var(--color-chart-seq-2);
+}
+
+.cell[data-step="3"] {
+  background-color: var(--color-chart-seq-3);
+}
+
+.cell[data-step="4"] {
+  background-color: var(--color-chart-seq-4);
+}
+
+.cell[data-step="5"] {
+  background-color: var(--color-chart-seq-5);
+  color: var(--color-chart-text-inverse);
+}
+
+.cell[data-step="6"] {
+  background-color: var(--color-chart-seq-6);
+  color: var(--color-chart-text-inverse);
+}
+
+.cell[data-step="7"] {
+  background-color: var(--color-chart-seq-7);
+  color: var(--color-chart-text-inverse);
+}
+
+/* The cell under the pointer: a hairline ring over the gap, on the surface, seen on any step. */
+/* A cell that shows a ring is lifted over its neighbors, and stays under the labels. */
+.cell:hover {
+  position: relative;
+  outline-color: var(--color-text-secondary);
+}
+
+/*
+ * The focus ring, with no offset, lies over the gap on the surface. The gaps beside the labels
+ * are covered by their fill, so the focused cell is lifted above the labels to keep its ring
+ * whole; moving the focus scrolls the cell clear of them.
+ */
+.cell:focus-visible {
+  position: relative;
+  z-index: calc(var(--z-sticky) + 2);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: 0;
+}
+
+/* The key: an empty cell, then the seven steps of the ramp. */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  align-items: center;
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.legendPart {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.legendRamp {
+  display: inline-flex;
+  gap: var(--space-0-5);
+}
+
+.legendSwatch,
+.legendStep {
+  block-size: var(--size-legend-swatch);
+  border-radius: var(--radius-xs);
+}
+
+.legendSwatch {
+  inline-size: var(--size-legend-swatch);
+  box-shadow: inset 0 0 0 var(--border-width-thin) var(--color-border-default);
+}
+
+.legendStep {
+  inline-size: var(--size-legend-step);
+}
+
+.legendStep[data-step="1"] {
+  background-color: var(--color-chart-seq-1);
+}
+
+.legendStep[data-step="2"] {
+  background-color: var(--color-chart-seq-2);
+}
+
+.legendStep[data-step="3"] {
+  background-color: var(--color-chart-seq-3);
+}
+
+.legendStep[data-step="4"] {
+  background-color: var(--color-chart-seq-4);
+}
+
+.legendStep[data-step="5"] {
+  background-color: var(--color-chart-seq-5);
+}
+
+.legendStep[data-step="6"] {
+  background-color: var(--color-chart-seq-6);
+}
+
+.legendStep[data-step="7"] {
+  background-color: var(--color-chart-seq-7);
+}
+
+/* A first load: blocks in the shape of the grid, without motion. */
+.skeleton {
+  display: grid;
+  overflow: hidden;
+  gap: var(--space-0-5);
+}
+
+.skeletonRow {
+  display: grid;
+  grid-template-columns: var(--size-bar-label-width) repeat(8, var(--size-heatmap-cell-width));
+  gap: var(--space-0-5);
+  align-items: center;
+  block-size: var(--density-row-height);
+}
+
+.skeletonCell {
+  block-size: 100%;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-skeleton);
+}
+
+/* A chart has no transition under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .heatmap,
+  .cell {
+    transition: none;
+  }
+}

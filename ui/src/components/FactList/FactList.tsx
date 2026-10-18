@@ -11,7 +11,7 @@ export interface Fact {
   /** The value. Text, or text with its own marks: it is never cut, so it may be long. */
   value: ReactNode;
   /**
-   * `identifier` for a line ID, a tag, a blocker item, or a file name: it is written in the
+   * `identifier` for a line ID, a tag, a source ID, or a file name: it is written in the
    * monospace, exactly as the source wrote it, and can be selected and copied.
    */
   kind?: "text" | "identifier";

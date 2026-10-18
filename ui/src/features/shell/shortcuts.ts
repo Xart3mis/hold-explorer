@@ -2,6 +2,7 @@
 // come from the destination list; the one shortcut that is not a destination's is named below.
 import { useEffect } from "react";
 import { needsWorkspace, type Destination } from "../../app/destinations";
+import { IN_PAGE_ATTRIBUTE } from "../../components";
 import { t } from "../../text/i18n";
 
 /** Starts an import. */
@@ -62,9 +63,15 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target.isContentEditable || target.matches("input, textarea, select");
 }
 
-/** Whether a menu or the list of a select is open. Its keys are its own while it is. */
+/**
+ * Whether a menu or the list of a select is open. Its keys are its own while it is. A list box
+ * that stands in the page, as a line chart does (`IN_PAGE_ATTRIBUTE`), is not open: it is always
+ * there.
+ */
 function isListOpen(): boolean {
-  return document.querySelector('[role="menu"], [role="listbox"]') !== null;
+  return (
+    document.querySelector(`[role="menu"], [role="listbox"]:not([${IN_PAGE_ATTRIBUTE}])`) !== null
+  );
 }
 
 /**

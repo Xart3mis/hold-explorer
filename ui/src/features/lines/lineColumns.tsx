@@ -1,13 +1,13 @@
 import { TriangleAlert } from "lucide-react";
 import type { Field } from "../../bindings/Field";
 import type { LineRow } from "../../bindings/LineRow";
-import { Tag, textChars, type DataTableColumn } from "../../components";
+import { Tag, textChars, type LeavingColumn } from "../../components";
 import { formatCount, formatDays, formatList, formatSize, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
-import { LINE_SORTS } from "./sorts";
+import { LINE_SORTS, type SortEntry } from "./sorts";
 
 /** A column of the table, with the fields of the export it needs to have values. */
-export interface NeedingColumn<Row> extends DataTableColumn<Row> {
+export interface NeedingColumn<Row> extends LeavingColumn<Row> {
   /** The column is left out when the snapshot has no value in one of these. */
   needs: readonly Field[];
 }
@@ -32,11 +32,14 @@ function given(items: readonly string[]): string {
 export function present<Row>(
   columns: readonly NeedingColumn<Row>[],
   absent: readonly Field[],
-): DataTableColumn<Row>[] {
+): LeavingColumn<Row>[] {
   return columns.filter((column) => !column.needs.some((field) => absent.includes(field)));
 }
 
-const sortable = (id: string) => LINE_SORTS.some((entry) => entry.column === id);
+/** Whether a press on a column's header asks for a sort. */
+export function sorting(table: readonly SortEntry<unknown>[], id: string) {
+  return { allowsSorting: table.some((entry) => entry.column === id) };
+}
 
 /** Room for the widest age the table may show: four figures of days. */
 const DAYS_CHARS = textChars(formatDays(9999));
@@ -47,6 +50,11 @@ const SIZE_CHARS = textChars(formatSize(99.75));
  * The columns of a row per line. The line ID is never cut: its column is as wide as the widest
  * line ID of the result, which the command sends with the rows. A column whose field the snapshot
  * has no value in is left out.
+ *
+ * A column whose value the line panel shows has a priority, and leaves a table that is too
+ * narrow for all of them, the highest number first: the size mismatch, the stress calc, the
+ * sizes, the hold types, the count of blockers, the disciplines. The line, its holds, and its
+ * oldest age always stay: they are what the rows are read and sorted by.
  */
 export function lineColumns(widestLineId: number, absent: readonly Field[]) {
   const mismatchLabel = t("lines.sizeMismatch");
@@ -73,6 +81,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       header: t("lines.column.disciplines"),
       cell: (line) => formatList(line.disciplines),
       size: { flex: 1, minChars: 14 },
+      priority: 1,
       needs: ["Discipline"],
     },
     {
@@ -80,6 +89,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       header: t("lines.column.holdTypes"),
       cell: (line) => given(line.hold_types),
       size: { flex: 1, minChars: 12 },
+      priority: 3,
       needs: ["HoldType"],
     },
     {
@@ -88,6 +98,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       cell: (line) => formatCount(line.blockers),
       kind: "number",
       size: { chars: figures(999) },
+      priority: 2,
       needs: ["Remark"],
     },
     {
@@ -105,6 +116,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       cell: (line) => (line.model_size === null ? missing() : formatSize(line.model_size)),
       kind: "number",
       size: { chars: SIZE_CHARS },
+      priority: 4,
       needs: ["ModelSize"],
     },
     {
@@ -113,6 +125,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       cell: (line) => (line.ldt_size === null ? missing() : formatSize(line.ldt_size)),
       kind: "number",
       size: { chars: SIZE_CHARS },
+      priority: 5,
       needs: ["LdtSize"],
     },
     {
@@ -121,6 +134,7 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
       cell: (line) => (line.stress_calc === "" ? missing() : line.stress_calc),
       isSupporting: true,
       size: { chars: 10 },
+      priority: 6,
       needs: ["StressCalc"],
     },
     {
@@ -134,11 +148,12 @@ export function lineColumns(widestLineId: number, absent: readonly Field[]) {
         ) : null,
       // The tag: its words, its icon, and its padding.
       size: { chars: textChars(mismatchLabel) + 4 },
+      priority: 7,
       needs: ["ModelSize", "LdtSize"],
     },
   ];
   return present(
-    columns.map((column) => ({ ...column, allowsSorting: sortable(column.id) })),
+    columns.map((column) => ({ ...column, ...sorting(LINE_SORTS, column.id) })),
     absent,
   );
 }
