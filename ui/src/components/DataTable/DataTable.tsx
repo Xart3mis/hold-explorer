@@ -946,9 +946,13 @@ export function DataTable<Item, Child = never>({
   // The rows as the component library takes them. It keeps what it built for an item, and this
   // is the same element until the rows or their shape change, so a render of the table for any
   // other reason does not walk the rows at all.
+  //
+  // Another result is another collection. React places the new rows of a kept collection one by
+  // one, and for each it walks past every other new row to find where it goes: with ten thousand
+  // rows of another result that is seconds. A collection of its own is placed once, as a whole.
   const body = useMemo(
     () => (
-      <Collection items={shown} dependencies={[rowCells]}>
+      <Collection key={resultKey} items={shown} dependencies={[rowCells]}>
         {(item) => (
           <Row
             id={keyOf.current(item)}
@@ -964,7 +968,7 @@ export function DataTable<Item, Child = never>({
         )}
       </Collection>
     ),
-    [shown, rowCells],
+    [shown, rowCells, resultKey],
   );
 
   // Rows that expand. The screen says which rows are expanded and what their children are; the
