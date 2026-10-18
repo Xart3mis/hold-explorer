@@ -221,6 +221,66 @@ describe("FilterBar", () => {
     expect(chips(region)).toEqual(["Discipline Civil"]);
   });
 
+  it("keeps a filter on a column the snapshot lacks, marks its chip, and sends it again for a snapshot that has the column", async () => {
+    // Snapshot 2, the one in view, has no discipline; snapshot 1 has one.
+    const select = held<WorkspaceOpen>();
+    const { options } = renderBar(
+      ({ view }) => filterOptions({ absent: view.snapshot_id === 2 ? ["Discipline"] : [] }),
+      { snapshot_select: select.handler },
+    );
+    const region = await bar();
+    set({
+      fields: [
+        { dim: "Discipline", values: [value("Civil")], negate: false },
+        { dim: "Role", values: [value("Lead")], negate: false },
+      ],
+    });
+    const roleOnly = {
+      ...openHoldsFilter(),
+      fields: [{ dim: "Role", values: ["Lead"], negate: false }],
+    };
+    await waitFor(() => {
+      expect(options).toHaveBeenLastCalledWith({
+        spec: roleOnly,
+        view: { workspace_id: workspace().id, snapshot_id: 2 },
+      });
+    });
+    // The chip stays, and says that its filter is not in this snapshot; the other one does not.
+    expect(chips(region)).toEqual([`Discipline Civil ${en.filterChip.notInSnapshot}`, "Role Lead"]);
+    expect(chip(region, `Discipline Civil ${en.filterChip.notInSnapshot}`)).toBeEnabled();
+    expect(removeButton(region, "Discipline")).toBeEnabled();
+    expect(now().filters.fields).toHaveLength(2);
+    expect(now().spec).toEqual(roleOnly);
+
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(select.waiting).toHaveLength(1);
+    });
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
+      await Promise.resolve();
+    });
+    const both = {
+      ...openHoldsFilter(),
+      fields: [
+        { dim: "Discipline", values: ["Civil"], negate: false },
+        { dim: "Role", values: ["Lead"], negate: false },
+      ],
+    };
+    await waitFor(() => {
+      expect(options).toHaveBeenLastCalledWith({
+        spec: both,
+        view: { workspace_id: workspace().id, snapshot_id: 1 },
+      });
+    });
+    await waitFor(() => {
+      expect(chips(region)).toEqual(["Discipline Civil", "Role Lead"]);
+    });
+    expect(now().spec).toEqual(both);
+  });
+
   it("removes a chip by its button, and moves the focus to the chip after it", async () => {
     const { user } = renderBar();
     const region = await bar();

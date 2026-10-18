@@ -1,6 +1,8 @@
 import { dimId, dimName } from "../../app/filters/dims";
+import { dimNeeds, FILTER_NEEDS, lacksAny } from "../../app/filters/spec";
 import type { Filters } from "../../app/filters/state";
 import type { Dim } from "../../bindings/Dim";
+import type { Field } from "../../bindings/Field";
 import { formatAgeBand, formatDateRange, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 
@@ -15,6 +17,18 @@ export type FilterField =
   | { kind: "released" }
   | { kind: "sizeMismatch" }
   | { kind: "text" };
+
+/** The columns of the export a filter on this field needs. */
+export function fieldNeeds(field: FilterField): readonly Field[] {
+  switch (field.kind) {
+    case "dim":
+      return dimNeeds(field.dim);
+    case "text":
+      return [];
+    default:
+      return FILTER_NEEDS[field.kind];
+  }
+}
 
 /** A field in one word, to tell it from every other: `dim:Discipline`, `ageBands`. */
 export function fieldId(field: FilterField): string {
@@ -53,6 +67,8 @@ export interface Chip {
   value: string;
   /** The filter keeps what does not match. */
   isNegated: boolean;
+  /** The snapshot in view lacks a column the filter needs: it is kept, and not sent. */
+  isAbsent: boolean;
   /** The filters without this one. */
   remove: (filters: Filters) => Filters;
 }
@@ -71,10 +87,12 @@ function summary(labels: readonly string[]): string {
 /**
  * The chips of the filters: the fields first, in the order they were added, then the filters that
  * are not a field, in the order the picker lists them. An entry without values filters nothing
- * and has no chip, and neither has the status.
+ * and has no chip, and neither has the status. A filter that needs one of the `absent` columns
+ * keeps its chip, marked: `toSpec` leaves it out.
  */
-export function chipsOf(filters: Filters): Chip[] {
+export function chipsOf(filters: Filters, absent: readonly Field[] = []): Chip[] {
   const chips: Chip[] = [];
+  const isAbsent = (field: FilterField) => lacksAny(fieldNeeds(field), absent);
   for (const entry of filters.fields) {
     if (entry.values.length === 0) continue;
     const field: FilterField = { kind: "dim", dim: entry.dim };
@@ -85,6 +103,7 @@ export function chipsOf(filters: Filters): Chip[] {
       name: fieldName(field),
       value: summary(entry.values.map((value) => value.label)),
       isNegated: entry.negate,
+      isAbsent: isAbsent(field),
       remove: (from) => ({
         ...from,
         fields: from.fields.filter((other) => fieldId({ kind: "dim", dim: other.dim }) !== id),
@@ -98,6 +117,7 @@ export function chipsOf(filters: Filters): Chip[] {
       name: fieldName(field),
       value,
       isNegated: false,
+      isAbsent: isAbsent(field),
       remove,
     });
   };

@@ -76,7 +76,8 @@ export const DEV_STATES = [
   "overview-many",
   // The filter bar on the Overview: several filters set, more than fit in one line, a snapshot
   // whose export had no size columns, a selection that never ends (select another snapshot to see
-  // the bar wait), and counts that cannot be read. `overview-limited` shows the bar of a
+  // the bar wait), and counts that cannot be read. `filters-absent` also sets a filter on the
+  // sizes, which that snapshot lacks. `overview-limited` shows the bar of a
   // snapshot without its released column.
   "filters",
   "filters-many",
@@ -285,11 +286,13 @@ const MANY_FILTERS: Filters = {
 export function devFilters(state: DevState): { workspaceId: string; filters: Filters } | null {
   switch (state) {
     case "filters":
-    case "filters-absent":
     case "filters-busy":
     case "filters-error":
     case "filters-picker":
       return { workspaceId: unit573.id, filters: SOME_FILTERS };
+    // A filter on the sizes, which the snapshot lacks: its chip stays, marked, and is not sent.
+    case "filters-absent":
+      return { workspaceId: unit573.id, filters: { ...SOME_FILTERS, sizeMismatch: true } };
     case "filters-many":
       return { workspaceId: unit573.id, filters: MANY_FILTERS };
     case "lines-none":

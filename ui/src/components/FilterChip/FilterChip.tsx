@@ -4,6 +4,7 @@ import { Button as RacButton, Focusable } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
+import { Tag } from "../Tag/Tag";
 import { Tooltip } from "../Tooltip/Tooltip";
 import styles from "./FilterChip.module.css";
 
@@ -69,6 +70,12 @@ export interface FilterChipProps {
    * it moves; the bar says why.
    */
   isDisabled?: boolean;
+  /**
+   * The filter is kept but not applied: the snapshot in view lacks the column it needs. The chip
+   * has no accent and reads "Not in this snapshot" after its value; it opens and is removed as
+   * any chip.
+   */
+  isInactive?: boolean;
   className?: string | undefined;
 }
 
@@ -86,6 +93,7 @@ export function FilterChip({
   isExpanded,
   isUnderPopover = false,
   isDisabled = false,
+  isInactive = false,
   className,
 }: FilterChipProps) {
   const remove = t("filterChip.remove", { field });
@@ -93,6 +101,7 @@ export function FilterChip({
     <span
       data-part="filter-chip"
       data-disabled={isDisabled ? "" : undefined}
+      data-inactive={isInactive ? "" : undefined}
       className={cx(styles.chip, className)}
     >
       <RacButton
@@ -106,6 +115,12 @@ export function FilterChip({
         className={cx(styles.body)}
       >
         <span className={styles.text}>{reading(field, value, isNegated)}</span>
+        {isInactive ? (
+          <>
+            {" "}
+            <Tag className={styles.tag}>{t("filterChip.notInSnapshot")}</Tag>
+          </>
+        ) : null}
       </RacButton>
       {isDisabled ? (
         // The X without its button: the same circle in the same place, and nothing to press.

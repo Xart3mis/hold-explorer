@@ -126,6 +126,26 @@ describe("chipsOf", () => {
     );
   });
 
+  it("marks the chip of a filter that needs a column the snapshot lacks, and keeps it", () => {
+    const absent = (chips: ReturnType<typeof chipsOf>) =>
+      chips.filter((chip) => chip.isAbsent).map((chip) => chip.id);
+    expect(absent(chipsOf(EVERY))).toEqual([]);
+    expect(absent(chipsOf(EVERY, ["Discipline", "Created"]))).toEqual([
+      "dim:Discipline",
+      "ageBands",
+      "created",
+    ]);
+    expect(absent(chipsOf(EVERY, ["ReleaseDate", "LdtSize"]))).toEqual([
+      "released",
+      "sizeMismatch",
+    ]);
+    // A column no filter needs marks nothing, and a custom column is never absent.
+    expect(absent(chipsOf(EVERY, ["SourceId", "Role", "StressCalc"]))).toEqual([]);
+    expect(chipsOf(EVERY, ["Discipline"]).map((chip) => chip.id)).toEqual(
+      chipsOf(EVERY).map((chip) => chip.id),
+    );
+  });
+
   it("removes exactly its own filter, and leaves the status as it is", () => {
     for (const chip of chipsOf(EVERY)) {
       const left = chip.remove(EVERY);

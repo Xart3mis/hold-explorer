@@ -9,7 +9,12 @@ import { AddFilterChip, FilterChip } from "./FilterChip";
 const removeDiscipline = en.filterChip.remove.replace("{{field}}", "Discipline");
 
 function setup(
-  props: { isNegated?: boolean; isDisabled?: boolean; isUnderPopover?: boolean } = {},
+  props: {
+    isNegated?: boolean;
+    isDisabled?: boolean;
+    isUnderPopover?: boolean;
+    isInactive?: boolean;
+  } = {},
 ) {
   const onPress = vi.fn();
   const onRemove = vi.fn();
@@ -32,6 +37,19 @@ describe("FilterChip", () => {
     expect(screen.getByRole("button", { name: "Discipline Civil" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: removeDiscipline })).toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
+
+  it("reads that its filter is not in this snapshot, and can still be opened and removed", async () => {
+    const { onPress, onRemove, user } = setup({ isInactive: true });
+    const name = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const body = screen.getByRole("button", { name });
+    expect(body.closest("[data-part='filter-chip']")).toHaveAttribute("data-inactive");
+    expect(screen.getByText(en.filterChip.notInSnapshot)).toHaveAttribute("data-part", "tag");
+    await user.click(body);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: removeDiscipline }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    await expectAccessible();
   });
 
   it("reads a negated filter as is not", () => {

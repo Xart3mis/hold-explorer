@@ -55,7 +55,7 @@ const CLOSED: Picker = {
  * which no hold is released is said to have none; only the open holds are then offered.
  */
 export function FilterBar() {
-  const { filters, update, clear } = useFilters();
+  const { filters, absent: lacking, update, clear } = useFilters();
   const { isBusy } = useStart();
   // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
   // workspace makes the bar wait for the workspace, also when a selection waits beside it.
@@ -73,7 +73,8 @@ export function FilterBar() {
   /** Whether the picker was open when the bar was drawn last: its closing gives the focus back. */
   const wasOpen = useRef(false);
 
-  const chips = chipsOf(filters);
+  // The chips say which filters are left out by the columns the spec of the filters left out.
+  const chips = chipsOf(filters, lacking);
   const counted = options.isError ? undefined : options.data;
   // What is shown was counted for the filters, the snapshot, or the workspace of before.
   const isStale = counted !== undefined && options.isPlaceholderData;
@@ -181,6 +182,7 @@ export function FilterBar() {
               field={chip.name}
               value={chip.value}
               isNegated={chip.isNegated}
+              isInactive={chip.isAbsent}
               isDisabled={isBusy}
               isExpanded={expanded === chip.id}
               isUnderPopover={isOpen}

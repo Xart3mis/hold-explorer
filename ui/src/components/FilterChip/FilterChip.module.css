@@ -109,6 +109,35 @@
   outline-offset: calc(-1 * var(--focus-ring-width));
 }
 
+/*
+ * A filter that is kept but not applied, for the snapshot in view lacks its column: no accent,
+ * the border of a control, and a tag after the value, which is cut before the tag is.
+ */
+.chip[data-inactive] {
+  border-color: var(--color-border-strong);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+}
+
+.tag {
+  margin-inline-start: var(--space-1-5);
+}
+
+.chip[data-inactive]:has(.body[data-hovered]),
+.chip[data-inactive]:has(.body[data-pressed]),
+.chip[data-inactive]:has(.body[aria-expanded="true"]) {
+  background-color: var(--color-surface-hover);
+}
+
+.chip[data-inactive]:not([data-disabled]) .remove:hover,
+.chip[data-inactive]:not([data-disabled]) .remove:active,
+.chip[data-inactive]:not([data-disabled]) .remove[data-hovered],
+.chip[data-inactive]:not([data-disabled]) .remove[data-pressed] {
+  border-color: var(--color-border-strong);
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
 .chip[data-disabled] {
   border-color: var(--color-border-default);
   background-color: var(--color-surface-disabled);
