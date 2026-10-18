@@ -253,6 +253,43 @@ describe("useSnapshotQuery", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 
+  it("reads nothing on a refetch while it is told that there is nothing to ask for, or while an action runs", async () => {
+    const read = vi.fn<Read>(() => Promise.resolve("lines of 2"));
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ enabled }: { enabled: boolean }) =>
+        useSnapshotQuery({ name: "lines", params: ["oldest"], read, enabled }),
+      { enabled: false },
+      start,
+      () => start.open,
+    );
+    await act(async () => {
+      await result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.lines.fetchStatus).toBe("idle");
+
+    rerender({ enabled: true });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 2");
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    await act(async () => {
+      await result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.data).toBe("lines of 2");
+  });
+
   it("reads again, for the new view, when another snapshot is the selected one", async () => {
     const { read, waiting } = heldRead();
     const start = openStart();
@@ -1750,6 +1787,45 @@ describe("useSnapshotPages", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads nothing on a retry while it is not enabled, or while an action runs", async () => {
+    const read = vi.fn<ReadPage>((view, offset, sort) =>
+      Promise.resolve(pageOf(view, offset, sort)),
+    );
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ enabled }: { enabled: boolean }) =>
+        useSnapshotPages({ name: "lines", params: ["oldest"], read, enabled }),
+      { enabled: false },
+      start,
+      () => start.open,
+    );
+    act(() => {
+      result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).not.toHaveBeenCalled();
+    expect(result.current.lines.isPending).toBe(true);
+
+    rerender({ enabled: true });
+    await waitFor(() => {
+      expect(result.current.lines.rows).toHaveLength(2);
+    });
+    expect(read).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      result.current.action.mutate(1);
+    });
+    await waitFor(() => {
+      expect(result.current.action.isPending).toBe(true);
+    });
+    act(() => {
+      result.current.lines.refetch();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(result.current.lines.rows).toHaveLength(2);
   });
 });
 

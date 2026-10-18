@@ -352,14 +352,25 @@ export function useSnapshotQuery<Data, const Params extends readonly unknown[]>(
   enabled = true,
 }: SnapshotQueryOptions<Data, Params>): UseQueryResult<Data> {
   const { queryKey, isReadable, perform } = useReading(keys.snapshot, name, params);
+  const isEnabled = enabled && isReadable;
 
-  return useQuery({
+  const query = useQuery({
     queryKey,
     queryFn:
       perform === null
         ? skipToken
         : ({ signal }) => perform(signal, (view) => read(view, ...params)),
-    enabled: enabled && isReadable,
+    enabled: isEnabled,
+  });
+  // The query library reads again on `refetch` whatever `enabled` says. Here a refetch reads
+  // nothing while nothing may be read, and answers with what is there. The result is a proxy of
+  // the one of the library, so the library still sees which of its parts a screen reads.
+  if (isEnabled) return query;
+  return new Proxy(query, {
+    get: (target, key, receiver): unknown =>
+      key === "refetch"
+        ? () => Promise.resolve(target)
+        : (Reflect.get(target, key, receiver) as unknown),
   });
 }
 
@@ -505,11 +516,14 @@ export function useSnapshotPages<
     if (canLoadMore) void fetchNextPage({ cancelRefetch: false });
   }, [canLoadMore, fetchNextPage]);
 
+  const isEnabled = enabled && isReadable;
   const retry = useCallback(() => {
+    // Nothing is read while nothing may be read, whatever the query library would do.
+    if (!isEnabled) return;
     // After a later page failed, the pages before it are there and are what they were: only the
     // page that failed is read. After anything else failed, what was being read is read again.
     void (isFetchNextPageError ? fetchNextPage({ cancelRefetch: false }) : refetch());
-  }, [isFetchNextPageError, fetchNextPage, refetch]);
+  }, [isEnabled, isFetchNextPageError, fetchNextPage, refetch]);
 
   return {
     rows,
