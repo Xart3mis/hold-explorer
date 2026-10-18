@@ -11,7 +11,7 @@ use hx_core::query::{
     FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage,
 };
 use hx_core::rules::RuleSet;
-use hx_core::solve::{solve_plan, solve_view, SolveView};
+use hx_core::solve::{solve_view, SolvePlan, SolveView};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -261,27 +261,54 @@ impl AppState {
         })
     }
 
-    /// The solve order of the kept holds. The plan is built for this filter on every request and
-    /// not kept; the cached plan of the open holds belongs to the line panel.
+    /// Checks `view` and gives `read` the snapshot in view with the open holds among those the
+    /// filter of the request keeps (see [`FilterSpec::open_only`]) and their solve plan, which
+    /// [`AppState::filtered_plan`] keeps for the next request; the cached plan of the open holds
+    /// belongs to the line panel. `None` when there is nothing to rank: the filter keeps released
+    /// holds only, or the workspace has no snapshot.
+    fn ranked<T>(
+        &mut self,
+        view: &ViewRef,
+        spec: &FilterSpec,
+        read: impl FnOnce(&Dataset, &FilterSpec, &SolvePlan) -> T,
+    ) -> Result<Option<T>, CommandError> {
+        let ranked = self.in_view(view, spec, |v| v.spec.open_only())?;
+        let (Some(selected), Some(ranked)) = (self.selected, ranked) else {
+            return Ok(None);
+        };
+        let (dataset, plan) = self.filtered_plan(selected, &ranked)?;
+        Ok(Some(read(dataset, &ranked, plan)))
+    }
+
+    /// The solve order of the open holds among the kept ones; empty when there is none.
     pub fn solve_order(
         &mut self,
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<SolveView, CommandError> {
-        self.in_view(view, spec, |v| solve_view(v.dataset, &v.spec))
+        Ok(self
+            .ranked(view, spec, |_, _, plan| solve_view(plan))?
+            .unwrap_or_else(|| {
+                solve_view(&SolvePlan {
+                    nodes: Vec::new(),
+                    steps: Vec::new(),
+                })
+            }))
     }
 
-    /// The detail of one blocker among the kept holds; `None` when no kept hold has it.
+    /// The detail of one blocker among the open holds of the kept ones; `None` when none of them
+    /// has it.
     pub fn blocker_detail(
         &mut self,
         spec: &FilterSpec,
         key: &str,
         view: &ViewRef,
     ) -> Result<Option<BlockerDetail>, CommandError> {
-        self.in_view(view, spec, |v| {
-            let plan = solve_plan(v.dataset, &v.spec, None);
-            blocker_detail(v.dataset, &v.spec, &plan, key)
-        })
+        Ok(self
+            .ranked(view, spec, |dataset, ranked, plan| {
+                blocker_detail(dataset, ranked, plan, key)
+            })?
+            .flatten())
     }
 
     /// One group of `dim` with its numbers and its first [`GROUP_LINES`] Lines; `None` when the

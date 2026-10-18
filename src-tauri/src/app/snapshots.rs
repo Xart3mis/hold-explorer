@@ -124,11 +124,14 @@ impl AppState {
                     snapshot_id,
                     dataset,
                     plan: None,
+                    filtered: None,
                     columns: None,
                     #[cfg(test)]
                     plan_builds: self.plan_builds.clone(),
                     #[cfg(test)]
                     column_builds: self.column_builds.clone(),
+                    #[cfg(test)]
+                    filtered_plan_builds: self.filtered_plan_builds.clone(),
                 }
             }
         };
@@ -154,6 +157,30 @@ impl AppState {
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             solve_plan(&cache.dataset, &FilterSpec::default(), None)
         });
+        Ok((&cache.dataset, plan))
+    }
+
+    /// The dataset of this snapshot with the solve plan of the holds `spec` keeps. The plan of the
+    /// last filter is kept with the dataset, so a solve order and the detail of one of its
+    /// blockers for the same filter plan once; another filter plans anew and takes its place.
+    pub(super) fn filtered_plan(
+        &mut self,
+        snapshot_id: i64,
+        spec: &FilterSpec,
+    ) -> Result<(&Dataset, &SolvePlan), CommandError> {
+        let cache = self.cache(snapshot_id)?;
+        let filtered = cache
+            .filtered
+            .take()
+            .filter(|(kept, _)| kept == spec)
+            .unwrap_or_else(|| {
+                #[cfg(test)]
+                cache
+                    .filtered_plan_builds
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                (spec.clone(), solve_plan(&cache.dataset, spec, None))
+            });
+        let (_, plan) = cache.filtered.insert(filtered);
         Ok((&cache.dataset, plan))
     }
 
@@ -226,6 +253,13 @@ impl AppState {
     #[cfg(test)]
     pub(super) fn plan_builds(&self) -> usize {
         self.plan_builds.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// How many plans of a filter were built since the application started.
+    #[cfg(test)]
+    pub(super) fn filtered_plan_builds(&self) -> usize {
+        self.filtered_plan_builds
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// How many times the columns of a snapshot were found since the application started.

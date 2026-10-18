@@ -686,8 +686,116 @@ fn the_solve_order_equals_the_core_view_and_leaves_the_cached_plan_alone() {
     let spec = open_holds();
     let order = state.solve_order(&spec, &view).unwrap();
     assert!(!order.rows.is_empty());
-    assert_eq!(order, hx_core::solve::solve_view(&ds, &spec));
+    assert_eq!(
+        order,
+        hx_core::solve::solve_view(&hx_core::solve::solve_plan(&ds, &spec, None))
+    );
     assert_eq!(state.plan_builds(), 0);
+}
+
+#[test]
+fn the_solve_order_and_a_blocker_detail_rank_the_open_holds_among_the_kept_ones() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let open = open_holds();
+    let all = FilterSpec {
+        status: Status::All,
+        ..FilterSpec::default()
+    };
+    let released = FilterSpec {
+        status: Status::Released,
+        ..FilterSpec::default()
+    };
+    let open_plan = hx_core::solve::solve_plan(&ds, &open, None);
+    // Some line has released holds only: planned with the open holds, it would count as held.
+    assert!(query::summary(&ds, &all).lines > query::summary(&ds, &open).lines);
+
+    let order = state.solve_order(&all, &view).unwrap();
+    assert_eq!(order, hx_core::solve::solve_view(&open_plan));
+    assert_eq!(order.lines_on_hold, query::summary(&ds, &open).lines);
+    for row in order.rows.iter().take(5) {
+        assert_eq!(
+            state.blocker_detail(&all, &row.key, &view).unwrap(),
+            hx_core::detail::blocker_detail(&ds, &open, &open_plan, &row.key)
+        );
+    }
+
+    // Released holds hold nothing: there is nothing to rank, even for their own blockers.
+    let nothing = state.solve_order(&released, &view).unwrap();
+    assert_eq!(
+        (
+            nothing.rows.len(),
+            nothing.lines_on_hold,
+            nothing.steps_to_most
+        ),
+        (0, 0, 0)
+    );
+    let of_released = query::group_by(&ds, &released, &Dim::Blocker)[0]
+        .key
+        .clone();
+    assert_eq!(
+        state
+            .blocker_detail(&released, &of_released, &view)
+            .unwrap(),
+        None
+    );
+}
+
+#[test]
+fn the_solve_order_and_a_blocker_detail_of_one_filter_share_one_plan() {
+    let fx = Fixture::new();
+    let (first, second) = (fx.synth("a.xlsx", 1), fx.synth("b.xlsx", 2));
+    let mut state = fx.state();
+    let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
+    import(&mut state, &second, "2026-09-08 00:00:00", false);
+    let view = shown(&state);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    assert_eq!(state.filtered_plan_builds(), 0);
+
+    let order = state.solve_order(&spec, &view).unwrap();
+    let key = order.rows[0].key.clone();
+    let detail = state.blocker_detail(&spec, &key, &view).unwrap();
+    state.solve_order(&spec, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 1);
+    // All ranks the same open holds, so it plans nothing new; Released plans nothing at all.
+    let all = FilterSpec {
+        status: Status::All,
+        ..FilterSpec::default()
+    };
+    assert_eq!(state.solve_order(&all, &view).unwrap(), order);
+    let released = FilterSpec {
+        status: Status::Released,
+        ..FilterSpec::default()
+    };
+    state.solve_order(&released, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 1);
+
+    // Another filter plans anew, and only the last plan is kept.
+    let mut narrowed = spec.clone();
+    narrowed.fields.push(FieldFilter {
+        dim: Dim::Blocker,
+        values: vec![key.clone()],
+        negate: true,
+    });
+    let without = state.solve_order(&narrowed, &view).unwrap();
+    assert_eq!(
+        without,
+        hx_core::solve::solve_view(&hx_core::solve::solve_plan(&ds, &narrowed, None))
+    );
+    assert_eq!(state.blocker_detail(&narrowed, &key, &view).unwrap(), None);
+    assert_eq!(state.filtered_plan_builds(), 2);
+    assert_eq!(state.blocker_detail(&spec, &key, &view).unwrap(), detail);
+    assert_eq!(state.filtered_plan_builds(), 3);
+    assert_eq!(state.plan_builds(), 0);
+
+    // Another snapshot drops the plan with the dataset.
+    state.select_snapshot(older).unwrap();
+    let view = shown(&state);
+    state.solve_order(&spec, &view).unwrap();
+    assert_eq!(state.filtered_plan_builds(), 4);
 }
 
 #[test]

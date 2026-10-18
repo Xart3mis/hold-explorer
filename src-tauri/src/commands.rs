@@ -290,7 +290,7 @@ pub async fn matrix<R: Runtime>(
     .await
 }
 
-/// The solve order of the kept holds, when `view` is the view in the state.
+/// The solve order of the open holds among the kept ones, when `view` is the view in the state.
 #[tauri::command]
 pub async fn solve_order<R: Runtime>(
     app: AppHandle<R>,
