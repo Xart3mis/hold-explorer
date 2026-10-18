@@ -14,6 +14,7 @@ tauri-build.workspace = true
 [dependencies]
 hx-core = { path = "../crates/core", features = ["ts"] }
 hx-store = { path = "../crates/store", features = ["ts"] }
+hx-export = { path = "../crates/export", features = ["ts"] }
 hx-synth = { path = "../crates/synth" }
 chrono.workspace = true
 serde.workspace = true

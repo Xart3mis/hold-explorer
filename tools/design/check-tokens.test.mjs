@@ -235,3 +235,16 @@ test("--hex prints the painted color of a token from the given directory", () =>
   assert.equal(result.status, 0, result.output);
   assert.match(result.output.trim(), /^#[0-9a-f]{6}$/);
 });
+
+test("every color of the export palette is the light value of its token", () => {
+  const palette = JSON.parse(readFileSync(join(ROOT, "crates", "export", "palette.json"), "utf8"));
+  const names = Object.keys(palette);
+  assert.ok(names.length > 0, "crates/export/palette.json is empty");
+  const result = check({ args: ["--hex", "light", ...names] });
+  assert.equal(result.status, 0, result.output);
+  const printed = result.output.trim().split(",");
+  assert.equal(printed.length, names.length, result.output);
+  names.forEach((name, at) => {
+    assert.equal(palette[name], printed[at], `${name} in crates/export/palette.json`);
+  });
+});

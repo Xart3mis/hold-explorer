@@ -1,0 +1,21 @@
+[package]
+name = "hx-export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# What `krilla` (the PDF report) needs.
+rust-version = "1.92"
+
+[dependencies]
+chrono.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+csv.workspace = true
+serde_json.workspace = true
+
+[features]
+ts = ["dep:ts-rs"]
