@@ -22,6 +22,7 @@ export { LineChart, type LineChartProps, type LinePoint } from "./charts/LineCha
 export { Checkbox, type CheckboxProps } from "./Checkbox/Checkbox";
 export { ChoiceGroup, type Choice, type ChoiceGroupProps } from "./ChoiceGroup/ChoiceGroup";
 export {
+  childKeyOfRow,
   DataTable,
   textChars,
   type ColumnSize,

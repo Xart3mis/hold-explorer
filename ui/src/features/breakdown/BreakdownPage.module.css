@@ -83,7 +83,8 @@
   background-color: var(--color-chart-neutral-hover);
 }
 
-/* A line under its group: its disciplines, and the age of its oldest hold at the trailing end. */
+/* A line under its group: its disciplines, and the age of its oldest hold right after them, so
+   the two stay together in a wide window. The disciplines are cut when the column is narrow. */
 .lineFacts {
   display: flex;
   gap: var(--space-3);
@@ -92,7 +93,7 @@
 }
 
 .disciplines {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;

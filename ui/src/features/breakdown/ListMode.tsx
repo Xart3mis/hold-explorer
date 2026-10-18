@@ -12,6 +12,7 @@ import type { GroupDetail } from "../../bindings/GroupDetail";
 import type { LineRow } from "../../bindings/LineRow";
 import type { ViewRef } from "../../bindings/ViewRef";
 import {
+  childKeyOfRow,
   DataTable,
   textChars,
   type DataTableChildColumn,
@@ -31,6 +32,11 @@ interface GroupReading {
   /** The group and its first lines; `null` when the filters no longer keep the group. */
   detail: GroupDetail | null | undefined;
   isLoading: boolean;
+  /**
+   * The detail is the one of the filters, the dimension, or the snapshot of before, standing in
+   * while the group is read again: it is not this group's, and is shown as a group being read.
+   */
+  isPlaceholder: boolean;
   error: Error | null;
   refetch: () => void;
 }
@@ -57,7 +63,7 @@ function GroupReader({
   onRead: (key: string, reading: GroupReading) => void;
   onForget: (key: string) => void;
 }) {
-  const { data, isPending, error, refetch } = useSnapshotQuery({
+  const { data, isPending, isPlaceholderData, error, refetch } = useSnapshotQuery({
     name: "groupDetail",
     params: [spec, dim, groupKey],
     read: readGroup,
@@ -66,12 +72,13 @@ function GroupReader({
     onRead(groupKey, {
       detail: data,
       isLoading: isPending,
+      isPlaceholder: isPlaceholderData,
       error,
       refetch: () => {
         void refetch();
       },
     });
-  }, [groupKey, data, isPending, error, refetch, onRead]);
+  }, [groupKey, data, isPending, isPlaceholderData, error, refetch, onRead]);
   useEffect(
     () => () => {
       onForget(groupKey);
@@ -160,8 +167,13 @@ export function ListMode({
   const { update } = useFilters();
   const { selection, select } = useSelection();
   // Enter, Escape, and the focus of the panel this table opens, as every such table has them. A
-  // line is a child row, whose key in the table is not its line ID, so Enter on it is not told.
-  const { listenTo, chosen } = useTableDetailFocus({ selectedKey: null });
+  // line is a child row, whose key in the table holds its group's as well (a line may stand under
+  // two groups), so the row of the open line is told by the line ID it holds.
+  const openLine = selection?.kind === "line" ? selection.lineId : null;
+  const { listenTo, chosen } = useTableDetailFocus({
+    selectedKey: null,
+    isSelectedRow: (key) => openLine !== null && childKeyOfRow(key) === openLine,
+  });
 
   const [readings, setReadings] = useState<ReadonlyMap<string, GroupReading>>(new Map());
   const onRead = useCallback((key: string, reading: GroupReading) => {
@@ -202,8 +214,10 @@ export function ListMode({
   const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
   const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
   // The widest line ID of the groups that are read: the line IDs under a group are never cut.
+  // Lines that stand in for a group being read again are not shown, and do not count.
   let widestLine = 0;
   for (const held of readings.values()) {
+    if (held.isPlaceholder) continue;
     widestLine = Math.max(widestLine, held.detail?.lines.widest_line_id ?? 0);
   }
 
@@ -265,6 +279,9 @@ export function ListMode({
     const isOpen = open.has(group.key);
     const held = readings.get(group.key);
     if (held === undefined) return isOpen ? { rows: NO_LINES, isLoading: true } : COLLAPSED;
+    // The lines of before stand in while the group is read again: they are of other filters or
+    // another snapshot, so the group shows that it is being read, as on its first reading.
+    if (held.isPlaceholder) return isOpen ? { rows: NO_LINES, isLoading: true } : COLLAPSED;
     if (held.error !== null) {
       // The command's message says what happened and what to do; the row stands under its group.
       return {
@@ -328,7 +345,7 @@ export function ListMode({
         onExpandedChange={(keys) => {
           if (isCurrent) setOpen(keys);
         }}
-        selectedChildKey={selection?.kind === "line" ? selection.lineId : null}
+        selectedChildKey={openLine}
         onChildSelectionChange={(line) => {
           chosen(line.line_id);
           select({ kind: "line", lineId: line.line_id });

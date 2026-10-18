@@ -42,9 +42,16 @@ export interface TableDetailFocus {
  */
 export function useTableDetailFocus({
   selectedKey,
+  isSelectedRow,
 }: {
   /** The key of the row the panel shows, as the table names it; `null` for none. */
   selectedKey: string | null;
+  /**
+   * For a table whose rows the panel shows are not named by one key, as the lines under the
+   * groups of Breakdown, where a line may stand under two groups: whether the row of this key
+   * is one the panel shows. Asked in place of comparing with `selectedKey`.
+   */
+  isSelectedRow?: (key: string) => boolean;
 }): TableDetailFocus {
   const { selection, close } = useSelection();
   const focus = useDetailFocus();
@@ -77,9 +84,11 @@ export function useTableDetailFocus({
   }, [focus]);
 
   // The listeners are attached once and read what the page shows now.
-  const latest = useRef({ isOpen: selection !== null, selectedKey, close });
+  const isSelected = (key: string) =>
+    isSelectedRow === undefined ? key === selectedKey : isSelectedRow(key);
+  const latest = useRef({ isOpen: selection !== null, isSelected, close });
   useEffect(() => {
-    latest.current = { isOpen: selection !== null, selectedKey, close };
+    latest.current = { isOpen: selection !== null, isSelected, close };
   });
 
   const attach = useCallback(
@@ -110,7 +119,7 @@ export function useTableDetailFocus({
         }
         if (!isTable || event.key !== "Enter" || !now.isOpen) return;
         const key = rowKeyOf(event.target instanceof Element ? event.target : null);
-        if (key !== null && key === now.selectedKey) {
+        if (key !== null && now.isSelected(key)) {
           opener.current = { kind: "row", key };
           focus.focusHeading();
         }

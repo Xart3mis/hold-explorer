@@ -325,6 +325,17 @@ const NO_ROWS: readonly never[] = [];
 const CHILD = "\u001f";
 const STATUS = "\u001e";
 
+/**
+ * The key of the child a row of the table holds, as `childKey` gave it, from the key the table
+ * gave that row (the `data-key` of the row); `null` for a row that holds no child. The same child
+ * may stand under two rows, so a page that asks whether a row holds the child it has selected
+ * reads the child's key with this.
+ */
+export function childKeyOfRow(rowKey: string): string | null {
+  const at = rowKey.indexOf(CHILD);
+  return at === -1 ? null : rowKey.slice(at + CHILD.length);
+}
+
 /** A child row as the table holds it: a child, or a row that says how the children are. */
 type ChildEntry =
   | { kind: "child"; key: string; id: string; item: unknown }

@@ -7,6 +7,7 @@ import { OPTIONAL_FIELDS } from "../../api/export";
 import { dimId, dimName } from "../../app/filters/dims";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
+import { searchWithSelection } from "../../app/selection";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
@@ -113,11 +114,15 @@ export function BreakdownPage() {
   const hasTable = shown !== null || !query.isError;
   const isStale = shown !== null && (!own || query.isRefetching);
   const emptyState = shown === null || shown.groups.length > 0 ? undefined : <NoHolds />;
+  // A line is opened from the list, and the matrix has none: another mode closes its panel, so
+  // the focus is not left to give back to a row that is gone.
   const choose = (mode: string) => {
     const next: BreakdownMode = mode === "matrix" ? "matrix" : "list";
-    void navigate(breakdownAddress({ ...state, mode: next }, location.search), {
-      replace: true,
-    });
+    if (next === state.mode) return;
+    void navigate(
+      breakdownAddress({ ...state, mode: next }, searchWithSelection(location.search, null)),
+      { replace: true },
+    );
   };
 
   return (

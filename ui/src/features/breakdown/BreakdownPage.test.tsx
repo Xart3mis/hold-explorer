@@ -258,6 +258,40 @@ describe("BreakdownPage", () => {
     },
   );
 
+  it(
+    "shows a group's lines of other filters as being read, not as its lines, once the groups are there",
+    SLOW,
+    async () => {
+      const { breakdown } = renderBreakdown({
+        path: "/breakdown?mode=list&by=Discipline&open=Civil",
+        // The groups of any filters come at once; the lines of other filters are slower.
+        groupDetail: ({ key, spec }) =>
+          spec.fields.length === 0 ? groupDetail(key) : new Promise(() => undefined),
+      });
+      const table = await groupTable();
+      await findRow(table, lineId(0));
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          fields: [{ dim: "Role", values: [{ key: "Checker", label: "Checker" }], negate: false }],
+        });
+      });
+      await waitFor(() => {
+        expect(breakdown).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            spec: specWith({ fields: [{ dim: "Role", values: ["Checker"], negate: false }] }),
+          }),
+        );
+      });
+      // The groups of the new filters are drawn, not dimmed.
+      await waitFor(() => {
+        expect(table.closest("[data-stale]")).toBeNull();
+      });
+      expect(table.querySelector("[data-part='loading-row']")).not.toBeNull();
+      expect(within(table).queryByRole("rowheader", { name: lineId(0) })).not.toBeInTheDocument();
+    },
+  );
+
   it("says when the filters no longer keep an expanded group, and collapses it", SLOW, async () => {
     const { user, router } = renderBreakdown({
       path: "/breakdown?mode=list&by=Discipline&open=Civil",
@@ -378,6 +412,43 @@ describe("BreakdownPage", () => {
     expect(
       await within(panel).findByRole("heading", { name: new RegExp(lineId(1)) }),
     ).toBeInTheDocument();
+  });
+
+  it(
+    "closes the panel of a line when the mode changes to the matrix, which has no lines",
+    SLOW,
+    async () => {
+      const { user, router } = renderBreakdown({
+        path: `/breakdown?mode=list&by=Discipline&open=Civil&line=${lineId(1)}`,
+      });
+      await groupTable();
+      await screen.findByRole("complementary");
+      await user.click(screen.getByRole("radio", { name: text.modeMatrix }));
+      await waitFor(() => {
+        expect(router.state.location.search).not.toContain("line=");
+      });
+      expect(new URLSearchParams(router.state.location.search).get("mode")).toBe("matrix");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+    },
+  );
+
+  it("takes the focus to the heading on Enter on the line that is open already", SLOW, async () => {
+    const { user } = renderBreakdown({
+      path: `/breakdown?mode=list&by=Discipline&open=Civil&line=${lineId(1)}`,
+    });
+    const table = await groupTable();
+    const panel = await screen.findByRole("complementary");
+    const heading = await within(panel).findByRole("heading", { name: new RegExp(lineId(1)) });
+    const row = await findRow(table, lineId(1));
+    act(() => {
+      row.focus();
+    });
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(heading).toHaveFocus();
+    });
   });
 
   it(

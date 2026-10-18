@@ -107,4 +107,13 @@ describe("the selection and another view", () => {
     expect(searchForAnotherWorkspace("?view=3&blocker=Civil%7CStress")).toBe("?view=3");
     expect(searchForAnotherWorkspace("?view=3")).toBeNull();
   });
+
+  it("drops the groups a page has expanded for another workspace, whose values they are not", () => {
+    expect(searchForAnotherWorkspace("?mode=list&by=Discipline&open=Piping%2CCivil")).toBe(
+      "?mode=list&by=Discipline",
+    );
+    expect(
+      searchForAnotherWorkspace("?mode=list&by=Discipline&open=Piping&line=78B01-573-4434-FW-001"),
+    ).toBe("?mode=list&by=Discipline");
+  });
 });

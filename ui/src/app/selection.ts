@@ -4,7 +4,7 @@
 // and write it through `useSelection` (ui/src/features/detail/selection.ts); the action that
 // selects another snapshot takes a hold out of it here, because a position means nothing in
 // another snapshot, and keeps a line and a blocker, whose ID and key are their text; the actions
-// that open another workspace take out all three.
+// that open another workspace take out all three, and the groups a page has expanded.
 
 /**
  * What the detail panel shows: a line, a hold by its position in the snapshot, a blocker by its
@@ -19,6 +19,11 @@ export type Selection =
 const LINE = "line";
 const HOLD = "hold";
 const BLOCKER = "blocker";
+/**
+ * The groups a page has expanded, by their values (Breakdown's `open`): values of one workspace,
+ * which another workspace may have as well, but as other groups.
+ */
+const OPEN = "open";
 
 /** The parts of a search text, or of an address that has one. */
 function partsOf(search: string): URLSearchParams {
@@ -69,9 +74,14 @@ export function searchForAnotherSnapshot(search: string): string | null {
 
 /**
  * The search text as it is to be after another workspace was opened, created, or built: nothing
- * is selected, since no line, position, or blocker of one workspace names anything in another.
- * `null` when nothing is to change.
+ * is selected, since no line, position, or blocker of one workspace names anything in another,
+ * and no group is expanded, since its value names another group there. `null` when nothing is to
+ * change.
  */
 export function searchForAnotherWorkspace(search: string): string | null {
-  return selectionOf(search) === null ? null : searchWithSelection(search, null);
+  if (selectionOf(search) === null && !partsOf(search).has(OPEN)) return null;
+  const parts = partsOf(searchWithSelection(search, null));
+  parts.delete(OPEN);
+  const text = parts.toString();
+  return text === "" ? "" : `?${text}`;
 }

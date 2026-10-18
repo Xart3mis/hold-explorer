@@ -7,7 +7,7 @@ import { searchForAnotherSnapshot, searchForAnotherWorkspace } from "../selectio
  * What the actions that change the view do to the selection of the detail panel, as the view is
  * asked for, before anything of the other view can be read: another snapshot takes out a hold,
  * whose position names another hold there or none; another workspace takes out a line, a hold,
- * and a blocker. Every other part of the address stays, its hash and what was passed with it
+ * a blocker, and the groups a page has expanded. Every other part of the address stays, its hash and what was passed with it
  * included. The address is the one the action is asked at: call these when it is asked for
  * (`onAsk`).
  */
