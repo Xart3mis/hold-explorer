@@ -108,7 +108,7 @@ describe("BlockersPage", () => {
       within(second)
         .getAllByRole("gridcell")
         .map((cell) => cell.textContent),
-    ).toEqual(["Process / 577-PR-400", "PR", "Process", "300", "200", "1,200"]);
+    ).toEqual(["Process / 577-PR-400", "PR", "Process", "300", "234", "1,234"]);
     const first = await stepRow(table, 1);
     expect(within(first).getByText("1,204")).toBeInTheDocument();
     expect(within(first).getAllByText("1,000")).toHaveLength(2);
@@ -168,7 +168,7 @@ describe("BlockersPage", () => {
     chart.focus();
     expect(await screen.findByText(caption(1000, 1262, 1))).toBeVisible();
     await user.keyboard("{ArrowRight}");
-    expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
+    expect(await screen.findByText(caption(1234, 1262, 2))).toBeVisible();
   });
 
   it("names the lines a step frees apart from the lines freed so far", async () => {
@@ -204,7 +204,7 @@ describe("BlockersPage", () => {
       const chart = await curve();
       chart.focus();
       await user.keyboard("{ArrowRight}");
-      expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
+      expect(await screen.findByText(caption(1234, 1262, 2))).toBeVisible();
       // A filter that keeps nothing takes the curve away while a point is in focus.
       act(() => {
         queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
@@ -236,10 +236,10 @@ describe("BlockersPage", () => {
       const chart = await curve();
       chart.focus();
       await user.keyboard("{ArrowRight}");
-      expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
+      expect(await screen.findByText(caption(1234, 1262, 2))).toBeVisible();
       // Read again, as after an action, with the point still in focus.
       await act(() => queryClient.invalidateQueries({ queryKey: keys.snapshots }));
-      expect(await screen.findByText(caption(1200, 1300, 2))).toBeVisible();
+      expect(await screen.findByText(caption(1234, 1300, 2))).toBeVisible();
       expect(within(chart).getByRole("option")).toHaveAttribute("aria-posinset", "2");
     },
   );

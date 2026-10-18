@@ -29,16 +29,17 @@ function step(
 
 /**
  * The solve order of the open holds: four steps that free the 1,262 lines on hold, the last of
- * them few. A step frees no more lines than its blocker has holds, since a hold is on one line.
+ * them few. A step frees no more lines than its blocker has holds, since a hold is on one line,
+ * and no more than the step before it, as the greedy order of the core takes the most first.
  * A blocker item is a tag as often as a word.
  */
 export function solveView(): SolveView {
   return {
     rows: [
       step(1, "Piping", "Stress", "Other", 1204, 1000, 1000),
-      step(2, "Process", "577-PR-400", "PR", 300, 200, 1200),
-      step(3, "Piping", "577-PK-400", "PK", 14, 14, 1214),
-      step(4, "Piping", "Client", "Other", 48, 48, 1262),
+      step(2, "Process", "577-PR-400", "PR", 300, 234, 1234),
+      step(3, "Piping", "577-PK-400", "PK", 14, 14, 1248),
+      step(4, "Piping", "Client", "Other", 20, 14, 1262),
     ],
     lines_on_hold: 1262,
     steps_to_most: 2,
