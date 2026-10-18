@@ -824,7 +824,7 @@
     "sharesLines_other": "Shares {{count, number}} lines",
     "shownOf": "{{shown, number}} of {{count, number}} shown",
     "showAll": "Show all on Lines",
-    "showAllOf": "Show all on Lines, from {{list}}",
+    "showAllOf": "Show all on Lines: {{list}}",
     "linkedShownOf": "{{shown, number}} of {{count, number}} shown: those that share the most lines",
     "clearFilters": "Clear filters",
     "blockerFilteredTitle": "The filters leave out this blocker",

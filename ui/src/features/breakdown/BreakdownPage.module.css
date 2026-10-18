@@ -45,8 +45,9 @@
 }
 
 /*
- * The heatmap takes the height that is left and scrolls inside it, so its column labels stay in
- * view over many rows; its table view keeps its own height.
+ * The heatmap is as tall as its rows, and shrinks to the height that is left when they need more,
+ * then scrolls inside it, so its column labels stay in view over many rows; its table view keeps
+ * its own height.
  */
 .matrix {
   flex: 0 1 auto;

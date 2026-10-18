@@ -26,6 +26,12 @@ export interface BarRowGroupProps {
   skeletonRows?: number;
   /** A refetch: the previous rows stay, dimmed, until the new rows arrive. */
   isStale?: boolean;
+  /**
+   * `wide` for labels that are long names, such as the top blockers: the label column takes the
+   * room the bars do not need, and the bars keep a least width (DESIGN.md, Bar row, "Wide
+   * labels"). Otherwise every group has the label column of one width.
+   */
+  labels?: "fixed" | "wide";
   className?: string | undefined;
 }
 
@@ -38,6 +44,7 @@ export function BarRowGroup({
   isLoading,
   skeletonRows = SKELETON_SHAPES,
   isStale,
+  labels = "fixed",
   className,
   ...props
 }: BarRowGroupProps) {
@@ -46,6 +53,7 @@ export function BarRowGroup({
     <div
       role="list"
       {...props}
+      data-labels={labels === "wide" ? "wide" : undefined}
       aria-busy={loading ? "true" : undefined}
       data-stale={isStale === true && !loading ? "" : undefined}
       className={cx(styles.group, className)}

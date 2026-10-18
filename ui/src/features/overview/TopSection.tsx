@@ -15,6 +15,7 @@ export function TopSection<Item>({
   label,
   holds,
   isIdentifier = false,
+  hasLongLabels = false,
   onOpen,
 }: {
   title: string;
@@ -27,6 +28,8 @@ export function TopSection<Item>({
   holds: (item: Item) => number;
   /** Whether what a row names is an identifier, a line ID. */
   isIdentifier?: boolean;
+  /** Whether its labels are long names, which take the room the bars leave. */
+  hasLongLabels?: boolean;
   /** Opens what a row names. */
   onOpen: (item: Item) => void;
 }) {
@@ -41,11 +44,16 @@ export function TopSection<Item>({
         </h2>
       </div>
       {items === undefined ? (
-        <BarRowGroup isLoading skeletonRows={TOP_SKELETON_ROWS} aria-labelledby={titleId} />
+        <BarRowGroup
+          isLoading
+          skeletonRows={TOP_SKELETON_ROWS}
+          labels={hasLongLabels ? "wide" : "fixed"}
+          aria-labelledby={titleId}
+        />
       ) : items.length === 0 ? (
         <p className={styles.none}>{none}</p>
       ) : (
-        <BarRowGroup aria-labelledby={titleId}>
+        <BarRowGroup labels={hasLongLabels ? "wide" : "fixed"} aria-labelledby={titleId}>
           {items.map((item) => (
             <BarRow
               key={itemKey(item)}

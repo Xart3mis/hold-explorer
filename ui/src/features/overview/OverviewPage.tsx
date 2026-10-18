@@ -359,6 +359,7 @@ export function OverviewPage() {
               itemKey={(blocker) => blocker.key}
               label={(blocker) => blocker.label}
               holds={(blocker) => blocker.holds}
+              hasLongLabels
               onOpen={(blocker) => {
                 // The blocker is selected on Blockers, under the filters that are set.
                 openAt(blockersAddress(blocker.key));

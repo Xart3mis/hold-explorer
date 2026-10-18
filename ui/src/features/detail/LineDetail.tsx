@@ -16,9 +16,9 @@ import {
   Tag,
   type Fact,
 } from "../../components";
+import { cx } from "../../components/cx";
 import { formatSize } from "../../text/format";
 import { t } from "../../text/i18n";
-import { cx } from "../../components/cx";
 import styles from "./Detail.module.css";
 import { HoldList } from "./HoldList";
 import {

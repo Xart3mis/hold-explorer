@@ -4,13 +4,14 @@ import {
   History,
   LayoutGrid,
   List,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   SlidersHorizontal,
   Users,
   Waypoints,
   type LucideIcon,
 } from "lucide-react";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useId } from "react";
 import { useLocation } from "react-router";
 import { IconButton } from "../../components";
@@ -38,10 +39,12 @@ function Group({
   items,
   isLast,
   isRail,
+  addressOf,
 }: {
   items: readonly Destination[];
   isLast: boolean;
   isRail: boolean;
+  addressOf: (path: string) => string;
 }) {
   const { pathname } = useLocation();
   return (
@@ -49,7 +52,7 @@ function Group({
       {items.map((destination) => (
         <li key={destination.id}>
           <NavItem
-            href={destination.path}
+            href={addressOf(destination.path)}
             label={t(`destinations.name.${destination.id}`)}
             icon={destinationIcons[destination.id]}
             isCurrent={pathname === destination.path}
@@ -65,6 +68,11 @@ function Group({
 
 export interface SidebarProps {
   destinations: readonly Destination[];
+  /**
+   * The address an item opens, from the address of its destination: where the destination was
+   * left in this session (DESIGN.md, "Sidebar item").
+   */
+  addressOf: (path: string) => string;
   /** With the labels, or collapsed to a rail of icons. */
   form: SidebarForm;
   onFormChange: (form: SidebarForm) => void;
@@ -76,7 +84,7 @@ export interface SidebarProps {
  * the others, except for the Soon tag after its label. The last item collapses the sidebar to a
  * rail of icons and expands it again; the names stay for assistive technology and in tooltips.
  */
-export function Sidebar({ destinations, form, onFormChange }: SidebarProps) {
+export function Sidebar({ destinations, addressOf, form, onFormChange }: SidebarProps) {
   const id = useId();
   const isRail = form === "rail";
   return (
@@ -85,8 +93,14 @@ export function Sidebar({ destinations, form, onFormChange }: SidebarProps) {
         items={destinations.filter(({ group }) => group === "data")}
         isLast={false}
         isRail={isRail}
+        addressOf={addressOf}
       />
-      <Group items={destinations.filter(({ group }) => group === "setup")} isLast isRail={isRail} />
+      <Group
+        items={destinations.filter(({ group }) => group === "setup")}
+        isLast
+        isRail={isRail}
+        addressOf={addressOf}
+      />
       <div className={styles.sidebarToggle}>
         <IconButton
           icon={isRail ? PanelLeftOpen : PanelLeftClose}

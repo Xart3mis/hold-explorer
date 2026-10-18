@@ -1,16 +1,17 @@
-import type { ReactNode } from "react";
-import { Button as RacButton } from "react-aria-components";
-import { useNavigate } from "react-router";
+import { useState, type ReactNode } from "react";
+import { Button as RacButton, type ButtonProps as RacButtonProps } from "react-aria-components";
+import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { useFilters, withValues } from "../../app/filters/state";
+import { searchWithSelection } from "../../app/selection";
 import { useSnapshotQuery } from "../../app/view";
 import type { BlockerDetail as BlockerAnswer } from "../../bindings/BlockerDetail";
 import type { LinkedBlocker } from "../../bindings/LinkedBlocker";
 import { Button, EmptyState, FactList, Skeleton, Tag, type Fact } from "../../components";
+import { cx } from "../../components/cx";
 import { formatCount, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
 import { DEFAULT_LINES_STATE, linesAddress } from "../lines/address";
-import { cx } from "../../components/cx";
 import styles from "./Detail.module.css";
 import { HoldList } from "./HoldList";
 import {
@@ -71,6 +72,46 @@ function blockerFacts(blocker: BlockerAnswer | undefined): Fact[] {
   ];
 }
 
+/**
+ * One stop in the Tab order for a list of rows, each a button: Tab enters the list on the row the
+ * keyboard was last on in it, the first at first; the up and down arrows move from row to row,
+ * Home and End to the ends. A long list is then one Tab to pass, not fifty. Give each row
+ * `rowProps(index)`.
+ */
+function useRowStop(count: number) {
+  const [at, setAt] = useState(0);
+  const stop = Math.min(at, Math.max(0, count - 1));
+  const rowProps = (index: number): Partial<RacButtonProps> => ({
+    excludeFromTabOrder: index !== stop,
+    onFocus: () => {
+      setAt(index);
+    },
+    onKeyDown: (event) => {
+      const list = event.target instanceof Element ? event.target.closest("ul") : null;
+      if (list === null) return;
+      const rows = [...list.querySelectorAll<HTMLElement>(":scope > li > button")];
+      const last = rows.length - 1;
+      const next =
+        event.key === "ArrowDown"
+          ? Math.min(last, index + 1)
+          : event.key === "ArrowUp"
+            ? Math.max(0, index - 1)
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? last
+                : null;
+      if (next === null) {
+        event.continuePropagation();
+        return;
+      }
+      event.preventDefault();
+      rows[next]?.focus();
+    },
+  });
+  return rowProps;
+}
+
 /** Under a list that holds more than it shows: how many it shows, and what leads to the rest. */
 function More({ text, action }: { text: string; action?: ReactNode }) {
   return (
@@ -93,12 +134,15 @@ function LineList({
 }) {
   const { select } = useSelection();
   const focus = useDetailFocus();
+  const shown = lines.slice(0, SHOWN_ROWS);
+  const rowProps = useRowStop(shown.length);
   return (
     <>
       <ul aria-label={label} className={styles.rows}>
-        {lines.slice(0, SHOWN_ROWS).map((lineId) => (
+        {shown.map((lineId, index) => (
           <li key={lineId} className={styles.holdItem}>
             <RacButton
+              {...rowProps(index)}
               data-part="line-row"
               className={cx(styles.lineRow)}
               onPress={() => {
@@ -135,12 +179,15 @@ function LineList({
 function LinkedList({ linked }: { linked: readonly LinkedBlocker[] }) {
   const { select } = useSelection();
   const focus = useDetailFocus();
+  const shown = linked.slice(0, SHOWN_ROWS);
+  const rowProps = useRowStop(shown.length);
   return (
     <>
       <ul aria-label={t("detail.linked")} className={styles.rows}>
-        {linked.slice(0, SHOWN_ROWS).map((blocker) => (
+        {shown.map((blocker, index) => (
           <li key={blocker.key} className={styles.holdItem}>
             <RacButton
+              {...rowProps(index)}
               data-part="blocker-row"
               className={cx(styles.holdRow)}
               onPress={() => {
@@ -182,6 +229,7 @@ export function BlockerDetail({
 }: DetailProps & { blockerKey: string }) {
   const heading = useHeading();
   const navigate = useNavigate();
+  const location = useLocation();
   const { spec, isDefault, clear, update } = useFilters();
   const query = useSnapshotQuery({
     name: "blockerDetail",
@@ -272,6 +320,12 @@ export function BlockerDetail({
     if (shown === undefined) return;
     update((current) =>
       withValues(current, "Blocker", [{ key: shown.key, label: shown.label }], false),
+    );
+    // The entry left behind is the page without the panel, so going back does not show it
+    // under the filter of its blocker either.
+    void navigate(
+      { search: searchWithSelection(location.search, null), hash: location.hash },
+      { replace: true, state: location.state as unknown },
     );
     void navigate(linesAddress(DEFAULT_LINES_STATE));
   };

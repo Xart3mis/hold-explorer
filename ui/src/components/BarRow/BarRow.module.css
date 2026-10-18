@@ -16,6 +16,16 @@
   grid-template-columns: var(--size-bar-label-width) minmax(0, 1fr) max-content max-content;
 }
 
+/*
+ * Labels that are long names take the room the bars do not need: the label column grows to its
+ * longest label, from the common width, after the bars have their least width.
+ */
+.group[data-labels="wide"] {
+  grid-template-columns:
+    minmax(var(--size-bar-label-width), max-content) minmax(var(--size-bar-min-width), 1fr)
+    max-content;
+}
+
 .group[data-stale] {
   opacity: var(--opacity-stale);
 }

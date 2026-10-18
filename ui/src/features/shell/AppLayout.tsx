@@ -10,6 +10,7 @@ import { useSelectionFollowsView } from "../../app/actions/selection";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
+import { searchWithSelection } from "../../app/selection";
 import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
 import type { AppStart } from "../../bindings/AppStart";
 import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../components";
@@ -97,6 +98,8 @@ function DropFrame({ paths }: { paths: readonly string[] }) {
   );
 }
 
+const NO_SEARCHES: ReadonlyMap<string, string> = new Map();
+
 interface ShellProps {
   start: AppStart;
   destinations: readonly Destination[];
@@ -139,6 +142,27 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const open = start.open;
   const home = open === null ? WELCOME_PATH : OVERVIEW_PATH;
   useSelectionFollowsView(open);
+
+  // The address each destination last had in this session, without a selection: the sidebar and
+  // the shortcuts open a destination there (DESIGN.md, "Sidebar item"). Forgotten when another
+  // workspace opens, since the addresses name values of the one before.
+  const workspaceId = open?.workspace.id ?? null;
+  const [visited, setVisited] = useState<{
+    workspace: typeof workspaceId;
+    searches: ReadonlyMap<string, string>;
+  }>({ workspace: workspaceId, searches: new Map() });
+  const isDestination = destinations.some((destination) => destination.path === location.pathname);
+  const leftAt = searchWithSelection(location.search, null);
+  const searches = visited.workspace === workspaceId ? visited.searches : NO_SEARCHES;
+  if (
+    visited.workspace !== workspaceId ||
+    (isDestination && searches.get(location.pathname) !== leftAt)
+  ) {
+    const next = new Map(searches);
+    if (isDestination) next.set(location.pathname, leftAt);
+    setVisited({ workspace: workspaceId, searches: next });
+  }
+  const addressOf = useCallback((path: string) => `${path}${searches.get(path) ?? ""}`, [searches]);
 
   // The toast region is rendered beside the layout. It learns from the root element where the
   // content area starts: after the sidebar, or after its rail; see app.css.
@@ -208,11 +232,11 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const bindings = useMemo(
     () =>
       shortcutBindings(destinations, {
-        open: (path) => void navigate(path),
+        open: (path) => void navigate(addressOf(path)),
         startImport: () => void startImport(),
         hasWorkspace: hasSidebar,
       }),
-    [destinations, navigate, hasSidebar],
+    [destinations, navigate, addressOf, hasSidebar],
   );
   useShortcuts(bindings);
 
@@ -256,7 +280,12 @@ function LoadedShell({ start, destinations }: ShellProps) {
             onProblem={setProblem}
           />
           {hasSidebar ? (
-            <Sidebar destinations={destinations} form={sidebarForm} onFormChange={setSidebarForm} />
+            <Sidebar
+              destinations={destinations}
+              addressOf={addressOf}
+              form={sidebarForm}
+              onFormChange={setSidebarForm}
+            />
           ) : null}
           <main className={styles.content}>
             {problem !== null ||

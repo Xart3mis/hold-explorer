@@ -228,6 +228,98 @@ describe("The panel of a blocker", () => {
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
   });
 
+  it(
+    "leaves no entry to go back to that shows the panel under the filter of its blocker",
+    SLOW,
+    async () => {
+      const many = (from: number, count: number) =>
+        Array.from({ length: count }, (_, at) => lineId(from + at));
+      const { user, router } = renderBlocker({
+        path: `/blockers?view=3&blocker=${encodeURIComponent(BLOCKER)}`,
+        handlers: {
+          blocker_detail: ({ key }) => blockerDetail(key, { frees: many(0, 312) }),
+        },
+      });
+      const region = await panel();
+      await user.click(
+        await within(region).findByRole("button", {
+          name: fill(text.showAllOf, { list: text.frees }),
+        }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      // Back: the page the panel was opened on, without the panel.
+      await act(async () => {
+        await router.navigate(-1);
+      });
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      expect(router.state.location.search).toBe("?view=3");
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    },
+  );
+
+  it(
+    "makes each list one stop in the Tab order, moved in with the arrow keys, so the linked blockers are a few Tabs away",
+    SLOW,
+    async () => {
+      const many = (from: number, count: number) =>
+        Array.from({ length: count }, (_, at) => lineId(from + at));
+      const linked = Array.from({ length: 30 }, (_, at) => ({
+        key: `Civil|Item ${String(at + 1)}`,
+        label: `Civil / Item ${String(at + 1)}`,
+        kind: "Other",
+        shared_lines: 30 - at,
+      }));
+      const { user, router } = renderBlocker({
+        handlers: {
+          blocker_detail: ({ key }) =>
+            blockerDetail(key, { frees: many(0, 312), shared: many(400, 60), linked }),
+        },
+      });
+      const region = await panel();
+      const frees = await within(region).findByRole("list", { name: text.frees });
+      act(() => {
+        within(region).getByRole("button", { name: text.closePanel }).focus();
+      });
+      // The lines it frees, their way to Lines, the lines it shares, theirs, the linked blockers.
+      let tabs = 0;
+      const list = within(region).getByRole("list", { name: text.linked });
+      while (!list.contains(document.activeElement) && tabs < 20) {
+        await user.tab();
+        tabs += 1;
+      }
+      expect(tabs).toBe(5);
+      const rows = within(list).getAllByRole("button");
+      expect(rows[0]).toHaveFocus();
+      await user.keyboard("{ArrowDown}");
+      expect(rows[1]).toHaveFocus();
+      await user.keyboard("{End}");
+      expect(rows.at(-1)).toHaveFocus();
+      await user.keyboard("{Home}");
+      expect(rows[0]).toHaveFocus();
+      await user.keyboard("{ArrowUp}");
+      expect(rows[0]).toHaveFocus();
+      // Back into a list, the Tab stop is the row the keyboard was last on.
+      const lines = within(frees).getAllByRole("button");
+      act(() => {
+        must(lines[0]).focus();
+      });
+      await user.keyboard("{ArrowDown}{ArrowDown}");
+      expect(lines[2]).toHaveFocus();
+      await user.tab();
+      await user.tab({ shift: true });
+      expect(lines[2]).toHaveFocus();
+      // Enter opens the row.
+      await user.keyboard("{Enter}");
+      await waitFor(() => {
+        expect(router.state.location.search).toBe(`?line=${lineId(2)}`);
+      });
+    },
+  );
+
   it("says when the filters leave it out, and clears them", async () => {
     const detail = vi.fn(({ key, spec }: { key: string; spec: FilterSpec }) =>
       spec.text === "" ? blockerDetail(key) : null,

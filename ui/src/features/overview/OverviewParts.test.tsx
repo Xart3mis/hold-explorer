@@ -130,6 +130,13 @@ describe("the parts of the Overview after its groups", () => {
     for (const label of lines.querySelectorAll("[data-part='bar-label']")) {
       expect(label).toHaveAttribute("data-identifier");
     }
+    // The top blockers are long names: their labels take the room the bars leave. Line IDs are
+    // short, and keep the column of every group.
+    expect(screen.getByRole("list", { name: text.topBlockers })).toHaveAttribute(
+      "data-labels",
+      "wide",
+    );
+    expect(screen.getByRole("list", { name: text.topLines })).not.toHaveAttribute("data-labels");
     // Each row opens what it names: it is a plain button, not a filter that is on or off.
     for (const name of [text.topBlockers, text.topLines]) {
       const rows = within(screen.getByRole("list", { name })).getAllByRole("button");

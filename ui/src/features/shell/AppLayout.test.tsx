@@ -13,7 +13,7 @@ import { durationToken } from "../../design/token-values";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
-import { opened, openStart, startState } from "../../test/fixtures";
+import { opened, openStart, otherWorkspace, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { overviewOf } from "../../test/overview";
 import { SLOW } from "../../test/slow";
@@ -506,6 +506,65 @@ describe("shortcuts", () => {
         await screen.findByRole("heading", { level: 1, name: names[destination.id] }),
       ).toBeInTheDocument();
     }
+  });
+
+  it(
+    "open each destination at the address it last had, with no row selected, as the sidebar does",
+    SLOW,
+    async () => {
+      const stub = <p />;
+      const { user, router } = renderApp({
+        start: openStart(),
+        path: "/breakdown?mode=matrix&rows=Role&cols=HoldType&line=L-1",
+        pages: {
+          ...destinationPages,
+          overview: stub,
+          breakdown: stub,
+          lines: stub,
+          blockers: stub,
+        },
+      });
+      const nav = await sidebar();
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      // Back to Breakdown by its shortcut: in the matrix it was left in, the line not selected.
+      await user.keyboard("{Control>}2{/Control}");
+      expect(router.state.location.pathname).toBe("/breakdown");
+      expect(router.state.location.search).toBe("?mode=matrix&rows=Role&cols=HoldType");
+      // And by its link in the sidebar.
+      await user.keyboard("{Control>}3{/Control}");
+      const breakdown = within(nav).getByRole("link", { name: names.breakdown });
+      expect(breakdown).toHaveAttribute("href", "/breakdown?mode=matrix&rows=Role&cols=HoldType");
+      await user.click(breakdown);
+      expect(router.state.location.search).toBe("?mode=matrix&rows=Role&cols=HoldType");
+      // A destination not visited yet opens at its own address.
+      expect(within(nav).getByRole("link", { name: names.blockers })).toHaveAttribute(
+        "href",
+        "/blockers",
+      );
+    },
+  );
+
+  it("forgets the addresses of the destinations when another workspace opens", SLOW, async () => {
+    const stub = <p />;
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: "/breakdown?mode=list&by=Role&open=Checker",
+      pages: { ...destinationPages, overview: stub, breakdown: stub, lines: stub, blockers: stub },
+      handlers: { workspace_open: () => opened({ workspace: otherWorkspace }) },
+    });
+    const nav = await sidebar();
+    await user.click(within(nav).getByRole("link", { name: names.lines }));
+    await user.click(await screen.findByRole("button", { name: switcher }));
+    const menu = await screen.findByRole("menu", { name: en.workspaces.switcher });
+    await user.click(within(menu).getByRole("menuitem", { name: otherWorkspace.name }));
+    await waitFor(() => {
+      expect(within(nav).getByRole("link", { name: names.breakdown })).toHaveAttribute(
+        "href",
+        "/breakdown",
+      );
+    });
+    expect(router.state.location.pathname).not.toBe("/breakdown");
   });
 
   it("Ctrl+, opens Settings", async () => {
