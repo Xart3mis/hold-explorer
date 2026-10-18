@@ -655,7 +655,7 @@
     "swap": "Swap rows and columns",
     "matrix": "Holds by {{rows}} and {{cols}}",
     "other": "All others",
-    "pressHint": "Press a cell to open its holds in Lines. All others holds many values and does not open.",
+    "pressHint": "Press a cell to open its holds in Lines. Cells in All others combine many values and do not open.",
     "pressHintUnfolded": "Press a cell to open its holds in Lines.",
     "cellHint": "Press to open these holds in Lines",
     "folded_one": "{{count, number}} more value of {{dim}} is in All others",
