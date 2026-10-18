@@ -15,7 +15,7 @@ pub mod text;
 
 pub use file::write_file;
 pub use sheet::{Cell, Column, ColumnKind, Sheet};
-pub use text::{csv, line_ids, tab_separated, ExportText, FILE_TEXT_KEYS};
+pub use text::{csv, line_ids, tab_separated, ExportText, FILE_TEXT_KEYS, KEY_NO, KEY_YES};
 
 use serde::Serialize;
 

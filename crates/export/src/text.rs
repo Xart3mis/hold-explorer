@@ -10,7 +10,12 @@ use crate::ExportError;
 
 /// Every key this crate asks [`ExportText::get`] for, sorted. `ui/src/api/file-text-keys.json`
 /// lists the same keys; a test on each side keeps the file, this list, and the catalog equal.
-pub const FILE_TEXT_KEYS: &[&str] = &[];
+pub const FILE_TEXT_KEYS: &[&str] = &[KEY_NO, KEY_YES];
+
+/// The key of the word a file writes for a [`Cell::Flag`] that is true.
+pub const KEY_YES: &str = "file.yes";
+/// The key of the word a file writes for a [`Cell::Flag`] that is false.
+pub const KEY_NO: &str = "file.no";
 
 /// Every word a file contains, from the interface's catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -42,20 +47,49 @@ impl ExportText {
     }
 }
 
-/// A cell as plain text: numbers as plain digits, a flag as `TRUE` or `FALSE` (what a
-/// spreadsheet reads as a yes or no), an empty cell as nothing. `date` writes a date.
-fn plain(cell: &Cell, date: impl Fn(NaiveDate) -> String) -> String {
-    match cell {
-        Cell::Text(text) => text.clone(),
-        Cell::Count(count) => count.to_string(),
-        Cell::Days(days) => days.to_string(),
-        // A non-finite size is no size. `Display` of a finite `f64` never uses an exponent.
-        Cell::Size(size) if size.is_finite() => size.to_string(),
-        Cell::Size(_) => String::new(),
-        Cell::Date(day) => date(*day),
-        Cell::Flag(true) => "TRUE".into(),
-        Cell::Flag(false) => "FALSE".into(),
-        Cell::Empty => String::new(),
+/// The first characters that make a spreadsheet read a text as a formula (or, for a tab and a
+/// carriage return, that some spreadsheets skip before reading one).
+const FORMULA_STARTS: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
+
+/// A text a spreadsheet reads as text: one that starts as a formula would gets a leading `'`,
+/// the mitigation OWASP gives for CSV injection.
+fn as_text(text: &str) -> String {
+    if text.starts_with(FORMULA_STARTS) {
+        format!("'{text}")
+    } else {
+        text.to_string()
+    }
+}
+
+/// The words a text format writes for a flag, read once from the catalog.
+struct Flags<'a> {
+    yes: &'a str,
+    no: &'a str,
+}
+
+impl<'a> Flags<'a> {
+    fn of(text: &'a ExportText) -> Result<Self, ExportError> {
+        Ok(Self {
+            yes: text.get(KEY_YES)?,
+            no: text.get(KEY_NO)?,
+        })
+    }
+
+    /// A cell as plain text: a text guarded against formulas, numbers as plain digits, a flag as
+    /// the catalog's word, an empty cell as nothing. `date` writes a date.
+    fn plain(&self, cell: &Cell, date: impl Fn(NaiveDate) -> String) -> String {
+        match cell {
+            Cell::Text(text) => as_text(text),
+            Cell::Count(count) => count.to_string(),
+            Cell::Days(days) => days.to_string(),
+            // A non-finite size is no size. `Display` of a finite `f64` never uses an exponent.
+            Cell::Size(size) if size.is_finite() => size.to_string(),
+            Cell::Size(_) => String::new(),
+            Cell::Date(day) => date(*day),
+            Cell::Flag(true) => self.yes.to_string(),
+            Cell::Flag(false) => self.no.to_string(),
+            Cell::Empty => String::new(),
+        }
     }
 }
 
@@ -82,18 +116,26 @@ fn push_csv_record<'a>(out: &mut String, fields: impl IntoIterator<Item = &'a st
 }
 
 /// CSV in UTF-8 with a byte-order mark, comma-separated, CRLF line ends, fields quoted when they
-/// hold a comma, a quote, or a line break. Dates `YYYY-MM-DD`; numbers as plain digits.
-pub fn csv(sheet: &Sheet) -> Vec<u8> {
+/// hold a comma, a quote, or a line break. Dates `YYYY-MM-DD`; numbers as plain digits; a flag as
+/// the catalog's word for yes or no.
+///
+/// A text cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return is written with a
+/// leading `'`, so that a spreadsheet opening the file reads it as text and never runs it as a
+/// formula. Numbers, counts, days, sizes, and dates are not text and are never prefixed.
+///
+/// `Err(ExportError::Text)` when the catalog lacks the word for yes or no.
+pub fn csv(sheet: &Sheet, text: &ExportText) -> Result<Vec<u8>, ExportError> {
+    let flags = Flags::of(text)?;
     let mut out = String::from('\u{FEFF}');
     push_csv_record(&mut out, sheet.columns.iter().map(|c| c.header.as_str()));
     for row in &sheet.rows {
         let fields: Vec<String> = row
             .iter()
-            .map(|cell| plain(cell, |day| day.format("%Y-%m-%d").to_string()))
+            .map(|cell| flags.plain(cell, |day| day.format("%Y-%m-%d").to_string()))
             .collect();
         push_csv_record(&mut out, fields.iter().map(String::as_str));
     }
-    out.into_bytes()
+    Ok(out.into_bytes())
 }
 
 /// A value on one line of tab-separated text: a tab or a line break becomes a space.
@@ -102,9 +144,16 @@ fn one_line(value: &str) -> String {
 }
 
 /// Tab-separated text for the clipboard: a header row, then the rows; a tab or line break
-/// inside a value becomes a space. Dates as [`ExportText::date`] writes them. Every row ends
-/// with a line break.
-pub fn tab_separated(sheet: &Sheet, text: &ExportText) -> String {
+/// inside a value becomes a space. Dates as [`ExportText::date`] writes them; a flag as the
+/// catalog's word for yes or no. Every row ends with a line break.
+///
+/// A text cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return is written with a
+/// leading `'`, so that a spreadsheet it is pasted into reads it as text and never runs it as a
+/// formula. Numbers, counts, days, sizes, and dates are not text and are never prefixed.
+///
+/// `Err(ExportError::Text)` when the catalog lacks the word for yes or no.
+pub fn tab_separated(sheet: &Sheet, text: &ExportText) -> Result<String, ExportError> {
+    let flags = Flags::of(text)?;
     let mut out = String::new();
     let mut push_row = |fields: Vec<String>| {
         out.push_str(&fields.join("\t"));
@@ -114,11 +163,11 @@ pub fn tab_separated(sheet: &Sheet, text: &ExportText) -> String {
     for row in &sheet.rows {
         push_row(
             row.iter()
-                .map(|cell| one_line(&plain(cell, |day| text.date(day))))
+                .map(|cell| one_line(&flags.plain(cell, |day| text.date(day))))
                 .collect(),
         );
     }
-    out
+    Ok(out)
 }
 
 /// One line ID per line, each once, in the order given.
@@ -142,7 +191,11 @@ mod tests {
 
     fn text() -> ExportText {
         ExportText {
-            labels: BTreeMap::from([("file.title".to_string(), "Holds".to_string())]),
+            labels: BTreeMap::from([
+                ("file.title".to_string(), "Holds".to_string()),
+                (KEY_YES.to_string(), "Yes".to_string()),
+                (KEY_NO.to_string(), "No".to_string()),
+            ]),
             months: MONTHS.iter().map(|m| m.to_string()).collect(),
         }
     }
@@ -238,8 +291,108 @@ mod tests {
     }
 
     #[test]
+    fn date_falls_back_to_year_month_day_when_the_catalog_lacks_the_month() {
+        let short = ExportText {
+            labels: BTreeMap::new(),
+            months: MONTHS[..9].iter().map(|m| m.to_string()).collect(),
+        };
+        assert_eq!(short.date(day(2026, 9, 30)), "30 Sept 2026");
+        assert_eq!(short.date(day(2026, 10, 1)), "2026-10-01");
+        assert_eq!(ExportText::default().date(day(2026, 1, 5)), "2026-01-05");
+    }
+
+    /// One text column and one days column, each row a text and a number of days.
+    fn guarded_sheet(values: &[&str]) -> Sheet {
+        Sheet {
+            name: "x".into(),
+            columns: vec![
+                column("a", "A", ColumnKind::Text),
+                column("d", "Days", ColumnKind::Days),
+            ],
+            rows: values
+                .iter()
+                .map(|value| vec![Cell::Text((*value).into()), Cell::Days(-3)])
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn csv_writes_a_text_that_starts_as_a_formula_with_a_leading_quote() {
+        let csv_of = |value: &str| {
+            let bytes = csv(&guarded_sheet(&[value]), &text()).unwrap();
+            String::from_utf8(bytes[3..].to_vec()).unwrap()
+        };
+        assert_eq!(csv_of("=SUM(A1)"), "A,Days\r\n'=SUM(A1),-3\r\n");
+        assert_eq!(csv_of("+1"), "A,Days\r\n'+1,-3\r\n");
+        assert_eq!(csv_of("-2"), "A,Days\r\n'-2,-3\r\n");
+        assert_eq!(csv_of("@cmd"), "A,Days\r\n'@cmd,-3\r\n");
+        assert_eq!(csv_of("\tx"), "A,Days\r\n'\tx,-3\r\n");
+        assert_eq!(csv_of("\rx"), "A,Days\r\n\"'\rx\",-3\r\n");
+        // Unchanged: a formula character that is not the first, and plain text.
+        assert_eq!(csv_of("L-1 = 2+3"), "A,Days\r\nL-1 = 2+3,-3\r\n");
+        assert_eq!(csv_of("plain"), "A,Days\r\nplain,-3\r\n");
+    }
+
+    #[test]
+    fn tab_separated_writes_a_text_that_starts_as_a_formula_with_a_leading_quote() {
+        let tsv_of = |value: &str| tab_separated(&guarded_sheet(&[value]), &text()).unwrap();
+        assert_eq!(tsv_of("=SUM(A1)"), "A\tDays\n'=SUM(A1)\t-3\n");
+        assert_eq!(tsv_of("+1"), "A\tDays\n'+1\t-3\n");
+        assert_eq!(tsv_of("-2"), "A\tDays\n'-2\t-3\n");
+        assert_eq!(tsv_of("@cmd"), "A\tDays\n'@cmd\t-3\n");
+        assert_eq!(tsv_of("\tx"), "A\tDays\n' x\t-3\n");
+        assert_eq!(tsv_of("\rx"), "A\tDays\n' x\t-3\n");
+        assert_eq!(tsv_of("L-1 = 2+3"), "A\tDays\nL-1 = 2+3\t-3\n");
+        assert_eq!(tsv_of("plain"), "A\tDays\nplain\t-3\n");
+    }
+
+    #[test]
+    fn numbers_sizes_and_dates_are_never_prefixed() {
+        let sheet = Sheet {
+            name: "x".into(),
+            columns: vec![
+                column("d", "Days", ColumnKind::Days),
+                column("s", "Size", ColumnKind::Size),
+                column("c", "Created", ColumnKind::Date),
+            ],
+            rows: vec![vec![
+                Cell::Days(-14),
+                Cell::Size(-0.5),
+                Cell::Date(day(2026, 9, 30)),
+            ]],
+        };
+        let bytes = csv(&sheet, &text()).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&bytes[3..]).unwrap(),
+            "Days,Size,Created\r\n-14,-0.5,2026-09-30\r\n"
+        );
+        assert_eq!(
+            tab_separated(&sheet, &text()).unwrap(),
+            "Days\tSize\tCreated\n-14\t-0.5\t30 Sept 2026\n"
+        );
+    }
+
+    #[test]
+    fn a_catalog_without_the_words_for_yes_and_no_is_refused_naming_the_key() {
+        let mut lacking = text();
+        lacking.labels.remove(KEY_YES);
+        assert_eq!(
+            csv(&sheet(), &lacking),
+            Err(ExportError::Text {
+                key: KEY_YES.into()
+            })
+        );
+        assert_eq!(
+            tab_separated(&sheet(), &lacking),
+            Err(ExportError::Text {
+                key: KEY_YES.into()
+            })
+        );
+    }
+
+    #[test]
     fn csv_starts_with_a_byte_order_mark_and_ends_lines_with_crlf() {
-        let bytes = csv(&sheet());
+        let bytes = csv(&sheet(), &text()).unwrap();
         assert!(bytes.starts_with(b"\xEF\xBB\xBF"));
         let body = std::str::from_utf8(&bytes[3..]).unwrap();
         assert!(body.starts_with("Line ID,Name,Remark,Holds,Age,Size,Created,Sizes differ\r\n"));
@@ -247,8 +400,8 @@ mod tests {
         assert_eq!(
             body,
             "Line ID,Name,Remark,Holds,Age,Size,Created,Sizes differ\r\n\
-             L-1,Jürgen Ødegård,\"Waiting on \"\"vendor\"\" data,\nthen stress\",1042,-3,0.75,2026-09-30,TRUE\r\n\
-             L-2,,tab\there,0,71,6,,FALSE\r\n"
+             L-1,Jürgen Ødegård,\"Waiting on \"\"vendor\"\" data,\nthen stress\",1042,-3,0.75,2026-09-30,Yes\r\n\
+             L-2,,tab\there,0,71,6,,No\r\n"
         );
     }
 
@@ -260,7 +413,7 @@ mod tests {
                 columns: vec![column("a", "A", ColumnKind::Text)],
                 rows: vec![vec![Cell::Text(value.into())]],
             };
-            let bytes = csv(&sheet);
+            let bytes = csv(&sheet, &text()).unwrap();
             String::from_utf8(bytes[3..].to_vec()).unwrap()
         };
         assert_eq!(one("plain"), "A\r\nplain\r\n");
@@ -273,7 +426,7 @@ mod tests {
     #[test]
     fn csv_reopened_with_the_csv_reader_gives_the_sheet_back() {
         let sheet = sheet();
-        let bytes = csv(&sheet);
+        let bytes = csv(&sheet, &text()).unwrap();
         let mut reader = ::csv::ReaderBuilder::new()
             .has_headers(true)
             .from_reader(&bytes[3..]);
@@ -300,9 +453,9 @@ mod tests {
                     "-3",
                     "0.75",
                     "2026-09-30",
-                    "TRUE"
+                    "Yes"
                 ],
-                vec!["L-2", "", "tab\there", "0", "71", "6", "", "FALSE"],
+                vec!["L-2", "", "tab\there", "0", "71", "6", "", "No"],
             ]
         );
     }
@@ -310,10 +463,10 @@ mod tests {
     #[test]
     fn tab_separated_writes_a_header_then_the_rows_with_dates_as_the_interface_writes_them() {
         assert_eq!(
-            tab_separated(&sheet(), &text()),
+            tab_separated(&sheet(), &text()).unwrap(),
             "Line ID\tName\tRemark\tHolds\tAge\tSize\tCreated\tSizes differ\n\
-             L-1\tJürgen Ødegård\tWaiting on \"vendor\" data, then stress\t1042\t-3\t0.75\t30 Sept 2026\tTRUE\n\
-             L-2\t\ttab here\t0\t71\t6\t\tFALSE\n"
+             L-1\tJürgen Ødegård\tWaiting on \"vendor\" data, then stress\t1042\t-3\t0.75\t30 Sept 2026\tYes\n\
+             L-2\t\ttab here\t0\t71\t6\t\tNo\n"
         );
     }
 
@@ -325,7 +478,7 @@ mod tests {
             rows: vec![vec![Cell::Text("one\ttwo\r\nthree\nfour\rfive".into())]],
         };
         assert_eq!(
-            tab_separated(&sheet, &text()),
+            tab_separated(&sheet, &text()).unwrap(),
             "A B\none two three four five\n"
         );
     }
