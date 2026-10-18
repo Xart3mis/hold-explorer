@@ -198,10 +198,23 @@ describe("the parts of the Overview after its groups", () => {
     expect(within(attention).getByText(text.staleUnknown)).toBeVisible();
     expect(within(attention).queryByText(/90 days or more/)).not.toBeInTheDocument();
     expect(within(attention).queryByRole("button")).not.toBeInTheDocument();
-    // Under all holds as well: the command answers the same for the open ones among them.
+    // Under all holds as well: the command answers the same for the open ones among them. All
+    // holds are a filter other than the default, so the sentence speaks of what the filters keep.
     set({ status: "All" });
     await screen.findByRole("group", { name: text.allFigures });
-    expect(await within(section(text.attention)).findByText(text.staleUnknown)).toBeVisible();
+    expect(await within(section(text.attention)).findByText(text.staleUnknownMatch)).toBeVisible();
+  });
+
+  it("says that no open hold the filters keep has a creation date when filters are set", async () => {
+    const view = overviewView();
+    renderOverview(() => ({ ...view, stale: { holds: 0, days: 90, ages_known: false } }));
+    await content();
+    expect(within(section(text.attention)).getByText(text.staleUnknown)).toBeVisible();
+    set({ text: "PR-1042" });
+    const attention = section(text.attention);
+    expect(await within(attention).findByText(text.staleUnknownMatch)).toBeVisible();
+    expect(text.staleUnknownMatch).toContain("no open hold the filters keep has a creation date");
+    expect(within(attention).queryByText(text.staleUnknown)).not.toBeInTheDocument();
   });
 
   it("takes whether the ages are known from the command, not from the median age", async () => {

@@ -13,7 +13,8 @@ import styles from "./Section.module.css";
  * opens them in Lines. A real state, so it carries a warning tag with its icon. When none has
  * waited that long the section says so in one quiet line, and there is nothing to press. When the
  * command says the age of the holds cannot be known, because the open holds the filters keep have
- * no creation date, it says that, and not that none is stale.
+ * no creation date, it says that, and not that none is stale; of the holds the filters keep when
+ * filters are set.
  */
 export function Attention({
   stale,
@@ -43,7 +44,7 @@ export function Attention({
       ) : stale.holds === 0 ? (
         <p className={styles.none}>
           {!stale.ages_known
-            ? t("overview.staleUnknown")
+            ? t(isFiltered ? "overview.staleUnknownMatch" : "overview.staleUnknown")
             : t(isFiltered ? "overview.staleNoneMatch" : "overview.staleNone", {
                 days: stale.days,
               })}
