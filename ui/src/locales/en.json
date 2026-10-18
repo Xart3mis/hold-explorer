@@ -687,7 +687,7 @@
   "blockers": {
     "curve": "Lines freed by the solve order",
     "axisX": "Step",
-    "axisY": "Lines freed",
+    "axisY": "Freed so far",
     "freed_one": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} step",
     "freed_other": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} steps",
     "table": "Steps of the solve order",
@@ -697,8 +697,8 @@
       "kind": "Type",
       "discipline": "Discipline",
       "holds": "Holds",
-      "gain": "Lines freed",
-      "cumulative": "Cumulative"
+      "gain": "Freed by this step",
+      "cumulative": "Freed so far"
     },
     "count_one": "{{count, number}} step",
     "count_other": "{{count, number}} steps",

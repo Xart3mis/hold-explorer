@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
@@ -10,10 +10,10 @@ import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { solveView } from "../../test/blockers";
-import { openStart, opened, workspace } from "../../test/fixtures";
+import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { formatCount } from "../../text/format";
+import { formatCount, formatDate } from "../../text/format";
 
 const text = en.blockers;
 const VIEW = { workspace_id: workspace().id, snapshot_id: 2 };
@@ -169,6 +169,56 @@ describe("BlockersPage", () => {
     expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
   });
 
+  it("names the lines a step frees apart from the lines freed so far", async () => {
+    const { user } = renderBlockers();
+    const table = await stepTable();
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent);
+    expect(headers).toContain("Freed by this step");
+    expect(headers).toContain("Freed so far");
+    expect(headers).not.toContain("Lines freed");
+    // The curve's value is the lines freed so far, named so on its axis and in its table view.
+    expect(within(await curve()).getAllByText("Freed so far").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+    const view = await screen.findByRole("grid", {
+      name: fill(en.charts.tableName, { name: text.curve }),
+    });
+    expect(
+      within(view)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual(["Step", "Blocker", "Freed so far"]);
+  });
+
+  it(
+    "says where the solve order ends again once the point in focus has gone with its curve",
+    SLOW,
+    async () => {
+      const none: SolveView = { rows: [], lines_on_hold: 0 };
+      const { user } = renderBlockers({
+        solveOrder: ({ spec }) => (spec.text === "" ? solveView() : none),
+      });
+      const chart = await curve();
+      chart.focus();
+      await user.keyboard("{ArrowRight}");
+      expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
+      // A filter that keeps nothing takes the curve away while a point is in focus.
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          text: "no such line",
+        });
+      });
+      await screen.findByRole("heading", { level: 2, name: text.noneTitle });
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), defaultFilters);
+      });
+      await curve();
+      expect(await screen.findByText(caption(1262, 1262, 4))).toBeVisible();
+    },
+  );
+
   it("selects the blocker of a step pressed in the table, and marks its point", SLOW, async () => {
     const { user, router } = renderBlockers({ path: "/blockers?view=3" });
     const table = await stepTable();
@@ -203,6 +253,45 @@ describe("BlockersPage", () => {
     expect(await stepRow(await stepTable(), 4)).toHaveAttribute("aria-selected", "true");
     expect(within(await curve()).getByRole("option")).toHaveAttribute("aria-posinset", "4");
   });
+
+  it(
+    "keeps the selected blocker for another snapshot, and drops it for another workspace",
+    SLOW,
+    async () => {
+      const { user, router } = renderBlockers({
+        path: "/blockers?blocker=Piping%7CClient",
+        handlers: {
+          snapshot_select: ({ id }) => opened({ selected: id }),
+          workspace_open: () => opened({ workspace: otherWorkspace }),
+        },
+      });
+      expect(await stepRow(await stepTable(), 4)).toHaveAttribute("aria-selected", "true");
+      // Another snapshot: a blocker is named by its text, so it stays selected there.
+      await user.click(
+        await screen.findByRole("button", {
+          name: fill(en.snapshots.trigger, { date: formatDate("2026-10-07T08:00:00") }),
+        }),
+      );
+      const snapshots = await screen.findByRole("menu", { name: en.snapshots.menu });
+      await user.click(must(within(snapshots).getAllByRole("menuitemradio")[1], "the older one"));
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("?blocker=Piping%7CClient");
+        expect(screen.queryByText(en.snapshots.toNewest)).toBeInTheDocument();
+      });
+      expect(await stepRow(await stepTable(), 4)).toHaveAttribute("aria-selected", "true");
+      // Another workspace: nothing of this one is selected there.
+      await user.click(
+        await screen.findByRole("button", {
+          name: `${en.workspaces.switcher} ${workspace().name}`,
+        }),
+      );
+      const workspaces = await screen.findByRole("menu", { name: en.workspaces.switcher });
+      await user.click(within(workspaces).getByRole("menuitem", { name: otherWorkspace.name }));
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("");
+      });
+    },
+  );
 
   describe("without steps", () => {
     it("leads to an import in a workspace without snapshots", async () => {

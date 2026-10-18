@@ -661,6 +661,39 @@ describe("DataTable in a viewport", () => {
     expect(grid.scrollTop).toBe(0);
   });
 
+  it(
+    "brings the selected row of another result into view, in place of returning to its top",
+    SLOW,
+    async () => {
+      const page = many.slice(0, 400);
+      const at = (number: number, resultKey: string) => ({
+        rows: [...page],
+        onSelectionChange: () => undefined,
+        selectedKey: lineId(number),
+        revealSelected: true,
+        resultKey,
+      });
+      const { rerender } = render(table(at(300, "all")));
+      const grid = screen.getByRole("grid");
+      const brought = ROW + 300 * ROW - (400 + ROW);
+      expect(grid.scrollTop).toBe(brought);
+      // The user scrolls away from it; another filter keeps it: it is brought again.
+      scrollTable(grid, 100 * ROW);
+      rerender(table(at(300, "civil")));
+      expect(grid.scrollTop).toBe(brought);
+      // And it stays there: nothing returns the table to its top on a later frame.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(brought);
+      // Another result without the selected row returns to its top, as before.
+      scrollTable(grid, brought);
+      rerender(table({ ...at(300, "piping"), rows: page.slice(0, 200) }));
+      // Within the frames of the return: fewer rows may have the library place it first.
+      await waitFor(() => {
+        expect(grid.scrollTop).toBe(0);
+      });
+    },
+  );
+
   it("does not move for a row selected outside it unless it is asked to", SLOW, () => {
     const page = many.slice(0, 400);
     const { rerender } = render(

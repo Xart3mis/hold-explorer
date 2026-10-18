@@ -1441,11 +1441,26 @@ export function DataTable<Item, Child = never>({
 
   // The rows are another result when the caller says so, and only then: the table starts at its
   // top again, and the end of the other result is another end.
+  // Whether the selected row is to be brought into view, for the return to the top below. It is
+  // written before that runs, at every render.
+  const revealable = useRef(false);
+  useLayoutEffect(() => {
+    revealable.current =
+      revealSelected === true &&
+      !expandable &&
+      selectedKey != null &&
+      rows.some((item) => rowKey(item) === selectedKey);
+  });
   const lastResult = useRef(resultKey);
   useLayoutEffect(() => {
     if (lastResult.current === resultKey) return;
     lastResult.current = resultKey;
     asked.current = null;
+    // The selected row is brought into view again in another result, also when it was before.
+    revealed.current = null;
+    // A selected row of the new result is brought into view in place of the top: the table
+    // brings it after this, and does not return to its top on a later frame and undo it.
+    if (revealable.current) return;
     const element = scroller.current;
     if (element === null || element.scrollTop === 0) return;
     element.scrollTop = 0;
