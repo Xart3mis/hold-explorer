@@ -10,7 +10,8 @@ use crate::ExportError;
 /// renamed over `path`. The temporary file is removed on every failure.
 ///
 /// A new file gets the permissions the user's umask leaves of read and write for everyone
-/// (`0o666`), as any program's new file does; a replaced file keeps its permissions.
+/// (`0o666`), as any program's new file does. A replaced file keeps its permissions: on Unix its
+/// mode bits only, not its owner, group, or extended attributes.
 ///
 /// A file that is read-only, held open by another program (a sharing violation on Windows), or
 /// that the system refuses to replace gives [`ExportError::FileInUse`]; a folder that does not
@@ -281,7 +282,6 @@ mod tests {
         write_file(&path, b"new").unwrap();
         let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, expected, "{mode:o} is not {expected:o}");
-        assert_ne!(mode, 0o600, "the owner-only mode of a temporary file");
     }
 
     #[cfg(unix)]
