@@ -11,9 +11,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
+use hx_core::filter::default_age_bands;
 use rust_xlsxwriter::{
-    utility, ConditionalFormat3ColorScale, ConditionalFormatDataBar, DocProperties, ExcelDateTime,
-    Format, Table, TableColumn, Workbook, Worksheet, XlsxError,
+    utility, ConditionalFormat2ColorScale, ConditionalFormatCell, ConditionalFormatCellRule,
+    ConditionalFormatDataBar, DocProperties, ExcelDateTime, Format, Table, TableColumn, Workbook,
+    Worksheet, XlsxError,
 };
 
 use crate::sheet::{Cell, Column, ColumnKind, ColumnRole, Sheet, SheetKind};
@@ -48,6 +50,10 @@ const FILTER_BUTTON: usize = 3;
 const DATE_CHARS: usize = 11;
 /// The most characters a cell of Excel holds.
 const MAX_CELL_CHARS: usize = 32_767;
+/// The most characters the heading of a column of an Excel table holds.
+const MAX_HEADER_CHARS: usize = 255;
+/// The most rows a sheet of Excel holds, its header among them.
+const MAX_ROWS: usize = 1_048_576;
 /// The format of a date.
 const DATE_FORMAT: &str = "d mmm yyyy";
 /// The format of a moment, on the About sheet.
@@ -79,13 +85,21 @@ fn color(token: &str) -> u32 {
 /// [`name_sheets`]; their headings are made unique, as an Excel table needs them. The document's
 /// title is the catalog's, with no author or company.
 ///
+/// `Err(ExportError::TooManyRows)` when a sheet has more rows than a sheet of Excel holds;
 /// `Err(ExportError::Text)` when `text` lacks a label; `Err(ExportError::Workbook)` when the
-/// workbook cannot be made, a fault of the application.
+/// workbook writer fails, a fault of the application.
 pub fn workbook(
     sheets: &[Sheet],
     about: &About,
     text: &ExportText,
 ) -> Result<Vec<u8>, ExportError> {
+    // Excel holds a limited number of rows: a sheet past it is refused before anything is written.
+    if let Some(sheet) = sheets.iter().find(|sheet| sheet.rows.len() >= MAX_ROWS) {
+        return Err(ExportError::TooManyRows {
+            sheet: sheet.name.clone(),
+            rows: sheet.rows.len(),
+        });
+    }
     let title = text.get("file.title")?;
     let about_sheet = about_sheet(about, text)?;
     let names = sheet_names(&about_sheet, sheets);
@@ -362,9 +376,9 @@ fn moment(at: NaiveDateTime) -> Result<ExcelDateTime, XlsxError> {
     )
 }
 
-/// The headings of `columns`, unique without regard to case as an Excel table needs them: a
-/// heading taken already gets ` (2)`, ` (3)`, and so on; an empty heading is the column's
-/// place, from 1.
+/// The headings of `columns`, unique without regard to case and at most 255 characters, as an
+/// Excel table needs them: a heading taken already gets ` (2)`, ` (3)`, and so on, cut to leave
+/// room for it; an empty heading is the column's place, from 1.
 pub(crate) fn unique_headers(columns: &[Column]) -> Vec<String> {
     let mut taken = HashSet::new();
     columns
@@ -374,12 +388,15 @@ pub(crate) fn unique_headers(columns: &[Column]) -> Vec<String> {
             let base = if column.header.is_empty() {
                 (at + 1).to_string()
             } else {
-                column.header.clone()
+                column.header.chars().take(MAX_HEADER_CHARS).collect()
             };
             let mut header = base.clone();
             let mut number = 2;
             while taken.contains(&header.to_lowercase()) {
-                header = format!("{base} ({number})");
+                let suffix = format!(" ({number})");
+                let room = MAX_HEADER_CHARS - suffix.chars().count();
+                let kept: String = base.chars().take(room).collect();
+                header = format!("{kept}{suffix}");
                 number += 1;
             }
             taken.insert(header.to_lowercase());
@@ -410,9 +427,33 @@ fn table_name(sheet: &str, taken: &mut HashSet<String>) -> String {
     name
 }
 
-/// Colors the `rows` rows under the header of `sheet`: an age column with the age-band ramp, a
-/// hold-count column with a neutral data bar, and the cells of a cross-tab between its totals
-/// with the sequential blue ramp.
+/// The fill of each default age band of the engine, youngest first; the youngest has none.
+const AGE_BAND_FILLS: [Option<&str>; 5] = [
+    None,
+    Some("--color-chart-seq-1"),
+    Some("--color-chart-seq-2"),
+    Some("--color-chart-seq-3"),
+    Some("--color-chart-seq-4"),
+];
+/// The ends of the scale of a cross-tab's cells, lightest first.
+const CROSS_TAB_FILLS: [&str; 2] = ["--color-chart-seq-1", "--color-chart-seq-4"];
+/// The data bar of a hold count.
+const HOLD_COUNT_FILL: &str = "--color-chart-neutral";
+
+/// Every fill a workbook puts under text: those [`paint`] uses, which a test checks against
+/// `palette.json` and against black text.
+#[cfg(test)]
+fn fills() -> impl Iterator<Item = &'static str> {
+    AGE_BAND_FILLS
+        .into_iter()
+        .flatten()
+        .chain(CROSS_TAB_FILLS)
+        .chain([HOLD_COUNT_FILL])
+}
+
+/// Colors the `rows` rows under the header of `sheet`: an age column by the default age band of
+/// each cell, a hold-count column with a neutral data bar, and the cells of a cross-tab between
+/// its totals with a light blue scale. Every fill keeps Excel's black text at 4.5:1 or more.
 fn paint(page: &mut Worksheet, sheet: &Sheet, rows: u32) -> Result<(), XlsxError> {
     if rows == 0 {
         return Ok(());
@@ -422,14 +463,25 @@ fn paint(page: &mut Worksheet, sheet: &Sheet, rows: u32) -> Result<(), XlsxError
         match column.role {
             ColumnRole::Plain => {}
             ColumnRole::Age => {
-                let scale = ConditionalFormat3ColorScale::new()
-                    .set_minimum_color(color_of("--color-chart-ord-1"))
-                    .set_midpoint_color(color_of("--color-chart-ord-3"))
-                    .set_maximum_color(color_of("--color-chart-ord-5"));
-                page.add_conditional_format(1, col, rows, col, &scale)?;
+                for (band, fill) in default_age_bands().iter().zip(AGE_BAND_FILLS) {
+                    let Some(fill) = fill else { continue };
+                    // Days are whole numbers far inside the range an `f64` holds exactly.
+                    let days = |days: Option<i64>| days.map(|days| days as f64);
+                    let rule = match (days(band.min_days), days(band.max_days)) {
+                        (Some(min), Some(max)) => ConditionalFormatCellRule::Between(min, max),
+                        (Some(min), None) => ConditionalFormatCellRule::GreaterThanOrEqualTo(min),
+                        (None, Some(max)) => ConditionalFormatCellRule::LessThanOrEqualTo(max),
+                        (None, None) => continue,
+                    };
+                    let format = Format::new().set_background_color(color_of(fill));
+                    let rule = ConditionalFormatCell::new()
+                        .set_rule(rule)
+                        .set_format(format);
+                    page.add_conditional_format(1, col, rows, col, &rule)?;
+                }
             }
             ColumnRole::HoldCount => {
-                let neutral = color_of("--color-chart-neutral");
+                let neutral = color_of(HOLD_COUNT_FILL);
                 let bar = ConditionalFormatDataBar::new()
                     .set_fill_color(neutral)
                     .set_border_color(neutral)
@@ -442,10 +494,10 @@ fn paint(page: &mut Worksheet, sheet: &Sheet, rows: u32) -> Result<(), XlsxError
     // total row.
     let cols = sheet.columns.len();
     if sheet.kind == SheetKind::CrossTab && rows > 1 && cols > 2 {
-        let scale = ConditionalFormat3ColorScale::new()
-            .set_minimum_color(color_of("--color-chart-seq-1"))
-            .set_midpoint_color(color_of("--color-chart-seq-4"))
-            .set_maximum_color(color_of("--color-chart-seq-7"));
+        let [light, dark] = CROSS_TAB_FILLS;
+        let scale = ConditionalFormat2ColorScale::new()
+            .set_minimum_color(color_of(light))
+            .set_maximum_color(color_of(dark));
         page.add_conditional_format(1, 1, rows - 1, (cols - 2) as u16, &scale)?;
     }
     Ok(())

@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use calamine::{open_workbook_from_rs, Data, DataType, Reader, Xlsx};
 use chrono::{NaiveDate, NaiveDateTime};
 use hx_core::dataset::Dataset;
-use hx_core::filter::{Dim, FilterSpec, Status};
+use hx_core::filter::{default_age_bands, Dim, FilterSpec, Status};
 use hx_core::load::load_file;
 use hx_core::query::{HoldSort, LineQuery};
 use hx_core::rules::RuleSet;
@@ -585,7 +585,7 @@ fn xf_wraps(styles: &str, index: usize) -> bool {
 // --- Colors ---
 
 #[test]
-fn age_columns_take_the_age_band_scale_and_hold_counts_a_neutral_data_bar() {
+fn age_columns_take_a_fill_per_age_band_and_hold_counts_a_neutral_data_bar() {
     let bytes = workbook(&[mixed()], &about(), &text()).unwrap();
     let sheet = part(&bytes, "xl/worksheets/sheet2.xml");
     let formats = conditional_formats(&sheet);
@@ -596,10 +596,74 @@ fn age_columns_take_the_age_band_scale_and_hold_counts_a_neutral_data_bar() {
     assert!(body.contains("FF6C7B7B"), "{body}");
     let (range, body) = &formats[1];
     assert_eq!(range, "E2:E3");
-    assert!(body.contains("<colorScale>"), "{body}");
-    for color in ["FF4281BF", "FF0E5794", "FF073257"] {
-        assert!(body.contains(color), "{color} in {body}");
-    }
+    assert!(!body.contains("<colorScale>"), "{body}");
+    // One rule per band but the youngest, which has no fill, each with its band's bounds.
+    let styles = part(&bytes, "xl/styles.xml");
+    let rules = cell_rules(body, &styles);
+    let bands = default_age_bands();
+    let bound = |days: Option<i64>| days.map(|d| d.to_string());
+    let want: Vec<(String, Vec<String>, String)> = bands[1..]
+        .iter()
+        .zip(["FFD9EAFC", "FFA8CBF1", "FF79ACE1", "FF508FCD"])
+        .map(|(band, fill)| {
+            let (operator, bounds) = match (bound(band.min_days), bound(band.max_days)) {
+                (Some(min), Some(max)) => ("between", vec![min, max]),
+                (Some(min), None) => ("greaterThanOrEqual", vec![min]),
+                (None, Some(max)) => ("lessThanOrEqual", vec![max]),
+                (None, None) => panic!("a band has a bound"),
+            };
+            (operator.to_string(), bounds, fill.to_string())
+        })
+        .collect();
+    assert_eq!(rules, want);
+    assert_eq!(
+        rules.iter().map(|r| r.1.clone()).collect::<Vec<_>>(),
+        [
+            vec!["14", "29"],
+            vec!["30", "59"],
+            vec!["60", "89"],
+            vec!["90"]
+        ]
+    );
+}
+
+/// The cell rules of a `<conditionalFormatting>` block: the operator, the bounds, and the fill
+/// of the rule's style in `styles.xml`.
+fn cell_rules(body: &str, styles: &str) -> Vec<(String, Vec<String>, String)> {
+    let dxfs: Vec<&str> = styles
+        .split("<dxfs")
+        .nth(1)
+        .unwrap()
+        .split("</dxfs>")
+        .next()
+        .unwrap()
+        .split("<dxf>")
+        .skip(1)
+        .collect();
+    body.split("<cfRule ")
+        .skip(1)
+        .map(|rule| {
+            assert!(rule.contains("type=\"cellIs\""), "{rule}");
+            let attr = |name: &str| {
+                let tag = format!("{name}=\"");
+                rule.split(&tag).nth(1).unwrap().split('"').next().unwrap()
+            };
+            let dxf: usize = attr("dxfId").parse().unwrap();
+            let fill = dxfs[dxf]
+                .split("rgb=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap();
+            let bounds = rule
+                .split("<formula>")
+                .skip(1)
+                .map(|f| f.split("</formula>").next().unwrap().to_string())
+                .collect();
+            (attr("operator").to_string(), bounds, fill.to_string())
+        })
+        .collect()
 }
 
 #[test]
@@ -622,7 +686,7 @@ fn the_screens_color_ages_of_open_holds_lines_oldest_age_and_hold_counts() {
         .any(|(r, b)| *r == format!("{holds}2:{holds}{n}") && b.contains("<dataBar")));
     assert!(formats
         .iter()
-        .any(|(r, b)| *r == format!("{oldest}2:{oldest}{n}") && b.contains("<colorScale>")));
+        .any(|(r, b)| *r == format!("{oldest}2:{oldest}{n}") && b.contains("cellIs")));
     assert_eq!(formats.len(), 2);
 
     for (status, colored) in [
@@ -643,7 +707,7 @@ fn the_screens_color_ages_of_open_holds_lines_oldest_age_and_hold_counts() {
         assert_eq!(
             formats
                 .iter()
-                .any(|(r, b)| r.starts_with(&format!("{days}2:")) && b.contains("<colorScale>")),
+                .any(|(r, b)| r.starts_with(&format!("{days}2:")) && b.contains("cellIs")),
             colored,
             "{status:?}"
         );
@@ -690,7 +754,9 @@ fn cross_tabs_take_the_blue_ramp_over_the_cells_between_the_totals() {
         let last_col = char::from(b'A' + (sheet.columns.len() - 2) as u8);
         assert_eq!(*range, format!("B2:{last_col}{}", sheet.rows.len()));
         assert!(body.contains("<colorScale>"), "{body}");
-        for color in ["FFD9EAFC", "FF508FCD", "FF094171"] {
+        // Two colors, from the lightest blue to the darkest that keeps black text readable.
+        assert_eq!(body.matches("<color ").count(), 2, "{body}");
+        for color in ["FFD9EAFC", "FF508FCD"] {
             assert!(body.contains(color), "{color} in {body}");
         }
     }
@@ -698,18 +764,82 @@ fn cross_tabs_take_the_blue_ramp_over_the_cells_between_the_totals() {
 
 #[test]
 fn the_palette_has_every_color_a_workbook_uses() {
-    for token in [
-        "--color-chart-ord-1",
-        "--color-chart-ord-3",
-        "--color-chart-ord-5",
-        "--color-chart-seq-1",
-        "--color-chart-seq-4",
-        "--color-chart-seq-7",
-        "--color-chart-neutral",
-    ] {
+    for token in fills() {
         assert!(palette().contains_key(token), "{token}");
+        color(token);
     }
-    assert_eq!(color("--color-chart-ord-1"), 0x4281BF);
+    assert_eq!(color("--color-chart-seq-1"), 0xD9EAFC);
+}
+
+#[test]
+fn there_is_a_fill_for_every_default_age_band() {
+    assert_eq!(AGE_BAND_FILLS.len(), default_age_bands().len());
+    assert_eq!(AGE_BAND_FILLS[0], None);
+}
+
+/// The relative luminance of `0xRRGGBB`, as WCAG 2.1 defines it.
+fn luminance(rgb: u32) -> f64 {
+    let channel = |shift: u32| {
+        let c = f64::from((rgb >> shift) & 0xFF) / 255.0;
+        if c <= 0.039_28 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+}
+
+#[test]
+fn black_text_is_readable_on_every_fill_a_workbook_uses() {
+    for token in fills() {
+        // Black has a luminance of 0.
+        let ratio = (luminance(color(token)) + 0.05) / 0.05;
+        assert!(ratio >= 4.5, "{token}: {ratio:.2} to 1 under black");
+    }
+}
+
+// --- Excel's limits ---
+
+#[test]
+fn headings_are_at_most_255_characters_and_still_unique() {
+    let long = "r".repeat(300);
+    let columns = vec![
+        column("a", &long, ColumnKind::Count, ColumnRole::Plain),
+        column("b", &long, ColumnKind::Count, ColumnRole::Plain),
+    ];
+    let headers = unique_headers(&columns);
+    assert_eq!(headers[0], "r".repeat(255));
+    assert_eq!(headers[1], format!("{} (2)", "r".repeat(251)));
+    let sheet = Sheet {
+        name: "Wide".into(),
+        kind: SheetKind::CrossTab,
+        columns,
+        rows: vec![vec![Cell::Count(1), Cell::Count(2)]],
+    };
+    let bytes = workbook(std::slice::from_ref(&sheet), &about(), &text()).unwrap();
+    assert_holds(&mut reopen(&bytes), "Wide", &sheet);
+}
+
+#[test]
+fn a_sheet_with_more_rows_than_excel_holds_is_refused_saying_so() {
+    let sheet = Sheet {
+        name: "Big".into(),
+        kind: SheetKind::Table,
+        columns: vec![column("a", "A", ColumnKind::Count, ColumnRole::Plain)],
+        rows: vec![Vec::new(); 1_048_576],
+    };
+    let refused = workbook(&[sheet], &about(), &text());
+    assert_eq!(
+        refused,
+        Err(ExportError::TooManyRows {
+            sheet: "Big".into(),
+            rows: 1_048_576,
+        })
+    );
+    let message = refused.unwrap_err().to_string();
+    assert!(message.contains("narrow the filters"), "{message}");
+    assert!(!message.contains("restart"), "{message}");
 }
 
 // --- About and properties ---

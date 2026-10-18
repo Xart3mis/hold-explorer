@@ -1097,6 +1097,14 @@ The same numbers as a table, for reading exact values, for assistive technology,
 - **Line chart:** one row per point, in the order of the points until a header is pressed (the x value sorts from the first): the x value, the label, and the y value, each column named as the chart names its axes.
 - **States:** those of the chart it stands for: skeleton rows on a first load, dimmed rows on a refetch.
 
+### Files: Excel
+
+A workbook is drawn in the light theme, with the hex values of `crates/export/palette.json`. Its text keeps Excel's automatic font color, black, and the writer sets no font color. Every fill under text gives black at least 4.5:1; a test computes the contrast of black against every fill the writer uses. Colors are conditional formats, so they follow a reader's own sorting.
+
+- **Ages** (the days of open holds, a line's oldest age): one cell rule per default age band of the engine (0 to 13, 14 to 29, 30 to 59, 60 to 89, 90 and more days), read from the engine's bands, not copied. Fills: none, then `--color-chart-seq-1`, `--color-chart-seq-2`, `--color-chart-seq-3`, `--color-chart-seq-4` (17.1, 12.5, 8.8, and 6.2 to 1 under black). The color says the band, whatever the other ages of the file. The ordinal ramp is not used: its steps are marks, not backgrounds of text.
+- **Hold counts:** a solid data bar of `--color-chart-neutral` (4.8 to 1 under black).
+- **Cross-tabs:** a two-color scale from `--color-chart-seq-1` to `--color-chart-seq-4` over the cells between the labels and the totals; every fill between them is at least as light as `--color-chart-seq-4`.
+
 ### Notice (inline)
 
 A message that belongs to a place on the page and stays until it no longer applies.

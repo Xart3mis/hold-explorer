@@ -57,8 +57,16 @@ pub enum ExportError {
         /// The system's reason.
         reason: String,
     },
-    /// The workbook could not be made: a fault of the application.
-    #[error("Hold Explorer could not make the workbook: {reason}. This is a fault of Hold Explorer; restart it and try again, and report it if it happens again.")]
+    /// A sheet would have more rows than a sheet of Excel holds.
+    #[error("Hold Explorer could not make the workbook: the sheet {sheet} would have {rows} rows, more than the 1,048,575 a sheet of Excel holds under its header. To save it, narrow the filters or choose fewer rows, and save again.")]
+    TooManyRows {
+        /// The name of the sheet.
+        sheet: String,
+        /// How many rows it would have.
+        rows: usize,
+    },
+    /// The workbook writer failed: a fault of the application.
+    #[error("Hold Explorer could not make the workbook: {reason}. This is a fault of Hold Explorer: save again, and report it if it happens again.")]
     Workbook {
         /// What the workbook writer said.
         reason: String,
