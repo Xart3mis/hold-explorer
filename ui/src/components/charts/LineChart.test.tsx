@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatCount } from "../../text/format";
 import { expectAccessible } from "../../test/axe";
+import { SLOW } from "../../test/slow";
 import { LineChart, type LineChartProps, type LinePoint } from "./LineChart";
 
 // The chart sizes itself to its container, which jsdom never lays out. A container of 600 pixels
@@ -128,6 +129,30 @@ describe("LineChart", () => {
     expect(option()).toHaveAttribute("aria-selected", "true");
   });
 
+  it("starts on a point selected elsewhere after the keyboard has moved on the curve", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <>
+        {chart({ selectedIndex: 2 })}
+        <button type="button">Steps</button>
+      </>,
+    );
+    await user.tab();
+    await user.keyboard("{ArrowRight}");
+    expect(option()).toHaveAttribute("aria-posinset", "4");
+    await user.tab();
+    // The steps table selects another step while the focus is away from the curve.
+    rerender(
+      <>
+        {chart({ selectedIndex: 30 })}
+        <button type="button">Steps</button>
+      </>,
+    );
+    await user.tab({ shift: true });
+    expect(option()).toHaveAttribute("aria-posinset", "31");
+    expect(option()).toHaveAttribute("aria-selected", "true");
+  });
+
   it("follows the pointer to the nearest point and shows its tooltip after the delay", () => {
     vi.useFakeTimers();
     const { container } = render(chart());
@@ -224,6 +249,42 @@ describe("LineChart", () => {
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
+  it("takes the Escape that closes a tooltip the pointer opened, so it moves nothing else", () => {
+    vi.useFakeTimers();
+    const onEscape = vi.fn();
+    const { container } = render(
+      <>
+        {chart()}
+        <button
+          type="button"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onEscape();
+          }}
+        >
+          Steps
+        </button>
+      </>,
+    );
+    const plot = container.querySelector("svg");
+    if (!plot) throw new Error("The chart drew nothing");
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, WIDTH, HEIGHT));
+    const steps = screen.getByRole("button", { name: "Steps" });
+    act(() => {
+      steps.focus();
+    });
+    fireEvent.pointerMove(plot, { clientX: 10, clientY: 100, pointerType: "mouse" });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    fireEvent.keyDown(steps, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    expect(onEscape).not.toHaveBeenCalled();
+    // With no tooltip to close, the key is the focused element's again.
+    fireEvent.keyDown(steps, { key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+  });
+
   it("tells the screen which point is shown only when it changes", async () => {
     const user = userEvent.setup();
     const seen: (number | null)[] = [];
@@ -296,6 +357,33 @@ describe("LineChart", () => {
       points.map((point) => [formatCount(point.x), point.label, formatCount(point.y)]),
     );
   });
+
+  it(
+    "builds its table view once for the same points, also when another point is selected",
+    SLOW,
+    () => {
+      // Points that count how often their label is read: the table view reads each when it builds
+      // its rows, and a chart that builds them at every render would read them all again.
+      let reads = 0;
+      const counted: LinePoint[] = Array.from({ length: 3000 }, (_, index) => {
+        const label = `Blocker ${String(index + 1)}`;
+        return {
+          x: index + 1,
+          y: index + 1,
+          get label() {
+            reads += 1;
+            return label;
+          },
+        };
+      });
+      const { rerender } = render(
+        chart({ view: "table", points: counted, yMax: 3000, selectedIndex: 2 }),
+      );
+      reads = 0;
+      rerender(chart({ view: "table", points: counted, yMax: 3000, selectedIndex: 30 }));
+      expect(reads).toBe(0);
+    },
+  );
 
   it("keeps its table view to twelve rows, or to the rows the screen gives", () => {
     const maxRows = () =>

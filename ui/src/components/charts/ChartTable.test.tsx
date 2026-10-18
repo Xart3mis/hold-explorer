@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
+import { SLOW } from "../../test/slow";
 import { tableViewport } from "../../test/viewport";
-import { ChartTable, ChartViewToggle } from "./ChartTable";
+import { ChartTable, ChartViewToggle, type ChartTableRow } from "./ChartTable";
 
 describe("ChartTable", () => {
   it("is a read-only table of the rows it is given", () => {
@@ -30,6 +31,44 @@ describe("ChartTable", () => {
     if (!piping) throw new Error("The table has no second row");
     expect(within(piping).getByRole("rowheader")).toHaveTextContent("Piping");
     expect(rows[1]).not.toHaveAttribute("aria-selected");
+  });
+});
+
+describe("ChartTable's renders", () => {
+  it("builds no row again for a render that hands it the same columns and rows", SLOW, () => {
+    // Rows that count how often the table reads them: a table that builds its rows reads the key
+    // of every one, and one that declares its columns from the rows reads every row's cells.
+    let reads = 0;
+    const rows: ChartTableRow[] = Array.from({ length: 3000 }, (_, index) => {
+      const key = `step-${String(index)}`;
+      const cells = [String(index + 1), `Blocker ${String(index + 1)}`];
+      return {
+        get key() {
+          reads += 1;
+          return key;
+        },
+        get cells() {
+          reads += 1;
+          return cells;
+        },
+      };
+    });
+    const columns = [
+      { id: "step", header: "Step", isNumber: true, isRowHeader: true },
+      { id: "blocker", header: "Blocker" },
+    ];
+    function Page({ tick }: { tick: number }) {
+      return (
+        <div data-tick={tick}>
+          <ChartTable aria-label="Steps, table" columns={columns} rows={rows} />
+        </div>
+      );
+    }
+    const { rerender } = render(<Page tick={0} />);
+    expect(screen.getByRole("grid", { name: "Steps, table" })).toBeInTheDocument();
+    reads = 0;
+    rerender(<Page tick={1} />);
+    expect(reads).toBe(0);
   });
 });
 

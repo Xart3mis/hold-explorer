@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
@@ -161,6 +161,63 @@ describe("BarRow", () => {
 
     await user.tab();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  });
+
+  it("measures its label again when the label changes or a font arrives, in a box of one size", async () => {
+    // jsdom lays nothing out: the label is cut while it is long, or once the font is wide.
+    const long = "Instrumentation and control / Client";
+    let wide = false;
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(80);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.textContent === long || wide ? 240 : 80;
+    });
+    // The box of a label keeps its size: the observer of sizes tells of it once, and never again.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly changed: ResizeObserverCallback) {}
+        observe() {
+          this.changed([], this);
+        }
+        unobserve() {
+          return undefined;
+        }
+        disconnect() {
+          return undefined;
+        }
+      },
+    );
+    const fonts = new EventTarget();
+    Object.defineProperty(document, "fonts", { value: fonts, configurable: true });
+    const user = userEvent.setup();
+    function Rows({ label }: { label: string }) {
+      return (
+        <BarRowGroup aria-label="Top blockers">
+          <BarRow opens label={label} value="106" fraction={0.5} onPress={vi.fn()} />
+          <BarRow opens label="Civil / Client" value="12" fraction={0.1} onPress={vi.fn()} />
+        </BarRowGroup>
+      );
+    }
+    try {
+      const { rerender } = render(<Rows label="Piping / Client" />);
+      rerender(<Rows label={long} />);
+      await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent(long);
+
+      await user.tab();
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+      wide = true;
+      act(() => {
+        fonts.dispatchEvent(new Event("loadingdone"));
+      });
+      await user.tab({ shift: true });
+      await user.tab();
+      expect(await screen.findByRole("tooltip")).toHaveTextContent("Civil / Client");
+    } finally {
+      Reflect.deleteProperty(document, "fonts");
+    }
   });
 
   it("writes a label that is not an identifier in the body face", () => {

@@ -136,19 +136,28 @@ export function Heatmap({
   const loading = isLoading === true;
   const stale = isStale === true && !loading;
 
-  if (view === "table") {
+  // The table view is built once for the numbers, not at every render: a table of new rows is
+  // built again whole.
+  const table = useMemo(() => {
+    if (view !== "table") return null;
+    const tableDown = axis(rows, otherRow);
+    const tableAcross = axis(cols, otherCol);
+    return heatmapTable(
+      tableDown.all,
+      tableAcross.all,
+      cells,
+      formatCell,
+      rowsLabel,
+      tableDown.other,
+      tableAcross.other,
+    );
+  }, [view, rows, cols, cells, otherRow, otherCol, formatCell, rowsLabel]);
+
+  if (table !== null) {
     return (
       <ChartTable
         aria-label={t("charts.tableName", { name })}
-        {...heatmapTable(
-          down.all,
-          across.all,
-          cells,
-          formatCell,
-          rowsLabel,
-          down.other,
-          across.other,
-        )}
+        {...table}
         isLoading={loading}
         isStale={stale}
         {...(resultKey === undefined ? {} : { resultKey })}

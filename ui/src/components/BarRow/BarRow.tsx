@@ -144,7 +144,7 @@ export function BarRow(props: BarRowProps) {
   const { label, value, secondaryValue, fraction, ordinalStep, isIdentifier } = props;
   const share = Math.min(1, Math.max(0, fraction));
   const labelText = useRef<HTMLSpanElement>(null);
-  const cut = useIsCut(labelText);
+  const cut = useIsCut(labelText, label);
   const content = (
     <>
       <span

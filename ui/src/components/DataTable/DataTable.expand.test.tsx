@@ -680,6 +680,28 @@ describe("DataTable with rows that expand, in a viewport", () => {
     },
   );
 
+  it(
+    "keeps the expanded rows and the focused row of the result before in another result",
+    SLOW,
+    async () => {
+      const user = userEvent.setup();
+      const props = {
+        rows: many.slice(0, 5),
+        childRows: twoHundred,
+        initiallyExpanded: ["G01"],
+        height: "fill",
+      } as const;
+      const { rerender } = render(<Tree {...props} resultKey="one" />);
+      await user.tab();
+      await user.keyboard("{ArrowDown}{ArrowDown}");
+      expect(rowNamed("G01-LINE-002")).toHaveFocus();
+      rerender(<Tree {...props} rows={[...props.rows]} resultKey="two" />);
+      expect(rowNamed("G01-LINE-001")).toBeInTheDocument();
+      await user.keyboard("{ArrowDown}");
+      expect(rowNamed("G01-LINE-003")).toHaveFocus();
+    },
+  );
+
   it("keeps the focused child row in the document while it is scrolled away", SLOW, async () => {
     const user = userEvent.setup();
     render(<Tree rows={many} childRows={twoHundred} initiallyExpanded={["G01"]} height="fill" />);

@@ -47,6 +47,11 @@ export function textChars(text: string): number {
   return figures + (text.length - figures) * LETTER;
 }
 
+/** Whether a column that makes room for `most` characters of its header cuts this header. */
+export function isHeaderCut(header: string, most: number | undefined): boolean {
+  return most !== undefined && textChars(header) > most;
+}
+
 /**
  * The least width of a column, whatever it declares: the room of its header. A header is not
  * cut, also not one that is longer than the values under it or that grew in a translation,
@@ -55,11 +60,6 @@ export function textChars(text: string): number {
  * counts, and a header that can be sorted keeps the room of the arrow (`arrow`: the icon and its
  * gap).
  */
-/** Whether a column that makes room for `most` characters of its header cuts this header. */
-export function isHeaderCut(header: string, most: number | undefined): boolean {
-  return most !== undefined && textChars(header) > most;
-}
-
 export function headerWidth(
   header: string,
   allowsSorting: boolean,

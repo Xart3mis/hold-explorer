@@ -482,7 +482,7 @@ These properties were checked in the font files themselves, not taken from descr
 | `--line-height-xl` | `2rem` | 32 px. Stat values. |
 | `--font-weight-regular` | `400` | Body, table cells, captions. |
 | `--font-weight-medium` | `500` | Labels and controls. |
-| `--font-weight-semibold` | `600` | Titles, stat values, emphasis inside body text. |
+| `--font-weight-semibold` | `600` | Titles, stat values, emphasis inside body text, the label of the sorted table header. |
 | `--letter-spacing-normal` | `0` | Everything at 13 and 17 px. |
 | `--letter-spacing-tight` | `-0.01em` | Page titles and stat values. |
 | `--font-numeric-tabular` | `tabular-nums` | Value of `font-variant-numeric` for numbers that sit in a column. |
@@ -524,7 +524,7 @@ The table gives the default of each role. The Figures Rule below overrides it in
 
 ### Named Rules
 
-**The Four Sizes Rule.** There are four sizes: 13, 17, 22, and 28 px, each at least 1.25 times the one below. A size between two steps is forbidden. Body, table, label, and caption share 13 px and are told apart by weight (regular or medium), ink (primary, secondary, or muted), and figure style. Nothing is smaller than 13 px, because the same screen is read at a desk and from across a meeting room.
+**The Four Sizes Rule.** There are four sizes: 13, 17, 22, and 28 px, each at least 1.25 times the one below. A size between two steps is forbidden. Body, table, label, and caption share 13 px and are told apart by weight (regular, medium, or semibold), ink (primary, secondary, or muted), and figure style. Nothing is smaller than 13 px, because the same screen is read at a desk and from across a meeting room.
 
 **The Figures Rule.** Any number that sits in a column (table cells, bar row values, axis ticks, counts in a filter picker) uses tabular figures, `--font-numeric-tabular`, and is right-aligned. A number that stands alone (a stat value, a count in a sentence) uses proportional figures, `--font-numeric-proportional`.
 
@@ -937,7 +937,7 @@ A row of figures, not a row of cards.
 
 ### Bar row
 
-A horizontal bar per category: bars by discipline, hold type, role; top blockers.
+A horizontal bar per category: bars by discipline, hold type, role; top blockers and top lines.
 
 - **Row:** height `--density-bar-row-height`, three columns: the label (`--text-body`, `--color-text-primary`, `--size-bar-label-width` wide, cut at the end with an ellipsis), the bar, and the value (`--text-table`, right-aligned, tabular figures) with an optional second value in `--color-text-muted`. A label that is an identifier, a line ID, is in `--text-mono`. A row that can be pressed and whose label is cut shows the whole label in a tooltip, at once on keyboard focus and after `--delay-tooltip` under the pointer ("Instrumentation and control / Client" among the top blockers); its accessible name always holds the whole label. A static row takes no focus and has none: its text stays whole for assistive technology.
 - **Bar:** thickness `--size-bar-height`, fill `--color-chart-neutral`, corner `--radius-xs`, growing from the left edge of its column. No track behind it. Every bar in a group has the same neutral color; length carries the value. The bar is never teal and never a categorical color.
@@ -1019,7 +1019,7 @@ The key of the heatmap, one line above it, at the leading edge. It is not a cont
 
 ### Line chart
 
-A series of points joined by a line: the Blockers curve, lines freed against the step of the solve order. Up to a few thousand points.
+A series of points joined by a line: the Blockers curve, lines freed against the step of the solve order. Up to about twelve thousand points (a solve order of 11,894 steps was measured).
 
 - **Plot:** `--size-line-chart-height` tall, the band of the x axis included, and as wide as its container. The value axis is at the leading side, `--size-chart-axis-width` wide.
 - **Over a table:** a line chart that stands over a table filling the same page (the curve of Blockers over its steps) gives way to the table in a short window: it is at most 35% of the height of the page's content, and never less than `--size-line-chart-min-height`, so the table keeps rows to read at 640 px. In a tall window it is `--size-line-chart-height`. The screen sets it; the chart takes the height it is given.
@@ -1042,9 +1042,9 @@ The chart tooltip is the tooltip of "Tooltip", with rows. It names the mark the 
 - **Shape:** that of a tooltip: fill `--color-surface-overlay`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-sm`, `--shadow-overlay`, padding `--space-1` above and below and `--space-2` at the sides, at most `--size-tooltip-max-width` wide, at `--z-tooltip`.
 - **Rows:** one per fact, `--space-2` between label and value: the label in `--text-caption` and `--color-text-secondary`, then the value in `--text-label` and `--color-text-primary` with tabular figures. The value row of a mark leads with its key: a swatch of `--size-legend-swatch` in the cell's step for a heatmap, a short line of `--size-chart-line` in the line's color for a line chart. Labels that were cut on the chart are written in full and wrap.
 - **What it shows:** for a heatmap cell, the row value, the column value, and the count; for a point, its label, its x, and its y. Where a press on the mark does something, a last line across both columns says what, in `--text-caption` and `--color-text-secondary`, `--space-1` under the facts.
-- **Placement:** `--space-1` under the mark, above it where there is no room below, kept inside the window. It never covers the mark.
+- **Placement:** `--space-1` under the mark, above it where there is no room below, kept inside the window. It does not cover the mark, except in a window too short for it either below or above: it then stands at the top of the window. Whether the mark is in view is judged against the window, so a heatmap cell scrolled under the pinned labels keeps its tooltip until the focus or the pointer moves.
 - **Showing:** on keyboard focus, at once. Under the pointer, after `--delay-tooltip`; once it shows, it follows the pointer from mark to mark without waiting again, until the pointer leaves the chart. It fades in over `--duration-fast`, and without a transition under reduced motion.
-- **Dismissing:** when the pointer leaves the chart and the focus is not in it, when the focus leaves the chart, and on Esc, which hides it until the next move and moves nothing. It takes no pointer: it follows the pointer, so it could not be reached anyway, and it holds nothing that is not in the table view.
+- **Dismissing:** when the pointer leaves the chart and the focus is not in it, when the focus leaves the chart, and on Esc, which hides it until the next move. An Esc that hides a tooltip the pointer opened, with the focus elsewhere, does nothing else: a detail panel stays open, and the next Esc closes it. With the focus on the chart, Esc is the chart's: it hides the tooltip, and what else it does there the screen says (the curve of Blockers closes the panel it opened). It takes no pointer: it follows the pointer, so it could not be reached anyway, and it holds nothing that is not in the table view.
 - **States:** none of its own.
 
 ### Chart table view

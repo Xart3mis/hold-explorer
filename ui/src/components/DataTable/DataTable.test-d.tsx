@@ -40,3 +40,21 @@ export const silentColumn: DataTableColumn<Row> = {
   priority: 1,
   cell: (row) => row.id,
 };
+
+// A table whose rows expand is not asked to bring its selected row into view.
+export const expanding = [
+  // @ts-expect-error revealSelected is for a table whose rows do not expand
+  <DataTable
+    key="tree"
+    aria-label="Rows"
+    columns={fixed}
+    rows={[]}
+    rowKey={key}
+    childRows={() => undefined}
+    childKey={key}
+    childColumns={[]}
+    expandedKeys={new Set<string>()}
+    onExpandedChange={() => undefined}
+    revealSelected
+  />,
+];

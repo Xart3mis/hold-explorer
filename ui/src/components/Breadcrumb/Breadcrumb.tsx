@@ -29,7 +29,7 @@ export interface BreadcrumbProps {
 /** One ancestor: a link. When the trail is too long and its label is cut, a tooltip gives it in full. */
 function Ancestor({ ancestor }: { ancestor: BreadcrumbAncestor }) {
   const link = useRef<HTMLAnchorElement>(null);
-  const cut = useIsCut(link);
+  const cut = useIsCut(link, ancestor.label);
   return (
     <Tooltip text={ancestor.label} isDisabled={!cut}>
       <Link

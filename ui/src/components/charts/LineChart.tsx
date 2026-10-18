@@ -152,12 +152,19 @@ export function LineChart({
   const name = props["aria-label"];
   const loading = isLoading === true;
   const stale = isStale === true && !loading;
+  // The rows of the table view are built once for the points, not at every render: a table of
+  // new rows is built again whole, and the screen renders the chart at each selection.
+  const table = useMemo(
+    () =>
+      view === "table" ? lineChartTable(points, xLabel, labelName, yLabel, formatX, formatY) : null,
+    [view, points, xLabel, labelName, yLabel, formatX, formatY],
+  );
 
-  if (view === "table") {
+  if (table !== null) {
     return (
       <ChartTable
         aria-label={t("charts.tableName", { name })}
-        {...lineChartTable(points, xLabel, labelName, yLabel, formatX, formatY)}
+        {...table}
         {...(tableRows === undefined ? {} : { maxRows: tableRows })}
         isLoading={loading}
         isStale={stale}
@@ -234,8 +241,15 @@ function Plot({
   const last = points.length - 1;
   const selected =
     selectedIndex !== null && selectedIndex >= 0 && selectedIndex <= last ? selectedIndex : null;
-  // The point of the keyboard: where it last was, or the selected point, or the first.
+  // The point of the keyboard: where it last was, or the selected point, or the first. Where it
+  // last was counts only until another point is selected, also elsewhere, such as in a table
+  // beside the chart: the keyboard then starts on that one. A selection that ends leaves it.
   const [cursor, setCursor] = useState<number | null>(null);
+  const [cursorSelected, setCursorSelected] = useState(selected);
+  if (cursorSelected !== selected) {
+    setCursorSelected(selected);
+    if (selected !== null) setCursor(selected);
+  }
   const keyIndex = Math.min(cursor ?? selected ?? 0, last);
   const [isFocused, setFocused] = useState(false);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -385,7 +399,8 @@ function Plot({
         aria-selected={keyIndex === selected}
         aria-posinset={keyIndex + 1}
         aria-setsize={points.length}
-        aria-describedby={tip.active === null ? undefined : tooltipId}
+        // Only a tooltip that is drawn describes the point.
+        aria-describedby={tip.active !== null && tip.active === shown ? tooltipId : undefined}
         className={styles.option}
       >
         {keyPoint === undefined

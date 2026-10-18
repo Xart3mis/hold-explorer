@@ -83,9 +83,9 @@ interface ColumnBase<Item> {
   /** What a cell of this column shows for a row. */
   cell: (item: Item) => ReactNode;
   /**
-   * `number`: right-aligned on tabular figures. `identifier`: a line ID, a tag, or a blocker
-   * item, in the monospace family and never cut: size its column from the widest value. `text`
-   * (the default): cut at the end when it does not fit.
+   * `number`: right-aligned on tabular figures. `identifier`: a line ID, a tag, or a source ID,
+   * in the monospace family and never cut: size its column from the widest value. `text` (the
+   * default): cut at the end when it does not fit.
    */
   kind?: DataTableColumnKind;
   /**
@@ -171,13 +171,6 @@ interface TableProps<Item> {
    * row does not answer to the pointer.
    */
   onSelectionChange?: (key: string) => void;
-  /**
-   * The selection is also made outside the table, as on the curve of Blockers: whenever
-   * `selectedKey` names another row, and when that row arrives, the table scrolls it into view
-   * at the nearer edge, and moves no focus. A row that is in view stays where it is. For a table
-   * whose rows do not expand.
-   */
-  revealSelected?: boolean;
   /** The sort the rows are in, to mark its column. */
   sort?: DataTableSort;
   /** Called with the sort a pressed header asks for. */
@@ -265,6 +258,13 @@ type Expanding<Item, Child> =
       onExpandedChange?: undefined;
       selectedChildKey?: undefined;
       onChildSelectionChange?: undefined;
+      /**
+       * The selection is also made outside the table, as on the curve of Blockers: whenever
+       * `selectedKey` names another row, and when that row arrives, the table scrolls it into
+       * view at the nearer edge, and moves no focus. A row that is in view stays where it is.
+       * For a table whose rows do not expand only.
+       */
+      revealSelected?: boolean | undefined;
     }
   | {
       /**
@@ -288,6 +288,7 @@ type Expanding<Item, Child> =
        * has `onSelectionChange` as well; its chevron, Right, and Left turn it either way.
        */
       onChildSelectionChange?: (child: Child) => void;
+      revealSelected?: undefined;
     };
 
 export type DataTableProps<Item, Child = never> = TableProps<Item> &
@@ -531,6 +532,20 @@ interface ColumnPart {
  * `chevron` of a row turns it; that a cell with a `colSpan` takes the tracks it spans; and that a
  * row's own `disabledBehavior` of `selection` keeps it focusable in a table whose disabled rows
  * are disabled for all. The tests of the expanding rows fail if one of them goes.
+ *
+ * And four more, each with a test that fails if it goes: that `KeepFocusDrawn` can read
+ * `expandedKeys` and the focused key from `TableStateContext` and set the focused key there, and
+ * that the children of a collapsed row keep their keys in the collection; that the render prop of
+ * a `Cell` gives `hasChildItems`; that the `render` prop of a `Row` is handed the DOM props with
+ * `aria-selected`, which `unmarked` takes out of a row that cannot be selected; and that a
+ * `Collection` builds its items again when one of its `dependencies` changes.
+ *
+ * One premise has no test, since jsdom does not show it: a `Collection` keyed by `resultKey`
+ * (`body`, `treeBody`) is placed in one pass, while new rows in a kept collection are placed one
+ * by one, each after a walk past the others, which took 2.1 s for 11,894 steps. After an upgrade,
+ * or a change that drops the `key`, measure again in a production build: a table of ten thousand
+ * rows handed the rows of another result draws them in about half a second, not two, and a
+ * profile shows no `getHostSibling` among the costs.
  */
 class DataTableLayout<T> extends TableLayout<T, LayoutOptions> {
   private emptyHeight = 0;
@@ -1250,12 +1265,18 @@ export function DataTable<Item, Child = never>({
   );
 
   // The rows of a table whose rows expand, as the library takes them: built once for each item,
-  // as the rows of any table are, with their children under them.
+  // as the rows of any table are, with their children under them. Another result is another
+  // collection, as in a flat table (see `body`); the rows that are expanded and the focused row
+  // are the table's state, not the collection's, and stay.
   const treeBody = useMemo(() => {
     if (!expandable) return null;
     const unselectable = { isDisabled: true, disabledBehavior: "selection" } as const;
     return (
-      <Collection items={shown} dependencies={[rowCells, parentSelectable, leafSet]}>
+      <Collection
+        key={resultKey}
+        items={shown}
+        dependencies={[rowCells, parentSelectable, leafSet]}
+      >
         {(item) => {
           const key = keyOf.current(item);
           const expands = !leafSet.has(key);
@@ -1293,7 +1314,7 @@ export function DataTable<Item, Child = never>({
         }}
       </Collection>
     );
-  }, [expandable, shown, rowCells, parentSelectable, leafSet, turn]);
+  }, [expandable, resultKey, shown, rowCells, parentSelectable, leafSet, turn]);
   const selectedKeys: string[] = [];
   if (parentSelectable && selectedKey !== undefined && selectedKey !== null) {
     selectedKeys.push(selectedKey);

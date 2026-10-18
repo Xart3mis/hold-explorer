@@ -104,35 +104,10 @@ export function ChartTable({
     else hide();
   };
 
-  // The rows are all here, so each column is declared from the longest text it holds.
-  const tableColumns: DataTableColumn<ChartTableRow>[] = columns.map((column, index) => {
-    const longest = rows.reduce(
-      (most, row) => Math.max(most, textChars(row.cells[index] ?? "")),
-      0,
-    );
-    return {
-      id: column.id,
-      header: column.header,
-      kind: column.isNumber === true ? "number" : "text",
-      isRowHeader: column.isRowHeader === true,
-      headerChars: HEADER_MOST,
-      size:
-        column.isNumber === true
-          ? { chars: Math.max(1, Math.ceil(longest)) }
-          : { flex: 1, minChars: Math.max(1, Math.min(TEXT_MOST, Math.ceil(longest))) },
-      cell: (row: ChartTableRow) => {
-        const text = row.cells[index] ?? "";
-        // A folded row or column is written in the ink the chart gives its fold.
-        return row.isFolded === true || column.isFolded === true ? (
-          <span data-folded="" className={styles.folded}>
-            {text}
-          </span>
-        ) : (
-          text
-        );
-      },
-    };
-  });
+  // The rows are all here, so each column is declared from the longest text it holds. The
+  // columns are declared once for the columns and rows they are given: new columns would have
+  // the table build every row again, at each render of the chart.
+  const tableColumns = useMemo(() => declareColumns(columns, rows), [columns, rows]);
   return (
     <div
       ref={area}
@@ -173,6 +148,41 @@ export function ChartTable({
       />
     </div>
   );
+}
+
+/** The columns of the table view, each declared from the longest text it holds in `rows`. */
+function declareColumns(
+  columns: readonly ChartTableColumn[],
+  rows: readonly ChartTableRow[],
+): DataTableColumn<ChartTableRow>[] {
+  return columns.map((column, index) => {
+    const longest = rows.reduce(
+      (most, row) => Math.max(most, textChars(row.cells[index] ?? "")),
+      0,
+    );
+    return {
+      id: column.id,
+      header: column.header,
+      kind: column.isNumber === true ? "number" : "text",
+      isRowHeader: column.isRowHeader === true,
+      headerChars: HEADER_MOST,
+      size:
+        column.isNumber === true
+          ? { chars: Math.max(1, Math.ceil(longest)) }
+          : { flex: 1, minChars: Math.max(1, Math.min(TEXT_MOST, Math.ceil(longest))) },
+      cell: (row: ChartTableRow) => {
+        const text = row.cells[index] ?? "";
+        // A folded row or column is written in the ink the chart gives its fold.
+        return row.isFolded === true || column.isFolded === true ? (
+          <span data-folded="" className={styles.folded}>
+            {text}
+          </span>
+        ) : (
+          text
+        );
+      },
+    };
+  });
 }
 
 export interface ChartViewToggleProps {

@@ -198,17 +198,27 @@ export function useChartTooltip<Key extends string | number>(): ChartTooltipStat
 
   const active = dismissed ? null : hovered !== null && pointerShown ? hovered : focused;
 
-  // Escape closes a tooltip that the pointer opened while the focus is somewhere else.
+  // Escape closes a tooltip that the pointer opened while the focus is somewhere else. Such a key
+  // is taken before anything else hears it, so it hides the tooltip and moves nothing: a detail
+  // panel stays open, a menu stays where it is, and the next Escape is theirs again. A tooltip
+  // the keyboard opened goes with the Escape of the element in focus, which says itself what
+  // else that key does.
+  const byPointer = active !== null && active === hovered && pointerShown;
   useEffect(() => {
     if (active === null) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDismissed(true);
+      if (event.key !== "Escape") return;
+      if (byPointer) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      setDismissed(true);
     };
-    document.addEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey, byPointer);
     return () => {
-      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey, byPointer);
     };
-  }, [active]);
+  }, [active, byPointer]);
 
   return { active, focus, blur, hover, leave, dismiss };
 }

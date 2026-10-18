@@ -292,6 +292,26 @@ describe("Heatmap", () => {
     ]);
   });
 
+  it("builds its table view once for the same numbers, not at every render", () => {
+    // A row that counts how often its label is read: the table view reads it when it builds its
+    // rows, and a heatmap that builds them at every render would read it again.
+    let reads = 0;
+    const counted = rows.map(({ key, label }) => ({
+      key,
+      get label() {
+        reads += 1;
+        return label;
+      },
+    }));
+    function Page({ tick }: { tick: number }) {
+      return <div data-tick={tick}>{heatmap({ view: "table", rows: counted })}</div>;
+    }
+    const { rerender } = render(<Page tick={0} />);
+    reads = 0;
+    rerender(<Page tick={1} />);
+    expect(reads).toBe(0);
+  });
+
   it("draws one cell and no Other when the command folded nothing", () => {
     render(
       heatmap({
