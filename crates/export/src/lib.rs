@@ -5,6 +5,10 @@
 //! rows of [`sheet::Cell`]s. [`text::csv`] and [`text::tab_separated`] write a sheet as text;
 //! [`text::line_ids`] writes a list of line IDs. Every word a file contains comes from the
 //! interface's catalog through [`text::ExportText`]. [`file::write_file`] writes the bytes.
+//!
+//! [`views::screen_sheets`] makes the sheets of a screen for an [`views::ExportRequest`],
+//! [`views::workbook_sheets`] those of the full workbook, and [`views::scope_line_ids`] the line
+//! IDs of the rows in scope, all with the same functions of `hx_core` the commands call.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
@@ -12,10 +16,14 @@
 pub mod file;
 pub mod sheet;
 pub mod text;
+pub mod views;
 
 pub use file::write_file;
 pub use sheet::{Cell, Column, ColumnKind, Sheet};
 pub use text::{csv, line_ids, tab_separated, ExportText, FILE_TEXT_KEYS, KEY_NO, KEY_YES};
+pub use views::{
+    name_sheets, scope_line_ids, screen_sheets, workbook_sheets, ExportRequest, RowScope, Screen,
+};
 
 use serde::Serialize;
 

@@ -1,0 +1,32 @@
+{
+  "lines": [
+    "line",
+    "holds",
+    "disciplines",
+    "holdTypes",
+    "blockers",
+    "oldest",
+    "modelSize",
+    "ldtSize",
+    "stressCalc",
+    "sizes"
+  ],
+  "holds": [
+    "line",
+    "discipline",
+    "holdType",
+    "remark",
+    "blocker",
+    "blockerType",
+    "name",
+    "role",
+    "created",
+    "status",
+    "releasedOn",
+    "days",
+    "sourceId",
+    "releaseRemark"
+  ],
+  "breakdown": ["label", "holds", "lines"],
+  "blockers": ["step", "blocker", "kind", "discipline", "holds", "gain", "cumulative"]
+}

@@ -1819,6 +1819,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "csv",
+ "hx-core",
+ "hx-synth",
  "serde",
  "serde_json",
  "tempfile",
