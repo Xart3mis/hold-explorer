@@ -119,6 +119,8 @@ Two rules bind the hues, and the checker enforces both.
 | `--color-accent-active` | `oklch(0.460 0.077 var(--hue-accent))` | `oklch(0.370 0.062 var(--hue-accent))` | Pressed step of the accent fill. |
 | `--color-accent-subtle` | `oklch(0.285 0.040 var(--hue-accent))` | `oklch(0.945 0.025 var(--hue-accent))` | Background of the current selection: selected row, current sidebar item, active filter chip. |
 | `--color-accent-subtle-hover` | `oklch(0.320 0.046 var(--hue-accent))` | `oklch(0.915 0.034 var(--hue-accent))` | Hover over a selected element. |
+| `--color-accent-open` | `oklch(0.305 0.050 var(--hue-accent))` | `oklch(0.912 0.044 var(--hue-accent))` | A deeper tint for the open row of a table among other selected rows (owner, 2026-10-19). |
+| `--color-accent-open-hover` | `oklch(0.328 0.052 var(--hue-accent))` | `oklch(0.895 0.048 var(--hue-accent))` | Hover over the open row among other selected rows. |
 | `--color-accent-border` | `oklch(0.440 0.070 var(--hue-accent))` | `oklch(0.800 0.055 var(--hue-accent))` | Hairline around an accent-subtle element such as an active filter chip. Decorative. |
 | `--color-accent-text` | `oklch(0.800 0.090 var(--hue-accent))` | `oklch(0.470 0.079 var(--hue-accent))` | Accent as ink on a surface: links, the selected tab indicator, the border of a checked checkbox, the active drop zone, the fill of the progress bar. |
 | `--color-focus-ring` | `oklch(0.820 0.110 var(--hue-accent))` | `oklch(0.520 0.087 var(--hue-accent))` | The keyboard focus ring, on every focusable element. |
@@ -265,6 +267,8 @@ What a fill may carry is written down once, here, and checked.
 | `--color-surface-overlay-hover` | yes | no | A swatch in a highlighted item of a filter picker. |
 | `--color-accent-subtle` | yes | no | A bar row in the active filter; a selected table row; the active drop zone, which hides its button. |
 | `--color-accent-subtle-hover` | yes | no | The same row under the pointer. |
+| `--color-accent-open` | no | no | The open row of a table among other selected rows. A table row holds text, identifiers, and quiet row actions; no chart mark and no primary button. |
+| `--color-accent-open-hover` | no | no | As above, under the pointer. |
 | `--color-chart-band` | yes | no | The forecast range behind a trend line. |
 | `--color-surface-field` | no | no | The inside of a field holds text and icons only. |
 | `--color-surface-disabled` | no | no | A disabled control holds its own label only, and so does a filter chip that is not in this snapshot, which stays operable: its field, value, icon, and X, in `--color-text-muted`. |
@@ -308,6 +312,8 @@ Five things are deliberately not in the table:
 | `--color-text-primary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item and option. |
 | `--color-text-primary` | `--color-accent-subtle` | 4.5 | text | Selected row, current sidebar item, active filter chip. |
 | `--color-text-primary` | `--color-accent-subtle-hover` | 4.5 | text | Hover over a selected element. |
+| `--color-text-primary` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-text-primary` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-text-primary` | `--color-danger-subtle` | 4.5 | text | Danger notice and tag. |
 | `--color-text-primary` | `--color-warning-subtle` | 4.5 | text | Warning notice and tag. |
 | `--color-text-primary` | `--color-success-subtle` | 4.5 | text | Success notice and tag. |
@@ -322,6 +328,8 @@ Five things are deliberately not in the table:
 | `--color-text-secondary` | `--color-surface-overlay-hover` | 4.5 | text | Highlighted menu item and option; the count of a highlighted option, and the border of its unticked mark. |
 | `--color-text-secondary` | `--color-accent-subtle` | 4.5 | text | Selected row, current sidebar item, active filter chip. |
 | `--color-text-secondary` | `--color-accent-subtle-hover` | 4.5 | text | Hover over a selected element. |
+| `--color-text-secondary` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-text-secondary` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-text-secondary` | `--color-danger-subtle` | 4.5 | text | Danger notice and tag. |
 | `--color-text-secondary` | `--color-warning-subtle` | 4.5 | text | Warning notice and tag. |
 | `--color-text-secondary` | `--color-success-subtle` | 4.5 | text | Success notice and tag. |
@@ -337,6 +345,8 @@ Five things are deliberately not in the table:
 | `--color-text-muted` | `--color-accent-subtle` | 4.5 | text | Captions, units, the Soon tag on selected row, current sidebar item, active filter chip. |
 | `--color-text-muted` | `--color-surface-disabled` | 4.5 | text | Field, value, and X of a filter chip that is not in this snapshot. |
 | `--color-text-muted` | `--color-accent-subtle-hover` | 4.5 | text | Captions, units, the Soon tag on hover over a selected element. |
+| `--color-text-muted` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-text-muted` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-accent-text` | `--color-surface-app` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-surface-panel` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-surface-raised` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
@@ -346,6 +356,8 @@ Five things are deliberately not in the table:
 | `--color-accent-text` | `--color-surface-overlay-hover` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-accent-subtle` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
 | `--color-accent-text` | `--color-accent-subtle-hover` | 4.5 | text | Links, the Undo label of a toast, the selected-option check. |
+| `--color-accent-text` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-accent-text` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-accent-text` | `--color-danger-subtle` | 4.5 | text | A link inside a danger notice. |
 | `--color-accent-text` | `--color-warning-subtle` | 4.5 | text | A link inside a warning notice. |
 | `--color-accent-text` | `--color-success-subtle` | 4.5 | text | A link inside a success notice. |
@@ -363,6 +375,8 @@ Five things are deliberately not in the table:
 | `--color-danger-text` | `--color-surface-pressed` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-accent-subtle` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
 | `--color-danger-text` | `--color-accent-subtle-hover` | 4.5 | text | Danger text and icon outside a notice: field error message, danger button label. |
+| `--color-danger-text` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-danger-text` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-warning-text` | `--color-warning-subtle` | 4.5 | text | Warning icon and state tag text on its own tint. |
 | `--color-warning-text` | `--color-surface-app` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-surface-panel` | 4.5 | text | Warning text and icon outside a notice. |
@@ -373,6 +387,8 @@ Five things are deliberately not in the table:
 | `--color-warning-text` | `--color-surface-pressed` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-accent-subtle` | 4.5 | text | Warning text and icon outside a notice. |
 | `--color-warning-text` | `--color-accent-subtle-hover` | 4.5 | text | Warning text and icon outside a notice. |
+| `--color-warning-text` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-warning-text` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-success-text` | `--color-success-subtle` | 4.5 | text | Success icon and state tag text on its own tint. |
 | `--color-success-text` | `--color-surface-app` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-surface-panel` | 4.5 | text | Success text and icon outside a notice. |
@@ -383,6 +399,8 @@ Five things are deliberately not in the table:
 | `--color-success-text` | `--color-surface-pressed` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-accent-subtle` | 4.5 | text | Success text and icon outside a notice. |
 | `--color-success-text` | `--color-accent-subtle-hover` | 4.5 | text | Success text and icon outside a notice. |
+| `--color-success-text` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-success-text` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-info-text` | `--color-info-subtle` | 4.5 | text | Info icon and state tag text on its own tint. |
 | `--color-info-text` | `--color-surface-app` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-surface-panel` | 4.5 | text | Info text and icon outside a notice. |
@@ -393,6 +411,8 @@ Five things are deliberately not in the table:
 | `--color-info-text` | `--color-surface-pressed` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-accent-subtle` | 4.5 | text | Info text and icon outside a notice. |
 | `--color-info-text` | `--color-accent-subtle-hover` | 4.5 | text | Info text and icon outside a notice. |
+| `--color-info-text` | `--color-accent-open` | 4.5 | text | The open row among other selected rows. |
+| `--color-info-text` | `--color-accent-open-hover` | 4.5 | text | The open row among other selected rows, under the pointer. |
 | `--color-text-primary` | `--color-chart-seq-1` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
 | `--color-text-primary` | `--color-chart-seq-2` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
 | `--color-text-primary` | `--color-chart-seq-3` | 4.5 | text | Heatmap cell label, steps 1 to 4. |
@@ -407,18 +427,16 @@ Five things are deliberately not in the table:
 | `--color-border-strong` | `--color-surface-field` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-hover` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
 | `--color-border-strong` | `--color-surface-pressed` | 3 | control-border | Border of a field, select, unchecked checkbox, unchosen radio, secondary button, add-filter chip, drop zone. |
-| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill, the frame of the open row. |
+| `--color-accent-text` | `--color-surface-app` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-accent-text` | `--color-surface-panel` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-accent-text` | `--color-surface-raised` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-accent-text` | `--color-surface-overlay` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-accent-text` | `--color-surface-field` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
-| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill, the frame of the open row. |
-| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill, the frame of the open row. |
+| `--color-accent-text` | `--color-surface-hover` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
+| `--color-accent-text` | `--color-surface-pressed` | 3 | control-border | Border of a checked checkbox, a chosen radio, and a focused field, the selected tab indicator, the active drop zone, the progress fill. |
 | `--color-danger-text` | `--color-surface-app` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-panel` | 3 | control-border | Border of a field in error and of a danger button. |
 | `--color-danger-text` | `--color-surface-field` | 3 | control-border | Border of a field in error and of a danger button. |
-| `--color-accent-text` | `--color-accent-subtle` | 3 | control-border | The frame of the open row among other selected rows. |
-| `--color-accent-text` | `--color-accent-subtle-hover` | 3 | control-border | The frame of the open row among other selected rows, under the pointer. |
 | `--color-accent-text` | `--color-border-default` | 3 | graphic | The progress fill against its track. |
 | `--color-focus-ring` | `--color-surface-app` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-surface-panel` | 3 | focus-ring | Focus ring. |
@@ -430,6 +448,8 @@ Five things are deliberately not in the table:
 | `--color-focus-ring` | `--color-surface-overlay-hover` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-accent-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-accent-subtle-hover` | 3 | focus-ring | Focus ring. |
+| `--color-focus-ring` | `--color-accent-open` | 3 | focus-ring | Focus ring. |
+| `--color-focus-ring` | `--color-accent-open-hover` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-danger-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-warning-subtle` | 3 | focus-ring | Focus ring. |
 | `--color-focus-ring` | `--color-success-subtle` | 3 | focus-ring | Focus ring. |
@@ -862,9 +882,13 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
 - **Hover:** fill `--color-surface-hover`.
 - **Selected row:** fill `--color-accent-subtle`, hover `--color-accent-subtle-hover`, `aria-selected`. Selection is a tint across the whole row. It is never a stripe on one edge.
 - **Selected rows:** a page that keeps a selection beside the open row (the row whose detail is open) lets several rows be selected, as in a spreadsheet (owner, 2026-10-18). The open row works as it always has; the selection stands beside it.
-  - *Gestures:* a press or Enter on a row opens it and selects it alone. Ctrl and a press adds the row to the selection or takes it out, without opening it; Ctrl is Ctrl on every system the app runs on. Shift and a press selects the loaded rows from the last row pressed to this one, also when that press took the row out. Shift+Up and Shift+Down move the focus by a row and extend the same range. Ctrl+A selects every row that is loaded, and no other. Esc clears the selection; the page's own Esc closes the panel in the same press. The panel shows the last row opened. Child rows of an expanded row are not selected by these keys, and a range runs over the rows, past their children. The page is handed the keys in the order of the rows.
-  - *Look:* a selected row has the tint of the selected row (`--color-accent-subtle`, hover `--color-accent-subtle-hover`) and `aria-selected="true"`; the others `aria-selected="false"`, and the grid has `aria-multiselectable="true"`. Teal marks the selection, and nothing else changes on a selected row. A selection of the open row alone looks as the selected row always has.
-  - *The open row among them:* when the selection holds other rows than the open one, or the open row was taken out of it, the open row also carries a frame: a `--border-width-thin` line in `--color-accent-text` around the whole row, inset as the focus ring is and drawn over the pinned cell, never on one edge only. It has `aria-current="true"`. The frame is a thin line of the accent ink and the focus ring a line of `--focus-ring-width` in `--color-focus-ring`, so on two rows they differ by width; on one row the ring covers the frame. The frame clears 3:1 on the tint, its hover, and the plain row fills in both themes (Contrast pairs), so the open row is told from the other selected rows in both.
+  - *Pointer:* a press on a row opens it and selects it alone. Ctrl and a press adds the row to the selection or takes it out, without opening it; Ctrl is Ctrl on every system the app runs on. Shift and a press selects the loaded rows from the last row pressed to this one, also when that press took the row out, without opening it.
+  - *Keyboard:* Enter opens the focused row and selects it alone, as a press does; Ctrl+Enter and Shift+Enter do the same. Ctrl+Space adds the focused row to the selection or takes it out, without opening it, as Ctrl and a press do (the convention of lists on Windows). Shift+Space selects the loaded rows from the last row pressed to the focused one, as Shift and a press do. Shift+Up and Shift+Down move the focus by a row and extend the same range; at the last loaded row Shift+Down stays there. Ctrl+A selects every row that is loaded, and no other. Esc clears the selection; the page's own Esc closes the panel in the same press.
+  - *Rows that turn:* on a table whose rows are turned by a press rather than opened (the groups of Breakdown), a press or Enter turns the row and leaves the selection as it is; Ctrl and Shift select as above.
+  - *Which rows:* child rows of an expanded row are not selected by these keys, and a range runs over the rows, past their children. The page is handed the keys in the order of the rows. The panel shows the last row opened.
+  - *Look:* a selected row has the tint of the selected row (`--color-accent-subtle`, hover `--color-accent-subtle-hover`) and `aria-selected="true"`; the others `aria-selected="false"`, and the grid has `aria-multiselectable="true"`. Teal marks the selection, and nothing else changes on a selected row.
+  - *The open row among them:* when the selection holds other rows than the open one, the open row has a deeper tint, `--color-accent-open` (hover `--color-accent-open-hover`), and `aria-current="true"`; it keeps `aria-selected` for whether it is in the selection, also when Ctrl took it out (owner, 2026-10-19). There is no outline: the focus ring is the only line around a row, so the open row and the focused row never look alike. Row text in all three inks clears 4.5:1 on both tints and their hover steps in both themes (Contrast pairs).
+  - *The open row alone:* when the selection is empty or holds the open row alone, the open row looks and is announced as it always was: the tint of the selected row and `aria-selected="true"`.
   - *Count line:* adds the selection after the count, in the page's words, joined by a comma ("400 of 9,312 lines, 3 selected"), whenever a row is selected. It is the same status region, so a change of the selection is announced politely, and the description of the grid says it as well.
   - *Whose it is:* the page holds the selection. It stays while more rows load, and the page clears it for another result (another filter, sort, or snapshot), when the rows it named are gone.
 - **A selection made elsewhere:** where the page selects a row from outside the table as well (the curve of Blockers selects the step of its point), the table brings the selected row into view when the selection changes, when the row arrives after it, and in another result that holds it (another filter), where it takes the place of the return to the top: scrolled the least that shows it whole, under the header or at the lower edge, without motion and without moving the focus. A row in view stays where it is, and the user may scroll away from it.

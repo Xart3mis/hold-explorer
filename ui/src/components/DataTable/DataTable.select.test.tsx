@@ -122,8 +122,8 @@ function marked(): string[] {
     .map((each) => each.dataset.key ?? "");
 }
 
-/** The key of the row that says it is the open one, apart from the selection. */
-function framed(): string[] {
+/** The keys of the rows marked as the open one apart from the selection: the deeper tint. */
+function openMarked(): string[] {
   return dataRows()
     .filter((each) => each.hasAttribute("data-open"))
     .map((each) => each.dataset.key ?? "");
@@ -147,8 +147,8 @@ describe("DataTable with selected rows, by the pointer", () => {
     expect(seen.opened).toEqual(["LINE-B"]);
     expect(lastSelection(seen)).toEqual(["LINE-B"]);
     expect(marked()).toEqual(["LINE-B"]);
-    // The open row alone in the selection looks as a selected row always has: no frame.
-    expect(framed()).toEqual([]);
+    // The open row alone in the selection looks as a selected row always has.
+    expect(openMarked()).toEqual([]);
   });
 
   it("sets the selection to the open row alone on a plain click on the open row", async () => {
@@ -178,8 +178,8 @@ describe("DataTable with selected rows, by the pointer", () => {
       expect(seen.opened).toEqual(["LINE-B"]);
       expect(lastSelection(seen)).toEqual(["LINE-B", "LINE-D"]);
       expect(marked()).toEqual(["LINE-B", "LINE-D"]);
-      // The open row among other selected rows carries its frame, and says it is the current one.
-      expect(framed()).toEqual(["LINE-B"]);
+      // The open row among other selected rows has the deeper tint, and is the current row.
+      expect(openMarked()).toEqual(["LINE-B"]);
       expect(row("LINE-B")).toHaveAttribute("aria-current", "true");
       expect(row("LINE-D")).not.toHaveAttribute("aria-current");
       // The row pressed takes the focus.
@@ -191,14 +191,17 @@ describe("DataTable with selected rows, by the pointer", () => {
       expect(lastSelection(seen)).toEqual(["LINE-B"]);
       expect(seen.opened).toEqual(["LINE-B"]);
 
-      // The open row taken out of the selection stays open, and framed.
+      // The open row taken out of a selection of others stays open, with the deeper tint, and
+      // says it is not selected.
       await user.keyboard("{Control>}");
+      await user.click(row("LINE-D"));
       await user.click(row("LINE-B"));
       await user.keyboard("{/Control}");
-      expect(lastSelection(seen)).toEqual([]);
-      expect(marked()).toEqual([]);
-      expect(framed()).toEqual(["LINE-B"]);
+      expect(lastSelection(seen)).toEqual(["LINE-D"]);
+      expect(marked()).toEqual(["LINE-D"]);
+      expect(openMarked()).toEqual(["LINE-B"]);
       expect(row("LINE-B")).toHaveAttribute("aria-selected", "false");
+      expect(row("LINE-B")).toHaveAttribute("aria-current", "true");
       expect(seen.opened).toEqual(["LINE-B"]);
     },
   );
@@ -286,8 +289,68 @@ describe("DataTable with selected rows, by the keyboard", () => {
     expect(marked()).toEqual(["LINE-A", "LINE-B"]);
     // Extending opens nothing; the open row is the one Enter opened.
     expect(seen.opened).toEqual(["LINE-B"]);
-    expect(framed()).toEqual(["LINE-B"]);
+    expect(openMarked()).toEqual(["LINE-B"]);
   });
+
+  it("adds or takes out the focused row with Ctrl+Space, without opening it", SLOW, async () => {
+    const seen = newSeen();
+    const user = userEvent.setup();
+    render(<Harness seen={seen} />);
+
+    await user.tab();
+    await user.keyboard("{Enter}");
+    expect(seen.opened).toEqual(["LINE-A"]);
+    await user.keyboard("{ArrowDown}{ArrowDown}");
+    await user.keyboard("{Control>} {/Control}");
+    expect(lastSelection(seen)).toEqual(["LINE-A", "LINE-C"]);
+    expect(row("LINE-C")).toHaveFocus();
+    await user.keyboard("{ArrowDown}{Control>} {/Control}");
+    expect(lastSelection(seen)).toEqual(["LINE-A", "LINE-C", "LINE-D"]);
+    await user.keyboard("{ArrowUp}{Control>} {/Control}");
+    expect(lastSelection(seen)).toEqual(["LINE-A", "LINE-D"]);
+    expect(marked()).toEqual(["LINE-A", "LINE-D"]);
+    // Nothing of it opened a row.
+    expect(seen.opened).toEqual(["LINE-A"]);
+  });
+
+  it(
+    "selects the range from the last row pressed to the focused one with Shift+Space",
+    SLOW,
+    async () => {
+      const seen = newSeen();
+      const user = userEvent.setup();
+      render(<Harness seen={seen} />);
+
+      await user.tab();
+      await user.keyboard("{ArrowDown}{Enter}");
+      await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+      expect(row("LINE-E")).toHaveFocus();
+      await user.keyboard("{Shift>} {/Shift}");
+      expect(lastSelection(seen)).toEqual(["LINE-B", "LINE-C", "LINE-D", "LINE-E"]);
+      expect(seen.opened).toEqual(["LINE-B"]);
+    },
+  );
+
+  it(
+    "opens the focused row and selects it alone on Ctrl+Enter and on Shift+Enter, as on Enter",
+    SLOW,
+    async () => {
+      const seen = newSeen();
+      const user = userEvent.setup();
+      render(<Harness seen={seen} initialSelected={["LINE-A", "LINE-E"]} />);
+
+      await user.tab();
+      await user.keyboard("{ArrowDown}{Control>}{Enter}{/Control}");
+      expect(seen.opened).toEqual(["LINE-B"]);
+      expect(lastSelection(seen)).toEqual(["LINE-B"]);
+
+      await user.keyboard("{Control>} {/Control}");
+      await user.keyboard("{ArrowDown}{ArrowDown}{Shift>}{Enter}{/Shift}");
+      expect(seen.opened).toEqual(["LINE-B", "LINE-D"]);
+      expect(lastSelection(seen)).toEqual(["LINE-D"]);
+      expect(marked()).toEqual(["LINE-D"]);
+    },
+  );
 
   it("selects every loaded row on Ctrl+A, and only those", async () => {
     const seen = newSeen();
@@ -323,7 +386,9 @@ describe("DataTable with selected rows, by the keyboard", () => {
     await user.tab();
     await user.keyboard("{Escape}");
     expect(lastSelection(seen)).toEqual([]);
-    expect(marked()).toEqual([]);
+    // The panel is the page's to close: with nothing else selected, the open row looks as it
+    // always did.
+    expect(marked()).toEqual(["LINE-A"]);
     expect(pageEscape).toHaveBeenCalledTimes(1);
   });
 });
@@ -340,7 +405,7 @@ describe("DataTable with selected rows, as it is read", () => {
     // The tint follows the selection, not the open row alone.
     expect(row("LINE-C")).toHaveAttribute("data-selected");
     expect(row("LINE-B")).not.toHaveAttribute("data-selected");
-    expect(framed()).toEqual(["LINE-A"]);
+    expect(openMarked()).toEqual(["LINE-A"]);
   });
 
   it(
@@ -363,16 +428,29 @@ describe("DataTable with selected rows, as it is read", () => {
     },
   );
 
-  it("keeps the selection through a load of more rows, and leaves it to the screen on another result", () => {
+  it("marks an open row with nothing else selected as it always was: tinted and selected", () => {
+    // As when the screen cleared the selection for another result and the panel stayed open, or
+    // the open row came from the address.
+    render(<Harness seen={newSeen()} initialOpen="LINE-C" />);
+    expect(row("LINE-C")).toHaveAttribute("aria-selected", "true");
+    expect(row("LINE-C")).toHaveAttribute("data-selected");
+    expect(row("LINE-C")).not.toHaveAttribute("data-open");
+    expect(row("LINE-C")).not.toHaveAttribute("aria-current");
+    expect(marked()).toEqual(["LINE-C"]);
+  });
+
+  it("keeps the selection through a load of more rows, and does not clear it for another result", () => {
+    // The harness holds the selection the screen would: it starts with LINE-B, and only the
+    // table's own calls change it. The table is handed more rows, then another result.
     const seen = newSeen();
     const { rerender } = render(
       <Harness seen={seen} rows={lines.slice(0, 3)} initialSelected={["LINE-B"]} resultKey="one" />,
     );
     expect(marked()).toEqual(["LINE-B"]);
-    rerender(<Harness seen={seen} rows={lines} initialSelected={["LINE-B"]} resultKey="one" />);
+    rerender(<Harness seen={seen} rows={lines} resultKey="one" />);
     expect(marked()).toEqual(["LINE-B"]);
-    rerender(<Harness seen={seen} rows={lines} initialSelected={["LINE-B"]} resultKey="two" />);
-    // The table does not clear what the screen holds; the screen clears it for another result.
+    rerender(<Harness seen={seen} rows={lines} resultKey="two" />);
+    // The table asks for no change: clearing the selection for another result is the screen's.
     expect(seen.selections).toEqual([]);
     expect(marked()).toEqual(["LINE-B"]);
   });
@@ -516,6 +594,20 @@ describe("DataTable with selected rows that expand", () => {
 
       await user.keyboard("{Control>}a{/Control}");
       expect(lastSelection(seen)).toEqual(["PIPING", "STRESS", "CIVIL"]);
+
+      // A press or Enter that only turns a group leaves the selection as it is.
+      const handed = seen.selections.length;
+      await user.click(row("CIVIL"));
+      expect(row("CIVIL")).toHaveAttribute("aria-expanded", "true");
+      await user.keyboard("{Enter}");
+      expect(row("CIVIL")).toHaveAttribute("aria-expanded", "false");
+      expect(seen.selections).toHaveLength(handed);
+      // The line opened before stays marked as the panel's; the groups are as they were.
+      expect(marked().filter((key) => !key.includes("\u001f"))).toEqual([
+        "PIPING",
+        "STRESS",
+        "CIVIL",
+      ]);
       // The child rows are not among them: the screen is handed the rows alone.
       expect(seen.selections.flat().some((key) => key.includes("PIPING-"))).toBe(false);
       expect(row(`PIPING\u001fPIPING-2`)).toHaveAttribute("aria-selected", "false");

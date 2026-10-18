@@ -1438,7 +1438,8 @@ function Tables() {
         </Forced>
       </Forced>
       <h3 className={styles.subTitle}>
-        Several rows selected: the open row framed among them, and the count line says how many
+        Several rows selected: the open row has a deeper tint among them, and the count line says
+        how many
       </h3>
       <SelectedRowsTable />
       <h3 className={styles.subTitle}>
@@ -1513,8 +1514,9 @@ function Tables() {
 
 /**
  * A table with several rows selected beside the open one. It is real: a press opens a row and
- * selects it alone, Ctrl and a press adds or takes out a row, Shift and a press or Shift+Up and
- * Shift+Down select a range, Ctrl+A selects every row, and Esc clears the selection.
+ * selects it alone, Ctrl and a press or Ctrl+Space adds or takes out a row, Shift and a press,
+ * Shift+Space, or Shift+Up and Shift+Down select a range, Ctrl+A selects every row, and Esc
+ * clears the selection.
  */
 function SelectedRowsTable() {
   const [open, setOpen] = useState<string | null>(lines[1]?.id ?? null);

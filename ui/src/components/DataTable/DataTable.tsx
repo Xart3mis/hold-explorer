@@ -354,7 +354,7 @@ const NO_ROWS: readonly never[] = [];
 
 /** The keys of the rows of a table without selected rows: none, the same at every render. */
 const NO_KEYS: readonly string[] = [];
-const NO_CHOSEN: ReadonlySet<string> = new Set();
+const NO_CHOSEN: ReadonlySet<string> = new Set<string>();
 
 /**
  * What stands between the key of a row and the key of a child, and of a row that says how its
@@ -590,15 +590,25 @@ interface ColumnPart {
  * `aria-selected`, which `unmarked` takes out of a row that cannot be selected; and that a
  * `Collection` builds its items again when one of its `dependencies` changes.
  *
- * And for a table with selected rows (`selectedKeys`), checked again on an upgrade, each with a test
- * in `DataTable.select.test.tsx` that fails if it goes: that a press reaches a row through the
- * `onPointerDown` (or `onMouseDown`) that `usePress`, by way of `useSelectableItem`, puts on the
- * row, which in a table of one selection opens the row whatever key is held, so a press with Ctrl
- * or Shift taken by the grid on its way down never reaches it; that `useSelectableCollection` of a
- * table of one selection neither selects on Shift and an arrow nor on Ctrl+A, and lets Escape go on
- * to the page while `disallowEmptySelection` holds; that `setFocusedKey` of the selection manager in
- * `TableStateContext` moves the focus to a row and scrolls it into view; and that the `render`
- * prop of a `Row` lets `aria-selected` and `data-selected` be set over what the library gives.
+ * And for a table with selected rows (`selectedKeys`), checked again on an upgrade:
+ * - that a press reaches a row through the `onPointerDown` (or `onMouseDown`) that `usePress`, by
+ *   way of `useSelectableItem`, puts on the row, which in a table of one selection opens the row
+ *   whatever key is held, so a press with Ctrl or Shift taken by the grid on its way down never
+ *   reaches it; and that a keyboard press of Space with Ctrl or Shift opens the row as well, so the
+ *   grid takes those keys too, while Enter with Ctrl or Shift opens it as Enter does;
+ * - that `row.focus()` on a row sets the library's focused key, through the `onFocus` it puts on
+ *   the row: the grid focuses the row it took a press from;
+ * - that `click` still reaches the grid after its `pointerdown` and `mousedown` were default
+ *   prevented: the grid answers such a press on its `click`;
+ * - that `useSelectableCollection` of a table of one selection neither selects on Shift and an
+ *   arrow nor on Ctrl+A, and lets Escape go on to the page while `disallowEmptySelection` holds;
+ * - that `setFocusedKey` of the selection manager in `TableStateContext` moves the focus to a row;
+ * - and that the `render` prop of a `Row` lets `aria-selected` and `data-selected` be set over
+ *   what the library gives.
+ * Each of these has a test in `DataTable.select.test.tsx` that fails if it goes. Two related
+ * premises have none, since jsdom lays nothing out and fires no default actions: that
+ * `setFocusedKey` also scrolls the row into view, and that a Shift press default-prevented on
+ * `pointerdown` and `mousedown` selects no text in a browser. Look at both in the gallery.
  *
  * One premise has no test, since jsdom does not show it: a `Collection` keyed by `resultKey`
  * (`body`, `treeBody`) is placed in one pass, while new rows in a kept collection are placed one
@@ -703,13 +713,13 @@ function unmarked<Props extends object>(props: Props): Props {
 
 /**
  * How a row of a table with selected rows (`selectedKeys`) is marked: whether it is selected, and
- * whether it is the open row framed apart from the others. `null` where the table has no such
+ * whether it is the open row, tinted apart from the others. `null` where the table has no such
  * selection: the row is then drawn as the component library marks it.
  */
 type Mark = "none" | "selected" | "open" | "selected open" | null;
 
 /**
- * Which rows are selected and which is framed as the open one, for the rows to read. A row is
+ * Which rows are selected and which is tinted as the open one, for the rows to read. A row is
  * built once for its item and kept, so it reads its mark here, and a change of the selection draws
  * again only the rows whose mark changed, not every row of the table.
  */
@@ -751,7 +761,7 @@ const noMark = (): Mark => null;
 /**
  * A row of the table as it is drawn, with the props the component library gives it. In a table
  * with selected rows it says itself whether it is selected, which the library would say of the
- * open row alone, and the open row among other selected rows carries its frame and is the current
+ * open row alone, and the open row among other selected rows has the deeper tint and is the current
  * row. Elsewhere it is drawn as the library gives it.
  */
 function MarkedRow({
@@ -1503,33 +1513,54 @@ export function DataTable<Item, Child = never>({
 
   // Rows selected beside the open one. They are rows of the table, never their children, and the
   // screen is handed them in the order of the rows. Each row reads its mark from a store, so a
-  // change of the selection draws again only the rows whose mark changed.
-  const topKeys = several ? shown.map((item) => rowKey(item)) : NO_KEYS;
-  const topSet = new Set(topKeys);
-  const marks = new Map<string, Mark>();
-  let selectedCount = 0;
+  // change of the selection draws again only the rows whose mark changed. The marks are worked out
+  // again only when the rows, the selection, or the open row change, not at every render.
+  const openKey = parentSelectable ? (selectedKey ?? null) : null;
+  // The keys of the rows, read once for each list of rows the screen hands over: the screen
+  // writes `rowKey` anew at every render, and it answers as before.
+  const [keysOfRows] = useState(() => new WeakMap<readonly Item[], readonly string[]>());
+  let shownKeys = NO_KEYS;
   if (several) {
-    for (const key of topKeys) {
-      if (!severalKeys.has(key)) continue;
-      marks.set(key, "selected");
-      selectedCount += 1;
-    }
-    // The open row is framed apart from the other selected rows, or when it was taken out of the
-    // selection; selected alone, it looks as a selected row always has.
-    const open = parentSelectable ? (selectedKey ?? null) : null;
-    if (open !== null && topSet.has(open)) {
-      const isIn = severalKeys.has(open);
-      if (!(isIn && selectedCount === 1)) marks.set(open, isIn ? "selected open" : "open");
-    }
+    const known = keysOfRows.get(shown);
+    shownKeys = known ?? shown.map((item) => rowKey(item));
+    if (known === undefined) keysOfRows.set(shown, shownKeys);
   }
+  const { topKeys, topSet, marks, selectedCount } = useMemo(() => {
+    if (!several) {
+      return {
+        topKeys: NO_KEYS,
+        topSet: NO_CHOSEN,
+        marks: new Map<string, Mark>(),
+        selectedCount: 0,
+      };
+    }
+    const keys = shownKeys;
+    const set = new Set(keys);
+    const byKey = new Map<string, Mark>();
+    let count = 0;
+    for (const key of keys) {
+      if (!severalKeys.has(key)) continue;
+      byKey.set(key, "selected");
+      count += 1;
+    }
+    // Among other selected rows, or taken out of a selection of others, the open row has a deeper
+    // tint. Alone, or with nothing selected, it looks and is announced as it always was.
+    if (openKey !== null && set.has(openKey)) {
+      const isIn = severalKeys.has(openKey);
+      const others = count - (isIn ? 1 : 0);
+      byKey.set(openKey, others === 0 ? "selected" : isIn ? "selected open" : "open");
+    }
+    return { topKeys: keys, topSet: set, marks: byKey, selectedCount: count };
+  }, [several, shownKeys, severalKeys, openKey]);
   const [markStore] = useState(() => new MarkStore());
   useLayoutEffect(() => {
     markStore.publish(several, marks);
-  });
+  }, [markStore, several, marks]);
   // What a press or a key asks of the selection is read when it is asked: the handlers sit on the
   // grid, which is built once, and the screen's props are new at every render.
   const picking = useRef({
     several,
+    opens: parentSelectable,
     topKeys,
     topSet,
     chosenKeys: severalKeys ?? NO_CHOSEN,
@@ -1539,6 +1570,7 @@ export function DataTable<Item, Child = never>({
   useLayoutEffect(() => {
     picking.current = {
       several,
+      opens: parentSelectable,
       topKeys,
       topSet,
       chosenKeys: severalKeys ?? NO_CHOSEN,
@@ -1564,6 +1596,39 @@ export function DataTable<Item, Child = never>({
     if (now.openKey !== null && now.topSet.has(now.openKey)) return now.openKey;
     return null;
   }, []);
+  /** A press or Enter: on a table whose rows open, the row opened is selected alone. */
+  const selectAlone = useCallback(
+    (key: string) => {
+      // A row that a press only turns (a group of Breakdown) leaves the selection as it is.
+      if (!picking.current.opens) return;
+      anchor.current = key;
+      handOver([key]);
+    },
+    [handOver],
+  );
+  /** Ctrl and a press, or Ctrl+Space: the row is added or taken out, and is not opened. */
+  const toggle = useCallback(
+    (key: string) => {
+      const now = picking.current;
+      const current = now.topKeys.filter((each) => now.chosenKeys.has(each));
+      anchor.current = key;
+      handOver(
+        now.chosenKeys.has(key) ? current.filter((each) => each !== key) : [...current, key],
+      );
+    },
+    [handOver],
+  );
+  /** Shift and a press, or Shift+Space: the range from the last row pressed; with Ctrl, added. */
+  const extendTo = useCallback(
+    (key: string, add: boolean) => {
+      const now = picking.current;
+      const from = anchorKey() ?? key;
+      anchor.current = from;
+      const range = rangeOf(now.topKeys, from, key);
+      handOver(add ? [...now.topKeys.filter((each) => now.chosenKeys.has(each)), ...range] : range);
+    },
+    [anchorKey, handOver],
+  );
   /** The row of the table, not a child row, that an event in the grid is on; `null` elsewhere. */
   const rowOfEvent = useCallback(
     (event: {
@@ -1601,28 +1666,16 @@ export function DataTable<Item, Child = never>({
       if (hit === null) return;
       const { key } = hit;
       if (!event.ctrlKey && !event.shiftKey) {
-        // A plain press: the library opens the row, and it is selected alone.
-        anchor.current = key;
-        handOver([key]);
+        // A plain press: the library opens the row, or turns it.
+        selectAlone(key);
         return;
       }
       event.preventDefault();
       event.stopPropagation();
-      const now = picking.current;
-      const current = now.topKeys.filter((each) => now.chosenKeys.has(each));
-      if (event.shiftKey) {
-        const from = anchorKey() ?? key;
-        anchor.current = from;
-        const range = rangeOf(now.topKeys, from, key);
-        handOver(event.ctrlKey ? [...current, ...range] : range);
-        return;
-      }
-      anchor.current = key;
-      handOver(
-        now.chosenKeys.has(key) ? current.filter((each) => each !== key) : [...current, key],
-      );
+      if (event.shiftKey) extendTo(key, event.ctrlKey);
+      else toggle(key);
     },
-    [rowOfEvent, anchorKey, handOver],
+    [rowOfEvent, selectAlone, extendTo, toggle],
   );
   const answerKey = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1644,9 +1697,22 @@ export function DataTable<Item, Child = never>({
       const hit = rowOfEvent(event);
       if (hit === null) return;
       const { key } = hit;
-      if ((event.key === "Enter" || event.key === " ") && !ctrl && !shift) {
-        anchor.current = key;
-        handOver([key]);
+      if (event.key === "Enter") {
+        // With Ctrl or Shift as without: the library opens the row, which is selected alone.
+        selectAlone(key);
+        return;
+      }
+      if (event.key === " ") {
+        if (!ctrl && !shift) {
+          selectAlone(key);
+          return;
+        }
+        // Ctrl+Space and Shift+Space are the keys of Ctrl and Shift and a press. The library
+        // would open the row on them, so the grid takes them.
+        event.preventDefault();
+        event.stopPropagation();
+        if (shift) extendTo(key, ctrl);
+        else toggle(key);
         return;
       }
       if ((event.key === "ArrowDown" || event.key === "ArrowUp") && shift && !ctrl) {
@@ -1663,7 +1729,7 @@ export function DataTable<Item, Child = never>({
         tableState.current?.selectionManager.setFocusedKey(next);
       }
     },
-    [rowOfEvent, anchorKey, handOver],
+    [rowOfEvent, anchorKey, handOver, selectAlone, extendTo, toggle],
   );
   const treeColumn = expandable
     ? columns.find((column) => column.isRowHeader === true)?.id
