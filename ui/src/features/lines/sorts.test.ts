@@ -16,19 +16,27 @@ const lineColumns: [string, LineSort, "ascending" | "descending"][] = [
   ["line", "LineId", "ascending"],
   ["holds", "HoldsDesc", "descending"],
   ["disciplines", "Disciplines", "descending"],
+  ["holdTypes", "HoldTypes", "descending"],
   ["blockers", "Blockers", "descending"],
   ["oldest", "OldestFirst", "descending"],
   ["modelSize", "ModelSize", "descending"],
   ["ldtSize", "LdtSize", "descending"],
   ["stressCalc", "StressCalc", "ascending"],
+  ["sizes", "SizeMismatch", "descending"],
 ];
 
 const holdColumns: [string, HoldSort, "ascending" | "descending"][] = [
   ["line", "LineId", "ascending"],
   ["discipline", "Discipline", "ascending"],
   ["holdType", "HoldType", "ascending"],
+  ["remark", "Remark", "ascending"],
   ["blocker", "Blocker", "ascending"],
+  ["blockerType", "BlockerType", "ascending"],
   ["name", "Name", "ascending"],
+  ["role", "Role", "ascending"],
+  ["created", "Created", "ascending"],
+  ["status", "Status", "ascending"],
+  ["releasedOn", "ReleaseDate", "ascending"],
   ["days", "OldestFirst", "descending"],
 ];
 
@@ -69,12 +77,30 @@ describe("the sorts of the Lines destination", () => {
   });
 
   it("asks for nothing for a column that cannot be sorted", () => {
-    for (const column of ["holdTypes", "mismatch", "remark", "unknown"]) {
+    for (const column of ["mismatch", "unknown"]) {
       expect(lineSortOf(column, "ascending")).toBeNull();
     }
-    for (const column of ["remark", "blockerType", "role", "created", "status", "unknown"]) {
+    for (const column of ["unknown"]) {
       expect(holdSortOf(column, "ascending")).toBeNull();
     }
+  });
+
+  it.each(lineColumns)("Lines: pressing %s twice sends %s, then its reverse", (column, sort) => {
+    const first = pressedSort(LINE_SORTS, undefined, column);
+    expect(lineSortOf(first.column, first.direction)).toEqual({ sort, reverse: false });
+    expect(lineTableSort(sort, false)).toEqual(first);
+    const second = pressedSort(LINE_SORTS, first, column);
+    expect(lineSortOf(second.column, second.direction)).toEqual({ sort, reverse: true });
+    expect(lineTableSort(sort, true)).toEqual(second);
+  });
+
+  it.each(holdColumns)("Holds: pressing %s twice sends %s, then its reverse", (column, sort) => {
+    const first = pressedSort(HOLD_SORTS, undefined, column);
+    expect(holdSortOf(first.column, first.direction)).toEqual({ sort, reverse: false });
+    expect(holdTableSort(sort, false)).toEqual(first);
+    const second = pressedSort(HOLD_SORTS, first, column);
+    expect(holdSortOf(second.column, second.direction)).toEqual({ sort, reverse: true });
+    expect(holdTableSort(sort, true)).toEqual(second);
   });
 
   it("asks for a column's own order on a first press, and reverses it on the next", () => {

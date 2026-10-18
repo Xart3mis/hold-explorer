@@ -351,6 +351,10 @@ pub enum LineSort {
     LdtSize,
     /// Stress calculation ascending, without regard to case.
     StressCalc,
+    /// Most distinct hold types first.
+    HoldTypes,
+    /// Lines whose sizes differ first; ties end in line ID order.
+    SizeMismatch,
 }
 
 /// Options for `lines`.
@@ -389,6 +393,18 @@ pub enum HoldSort {
     Blocker,
     /// Name ascending; holds with the blank spelling `—` come last.
     Name,
+    /// Remark ascending without regard to case; an empty remark comes last.
+    Remark,
+    /// Blocker type ascending without regard to case.
+    BlockerType,
+    /// Role ascending; holds with the blank spelling `—` come last.
+    Role,
+    /// Creation date, oldest first; holds without one come last.
+    Created,
+    /// Release date, earliest first; holds without one come last.
+    ReleaseDate,
+    /// Open holds first, then released ones; ties stay in file order.
+    Status,
 }
 
 /// Options for `holds`: the order and the page to return.
@@ -507,6 +523,48 @@ pub fn holds(ds: &Dataset, spec: &FilterSpec, query: &HoldQuery) -> HoldPage {
                 text(&row.hold.discipline, UNSPECIFIED)
                     .map(|discipline| (discipline, row.blocker.item.to_lowercase()))
             },
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::Remark => order_by(
+            &mut selected,
+            |(_, row)| text(&row.hold.remark, ""),
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::BlockerType => order_by(
+            &mut selected,
+            |(_, row)| Some(row.blocker.kind.to_lowercase()),
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::Role => order_by(
+            &mut selected,
+            |(_, row)| text(&row.hold.role, DASH),
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::Created => order_by(
+            &mut selected,
+            |(_, row)| row.hold.created,
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::ReleaseDate => order_by(
+            &mut selected,
+            |(_, row)| row.hold.release_date,
+            |a, b| a.cmp(b),
+            reverse,
+            same,
+        ),
+        HoldSort::Status => order_by(
+            &mut selected,
+            |(_, row)| Some(row.hold.released),
             |a, b| a.cmp(b),
             reverse,
             same,
@@ -666,6 +724,20 @@ pub fn line_page(
             &mut out,
             |line| (!line.stress_calc.is_empty()).then(|| line.stress_calc.to_lowercase()),
             |a, b| a.cmp(b),
+            reverse,
+            by_id,
+        ),
+        LineSort::HoldTypes => order_by(
+            &mut out,
+            |line| Some(line.hold_types.len()),
+            |a, b| b.cmp(a),
+            reverse,
+            by_id,
+        ),
+        LineSort::SizeMismatch => order_by(
+            &mut out,
+            |line| Some(line.size_mismatch),
+            |a, b| b.cmp(a),
             reverse,
             by_id,
         ),
@@ -1744,5 +1816,129 @@ mod tests {
         assert_eq!(top.cells.len(), 1);
         assert_eq!(top.cells[0].iter().sum::<usize>(), 8);
         assert_eq!(top.folded_rows, 4);
+    }
+
+    fn hold_ids_by(ds: &Dataset, spec: &FilterSpec, sort: HoldSort, reverse: bool) -> Vec<usize> {
+        holds(
+            ds,
+            spec,
+            &HoldQuery {
+                sort,
+                reverse,
+                ..Default::default()
+            },
+        )
+        .positions
+    }
+
+    /// Five holds for the hold sorts that read a remark, a role, dates, or a status.
+    ///
+    /// | pos | remark             | role   | created | released on | state    |
+    /// |-----|--------------------|--------|---------|-------------|----------|
+    /// | 0   | Pending 538-PR-100 | Zed    | 10 d    | none        | open     |
+    /// | 1   | P&ID update        | `—`    | none    | none        | open     |
+    /// | 2   | empty              | alice  | 30 d    | 5 d         | released |
+    /// | 3   | Pending 538-PR-100 | Alice  | 10 d    | 20 d        | released |
+    /// | 4   | Apple              | Bob    | 1 d     | none        | open     |
+    fn column_set() -> Dataset {
+        let make = |remark: &str, role: &str, created: Option<i64>, released: Option<i64>| {
+            let mut h = hold("L", "Civil", "MISC.", remark, 0);
+            h.role = role.to_string();
+            h.created = created.map(|d| snapshot() - chrono::Duration::days(d));
+            if let Some(d) = released {
+                h.released = true;
+                h.release_date = Some(snapshot() - chrono::Duration::days(d));
+            }
+            h
+        };
+        Dataset::build(
+            vec![
+                make("Pending 538-PR-100", "Zed", Some(10), None),
+                make("P&ID update", DASH, None, None),
+                make("", "alice", Some(30), Some(5)),
+                make("Pending 538-PR-100", "Alice", Some(10), Some(20)),
+                make("Apple", "Bob", Some(1), None),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        )
+    }
+
+    #[test]
+    fn new_hold_column_sorts_put_holds_without_the_value_last_and_keep_ties_in_file_order() {
+        let ds = column_set();
+        for (sort, forward, backward) in [
+            (HoldSort::Remark, vec![4, 1, 0, 3, 2], vec![0, 3, 1, 4, 2]),
+            (HoldSort::Role, vec![2, 3, 4, 0, 1], vec![0, 4, 2, 3, 1]),
+            (HoldSort::Created, vec![2, 0, 3, 4, 1], vec![4, 0, 3, 2, 1]),
+            (
+                HoldSort::ReleaseDate,
+                vec![3, 2, 0, 1, 4],
+                vec![2, 3, 0, 1, 4],
+            ),
+            (HoldSort::Status, vec![0, 1, 4, 2, 3], vec![2, 3, 0, 1, 4]),
+        ] {
+            assert_eq!(hold_ids_by(&ds, &all(), sort, false), forward, "{sort:?}");
+            assert_eq!(
+                hold_ids_by(&ds, &all(), sort, true),
+                backward,
+                "{sort:?} reversed"
+            );
+        }
+    }
+
+    #[test]
+    fn the_blocker_type_sort_compares_without_case_and_keeps_ties_in_file_order() {
+        let ds = column_set();
+        let kinds: Vec<String> = ds.rows.iter().map(|r| r.blocker.kind.clone()).collect();
+        assert_eq!(kinds, ["PR", "P&ID", "Other", "PR", "Other"]);
+        assert_eq!(
+            hold_ids_by(&ds, &all(), HoldSort::BlockerType, false),
+            vec![2, 4, 1, 0, 3]
+        );
+        assert_eq!(
+            hold_ids_by(&ds, &all(), HoldSort::BlockerType, true),
+            vec![0, 3, 1, 2, 4]
+        );
+    }
+
+    #[test]
+    fn hold_type_count_and_size_mismatch_sorts_end_ties_in_line_order() {
+        let mut a1 = hold("A", "Civil", "MISC.", "x", 1);
+        a1.model_size = Some(4.0);
+        a1.ldt_size = Some(6.0);
+        let mut c1 = hold("C", "Civil", "MISC.", "x", 1);
+        c1.model_size = Some(6.0);
+        let mut d1 = hold("D", "Civil", "MISC.", "x", 1);
+        d1.model_size = Some(2.0);
+        d1.ldt_size = Some(3.0);
+        let ds = Dataset::build(
+            vec![
+                a1,
+                hold("A", "Civil", "P&ID", "x", 2),
+                hold("B", "Civil", "MISC.", "x", 1),
+                c1,
+                hold("C", "Civil", "MISC.", "x", 2),
+                d1,
+                hold("D", "Civil", "P&ID", "x", 2),
+                hold("D", "Civil", "ISO", "x", 3),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        let order = |sort: LineSort, reverse: bool| {
+            line_ids(
+                &ds,
+                &LineQuery {
+                    sort,
+                    reverse,
+                    ..Default::default()
+                },
+            )
+        };
+        assert_eq!(order(LineSort::HoldTypes, false), "DABC");
+        assert_eq!(order(LineSort::HoldTypes, true), "BCAD");
+        assert_eq!(order(LineSort::SizeMismatch, false), "ADBC");
+        assert_eq!(order(LineSort::SizeMismatch, true), "BCAD");
     }
 }
