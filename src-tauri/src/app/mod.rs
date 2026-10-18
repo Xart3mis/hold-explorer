@@ -13,6 +13,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use hx_core::dataset::Dataset;
+use hx_core::mapping::Field;
 use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
@@ -40,17 +41,30 @@ pub const TOP_ITEMS: usize = 10;
 /// Age in days from which an open hold counts as stale.
 pub const STALE_DAYS: i64 = 90;
 
-/// The dataset that was built last, with the workspace and the snapshot it belongs to, and the
-/// solve plan of its open holds once one was asked for. Read it through [`AppState::dataset`]
-/// and [`AppState::plan`] only, which ask for the snapshot.
+/// The dataset that was built last, with the workspace and the snapshot it belongs to, the solve
+/// plan of its open holds once one was asked for, and its columns once they were asked for. Read
+/// it through [`AppState::dataset`], [`AppState::plan`], and [`AppState::columns`] only, which
+/// ask for the snapshot.
 struct Cache {
     workspace_id: String,
     snapshot_id: i64,
     dataset: Dataset,
     plan: Option<SolvePlan>,
+    columns: Option<Columns>,
     /// The count of the state, to add to where a plan is built.
     #[cfg(test)]
     plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// The count of the state, to add to where the columns are found.
+    #[cfg(test)]
+    column_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+/// What the columns of a snapshot are, which the filter options name on every call.
+struct Columns {
+    /// [`Dataset::custom_dims`].
+    custom_dims: Vec<String>,
+    /// [`Dataset::absent_fields`].
+    absent: Vec<Field>,
 }
 
 /// What the application holds between commands.
@@ -73,6 +87,9 @@ pub struct AppState {
     /// How many solve plans were built since the application started.
     #[cfg(test)]
     plan_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    /// How many times the columns of a snapshot were found since the application started.
+    #[cfg(test)]
+    column_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl AppState {
@@ -94,6 +111,8 @@ impl AppState {
             dataset_builds: 0,
             #[cfg(test)]
             plan_builds: Default::default(),
+            #[cfg(test)]
+            column_builds: Default::default(),
         }
     }
 

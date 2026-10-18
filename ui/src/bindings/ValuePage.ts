@@ -12,4 +12,8 @@ total: number,
 /**
  * The first `limit` of them, ordered as `group_by` orders groups.
  */
-values: Array<Group>, };
+values: Array<Group>, 
+/**
+ * How many values match `search` beyond those in `values`.
+ */
+more: number, };

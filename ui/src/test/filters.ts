@@ -39,9 +39,15 @@ export function group(label: string, holds: number, key = label): Group {
 
 /**
  * The values the picker is offered for a dimension: three of them, all there are, as the command
- * counts them for the default filter. A test that looks at other values gives its own.
+ * counts them for the default filter. A test that looks at other values gives its own; `more` is
+ * what the command would answer for the `total` and the `values` of the page unless it is given.
  */
 export function valuePage(overrides: Partial<ValuePage> = {}): ValuePage {
-  const values = [group("Piping", 1186), group("Process", 913), group("Civil", 702)];
-  return { total: values.length, values, ...overrides };
+  const values = overrides.values ?? [
+    group("Piping", 1186),
+    group("Process", 913),
+    group("Civil", 702),
+  ];
+  const total = overrides.total ?? values.length;
+  return { total, values, more: total - values.length, ...overrides };
 }

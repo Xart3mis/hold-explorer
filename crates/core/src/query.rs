@@ -288,6 +288,17 @@ pub fn stale_count(ds: &Dataset, spec: &FilterSpec, days: i64) -> usize {
         .count()
 }
 
+/// Whether it can be known which open holds the filter keeps are stale: false only when it keeps
+/// open holds and none of them has an age, because none has a creation date, so that
+/// [`stale_count`] is 0 for want of dates. True when it keeps no open hold, as there is nothing to
+/// know then. Only an open hold has an age.
+pub fn ages_known(ds: &Dataset, spec: &FilterSpec) -> bool {
+    let mut open = filtered(ds, spec)
+        .filter(|row| !row.hold.released)
+        .peekable();
+    open.peek().is_none() || open.any(|row| row.age_days.is_some())
+}
+
 /// One line of a view. Sizes, stress calc, and the mismatch flag come from the line's first
 /// hold in the selection, because they are line-level attributes.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -732,6 +743,8 @@ pub struct ValuePage {
     pub total: usize,
     /// The first `limit` of them, ordered as `group_by` orders groups.
     pub values: Vec<Group>,
+    /// How many values match `search` beyond those in `values`.
+    pub more: usize,
 }
 
 /// Groups the holds kept by `spec.without(dim)` by `dim`, keeps the groups whose label contains
@@ -752,6 +765,7 @@ pub fn value_page(
     matching.truncate(limit);
     ValuePage {
         total,
+        more: total - matching.len(),
         values: matching,
     }
 }
@@ -1174,10 +1188,13 @@ mod tests {
     fn value_page_total_counts_matches_before_the_limit() {
         let page = value_page(&sample(), &open(), &Dim::Discipline, "", 2);
         assert_eq!(page.total, 3);
+        assert_eq!(page.more, 1);
         assert_eq!(keys(&page.values), vec![("Civil", 2, 2), ("Piping", 1, 1)]);
         let none = value_page(&sample(), &open(), &Dim::Discipline, "", 0);
-        assert_eq!(none.total, 3);
+        assert_eq!((none.total, none.more), (3, 3));
         assert!(none.values.is_empty());
+        let all = value_page(&sample(), &open(), &Dim::Discipline, "", 10);
+        assert_eq!((all.total, all.more), (3, 0));
     }
 
     #[test]
@@ -1658,6 +1675,51 @@ mod tests {
         assert_eq!(stale_count(&ds, &all(), 90), 2);
         assert_eq!(stale_count(&ds, &all(), 91), 1);
         assert_eq!(stale_count(&ds, &all(), 0), 3);
+    }
+
+    #[test]
+    fn ages_are_unknown_only_when_open_holds_are_kept_and_none_has_an_age() {
+        let mut released = hold("R", "Civil", "MISC.", "x", 200);
+        released.released = true;
+        released.release_date = Some(snapshot());
+        let dated = Dataset::build(
+            vec![hold("A", "Civil", "MISC.", "x", 30), released.clone()],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        assert!(ages_known(&dated, &open()));
+        assert!(ages_known(&dated, &all()));
+
+        // The same holds without their creation dates: no open hold has an age.
+        let mut dateless = dated.clone();
+        for row in &mut dateless.rows {
+            row.age_days = None;
+        }
+        assert!(!ages_known(&dateless, &open()));
+        assert!(!ages_known(&dateless, &all()));
+        // With no open hold kept there is nothing to know.
+        let released_only = FilterSpec {
+            status: Status::Released,
+            ..Default::default()
+        };
+        assert!(ages_known(&dateless, &released_only));
+        let nothing = FilterSpec {
+            text: "no hold has this text".to_owned(),
+            ..Default::default()
+        };
+        assert!(ages_known(&dateless, &nothing));
+
+        // One open hold with an age among the kept is enough.
+        let mut one = Dataset::build(
+            vec![
+                hold("A", "Civil", "MISC.", "x", 30),
+                hold("B", "Civil", "MISC.", "x", 40),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        one.rows[0].age_days = None;
+        assert!(ages_known(&one, &open()));
     }
 
     #[test]

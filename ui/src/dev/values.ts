@@ -115,5 +115,6 @@ export function devValues(
       lines: Math.round((kept * weight) / sum / 1.4),
     }))
     .sort((a, b) => b.holds - a.holds);
-  return { total: matching.length, values: matching.slice(0, LIMIT) };
+  const shown = matching.slice(0, LIMIT);
+  return { total: matching.length, values: shown, more: matching.length - shown.length };
 }

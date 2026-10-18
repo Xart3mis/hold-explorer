@@ -66,6 +66,24 @@ fn empty_dataset() -> Dataset {
     )
 }
 
+/// The options of the filter bar for the holds of `ds` that `spec` keeps, with the snapshot's
+/// extra columns and absent fields.
+fn options(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    custom_dims: Vec<String>,
+    absent: Vec<Field>,
+) -> FilterOptions {
+    let bands = default_age_bands();
+    FilterOptions {
+        total: summary(ds, spec).holds,
+        facets: facet_counts(ds, spec, &bands),
+        age_bands: bands,
+        custom_dims,
+        absent,
+    }
+}
+
 impl AppState {
     /// Checks `view` and gives `read` the dataset of the snapshot in view, or an empty one for a
     /// workspace without a snapshot, so the two cases cannot answer differently.
@@ -88,24 +106,24 @@ impl AppState {
     }
 
     /// The options of the filter bar for this filter. Without a snapshot every count is zero and
-    /// `absent` is empty: nothing is missing from a snapshot that does not exist.
+    /// `absent` is empty: nothing is missing from a snapshot that does not exist. The extra
+    /// columns and absent fields of a snapshot are found once; see [`AppState::columns`].
     pub fn filter_options(
         &mut self,
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<FilterOptions, CommandError> {
-        let bands = default_age_bands();
-        self.in_view(view, |ds, exists| FilterOptions {
-            total: summary(ds, spec).holds,
-            facets: facet_counts(ds, spec, &bands),
-            age_bands: bands.clone(),
-            custom_dims: ds.custom_dims(),
-            absent: if exists {
-                ds.absent_fields()
-            } else {
-                Vec::new()
-            },
-        })
+        let Some(selected) = self.snapshot_in_view(view)? else {
+            let ds = empty_dataset();
+            return Ok(options(&ds, spec, ds.custom_dims(), Vec::new()));
+        };
+        let (ds, columns) = self.columns(selected)?;
+        Ok(options(
+            ds,
+            spec,
+            columns.custom_dims.clone(),
+            columns.absent.clone(),
+        ))
     }
 
     /// The values of `dim` the picker offers, at most [`PICKER_VALUES`], whose label contains

@@ -3,7 +3,7 @@
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::query::{
-    group_by, line_page, stale_count, summary, Group, LineQuery, LineRow, Summary,
+    ages_known, group_by, line_page, stale_count, summary, Group, LineQuery, LineRow, Summary,
 };
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, SolvePlan};
@@ -13,7 +13,7 @@ use ts_rs::TS;
 
 use super::error::CommandError;
 use super::workspaces::WorkspaceOpen;
-use super::{describe, AppState, Cache, STALE_DAYS, TOP_ITEMS};
+use super::{describe, AppState, Cache, Columns, STALE_DAYS, TOP_ITEMS};
 
 /// The view the interface is showing when it asks for data. A command that reads the data in
 /// view answers only when this names the open workspace and the selected snapshot.
@@ -63,19 +63,6 @@ pub struct StaleCount {
     /// 0 for want of dates, not because no hold has waited long. True when it keeps no open hold,
     /// as there is nothing to know then.
     pub ages_known: bool,
-}
-
-/// Whether the filter keeps no open hold, or keeps one that has an age: see
-/// [`StaleCount::ages_known`]. Only an open hold has an age. This is `median_age_days.is_some()`
-/// of the summary except when no open hold is kept, where the median is absent too but nothing
-/// is unknown.
-pub(super) fn ages_known(dataset: &Dataset, spec: &FilterSpec) -> bool {
-    let mut open = dataset
-        .rows
-        .iter()
-        .filter(|row| !row.hold.released && spec.matches(row))
-        .peekable();
-    open.peek().is_none() || open.any(|row| row.age_days.is_some())
 }
 
 impl AppState {
@@ -137,8 +124,11 @@ impl AppState {
                     snapshot_id,
                     dataset,
                     plan: None,
+                    columns: None,
                     #[cfg(test)]
                     plan_builds: self.plan_builds.clone(),
+                    #[cfg(test)]
+                    column_builds: self.column_builds.clone(),
                 }
             }
         };
@@ -165,6 +155,26 @@ impl AppState {
             solve_plan(&cache.dataset, &FilterSpec::default(), None)
         });
         Ok((&cache.dataset, plan))
+    }
+
+    /// The dataset of this snapshot with its extra columns and absent fields, which are found on
+    /// the first call for the snapshot and kept with the dataset.
+    pub(super) fn columns(
+        &mut self,
+        snapshot_id: i64,
+    ) -> Result<(&Dataset, &Columns), CommandError> {
+        let cache = self.cache(snapshot_id)?;
+        let columns = cache.columns.get_or_insert_with(|| {
+            #[cfg(test)]
+            cache
+                .column_builds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Columns {
+                custom_dims: cache.dataset.custom_dims(),
+                absent: cache.dataset.absent_fields(),
+            }
+        });
+        Ok((&cache.dataset, columns))
     }
 
     /// The Overview of the selected snapshot for this filter; `None` when the workspace has no
@@ -215,5 +225,12 @@ impl AppState {
     #[cfg(test)]
     pub(super) fn plan_builds(&self) -> usize {
         self.plan_builds.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// How many times the columns of a snapshot were found since the application started.
+    #[cfg(test)]
+    pub(super) fn column_builds(&self) -> usize {
+        self.column_builds
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }

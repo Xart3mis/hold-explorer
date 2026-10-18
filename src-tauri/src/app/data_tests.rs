@@ -3,12 +3,11 @@ use std::path::PathBuf;
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec, Status};
 use hx_core::mapping::Field;
-use hx_core::query::{self, HoldQuery, HoldSort, LineQuery, LineSort};
+use hx_core::query::{self, ages_known, HoldQuery, HoldSort, LineQuery, LineSort};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
 use super::snapshot_tests::{import, open_holds, view_of, Fixture};
-use super::snapshots::ages_known;
 use super::{
     AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
 };
@@ -229,11 +228,46 @@ fn filter_values_never_return_more_than_the_picker_shows_and_report_the_true_tot
     let page = state.filter_values(&spec, &Dim::LineId, "", &view).unwrap();
     assert!(page.total > PICKER_VALUES, "{}", page.total);
     assert_eq!(page.values.len(), PICKER_VALUES);
+    assert_eq!(page.more, page.total - PICKER_VALUES);
 
     let narrow = state
         .filter_values(&spec, &Dim::LineId, "no such line anywhere", &view)
         .unwrap();
-    assert_eq!((narrow.total, narrow.values.len()), (0, 0));
+    assert_eq!((narrow.total, narrow.values.len(), narrow.more), (0, 0, 0));
+}
+
+#[test]
+fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
+    let fx = Fixture::new();
+    let (first, second) = (fx.synth("a.xlsx", 1), fx.synth("b.xlsx", 2));
+    let mut state = fx.state();
+    let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
+    import(&mut state, &second, "2026-09-08 00:00:00", false);
+    let options = |state: &mut AppState, spec: &FilterSpec| {
+        let view = shown(state);
+        state.filter_options(spec, &view).unwrap()
+    };
+    let spec = open_holds();
+    let once = options(&mut state, &spec);
+    assert_eq!(state.column_builds(), 1);
+    let all = FilterSpec {
+        status: Status::All,
+        ..open_holds()
+    };
+    let again = options(&mut state, &all);
+    assert_eq!(state.column_builds(), 1);
+    let ds = dataset_of(&mut state);
+    for answer in [once, again] {
+        assert_eq!(
+            (answer.custom_dims, answer.absent),
+            (ds.custom_dims(), ds.absent_fields())
+        );
+    }
+
+    // Another snapshot finds them anew.
+    state.select_snapshot(older).unwrap();
+    options(&mut state, &spec);
+    assert_eq!(state.column_builds(), 2);
 }
 
 #[test]
