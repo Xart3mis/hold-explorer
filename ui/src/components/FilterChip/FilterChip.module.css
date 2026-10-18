@@ -18,7 +18,8 @@
   transition:
     background-color var(--duration-fast) var(--ease-out),
     border-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
 }
 
 /* The field and the value: the button that opens the filter. */
@@ -129,6 +130,11 @@
   flex: none;
   margin-inline-end: var(--space-1);
   color: var(--color-text-muted);
+}
+
+/* A mark of an answer for the filters or the view of before, as the total is while it is read. */
+.chip[data-stale] {
+  opacity: var(--opacity-stale);
 }
 
 .chip[data-inactive]:has(.body[data-hovered]),

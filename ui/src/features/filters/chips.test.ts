@@ -128,7 +128,7 @@ describe("chipsOf", () => {
 
   it("marks the chip of each filter the command says the snapshot cannot apply, and keeps it", () => {
     const absent = (chips: ReturnType<typeof chipsOf>) =>
-      chips.filter((chip) => chip.isAbsent).map((chip) => chip.id);
+      chips.filter((chip) => chip.isInactive).map((chip) => chip.id);
     expect(absent(chipsOf(EVERY))).toEqual([]);
     expect(absent(chipsOf(EVERY, { dims: [], parts: [] }))).toEqual([]);
     expect(

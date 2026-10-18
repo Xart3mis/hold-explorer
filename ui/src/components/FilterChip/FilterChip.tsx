@@ -76,6 +76,11 @@ export interface FilterChipProps {
    * It opens and is removed as any chip.
    */
   isInactive?: boolean;
+  /**
+   * What the chip says is that of an answer for the filters or the view of before: it is shown
+   * at `--opacity-stale` until the new answer is there.
+   */
+  isStale?: boolean;
   className?: string | undefined;
 }
 
@@ -94,6 +99,7 @@ export function FilterChip({
   isUnderPopover = false,
   isDisabled = false,
   isInactive = false,
+  isStale = false,
   className,
 }: FilterChipProps) {
   const remove = t("filterChip.remove", { field });
@@ -102,6 +108,7 @@ export function FilterChip({
       data-part="filter-chip"
       data-disabled={isDisabled ? "" : undefined}
       data-inactive={isInactive ? "" : undefined}
+      data-stale={isStale ? "" : undefined}
       className={cx(styles.chip, className)}
     >
       <RacButton

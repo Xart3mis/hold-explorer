@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Duration, NaiveDateTime};
 use hx_core::dataset::Dataset;
-use hx_core::filter::{Dim, FieldFilter, FilterSpec, Status};
+use hx_core::filter::{Dim, FieldFilter, FilterPart, FilterSpec, Status};
 use hx_core::load::load_file;
 use hx_core::mapping::Field;
 use hx_core::query::{group_by, summary};
@@ -404,6 +404,50 @@ fn the_export_column_names_the_interface_shows_are_the_labels_of_the_fields() {
     }
     // Every name belongs to a field: the loop found one for each field, and there is no other.
     assert_eq!(names.len(), Field::ALL.len());
+}
+
+#[test]
+fn the_columns_the_interface_takes_each_filter_to_need_are_the_engines() {
+    #[derive(serde::Deserialize)]
+    struct Needs {
+        dims: BTreeMap<String, Vec<Field>>,
+        parts: BTreeMap<String, Vec<Field>>,
+    }
+    let json = include_str!("../../../ui/src/api/filter-needs.json");
+    let needs: Needs = serde_json::from_str(json).unwrap();
+    // Every dimension but a custom column, which is needed by name.
+    let named = [
+        Dim::Discipline,
+        Dim::HoldType,
+        Dim::Role,
+        Dim::Name,
+        Dim::BlockerType,
+        Dim::Blocker,
+        Dim::Remark,
+        Dim::LineId,
+        Dim::ModelSize,
+        Dim::StressCalc,
+    ];
+    for dim in &named {
+        let key = serde_json::to_value(dim).unwrap();
+        let key = key.as_str().unwrap();
+        assert_eq!(
+            needs.dims.get(key).map(Vec::as_slice),
+            Some(dim.needs()),
+            "the interface takes {key} to need what the engine does"
+        );
+    }
+    assert_eq!(needs.dims.len(), named.len());
+    for part in FilterPart::ALL {
+        let key = serde_json::to_value(part).unwrap();
+        let key = key.as_str().unwrap();
+        assert_eq!(
+            needs.parts.get(key).map(Vec::as_slice),
+            Some(part.needs()),
+            "the interface takes {key} to need what the engine does"
+        );
+    }
+    assert_eq!(needs.parts.len(), FilterPart::ALL.len());
 }
 
 #[test]

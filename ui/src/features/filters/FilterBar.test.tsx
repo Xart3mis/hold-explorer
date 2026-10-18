@@ -788,6 +788,59 @@ describe("FilterBar", () => {
     expect(within(full).getAllByRole("menuitemradio")).toHaveLength(3);
   });
 
+  it("dims the marks of the chips while they are those of the snapshot of before", async () => {
+    const select = held<WorkspaceOpen>();
+    renderBar(
+      ({ view }) =>
+        view.snapshot_id === 2
+          ? filterOptions({ absent: ["Discipline"], inactive: { dims: ["Discipline"], parts: [] } })
+          : new Promise<never>(() => undefined),
+      { snapshot_select: select.handler },
+    );
+    const region = await bar();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const pill = () =>
+      must(chip(region, marked).closest("[data-part='filter-chip']"), "the marked chip");
+    // Once the answer for these filters is there, the mark is its own, and not dimmed.
+    await waitFor(() => {
+      expect(chips(region)).toEqual([marked]);
+      expect(pill()).not.toHaveAttribute("data-stale");
+    });
+
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(select.waiting).toHaveLength(1);
+    });
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
+      await Promise.resolve();
+    });
+    // The answer for snapshot 1 is on its way: the mark is the one of snapshot 2, dimmed.
+    await waitFor(() => {
+      expect(pill()).toHaveAttribute("data-stale");
+    });
+    expect(total(region)).toHaveAttribute("data-stale");
+  });
+
+  it("marks no chip and says so while the counts cannot be read", async () => {
+    renderBar(() => {
+      throw commandFailure("Io", "The workspace file could not be read. Try again.");
+    });
+    const region = await screen.findByRole("group", { name: text.bar });
+    await within(region).findByRole("alert");
+    expect(region.querySelector("[data-part='filter-inactive-unknown']")).toBeNull();
+    set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
+    await waitFor(() => {
+      expect(region.querySelector("[data-part='filter-inactive-unknown']")).toHaveTextContent(
+        text.inactiveUnknown,
+      );
+    });
+    expect(chips(region)).toEqual(["Discipline Civil"]);
+  });
+
   it("offers only the open holds, and the status in view, while the counts cannot be read", async () => {
     const { user } = renderBar(() => {
       throw commandFailure("Io", "The workspace file could not be read. Try again.");

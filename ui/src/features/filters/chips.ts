@@ -56,7 +56,7 @@ export interface Chip {
   /** The filter keeps what does not match. */
   isNegated: boolean;
   /** The command left the filter out: the snapshot in view lacks a column it needs. */
-  isAbsent: boolean;
+  isInactive: boolean;
   /** The filters without this one. */
   remove: (filters: Filters) => Filters;
 }
@@ -80,6 +80,11 @@ const PARTS: Record<Exclude<FilterField["kind"], "dim" | "text">, FilterPart> = 
   sizeMismatch: "SizeMismatch",
 };
 
+/** The part of the filter a field is, as the command names it; `null` for a dimension and text. */
+export function filterPart(field: FilterField): FilterPart | null {
+  return field.kind === "dim" || field.kind === "text" ? null : PARTS[field.kind];
+}
+
 /**
  * The chips of the filters: the fields first, in the order they were added, then the filters that
  * are not a field, in the order the picker lists them. An entry without values filters nothing
@@ -88,10 +93,11 @@ const PARTS: Record<Exclude<FilterField["kind"], "dim" | "text">, FilterPart> = 
  */
 export function chipsOf(filters: Filters, inactive?: Inactive): Chip[] {
   const chips: Chip[] = [];
-  const isAbsent = (field: FilterField): boolean => {
-    if (inactive === undefined || field.kind === "text") return false;
+  const isInactive = (field: FilterField): boolean => {
+    if (inactive === undefined) return false;
     if (field.kind === "dim") return inactive.dims.some((dim) => isSameDim(dim, field.dim));
-    return inactive.parts.includes(PARTS[field.kind]);
+    const part = filterPart(field);
+    return part !== null && inactive.parts.includes(part);
   };
   for (const entry of filters.fields) {
     if (entry.values.length === 0) continue;
@@ -103,7 +109,7 @@ export function chipsOf(filters: Filters, inactive?: Inactive): Chip[] {
       name: fieldName(field),
       value: summary(entry.values.map((value) => value.label)),
       isNegated: entry.negate,
-      isAbsent: isAbsent(field),
+      isInactive: isInactive(field),
       remove: (from) => ({
         ...from,
         fields: from.fields.filter((other) => fieldId({ kind: "dim", dim: other.dim }) !== id),
@@ -117,7 +123,7 @@ export function chipsOf(filters: Filters, inactive?: Inactive): Chip[] {
       name: fieldName(field),
       value,
       isNegated: false,
-      isAbsent: isAbsent(field),
+      isInactive: isInactive(field),
       remove,
     });
   };

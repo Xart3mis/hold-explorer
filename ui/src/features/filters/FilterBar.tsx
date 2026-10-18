@@ -74,9 +74,12 @@ export function FilterBar() {
   const wasOpen = useRef(false);
 
   const counted = options.isError ? undefined : options.data;
-  // The command says which filters the snapshot cannot apply, and their chips are marked.
+  // The command says which filters the snapshot cannot apply, and their chips are marked. While
+  // the counts cannot be read, which those are is not known: no chip is marked, and the line
+  // under the controls says so.
   const chips = chipsOf(filters, counted?.inactive);
-  const hasInactive = chips.some((chip) => chip.isAbsent);
+  const hasInactive = chips.some((chip) => chip.isInactive);
+  const isUnknown = options.isError && chips.length > 0;
   // What is shown was counted for the filters, the snapshot, or the workspace of before.
   const isStale = counted !== undefined && options.isPlaceholderData;
   const absent = counted?.absent ?? [];
@@ -183,7 +186,9 @@ export function FilterBar() {
               field={chip.name}
               value={chip.value}
               isNegated={chip.isNegated}
-              isInactive={chip.isAbsent}
+              isInactive={chip.isInactive}
+              // A mark is that of the answer shown, which may be that of the view of before.
+              isStale={chip.isInactive && isStale}
               isDisabled={isBusy}
               isExpanded={expanded === chip.id}
               isUnderPopover={isOpen}
@@ -244,7 +249,7 @@ export function FilterBar() {
           )}
         </div>
       </div>
-      {noReleased || missing.length > 0 || hasInactive ? (
+      {noReleased || missing.length > 0 || hasInactive || isUnknown ? (
         <p data-part="filter-notes" data-stale={isStale ? "" : undefined} className={styles.notes}>
           {[
             noReleased ? (
@@ -263,6 +268,11 @@ export function FilterBar() {
             hasInactive ? (
               <span key="inactive" data-part="filter-inactive">
                 {t("filters.inactiveKept")}
+              </span>
+            ) : null,
+            isUnknown ? (
+              <span key="unknown" data-part="filter-inactive-unknown">
+                {t("filters.inactiveUnknown")}
               </span>
             ) : null,
           ]

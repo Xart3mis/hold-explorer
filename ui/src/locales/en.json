@@ -103,6 +103,7 @@
     "total_one": "{{count, number}} hold",
     "total_other": "{{count, number}} holds",
     "inactiveKept": "Filters on columns this snapshot lacks are kept, and not applied to it.",
+    "inactiveUnknown": "Which filters this snapshot cannot apply is not known until the counts are read.",
     "busySnapshot": "Waiting for the snapshot.",
     "busyWorkspace": "Waiting for the workspace.",
     "noReleased": "No hold in this snapshot is released. Only open holds can be shown.",

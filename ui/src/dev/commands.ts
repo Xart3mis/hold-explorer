@@ -2,11 +2,13 @@
 // development only; see ui/src/dev/app.tsx.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { openHoldsFilter } from "../api/filter";
+import { dimNeeds, partNeeds } from "../api/filter-needs";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
 import type { Dim } from "../bindings/Dim";
 import type { Field } from "../bindings/Field";
+import type { FilterPart } from "../bindings/FilterPart";
 import type { Inactive } from "../bindings/Inactive";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
@@ -285,15 +287,6 @@ const MANY_FILTERS: Filters = {
   sizeMismatch: true,
 };
 
-/** The columns a filter on each built-in dimension needs, as the core says them. */
-const DIM_NEEDS: Partial<Record<string, Field[]>> = {
-  Discipline: ["Discipline"],
-  Role: ["Role"],
-  Name: ["Name"],
-  ModelSize: ["ModelSize"],
-  StressCalc: ["StressCalc"],
-};
-
 /**
  * The filter as the core's `FilterSpec::applicable` leaves it for a snapshot that lacks `absent`
  * and names `customDims`, with what it left out.
@@ -303,9 +296,9 @@ function devApplicable(
   absent: Field[],
   customDims: string[],
 ): { applied: FilterSpec; inactive: Inactive } {
-  const lacks = (needs: Field[]) => needs.some((field) => absent.includes(field));
+  const lacks = (needs: readonly Field[]) => needs.some((field) => absent.includes(field));
   const isAbsent = (dim: Dim) =>
-    typeof dim === "string" ? lacks(DIM_NEEDS[dim] ?? []) : !customDims.includes(dim.Custom);
+    typeof dim === "string" ? lacks(dimNeeds(dim)) : !customDims.includes(dim.Custom);
   const inactive: Inactive = {
     dims: spec.fields
       .filter((field) => field.values.length > 0 && isAbsent(field.dim))
@@ -317,21 +310,17 @@ function devApplicable(
     fields: spec.fields.filter((field) => field.values.length === 0 || !isAbsent(field.dim)),
   };
   const isBounded = (range: FilterSpec["created"]) => range.from !== null || range.to !== null;
-  if (spec.age_bands.length > 0 && lacks(["Created"])) {
-    inactive.parts.push("AgeBands");
-    applied.age_bands = [];
-  }
-  if (isBounded(spec.created) && lacks(["Created"])) {
-    inactive.parts.push("Created");
-    applied.created = { from: null, to: null };
-  }
-  if (isBounded(spec.released) && lacks(["Released", "ReleaseDate"])) {
-    inactive.parts.push("Released");
-    applied.released = { from: null, to: null };
-  }
-  if (spec.size_mismatch !== null && lacks(["ModelSize", "LdtSize"])) {
-    inactive.parts.push("SizeMismatch");
-    applied.size_mismatch = null;
+  const parts: [FilterPart, boolean, () => void][] = [
+    ["AgeBands", spec.age_bands.length > 0, () => (applied.age_bands = [])],
+    ["Created", isBounded(spec.created), () => (applied.created = { from: null, to: null })],
+    ["Released", isBounded(spec.released), () => (applied.released = { from: null, to: null })],
+    ["SizeMismatch", spec.size_mismatch !== null, () => (applied.size_mismatch = null)],
+  ];
+  for (const [part, isSet, clear] of parts) {
+    if (isSet && lacks(partNeeds(part))) {
+      inactive.parts.push(part);
+      clear();
+    }
   }
   return { applied, inactive };
 }
