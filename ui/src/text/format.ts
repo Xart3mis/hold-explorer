@@ -44,6 +44,18 @@ const size = new Intl.NumberFormat(locale, { maximumFractionDigits: 3 });
 
 const percent = new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 });
 
+// Text in the order a reader expects of a sorted column: case and accents aside, the numbers in it
+// as numbers ("Item 2" before "Item 10").
+const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
+
+/**
+ * How two texts compare in a sorted column: below zero when `one` comes first, above when
+ * `other` does, zero when they are the same to a reader (case and accents aside).
+ */
+export function compareText(one: string, other: string): number {
+  return collator.compare(one, other);
+}
+
 const WALL_CLOCK = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?$/;
 
 /** The moment a wall-clock text names, read as UTC; `null` when the text is not such a moment. */

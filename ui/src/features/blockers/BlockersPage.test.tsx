@@ -403,6 +403,86 @@ describe("BlockersPage", () => {
     expect(within(chart).getByRole("option")).toHaveAttribute("aria-selected", "true");
   });
 
+  it(
+    "sorts the steps by any column, keeps the sort in the address, and leaves the curve in step order",
+    SLOW,
+    async () => {
+      const { user, router, solveOrder } = renderBlockers({
+        path: "/blockers?blocker=Piping%7CClient",
+      });
+      const table = await stepTable();
+      await stepRow(table, 4);
+      const header = (name: string) => within(table).getByRole("columnheader", { name });
+      const steps = () =>
+        within(table)
+          .getAllByRole("rowheader")
+          .map((cell) => cell.textContent);
+      // Every column sorts; none is marked while the steps are in the solve order.
+      for (const name of Object.values(text.column)) {
+        expect(header(name)).toHaveAttribute("aria-sort", "none");
+      }
+      expect(steps()).toEqual(["1", "2", "3", "4"]);
+
+      await user.click(header(text.column.holds));
+      expect(header(text.column.holds)).toHaveAttribute("aria-sort", "descending");
+      expect(steps()).toEqual(["1", "2", "4", "3"]);
+      expect(router.state.location.search).toBe("?blocker=Piping%7CClient&sort=holds&dir=desc");
+      await user.click(header(text.column.holds));
+      expect(header(text.column.holds)).toHaveAttribute("aria-sort", "ascending");
+      expect(steps()).toEqual(["3", "4", "2", "1"]);
+      // Text from A, and the steps ties leave in the solve order.
+      await user.click(header(text.column.blocker));
+      expect(header(text.column.blocker)).toHaveAttribute("aria-sort", "ascending");
+      expect(steps()).toEqual(["3", "4", "1", "2"]);
+      await user.click(header(text.column.kind));
+      expect(steps()).toEqual(["1", "4", "3", "2"]);
+      await user.click(header(text.column.discipline));
+      expect(steps()).toEqual(["1", "3", "4", "2"]);
+      await user.click(header(text.column.gain));
+      expect(header(text.column.gain)).toHaveAttribute("aria-sort", "descending");
+      expect(steps()).toEqual(["1", "2", "3", "4"]);
+      await user.click(header(text.column.cumulative));
+      expect(steps()).toEqual(["4", "3", "2", "1"]);
+      await user.click(header(text.column.step));
+      expect(header(text.column.step)).toHaveAttribute("aria-sort", "ascending");
+      expect(steps()).toEqual(["1", "2", "3", "4"]);
+      await user.click(header(text.column.step));
+      expect(steps()).toEqual(["4", "3", "2", "1"]);
+      expect(router.state.location.search).toBe("?blocker=Piping%7CClient&sort=step&dir=desc");
+
+      // The selection stays, and the curve keeps the order of the steps: its point is step 4.
+      expect(await stepRow(table, 4)).toHaveAttribute("aria-selected", "true");
+      expect(within(await curve()).getByRole("option")).toHaveAttribute("aria-posinset", "4");
+      await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+      const view = await screen.findByRole("grid", {
+        name: fill(en.charts.tableName, { name: text.curve }),
+      });
+      expect(
+        within(view)
+          .getAllByRole("rowheader")
+          .map((cell) => cell.textContent),
+      ).toEqual(["1", "2", "3", "4"]);
+      // Sorting is presentation: the solve order was read once.
+      expect(solveOrder).toHaveBeenCalledTimes(1);
+      await expectAccessible(document.body, { page: true });
+    },
+  );
+
+  it("opens with the steps sorted as its address says", async () => {
+    renderBlockers({ path: "/blockers?sort=holds&dir=asc" });
+    const table = await stepTable();
+    await stepRow(table, 1);
+    expect(within(table).getByRole("columnheader", { name: text.column.holds })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    expect(
+      within(table)
+        .getAllByRole("rowheader")
+        .map((cell) => cell.textContent),
+    ).toEqual(["3", "4", "2", "1"]);
+  });
+
   it("marks the step of the blocker its address names", async () => {
     renderBlockers({ path: "/blockers?blocker=Piping%7CClient" });
     expect(await stepRow(await stepTable(), 4)).toHaveAttribute("aria-selected", "true");
@@ -710,6 +790,50 @@ describe("BlockersPage", () => {
           expect(await stepRow(table, step)).toHaveAttribute("aria-selected", "true");
         }
         expect(reads).toBe(0);
+      },
+    );
+
+    it("hands the steps over in the sorted order as the table is scrolled", SLOW, async () => {
+      renderBlockers({
+        path: "/blockers?sort=step&dir=desc",
+        solveOrder: () => manySteps(5300, 100),
+      });
+      const table = await stepTable();
+      await waitFor(() => {
+        expect(countLine()).toHaveTextContent("200 of 5,300 steps");
+      });
+      expect(await within(table).findByRole("rowheader", { name: "5,300" })).toBeInTheDocument();
+      scrollTable(table, 200 * 36);
+      await waitFor(() => {
+        expect(loaded()).toBe(400);
+      });
+      scrollTable(table, 380 * 36);
+      // The steps handed after the first 200 go on down from step 5,101.
+      expect(await within(table).findByRole("rowheader", { name: "4,920" })).toBeInTheDocument();
+      const shown = within(table)
+        .getAllByRole("rowheader")
+        .map((cell) => Number(cell.textContent.replace(/,/g, "")));
+      expect(shown).toEqual([...shown].sort((one, other) => other - one));
+    });
+
+    it(
+      "hands over a step selected past those shown in the sorted table, and brings it into view",
+      SLOW,
+      async () => {
+        renderBlockers({
+          path: "/blockers?blocker=Piping%7CItem%20600&sort=cumulative&dir=desc",
+          solveOrder: () => manySteps(5300, 100),
+        });
+        const table = await stepTable();
+        // Most lines freed so far first: step 600 is the 4,701st row, so 4,800 are handed.
+        await waitFor(() => {
+          expect(countLine()).toHaveTextContent("4,800 of 5,300 steps");
+        });
+        await waitFor(() => {
+          expect(table.scrollTop).toBeGreaterThan(4650 * 36);
+        });
+        scrollTable(table, table.scrollTop);
+        expect(await stepRow(table, 600)).toHaveAttribute("aria-selected", "true");
       },
     );
 

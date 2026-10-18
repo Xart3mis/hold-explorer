@@ -315,6 +315,67 @@ describe("the welcome page with workspaces", () => {
     expect(within(main).getByRole("button", { name: en.welcome.demoOpen })).toBeInTheDocument();
   });
 
+  it(
+    "sorts the list by any of its columns, and turns it round on a second press",
+    SLOW,
+    async () => {
+      const open = vi.fn(() => opened({ workspace: otherWorkspace }));
+      const { user } = renderApp({
+        start: startState({
+          list: {
+            ...startState().list,
+            workspaces: [
+              otherWorkspace,
+              workspace(),
+              workspace({
+                id: "e".repeat(16),
+                name: "Empty",
+                snapshot_count: 0,
+                latest_taken_at: null,
+              }),
+            ],
+          },
+        }),
+        path: "/welcome",
+        handlers: { workspace_open: open },
+      });
+      const main = await page();
+      const grid = within(main).getByRole("grid", { name: en.workspaces.table });
+      const names = () =>
+        within(grid)
+          .getAllByRole("row")
+          .slice(1)
+          .map((row) => within(row).getByRole("rowheader").textContent);
+      const header = (name: string) => within(grid).getByRole("columnheader", { name });
+      for (const name of [
+        en.workspaces.columnName,
+        en.workspaces.columnSnapshots,
+        en.workspaces.columnLatest,
+      ]) {
+        expect(header(name)).toHaveAttribute("aria-sort", "none");
+      }
+      expect(names()).toEqual(["Tank farm", "Unit 573 piping", "Empty"]);
+      await user.click(header(en.workspaces.columnName));
+      expect(header(en.workspaces.columnName)).toHaveAttribute("aria-sort", "ascending");
+      expect(names()).toEqual(["Empty", "Tank farm", "Unit 573 piping"]);
+      await user.click(header(en.workspaces.columnName));
+      expect(names()).toEqual(["Unit 573 piping", "Tank farm", "Empty"]);
+      // A count, the most first.
+      await user.click(header(en.workspaces.columnSnapshots));
+      expect(header(en.workspaces.columnSnapshots)).toHaveAttribute("aria-sort", "descending");
+      expect(names()).toEqual(["Tank farm", "Unit 573 piping", "Empty"]);
+      // A date, the newest first; a workspace without a snapshot stays last both ways.
+      await user.click(header(en.workspaces.columnLatest));
+      expect(header(en.workspaces.columnLatest)).toHaveAttribute("aria-sort", "descending");
+      expect(names()).toEqual(["Unit 573 piping", "Tank farm", "Empty"]);
+      await user.click(header(en.workspaces.columnLatest));
+      expect(names()).toEqual(["Tank farm", "Unit 573 piping", "Empty"]);
+      // Sorting opens nothing.
+      expect(open).not.toHaveBeenCalled();
+      await expectAccessible(document.body, { page: true });
+    },
+  );
+
   it("opens a workspace when its row is activated, and lands on Overview", SLOW, async () => {
     const open = vi.fn(() => opened({ workspace: otherWorkspace }));
     const { user, router } = renderApp({

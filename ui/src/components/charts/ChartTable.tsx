@@ -1,5 +1,5 @@
 import { Table2 } from "lucide-react";
-import { useId, useMemo, useRef, type SyntheticEvent } from "react";
+import { useId, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { ToggleButton } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
@@ -10,8 +10,10 @@ import {
   isHeaderCut,
   textChars,
   type DataTableColumn,
+  type DataTableSort,
 } from "../DataTable/DataTable";
 import { Icon } from "../Icon/Icon";
+import { nextSort, useTableSort } from "../useTableSort";
 import styles from "./ChartTable.module.css";
 import { ChartTooltip, useChartTooltip } from "./ChartTooltip";
 
@@ -29,12 +31,22 @@ export interface ChartTableColumn {
   isRowHeader?: boolean;
   /** The column of the values a chart folded into one, such as the last column of a heatmap. */
   isFolded?: boolean;
+  /**
+   * The direction of a first press of its header: the most first for a number, from A for text,
+   * unless the column says otherwise (the steps of a curve, from the first).
+   */
+  sortFirst?: "ascending" | "descending";
 }
 
-/** A row of the table view: one text per column, formatted as the chart formats it. */
+/**
+ * A row of the table view: one text per column, formatted as the chart formats it, and the value
+ * each text formats, by which the column sorts.
+ */
 export interface ChartTableRow {
   key: string;
   cells: readonly string[];
+  /** The raw value of each cell, one per column; `null` for a cell without one. */
+  values: readonly (string | number | null)[];
   /** The row of the values a chart folded into one, such as the last row of a heatmap. */
   isFolded?: boolean;
 }
@@ -69,9 +81,15 @@ const TABLE_ROWS = 12;
  */
 const HEADER_MOST = 24;
 
+/** The folded row stays last whatever the sort, as the chart draws it last. */
+const isFoldedRow = (row: ChartTableRow) => row.isFolded === true;
+
 /**
  * The table view of a chart: the same numbers, formatted the same, in a read-only table. Every
- * chart builds its rows from the data it draws, so the two cannot differ.
+ * chart builds its rows from the data it draws, so the two cannot differ. Every column sorts by
+ * the values of its cells; the rows start in the order of the chart, unmarked, and a folded row
+ * stays last. The sort is the table's own: it is not kept when the table goes, and it is
+ * forgotten when the columns are others.
  */
 export function ChartTable({
   columns,
@@ -108,6 +126,17 @@ export function ChartTable({
   // columns are declared once for the columns and rows they are given: new columns would have
   // the table build every row again, at each render of the chart.
   const tableColumns = useMemo(() => declareColumns(columns, rows), [columns, rows]);
+  // The sort, for the columns it was asked for: other columns (a heatmap of other dimensions)
+  // start again in the order of the chart.
+  const [asked, setAsked] = useState<{
+    columns: readonly ChartTableColumn[];
+    sort: DataTableSort;
+  }>();
+  const sort = asked?.columns === columns ? asked.sort : undefined;
+  const sorted = useTableSort(rows, tableColumns, sort, isFoldedRow);
+  // Another sort is another result: the table returns to its top.
+  const sortedKey =
+    sort === undefined ? resultKey : `${resultKey ?? ""}|${sort.column}:${sort.direction}`;
   return (
     <div
       ref={area}
@@ -126,12 +155,16 @@ export function ChartTable({
       <DataTable
         aria-label={props["aria-label"]}
         columns={tableColumns}
-        rows={rows}
+        rows={sorted}
         rowKey={(row) => row.key}
+        {...(sort === undefined ? {} : { sort })}
+        onSortChange={(pressed) => {
+          setAsked({ columns, sort: nextSort(tableColumns, sort, pressed.column) });
+        }}
         height={{ maxRows }}
         isLoading={isLoading === true}
         isStale={isStale === true}
-        {...(resultKey === undefined ? {} : { resultKey })}
+        {...(sortedKey === undefined ? {} : { resultKey: sortedKey })}
         className={className}
       />
       <ChartTooltip
@@ -166,6 +199,8 @@ function declareColumns(
       kind: column.isNumber === true ? "number" : "text",
       isRowHeader: column.isRowHeader === true,
       headerChars: HEADER_MOST,
+      sortValue: (row: ChartTableRow) => row.values[index] ?? null,
+      sortFirst: column.sortFirst ?? (column.isNumber === true ? "descending" : "ascending"),
       size:
         column.isNumber === true
           ? { chars: Math.max(1, Math.ceil(longest)) }

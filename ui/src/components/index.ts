@@ -104,5 +104,15 @@ export {
   type ToastOptions,
 } from "./ToastRegion/ToastRegion";
 export { Tooltip, type TooltipProps } from "./Tooltip/Tooltip";
+export {
+  nextSort,
+  SORT_PARTS,
+  sortAddress,
+  sortOfAddress,
+  sortRows,
+  useTableSort,
+  type SortableColumn,
+  type SortValue,
+} from "./useTableSort";
 export { ViewSwitch, type View, type ViewSwitchProps } from "./ViewSwitch/ViewSwitch";
 export { VisuallyHidden, type VisuallyHiddenProps } from "./VisuallyHidden/VisuallyHidden";

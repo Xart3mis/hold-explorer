@@ -124,6 +124,99 @@ describe("BreakdownPage", () => {
     },
   );
 
+  it(
+    "sorts the groups by any column, keeps the sort in the address, and asks for nothing",
+    SLOW,
+    async () => {
+      const { user, router, breakdown } = renderBreakdown({
+        path: "/breakdown?mode=list&by=Discipline&open=Piping",
+      });
+      const table = await groupTable();
+      await findRow(table, lineId(2));
+      const header = (name: string) => within(table).getByRole("columnheader", { name });
+      const groups = () =>
+        within(table)
+          .getAllByRole("row")
+          .filter((row) => row.getAttribute("aria-level") === "1")
+          .map((row) => within(row).getByRole("rowheader").textContent);
+      const children = () =>
+        within(table)
+          .getAllByRole("row")
+          .filter((row) => row.getAttribute("aria-level") === "2")
+          .map((row) => within(row).getByRole("rowheader").textContent);
+      // Every column sorts; none is marked while the groups are in the command's order.
+      for (const name of ["Discipline", text.column.share, text.column.holds, text.column.lines]) {
+        expect(header(name)).toHaveAttribute("aria-sort", "none");
+      }
+      expect(groups()).toEqual(["Piping", "Civil", "(blank)"]);
+
+      await user.click(header(text.column.lines));
+      expect(header(text.column.lines)).toHaveAttribute("aria-sort", "descending");
+      expect(router.state.location.search).toBe(
+        "?mode=list&by=Discipline&open=Piping&sort=lines&dir=desc",
+      );
+      await user.click(header(text.column.lines));
+      expect(header(text.column.lines)).toHaveAttribute("aria-sort", "ascending");
+      expect(groups()).toEqual(["(blank)", "Civil", "Piping"]);
+      expect(router.state.location.search).toBe(
+        "?mode=list&by=Discipline&open=Piping&sort=lines&dir=asc",
+      );
+      // The lines of an expanded group keep the order the group was read with.
+      expect(children()).toEqual([lineId(0), lineId(1), lineId(2)]);
+
+      // The share sorts by the holds, the most first.
+      await user.click(header(text.column.share));
+      expect(header(text.column.share)).toHaveAttribute("aria-sort", "descending");
+      expect(header(text.column.lines)).toHaveAttribute("aria-sort", "none");
+      expect(groups()).toEqual(["Piping", "Civil", "(blank)"]);
+      await user.click(header(text.column.holds));
+      await user.click(header(text.column.holds));
+      expect(header(text.column.holds)).toHaveAttribute("aria-sort", "ascending");
+      expect(groups()).toEqual(["(blank)", "Civil", "Piping"]);
+      await user.click(header("Discipline"));
+      expect(header("Discipline")).toHaveAttribute("aria-sort", "ascending");
+      expect(groups()).toEqual(["(blank)", "Civil", "Piping"]);
+      await user.click(header("Discipline"));
+      expect(groups()).toEqual(["Piping", "Civil", "(blank)"]);
+      expect(router.state.location.search).toBe(
+        "?mode=list&by=Discipline&open=Piping&sort=label&dir=desc",
+      );
+      // Sorting is presentation: the groups and the lines were read once.
+      expect(breakdown).toHaveBeenCalledTimes(1);
+      await expectAccessible(document.body, { page: true });
+    },
+  );
+
+  it(
+    "opens sorted as its address says, and drops the sort for another dimension",
+    SLOW,
+    async () => {
+      const { user, router } = renderBreakdown({
+        path: "/breakdown?mode=list&by=Discipline&sort=lines&dir=asc",
+      });
+      const table = await groupTable();
+      await findRow(table, "Piping");
+      expect(within(table).getByRole("columnheader", { name: text.column.lines })).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+      );
+      expect(
+        within(table)
+          .getAllByRole("rowheader")
+          .map((cell) => cell.textContent),
+      ).toEqual(["(blank)", "Civil", "Piping"]);
+      await choose(user, new RegExp(text.groupBy), en.import.field.HoldType);
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("?mode=list&by=HoldType");
+      });
+      const byType = await groupTable(en.import.field.HoldType);
+      await findRow(byType, "Piping");
+      for (const header of within(byType).getAllByRole("columnheader")) {
+        expect(header).toHaveAttribute("aria-sort", "none");
+      }
+    },
+  );
+
   it("offers each dimension the snapshot has values for, and its extra columns", SLOW, async () => {
     const { user } = renderBreakdown({
       handlers: {

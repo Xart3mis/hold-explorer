@@ -14,7 +14,9 @@ import type { ViewRef } from "../../bindings/ViewRef";
 import {
   childKeyOfRow,
   DataTable,
+  nextSort,
   textChars,
+  useTableSort,
   type DataTableChildColumn,
   type DataTableChildren,
   type DataTableColumn,
@@ -150,7 +152,9 @@ export interface ListModeProps {
  * holds, and its lines. A group expands in place to its lines (the owner's choice of 2026-10-17):
  * they are read when it expands, the first two hundred of them, and a last row leads to all of
  * them in Lines. A line opens in the detail panel. The groups that are expanded are kept in the
- * address.
+ * address, and so is the sort of the groups: a header orders the groups the command returned
+ * (the share by the holds), and asks for nothing; the lines under a group keep the order they
+ * were read in.
  */
 export function ListMode({
   state,
@@ -229,12 +233,15 @@ export function ListMode({
         cell: (group) => group.label,
         isRowHeader: true,
         size: { flex: 2, minChars: 20 },
+        sortValue: (group) => group.label,
       },
       {
         id: "share",
         header: t("breakdown.column.share"),
         cell: (group) => <ShareBar holds={group.holds} largest={largest} />,
         size: { flex: 3, minChars: 16 },
+        sortValue: (group) => group.holds,
+        sortFirst: "descending",
       },
       {
         id: "holds",
@@ -242,6 +249,8 @@ export function ListMode({
         cell: (group) => formatCount(group.holds),
         kind: "number",
         size: { chars: textChars(formatCount(largest)) },
+        sortValue: (group) => group.holds,
+        sortFirst: "descending",
       },
       {
         id: "lines",
@@ -249,6 +258,8 @@ export function ListMode({
         cell: (group) => formatCount(group.lines),
         kind: "number",
         size: { chars: textChars(formatCount(mostLines)) },
+        sortValue: (group) => group.lines,
+        sortFirst: "descending",
       },
     ],
     [shownDim, largest, mostLines],
@@ -261,6 +272,13 @@ export function ListMode({
     ],
     [widestLine],
   );
+
+  // The groups of before, while another dimension is read, are in the command's order: the sort
+  // belongs to the dimension it was asked under, and another one drops it.
+  const sort = isCurrent ? state.sort : undefined;
+  const sortedGroups = useTableSort(groups, columns, sort);
+  // Another sort is another result: the table returns to its top.
+  const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
 
   /** Writes the groups that are open into the address, keeping the rest of it. */
   const setOpen = (keys: ReadonlySet<string>) => {
@@ -336,8 +354,19 @@ export function ListMode({
       <DataTable
         aria-label={t("breakdown.table", { dim: dimName(shownDim) })}
         columns={columns}
-        rows={groups}
+        rows={sortedGroups}
         rowKey={groupKeyOf}
+        {...(sort === undefined ? {} : { sort })}
+        onSortChange={(pressed) => {
+          if (!isCurrent) return;
+          void navigate(
+            breakdownAddress(
+              { ...state, sort: nextSort(columns, sort, pressed.column) },
+              location.search,
+            ),
+            { replace: true },
+          );
+        }}
         childRows={childRows}
         childKey={lineKeyOf}
         childColumns={childColumns}
@@ -353,7 +382,7 @@ export function ListMode({
         height="fill"
         isLoading={isLoading}
         isStale={isStale}
-        resultKey={resultKey}
+        resultKey={tableKey}
         {...(isLoading
           ? {}
           : {

@@ -540,7 +540,10 @@ function Marker({ cx, cy, active, selected, ref }: MarkerProps) {
   );
 }
 
-/** The table view of a line chart: a row per point, in the order of the points. */
+/**
+ * The table view of a line chart: a row per point, in the order of the points until a header
+ * sorts it.
+ */
 export function lineChartTable(
   points: readonly LinePoint[],
   xLabel: string,
@@ -551,13 +554,15 @@ export function lineChartTable(
 ): { columns: ChartTableColumn[]; rows: ChartTableRow[] } {
   return {
     columns: [
-      { id: "x", header: xLabel, isNumber: true, isRowHeader: true },
+      // The steps of a curve are read from the first, as the chart draws them.
+      { id: "x", header: xLabel, isNumber: true, isRowHeader: true, sortFirst: "ascending" },
       { id: "label", header: labelName },
       { id: "y", header: yLabel, isNumber: true },
     ],
     rows: points.map((point, index) => ({
       key: String(index),
       cells: [formatX(point.x), point.label, formatY(point.y)],
+      values: [point.x, point.label, point.y],
     })),
   };
 }

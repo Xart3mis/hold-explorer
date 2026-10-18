@@ -47,7 +47,7 @@ interface Shown {
  * matrix, so that each mode is as it was when the page switches back to it. Another dimension or
  * another filter is read anew; the groups of before stay on screen, dimmed, until the new ones
  * are there, and the table then returns to its top. Another dimension closes the groups that were
- * open.
+ * open, and drops the sort of the groups.
  *
  * A workspace without snapshots gets an empty state that starts an import. A result without
  * groups says why: the filters, or a snapshot without open holds, and offers the way back.
@@ -153,10 +153,12 @@ export function BreakdownPage() {
                 onSelectionChange={(id) => {
                   const by = choices.find((dim) => dimId(dim) === id);
                   if (by === undefined || id === dimId(state.by)) return;
-                  // The groups of another dimension are other groups: none of them is open.
-                  void navigate(breakdownAddress({ ...state, by, open: [] }, location.search), {
-                    replace: true,
-                  });
+                  // The groups of another dimension are other groups: none of them is open, and
+                  // they are in the command's order.
+                  void navigate(
+                    breakdownAddress({ ...state, by, open: [], sort: undefined }, location.search),
+                    { replace: true },
+                  );
                 }}
                 className={styles.groupBy}
               />

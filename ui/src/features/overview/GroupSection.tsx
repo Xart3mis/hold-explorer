@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useMemo, useState } from "react";
 import { isSameDim } from "../../app/filters/dims";
 import type { Filters } from "../../app/filters/state";
 import type { Dim } from "../../bindings/Dim";
@@ -8,8 +8,11 @@ import {
   BarRowGroup,
   Checkbox,
   DataTable,
-  type DataTableColumn,
+  nextSort,
   textChars,
+  useTableSort,
+  type DataTableColumn,
+  type DataTableSort,
 } from "../../components";
 import { formatCount } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -60,10 +63,14 @@ const LABEL_CHARS = 16;
 
 const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
 
+const NO_GROUPS: readonly Group[] = [];
+
 /**
  * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
  * A bar is pressed to see the lines of its value: it filters by that value and opens Lines.
- * The rows are shown in the order the command sends, largest first; the interface sorts nothing.
+ * The rows are shown in the order the command sends, largest first. The table may be sorted by
+ * any of its columns, which orders the rows the command sent and asks for nothing; the sort is
+ * the table's own and is not kept.
  * The length of a bar is its row's holds as a share of the largest count of the group; no number
  * that is shown is worked out here.
  */
@@ -80,32 +87,42 @@ export function GroupSection({
   onPress,
 }: GroupSectionProps) {
   const titleId = useId();
-  const rows = groups ?? [];
+  const rows = groups ?? NO_GROUPS;
+  const [sort, setSort] = useState<DataTableSort>();
   const largest = rows.reduce((most, group) => Math.max(most, group.holds), 0);
-  const columns: DataTableColumn<Group>[] = [
-    {
-      id: "label",
-      header: column,
-      cell: (group) => group.label,
-      isRowHeader: true,
-      size: { flex: 1, minChars: LABEL_CHARS },
-    },
-    {
-      id: "holds",
-      header: t("overview.columnHolds"),
-      cell: (group) => formatCount(group.holds),
-      kind: "number",
-      size: { chars: countChars(rows.map((group) => group.holds)) },
-    },
-    {
-      id: "lines",
-      header: t("overview.columnLines"),
-      cell: (group) => formatCount(group.lines),
-      kind: "number",
-      isSupporting: true,
-      size: { chars: countChars(rows.map((group) => group.lines)) },
-    },
-  ];
+  const columns = useMemo(
+    (): DataTableColumn<Group>[] => [
+      {
+        id: "label",
+        header: column,
+        cell: (group) => group.label,
+        isRowHeader: true,
+        size: { flex: 1, minChars: LABEL_CHARS },
+        sortValue: (group) => group.label,
+      },
+      {
+        id: "holds",
+        header: t("overview.columnHolds"),
+        cell: (group) => formatCount(group.holds),
+        kind: "number",
+        size: { chars: countChars(rows.map((group) => group.holds)) },
+        sortValue: (group) => group.holds,
+        sortFirst: "descending",
+      },
+      {
+        id: "lines",
+        header: t("overview.columnLines"),
+        cell: (group) => formatCount(group.lines),
+        kind: "number",
+        isSupporting: true,
+        size: { chars: countChars(rows.map((group) => group.lines)) },
+        sortValue: (group) => group.lines,
+        sortFirst: "descending",
+      },
+    ],
+    [column, rows],
+  );
+  const sorted = useTableSort(rows, columns, sort);
 
   return (
     <section className={styles.group}>
@@ -127,7 +144,11 @@ export function GroupSection({
         <DataTable
           aria-label={title}
           columns={columns}
-          rows={rows}
+          rows={sorted}
+          {...(sort === undefined ? {} : { sort })}
+          onSortChange={(pressed) => {
+            setSort(nextSort(columns, sort, pressed.column));
+          }}
           // A blank value has the empty key, and a row needs a key that is not empty.
           rowKey={(group) => `group:${group.key}`}
           // A group is read whole, as its bars are: the page scrolls, the table does not.

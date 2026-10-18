@@ -385,6 +385,34 @@ describe("LineChart", () => {
     },
   );
 
+  it("sorts its table view by any column: the steps from the first, a count the most first", async () => {
+    const user = userEvent.setup();
+    const few = points.slice(0, 3);
+    render(chart({ view: "table", points: few }));
+    const table = screen.getByRole("grid", { name: "Lines freed by the solve order, table" });
+    for (const header of within(table).getAllByRole("columnheader"))
+      expect(header).toHaveAttribute("aria-sort", "none");
+    const steps = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getByRole("rowheader").textContent);
+    const freed = within(table).getByRole("columnheader", { name: "Lines freed" });
+    await user.click(freed);
+    expect(freed).toHaveAttribute("aria-sort", "descending");
+    expect(steps()).toEqual(["3", "2", "1"]);
+    const step = within(table).getByRole("columnheader", { name: "Step" });
+    await user.click(step);
+    expect(step).toHaveAttribute("aria-sort", "ascending");
+    expect(steps()).toEqual(["1", "2", "3"]);
+    await user.click(step);
+    expect(steps()).toEqual(["3", "2", "1"]);
+    const blocker = within(table).getByRole("columnheader", { name: "Blocker" });
+    await user.click(blocker);
+    expect(blocker).toHaveAttribute("aria-sort", "ascending");
+    expect(steps()).toEqual(["1", "2", "3"]);
+  });
+
   it("keeps its table view to twelve rows, or to the rows the screen gives", () => {
     const maxRows = () =>
       document

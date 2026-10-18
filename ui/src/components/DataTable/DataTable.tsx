@@ -100,14 +100,30 @@ interface ColumnBase<Item> {
    * while the other columns scroll sideways.
    */
   isRowHeader?: boolean;
-  /** The header is a button that asks for a sort by this column. */
+  /**
+   * The header is a button that asks for a sort by this column. A column with `sortValue` is
+   * sortable without it.
+   */
   allowsSorting?: boolean;
+  /**
+   * For a table whose rows the screen holds whole: the value the rows are ordered by when this
+   * header is pressed (see `useTableSort`); `null` for a row without one, which stays last in
+   * both directions. Giving it makes the header sortable. The table sorts nothing itself.
+   */
+  sortValue?: (item: Item) => string | number | null;
+  /** The direction of a first press: `descending` for counts and ages, `ascending` for text. */
+  sortFirst?: "ascending" | "descending";
   /**
    * The most characters of the header the column makes room for; a longer header is cut at the
    * end. Only for a header that is a value of the data, as in the table view of a chart, whose
    * screen shows the whole text in another way. Other headers are never cut.
    */
   headerChars?: number;
+}
+
+/** Whether the header of a column is a button that asks for a sort. */
+function isSortable(column: ColumnBase<never>): boolean {
+  return column.allowsSorting === true || column.sortValue !== undefined;
 }
 
 /** A column of a table. It stays whatever the width of the table. */
@@ -840,7 +856,7 @@ export function DataTable<Item, Child = never>({
     const sized = columnWidth(column.size, column.kind ?? "text", chars, metrics.paddingX);
     const least = headerWidth(
       column.header,
-      column.allowsSorting === true,
+      isSortable(column),
       chars,
       metrics.paddingX,
       metrics.arrow,
@@ -1670,7 +1686,7 @@ export function DataTable<Item, Child = never>({
                 key={column.id}
                 id={column.id}
                 isRowHeader={column.isRowHeader === true}
-                allowsSorting={column.allowsSorting === true && !loading}
+                allowsSorting={isSortable(column) && !loading}
                 textValue={column.header}
                 width={columnWidths[index]?.width ?? null}
                 minWidth={columnWidths[index]?.minWidth ?? null}

@@ -17,8 +17,8 @@ describe("ChartTable", () => {
           { id: "holds", header: "Holds", isNumber: true },
         ]}
         rows={[
-          { key: "civil", cells: ["Civil", "1,515"] },
-          { key: "piping", cells: ["Piping", "1,285"] },
+          { key: "civil", cells: ["Civil", "1,515"], values: ["Civil", 1515] },
+          { key: "piping", cells: ["Piping", "1,285"], values: ["Piping", 1285] },
         ]}
       />,
     );
@@ -34,6 +34,71 @@ describe("ChartTable", () => {
   });
 });
 
+describe("ChartTable's sort", () => {
+  const COLUMNS = [
+    { id: "discipline", header: "Discipline", isRowHeader: true },
+    { id: "holds", header: "Holds", isNumber: true },
+    { id: "lines", header: "Lines", isNumber: true },
+  ];
+  const ROWS: ChartTableRow[] = [
+    { key: "civil", cells: ["Civil", "1,515", "9"], values: ["Civil", 1515, 9] },
+    { key: "piping", cells: ["Piping", "1,285", "40"], values: ["Piping", 1285, 40] },
+    { key: "blank", cells: ["No value", "—", "2"], values: [null, null, 2] },
+    {
+      key: "others",
+      cells: ["All others", "9,999", "1,000"],
+      values: ["All others", 9999, 1000],
+      isFolded: true,
+    },
+    { key: "electrical", cells: ["Electrical", "300", "12"], values: ["Electrical", 300, 12] },
+  ];
+
+  function sortTable() {
+    render(<ChartTable aria-label="Holds by discipline, table" columns={COLUMNS} rows={ROWS} />);
+    return screen.getByRole("grid", { name: "Holds by discipline, table" });
+  }
+
+  /** The keys of the rows in the order they are drawn, by the text of their first cell. */
+  function order(table: HTMLElement): string[] {
+    return within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getByRole("rowheader").textContent);
+  }
+
+  it("lets every column be sorted, and starts in the order of the chart, unmarked", () => {
+    const table = sortTable();
+    for (const header of within(table).getAllByRole("columnheader")) {
+      expect(header).toHaveAttribute("aria-sort", "none");
+      expect(header.querySelector("[data-mark]")).toHaveAttribute("data-mark", "rest");
+    }
+    expect(order(table)).toEqual(["Civil", "Piping", "No value", "All others", "Electrical"]);
+  });
+
+  it("sorts by a pressed header, the most first for a number, and turns round on a second press", async () => {
+    const user = userEvent.setup();
+    const table = sortTable();
+    const holds = within(table).getByRole("columnheader", { name: "Holds" });
+    await user.click(holds);
+    expect(holds).toHaveAttribute("aria-sort", "descending");
+    // The row without a value, and then the folded row, stay last in both directions.
+    expect(order(table)).toEqual(["Civil", "Piping", "Electrical", "No value", "All others"]);
+    await user.click(holds);
+    expect(holds).toHaveAttribute("aria-sort", "ascending");
+    expect(order(table)).toEqual(["Electrical", "Piping", "Civil", "No value", "All others"]);
+    const name = within(table).getByRole("columnheader", { name: "Discipline" });
+    await user.click(name);
+    expect(name).toHaveAttribute("aria-sort", "ascending");
+    expect(holds).toHaveAttribute("aria-sort", "none");
+    expect(order(table)).toEqual(["Civil", "Electrical", "Piping", "No value", "All others"]);
+    await user.click(name);
+    expect(order(table)).toEqual(["Piping", "Electrical", "Civil", "No value", "All others"]);
+    await user.click(within(table).getByRole("columnheader", { name: "Lines" }));
+    expect(order(table)).toEqual(["Piping", "Electrical", "Civil", "No value", "All others"]);
+    await expectAccessible();
+  });
+});
+
 describe("ChartTable's renders", () => {
   it("builds no row again for a render that hands it the same columns and rows", SLOW, () => {
     // Rows that count how often the table reads them: a table that builds its rows reads the key
@@ -42,7 +107,9 @@ describe("ChartTable's renders", () => {
     const rows: ChartTableRow[] = Array.from({ length: 3000 }, (_, index) => {
       const key = `step-${String(index)}`;
       const cells = [String(index + 1), `Blocker ${String(index + 1)}`];
+      const values = [index + 1, `Blocker ${String(index + 1)}`];
       return {
+        values,
         get key() {
           reads += 1;
           return key;
@@ -85,7 +152,7 @@ describe("ChartTable with long headers", () => {
           { id: "col-0", header: REMARK, isNumber: true },
           { id: "col-1", header: "Client", isNumber: true },
         ]}
-        rows={[{ key: "piping", cells: ["Piping", "12", "4"] }]}
+        rows={[{ key: "piping", cells: ["Piping", "12", "4"], values: ["Piping", 12, 4] }]}
       />
     );
   }
@@ -94,10 +161,11 @@ describe("ChartTable with long headers", () => {
     render(longTable());
     const header = screen.getByRole("columnheader", { name: REMARK });
     // The stand-in widths of a test: 7 px for a character, 12 px padding. The header makes room
-    // for 24 characters of it, not for the whole of it.
-    expect(header.parentElement).toHaveStyle({ width: "192px" });
+    // for 24 characters of it, not for the whole of it, and, as every header of a table view can
+    // be sorted, for its sort mark (20 px: the icon and its gap).
+    expect(header.parentElement).toHaveStyle({ width: `${String(192 + 20)}px` });
     expect(screen.getByRole("columnheader", { name: "Client" }).parentElement).toHaveStyle({
-      width: "60px",
+      width: `${String(60 + 20)}px`,
     });
   });
 
@@ -137,7 +205,7 @@ describe("ChartTable with long headers, under the pointer", () => {
           { id: "col-0", header: REMARK, isNumber: true },
           { id: "col-1", header: "Client", isNumber: true },
         ]}
-        rows={[{ key: "piping", cells: ["Piping", "12", "4"] }]}
+        rows={[{ key: "piping", cells: ["Piping", "12", "4"], values: ["Piping", 12, 4] }]}
       />,
     );
     const cut = screen.getByRole("columnheader", { name: REMARK });

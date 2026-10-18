@@ -17,6 +17,9 @@ const COUNT_CHARS = formatCount(999_999).length;
  * narrow for all of them, the highest number first: the discipline, which the blocker's label
  * names already, then the type, then the holds. The step, the blocker, and the two counts of
  * freed lines always stay: they are the solve order.
+ *
+ * Every column sorts the steps, which the page holds whole: the step, the blocker, its type, and
+ * its discipline from the first or from A, the counts the most first.
  */
 export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
   return [
@@ -27,11 +30,14 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       kind: "number",
       isRowHeader: true,
       size: { chars: COUNT_CHARS },
+      sortValue: (row) => row.step,
+      sortFirst: "ascending",
     },
     {
       id: "blocker",
       header: t("blockers.column.blocker"),
       cell: (row) => row.label,
+      sortValue: (row) => row.label,
       // At least as wide as a label such as "Piping / 577-PK-400". A longer label is cut, and read
       // in full in the panel: at 1280 the panel beside the table leaves the four columns that
       // stay no room for more.
@@ -41,6 +47,7 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       id: "kind",
       header: t("blockers.column.kind"),
       cell: (row) => row.kind,
+      sortValue: (row) => row.kind,
       isSupporting: true,
       size: { chars: 10 },
       priority: 2,
@@ -49,6 +56,7 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       id: "discipline",
       header: t("blockers.column.discipline"),
       cell: (row) => row.discipline,
+      sortValue: (row) => row.discipline,
       isSupporting: true,
       // Room for the longer names, such as "Instrumentation and control".
       size: { chars: 24 },
@@ -59,6 +67,8 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       header: t("blockers.column.holds"),
       cell: (row) => formatCount(row.holds),
       kind: "number",
+      sortValue: (row) => row.holds,
+      sortFirst: "descending",
       size: { chars: COUNT_CHARS },
       priority: 1,
     },
@@ -67,6 +77,8 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       header: t("blockers.column.gain"),
       cell: (row) => formatCount(row.gain),
       kind: "number",
+      sortValue: (row) => row.gain,
+      sortFirst: "descending",
       size: { chars: COUNT_CHARS },
     },
     {
@@ -74,6 +86,8 @@ export function stepColumns(): readonly LeavingColumn<SolveRow>[] {
       header: t("blockers.column.cumulative"),
       cell: (row) => formatCount(row.cumulative),
       kind: "number",
+      sortValue: (row) => row.cumulative,
+      sortFirst: "descending",
       size: { chars: COUNT_CHARS },
     },
   ];

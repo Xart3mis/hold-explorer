@@ -105,4 +105,44 @@ describe("the address of Breakdown", () => {
       cols: "Role",
     });
   });
+
+  it("writes the sort of the groups after the dimension, and reads it back", () => {
+    const sorted: BreakdownState = {
+      ...LIST,
+      by: "Role",
+      open: ["Checker"],
+      sort: { column: "lines", direction: "descending" },
+    };
+    expect(breakdownAddress(sorted)).toBe(
+      "/breakdown?mode=list&by=Role&open=Checker&sort=lines&dir=desc",
+    );
+    expect(parseBreakdownAddress(breakdownAddress(sorted))).toEqual(sorted);
+    for (const column of ["label", "share", "holds", "lines"]) {
+      for (const direction of ["ascending", "descending"] as const) {
+        const state: BreakdownState = { ...LIST, sort: { column, direction } };
+        expect(parseBreakdownAddress(breakdownAddress(state))).toEqual(state);
+      }
+    }
+    // Kept while the matrix shows, as the rest of the list is.
+    const matrix: BreakdownState = { ...sorted, mode: "matrix" };
+    expect(breakdownAddress(matrix)).toBe(
+      "/breakdown?mode=matrix&rows=Discipline&cols=HoldType&by=Role&open=Checker&sort=lines&dir=desc",
+    );
+    expect(parseBreakdownAddress(breakdownAddress(matrix))).toEqual(matrix);
+  });
+
+  it("writes no sort for the command's order, and reads none it cannot read", () => {
+    expect(breakdownAddress(LIST)).toBe("/breakdown?mode=list&by=Discipline");
+    expect(parseBreakdownAddress("?sort=lines")).toEqual(LIST);
+    expect(parseBreakdownAddress("?sort=lines&dir=sideways")).toEqual(LIST);
+    expect(parseBreakdownAddress("?sort=step&dir=asc")).toEqual(LIST);
+    expect(parseBreakdownAddress("?sort=lines&dir=asc").sort).toEqual({
+      column: "lines",
+      direction: "ascending",
+    });
+    // The sort is the page's own part: it is written from the state, never kept from before.
+    expect(breakdownAddress(LIST, "?sort=holds&dir=asc&view=3")).toBe(
+      "/breakdown?mode=list&by=Discipline&view=3",
+    );
+  });
 });

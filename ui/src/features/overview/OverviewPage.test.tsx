@@ -376,11 +376,94 @@ describe("the Overview with a snapshot", () => {
       const grid = screen.getByRole("grid", { name: text.byDiscipline });
       const width = (name: string) =>
         within(grid).getByRole("columnheader", { name }).parentElement?.style.width;
-      // Where nothing is laid out a figure is 7 px wide and the padding 12 px: the widest count,
-      // "1,515", is four figures and a separator. Six characters for every count would be 66 px.
-      expect(width(text.columnHolds)).toBe("58px");
-      // "Lines" needs more than three figures do, so the header decides.
-      expect(width(text.columnLines)).toBe("54px");
+      // Where nothing is laid out a figure is 7 px wide, the padding 12 px, and the sort mark of a
+      // header 20 px. The widest count, "1,515", is four figures and a separator (58 px); a
+      // header that can be sorted keeps the room of its mark, so "Holds" and "Lines" decide.
+      expect(width(text.columnHolds)).toBe(`${String(54 + 20)}px`);
+      expect(width(text.columnLines)).toBe(`${String(54 + 20)}px`);
+    },
+  );
+
+  it(
+    "gives the counts of a group's table the room of its widest count when they need more than the header",
+    SLOW,
+    async () => {
+      const view = overviewView();
+      const { user, overview } = renderOverview(() => ({
+        ...view,
+        by_discipline: [group("Piping", 12345678, 9876543), group("Civil", 1234567, 987654)],
+      }));
+      await loaded(overview);
+      await user.click(disciplineSwitch());
+      const grid = screen.getByRole("grid", { name: text.byDiscipline });
+      const width = (name: string) =>
+        within(grid).getByRole("columnheader", { name }).parentElement?.style.width;
+      // "12,345,678": eight figures and two separators at 0.85 of one, 68 px, and the padding.
+      expect(width(text.columnHolds)).toBe("92px");
+      // "9,876,543": seven figures and two separators, 61 px, and the padding.
+      expect(width(text.columnLines)).toBe("85px");
+    },
+  );
+
+  it(
+    "sorts a group's table by any column, and turns it round on a second press",
+    SLOW,
+    async () => {
+      const { user, overview } = renderOverview();
+      await loaded(overview);
+      await user.click(disciplineSwitch());
+      const grid = screen.getByRole("grid", { name: text.byDiscipline });
+      const names = () => tableRows(text.byDiscipline).map(([name]) => name);
+      // As the command sent them, unmarked, until a header is pressed.
+      for (const header of within(grid).getAllByRole("columnheader")) {
+        expect(header).toHaveAttribute("aria-sort", "none");
+      }
+      expect(names()).toEqual([
+        "Civil",
+        "Piping",
+        "Process",
+        "Instrumentation",
+        "Structural",
+        "Electrical",
+        "Unspecified",
+      ]);
+      const discipline = within(grid).getByRole("columnheader", { name: text.columnDiscipline });
+      await user.click(discipline);
+      expect(discipline).toHaveAttribute("aria-sort", "ascending");
+      expect(names()).toEqual([
+        "Civil",
+        "Electrical",
+        "Instrumentation",
+        "Piping",
+        "Process",
+        "Structural",
+        "Unspecified",
+      ]);
+      await user.click(discipline);
+      expect(discipline).toHaveAttribute("aria-sort", "descending");
+      expect(names()[0]).toBe("Unspecified");
+      // A count sorts the most first; the lines are not in the order of the holds.
+      const lines = within(grid).getByRole("columnheader", { name: text.columnLines });
+      await user.click(lines);
+      expect(lines).toHaveAttribute("aria-sort", "descending");
+      expect(discipline).toHaveAttribute("aria-sort", "none");
+      expect(names()).toEqual([
+        "Civil",
+        "Piping",
+        "Process",
+        "Instrumentation",
+        "Structural",
+        "Unspecified",
+        "Electrical",
+      ]);
+      const holds = within(grid).getByRole("columnheader", { name: text.columnHolds });
+      await user.click(holds);
+      await user.click(holds);
+      expect(holds).toHaveAttribute("aria-sort", "ascending");
+      expect(names()[0]).toBe("Unspecified");
+      // Sorting is presentation: nothing is asked again.
+      expect(overview).toHaveBeenCalledTimes(1);
+      await expectAccessible(document.body, { page: true });
     },
   );
 
