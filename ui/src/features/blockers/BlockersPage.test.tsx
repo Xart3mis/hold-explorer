@@ -9,12 +9,12 @@ import type { SolveView } from "../../bindings/SolveView";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
-import { solveView } from "../../test/blockers";
+import { manySteps, solveView } from "../../test/blockers";
 import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
 import { selectOlderSnapshot } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { scrollTable } from "../../test/viewport";
+import { scrollTable, tableViewport } from "../../test/viewport";
 import { formatCount } from "../../text/format";
 
 const text = en.blockers;
@@ -498,19 +498,158 @@ describe("BlockersPage", () => {
       expect(solveOrder).toHaveBeenLastCalledWith(expect.objectContaining({ spec: specWith({}) }));
     });
 
-    it("says when the snapshot has no open hold, and offers all holds", async () => {
-      const { user, solveOrder } = renderBlockers({
-        solveOrder: ({ spec }) =>
-          spec.status === "Open" ? { rows: [], lines_on_hold: 0, steps_to_most: 0 } : solveView(),
+    it("says when the snapshot has no open hold that blockers rank open holds, and offers an import", async () => {
+      // The Rust side ranks the open holds among those the filters keep: with no open hold, the
+      // status Open and the status All both give nothing to rank.
+      const { solveOrder } = renderBlockers({
+        solveOrder: () => ({ rows: [], lines_on_hold: 0, steps_to_most: 0 }),
       });
       const title = await screen.findByRole("heading", { level: 2, name: text.noOpenTitle });
+      const state = must(title.parentElement);
+      expect(state).toHaveTextContent(text.noOpenText);
+      expect(within(state).getByRole("button", { name: text.noOpenAction })).toBeInTheDocument();
+      expect(within(state).queryByRole("button", { name: text.releasedAction })).toBeNull();
+      expect(solveOrder).toHaveBeenLastCalledWith(expect.objectContaining({ spec: specWith({}) }));
+    });
+
+    it("says under the status Released that blockers rank open holds, and offers them", async () => {
+      const { user, solveOrder } = renderBlockers({
+        solveOrder: ({ spec }) =>
+          spec.status === "Released"
+            ? { rows: [], lines_on_hold: 0, steps_to_most: 0 }
+            : solveView(),
+        filters: { ...defaultFilters, status: "Released" },
+      });
+      const title = await screen.findByRole("heading", { level: 2, name: text.releasedTitle });
+      expect(must(title.parentElement)).toHaveTextContent(text.releasedText);
       await user.click(
-        within(must(title.parentElement)).getByRole("button", { name: text.noOpenAction }),
+        within(must(title.parentElement)).getByRole("button", { name: text.releasedAction }),
       );
       await stepRow(await stepTable(), 1);
       expect(solveOrder).toHaveBeenLastCalledWith(
-        expect.objectContaining({ spec: specWith({ status: "All" }) }),
+        expect.objectContaining({ spec: specWith({ status: "Open" }) }),
       );
+    });
+  });
+
+  describe("with a long tail", () => {
+    it(
+      "draws the steps that free most lines, at least ten, and all of them on request",
+      SLOW,
+      async () => {
+        const { user } = renderBlockers({ solveOrder: () => manySteps(40, 12) });
+        const chart = await curve();
+        expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "12");
+        const all = screen.getByRole("button", { name: fill(text.showAll_other, { count: 40 }) });
+        await user.click(all);
+        expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "40");
+        await user.click(
+          screen.getByRole("button", { name: fill(text.showHead_other, { count: 12 }) }),
+        );
+        expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "12");
+        // The steps table and the table view hold every step either way.
+        expect(screen.getByText(fill(text.count_other, { count: 40 }))).toBeVisible();
+        await user.click(screen.getByRole("button", { name: en.charts.tableView }));
+        const view = await screen.findByRole("grid", {
+          name: fill(en.charts.tableName, { name: text.curve }),
+        });
+        expect(within(view).getAllByRole("row")).toHaveLength(41);
+        expect(
+          screen.queryByRole("button", { name: fill(text.showAll_other, { count: 40 }) }),
+        ).not.toBeInTheDocument();
+      },
+    );
+
+    it("draws ten steps at least, and the steps up to one selected past them", SLOW, async () => {
+      const { user } = renderBlockers({ solveOrder: () => manySteps(40, 3) });
+      const chart = await curve();
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "10");
+      await user.click(await stepRow(await stepTable(), 30));
+      await waitFor(() => {
+        expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "30");
+      });
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-posinset", "30");
+    });
+
+    it("draws every step of a solve order shorter than ten, with no button", async () => {
+      renderBlockers();
+      const chart = await curve();
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-setsize", "4");
+      expect(screen.queryByRole("button", { name: /^Show all/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("with many steps, in a window of the table", () => {
+    tableViewport({ width: 1280, height: 400 });
+
+    function countLine(): HTMLElement {
+      return must(document.querySelector<HTMLElement>("[data-part='steps'] p[role='status']"));
+    }
+    const loaded = () =>
+      Number(/^([\d,]+) of/.exec(countLine().textContent)?.[1]?.replace(/,/g, ""));
+
+    it(
+      "hands the steps to the table 200 at a time as it is scrolled, up to 5,000, and says how to reach the others",
+      { timeout: SLOW.timeout * 2 },
+      async () => {
+        renderBlockers({ solveOrder: () => manySteps(5300, 100) });
+        const table = await stepTable();
+        await waitFor(() => {
+          expect(countLine()).toHaveTextContent("200 of 5,300 steps");
+        });
+        while (loaded() < 5000) {
+          const before = loaded();
+          scrollTable(table, before * 36);
+          await waitFor(() => {
+            expect(loaded()).toBeGreaterThan(before);
+          });
+        }
+        expect(countLine()).toHaveTextContent(
+          "5,000 of 5,300 steps are shown. Narrow the filters to reach the others.",
+        );
+        scrollTable(table, 0);
+        scrollTable(table, 5000 * 36);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(loaded()).toBe(5000);
+      },
+    );
+
+    it("hands over a step selected past those shown, with the steps before it", SLOW, async () => {
+      renderBlockers({
+        path: "/blockers?blocker=Piping%7CItem%20450",
+        solveOrder: () => manySteps(5300, 100),
+      });
+      const table = await stepTable();
+      await waitFor(() => {
+        expect(countLine()).toHaveTextContent("600 of 5,300 steps");
+      });
+      // The table brought the step into view; jsdom tells the rows of the scroll it made.
+      await waitFor(() => {
+        expect(table.scrollTop).toBeGreaterThan(400 * 36);
+      });
+      scrollTable(table, table.scrollTop);
+      expect(await stepRow(table, 450)).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("starts again at 200 steps for another result", SLOW, async () => {
+      renderBlockers({ solveOrder: () => manySteps(5300, 100) });
+      const table = await stepTable();
+      await waitFor(() => {
+        expect(loaded()).toBe(200);
+      });
+      scrollTable(table, 200 * 36);
+      await waitFor(() => {
+        expect(loaded()).toBe(400);
+      });
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          status: "All",
+        });
+      });
+      await waitFor(() => {
+        expect(loaded()).toBe(200);
+      });
     });
   });
 

@@ -711,6 +711,10 @@
     "axisY": "Freed so far",
     "freed_one": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} step",
     "freed_other": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} steps",
+    "showAll_one": "Show all {{count, number}} step",
+    "showAll_other": "Show all {{count, number}} steps",
+    "showHead_one": "Show the first {{count, number}} step",
+    "showHead_other": "Show the first {{count, number}} steps",
     "table": "Steps of the solve order",
     "column": {
       "step": "Step",
@@ -723,6 +727,10 @@
     },
     "count_one": "{{count, number}} step",
     "count_other": "{{count, number}} steps",
+    "countOf_one": "{{shown, number}} of {{count, number}} step",
+    "countOf_other": "{{shown, number}} of {{count, number}} steps",
+    "countLimited_one": "{{shown, number}} of {{count, number}} step is shown. Narrow the filters to reach the others.",
+    "countLimited_other": "{{shown, number}} of {{count, number}} steps are shown. Narrow the filters to reach the others.",
     "leftOut": "Not shown at this width: {{columns}}. Open a blocker to read them.",
     "error": "The solve order could not be loaded",
     "emptyTitle": "This workspace has no snapshots",
@@ -732,8 +740,11 @@
     "noneText": "Change a filter in the bar above, or clear them all to rank the blockers of the open holds again.",
     "noneAction": "Clear all",
     "noOpenTitle": "This snapshot has no open holds",
-    "noOpenText": "Every hold of this snapshot is released. Show all holds to rank their blockers.",
-    "noOpenAction": "Show all holds"
+    "noOpenText": "Blockers ranks what the open holds wait for, and every hold of this snapshot is released. Import a newer export to rank its blockers.",
+    "noOpenAction": "Import",
+    "releasedTitle": "Blockers ranks open holds",
+    "releasedText": "The status filter keeps released holds only, and a released hold waits for nothing. Show the open holds to rank their blockers.",
+    "releasedAction": "Show open holds"
   },
   "detail": {
     "closePanel": "Close panel",

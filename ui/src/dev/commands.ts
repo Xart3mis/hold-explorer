@@ -179,6 +179,14 @@ const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
 const LOCKED =
   "The workspace file could not be read (it is locked by another program). Close the other program, then try again.";
 
+/**
+ * The filter the solve order and a blocker's detail rank, as the desktop side's `open_only`
+ * leaves it: the open holds among those the filter keeps, and nothing under the status Released.
+ */
+function openOnly(spec: FilterSpec): FilterSpec | null {
+  return spec.status === "Released" ? null : { ...spec, status: "Open" };
+}
+
 function failure(kind: string, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
 }
@@ -940,8 +948,11 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       if (state === "detail-loading") return new Promise(() => undefined);
       if (state === "detail-error") throw failure("Io", LOCKED);
       const matching = state === "lines-matching-sizes";
+      const ranked = openOnly(spec);
       return later(state === "detail-slow" ? 2000 : 150, () =>
-        selected === undefined ? null : devBlockerDetail(selected, spec, key, matching),
+        selected === undefined || ranked === null
+          ? null
+          : devBlockerDetail(selected, ranked, key, matching),
       );
     },
     breakdown: (payload) => {
@@ -986,8 +997,11 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       const { spec, selected } = inView(payload);
       if (state === "blockers-loading") return new Promise(() => undefined);
       if (state === "blockers-error") throw failure("Io", LOCKED);
+      const ranked = openOnly(spec);
       return later(200, () =>
-        selected === undefined ? { rows: [], lines_on_hold: 0 } : devSolveOrder(selected, spec),
+        selected === undefined || ranked === null
+          ? { rows: [], lines_on_hold: 0, steps_to_most: 0 }
+          : devSolveOrder(selected, ranked),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

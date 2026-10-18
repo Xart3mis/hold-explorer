@@ -37,6 +37,31 @@ const NO_ROWS: readonly SolveRow[] = [];
 /** How many rows the table view of the curve shows: about the height of the curve. */
 const CURVE_TABLE_ROWS = 6;
 
+/** How many steps the table is handed at first, and how many more each time its end comes near. */
+const STEP_ROWS = 200;
+
+/**
+ * The most steps the table is handed as it is scrolled, as Lines loads its rows (DESIGN.md,
+ * Table): what a filter change costs follows the rows a table is handed. A step selected past
+ * them is handed over all the same, with the steps before it.
+ */
+export const MAX_STEP_ROWS = 5000;
+
+/** The fewest steps the curve draws by default. */
+const HEAD_LEAST = 10;
+
+/** The count line of the steps: how many are handed to the table of how many there are. */
+function stepCount(shown: number, total: number): string {
+  if (shown >= total) return t("blockers.count", { count: total });
+  if (shown >= MAX_STEP_ROWS) return t("blockers.countLimited", { shown, count: total });
+  return t("blockers.countOf", { shown, count: total });
+}
+
+/** The number of steps that covers the step at `index`, in whole handfuls of `STEP_ROWS`. */
+function rowsFor(index: number): number {
+  return Math.ceil((index + 1) / STEP_ROWS) * STEP_ROWS;
+}
+
 function readSolveOrder(view: ViewRef, spec: FilterSpec) {
   return api.solveOrder(spec, view);
 }
@@ -50,19 +75,41 @@ interface Shown {
 }
 
 /**
- * What Blockers shows in the place of its steps when there are none: in a snapshot without open
- * holds, a way to all holds; otherwise a way to clear the filters that keep none.
+ * What Blockers shows in the place of its steps when there are none. The command ranks the open
+ * holds among those the filters keep, so: under the status Released, that blockers rank open
+ * holds, and a way to them; in a snapshot without open holds, the same, and a way to a newer
+ * export; otherwise a way to clear the filters that keep none.
  */
 function NoSteps() {
-  const { isDefault, clear, update } = useFilters();
+  const { filters, isDefault, clear, update } = useFilters();
+  if (filters.status === "Released") {
+    return (
+      <EmptyState
+        placement="table"
+        title={t("blockers.releasedTitle")}
+        action={
+          <Button
+            onPress={() => {
+              update((current) => ({ ...current, status: "Open" }));
+            }}
+          >
+            {t("blockers.releasedAction")}
+          </Button>
+        }
+      >
+        {t("blockers.releasedText")}
+      </EmptyState>
+    );
+  }
   return isDefault ? (
     <EmptyState
       placement="table"
       title={t("blockers.noOpenTitle")}
       action={
         <Button
+          icon={Upload}
           onPress={() => {
-            update((current) => ({ ...current, status: "All" }));
+            void startImport();
           }}
         >
           {t("blockers.noOpenAction")}
@@ -91,7 +138,10 @@ function NoSteps() {
  * other marks it, the table bringing its row into view, and the detail panel opens on that
  * blocker. The keys of the table are those of Lines: Enter on a step opens its blocker with the
  * focus on the heading of the panel, and Escape closes it and gives the focus back to the step.
- * The steps of a snapshot are a few thousand at most, so they come in one answer.
+ * The steps come in one answer, and the table is handed them 200 at a time as it is scrolled, up
+ * to 5,000, as Lines loads its rows. The curve draws by default the steps that free most lines
+ * (`steps_to_most`, at least ten), and every step on request; its table view and the steps table
+ * hold every step either way.
  *
  * Another filter is read anew; the steps of before stay on screen, dimmed, until the new ones are
  * there, and the table then returns to its top. A workspace without snapshots gets an empty state
@@ -127,15 +177,51 @@ export function BlockersPage() {
   const shown: Shown | null = own ? { solve: query.data, key: asked } : kept;
 
   const rows = shown?.solve.rows ?? NO_ROWS;
-  const points = useMemo(
-    (): LinePoint[] => rows.map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
-    [rows],
-  );
   const selectedKey = selectedBlocker(location.search);
   const selectedIndex = useMemo(() => {
     const index = rows.findIndex((row) => row.key === selectedKey);
     return index === -1 ? null : index;
   }, [rows, selectedKey]);
+
+  // How many steps the table is handed, for the result on screen: 200 more each time its end
+  // comes near, up to the limit, and always as many as cover the selected step.
+  const resultKey = shown?.key ?? "";
+  const [handed, setHanded] = useState({ key: resultKey, count: STEP_ROWS });
+  const handedCount = handed.key === resultKey ? handed.count : STEP_ROWS;
+  const tableCount = Math.min(
+    rows.length,
+    Math.max(handedCount, selectedIndex === null ? 0 : rowsFor(selectedIndex)),
+  );
+  const tableRows = useMemo(
+    () => (tableCount >= rows.length ? rows : rows.slice(0, tableCount)),
+    [rows, tableCount],
+  );
+  const canHandMore = tableCount < rows.length && tableCount < MAX_STEP_ROWS;
+  const handMore = () => {
+    setHanded({ key: resultKey, count: Math.min(MAX_STEP_ROWS, tableCount + STEP_ROWS) });
+  };
+
+  // The steps the curve draws: those that free most lines, at least ten, up to the selected
+  // step, or all of them.
+  const [showAll, setShowAll] = useState(false);
+  const head = Math.max(HEAD_LEAST, shown?.solve.steps_to_most ?? 0);
+  const drawn = showAll
+    ? rows.length
+    : Math.min(rows.length, Math.max(head, selectedIndex === null ? 0 : selectedIndex + 1));
+  const points = useMemo(
+    (): LinePoint[] =>
+      rows.slice(0, drawn).map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
+    [rows, drawn],
+  );
+  // The table view holds every step, whatever the curve draws.
+  const allPoints = useMemo(
+    (): LinePoint[] =>
+      drawn === rows.length
+        ? points
+        : rows.map((row) => ({ x: row.step, y: row.cumulative, label: row.label })),
+    [rows, drawn, points],
+  );
+  const canShowAll = rows.length > Math.min(rows.length, head);
 
   // Enter, Escape, and the focus of the panel the steps open, as every such table has them. The
   // curve opens it as well, and is given the focus back when it did.
@@ -211,11 +297,25 @@ export function BlockersPage() {
                   {caption}
                 </p>
               )}
-              <ChartViewToggle view={view} onChange={setView} className={styles.trailing} />
+              <div className={styles.trailing}>
+                {canShowAll && view === "chart" ? (
+                  <Button
+                    variant="quiet"
+                    onPress={() => {
+                      setShowAll((all) => !all);
+                    }}
+                  >
+                    {showAll
+                      ? t("blockers.showHead", { count: Math.min(rows.length, head) })
+                      : t("blockers.showAll", { count: rows.length })}
+                  </Button>
+                ) : null}
+                <ChartViewToggle view={view} onChange={setView} />
+              </div>
             </div>
             <LineChart
               aria-label={t("blockers.curve")}
-              points={points}
+              points={view === "table" ? allPoints : points}
               yMax={linesOnHold}
               xLabel={t("blockers.axisX")}
               yLabel={t("blockers.axisY")}
@@ -242,20 +342,15 @@ export function BlockersPage() {
               aria-label={t("blockers.table")}
               columns={columns}
               leftOutText={(headers) => t("blockers.leftOut", { columns: formatList(headers) })}
-              rows={rows}
+              rows={tableRows}
               rowKey={stepKey}
               height="fill"
               isLoading={isLoading}
               isStale={isStale}
-              resultKey={shown?.key ?? ""}
+              resultKey={resultKey}
               // How many steps there are is said once it is known: not on a first load.
-              {...(shown === null
-                ? {}
-                : {
-                    totalRows: rows.length,
-                    countText: (_shown: number, total: number) =>
-                      t("blockers.count", { count: total }),
-                  })}
+              {...(shown === null ? {} : { totalRows: rows.length, countText: stepCount })}
+              {...(canHandMore ? { onLoadMore: handMore } : {})}
               {...(isEmpty ? { emptyState: <NoSteps /> } : {})}
               onSelectionChange={selectStep}
               selectedKey={selectedKey}

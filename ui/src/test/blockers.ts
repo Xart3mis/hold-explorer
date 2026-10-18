@@ -46,6 +46,20 @@ export function solveView(): SolveView {
 }
 
 /**
+ * A solve order of `count` steps, each of a blocker of its own that frees one line, after which
+ * `stepsToMost` steps free most lines.
+ */
+export function manySteps(count: number, stepsToMost: number): SolveView {
+  return {
+    rows: Array.from({ length: count }, (_, index) =>
+      step(index + 1, "Piping", `Item ${String(index + 1)}`, "Other", 1, 1, index + 1),
+    ),
+    lines_on_hold: count,
+    steps_to_most: stepsToMost,
+  };
+}
+
+/**
  * What `blocker_detail` answers for a blocker, by its key (`<discipline>|<item>`): fourteen
  * holds, two lines it frees on its own and one it shares with the blocker of the client's
  * decision, and its oldest open hold, on the third line. A blocker of the solve order of
