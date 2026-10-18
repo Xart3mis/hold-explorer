@@ -534,4 +534,32 @@ mod tests {
         // Position 0 is the released hold (50 days); the open one (position 1) is the oldest.
         assert_eq!(piping.oldest.unwrap().position, 1);
     }
+
+    #[test]
+    fn a_blocker_of_blank_remarks_ranks_and_has_its_detail() {
+        // A blank remark gives the item the engine writes for a blank cell, never an empty one,
+        // so the key of such a blocker is never `<discipline>|`.
+        let ds = Dataset::build(
+            vec![
+                hold("A", "Piping", "MISC.", "", 9),
+                hold("B", "Piping", "MISC.", "   ", 8),
+                hold("C", "Civil", "MISC.", "Pending 538-PR-100", 7),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        let spec = spec_of(Status::Open);
+        let view = crate::solve::solve_view(&ds, &spec);
+        let first = &view.rows[0];
+        assert_eq!(
+            (first.step, first.key.as_str(), first.label.as_str()),
+            (1, "Piping|—", "Piping / —")
+        );
+        let top = crate::query::group_by(&ds, &spec, &crate::filter::Dim::Blocker);
+        assert_eq!(top[0].key, "Piping|—");
+        let plan = solve_plan(&ds, &spec, None);
+        let blank = blocker_detail(&ds, &spec, &plan, "Piping|—").unwrap();
+        assert_eq!(blank.frees, vec!["A", "B"]);
+        assert_eq!(blank.step, Some(1));
+    }
 }
