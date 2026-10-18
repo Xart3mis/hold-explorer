@@ -3,7 +3,6 @@ import { Button as RacButton } from "react-aria-components";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { useFilters, withValues } from "../../app/filters/state";
-import { searchWithSelection } from "../../app/selection";
 import { useSnapshotQuery } from "../../app/view";
 import type { BlockerDetail as BlockerAnswer } from "../../bindings/BlockerDetail";
 import type { LinkedBlocker } from "../../bindings/LinkedBlocker";
@@ -66,7 +65,7 @@ function blockerFacts(blocker: BlockerAnswer | undefined): Fact[] {
       ...(blocker === undefined
         ? waiting
         : blocker.step === null
-          ? { value: t("detail.notRanked"), isAbsent: true }
+          ? { value: t("detail.noStep"), isAbsent: true }
           : { value: t("detail.step", { step: blocker.step }) }),
     },
   ];
@@ -117,7 +116,12 @@ function LineList({
         <More
           text={t("detail.shownOf", { shown: SHOWN_ROWS, count: lines.length })}
           action={
-            <Button variant="quiet" onPress={onShowAll}>
+            // Named by the list it stands under, so the two read apart.
+            <Button
+              variant="quiet"
+              aria-label={t("detail.showAllOf", { list: label })}
+              onPress={onShowAll}
+            >
               {t("detail.showAll")}
             </Button>
           }
@@ -194,6 +198,9 @@ export function BlockerDetail({
       }
     : null;
   const blocker = data ?? undefined;
+  // That the filters leave out the blocker, or that the snapshot has none, is said of the
+  // filters it was read for: while other filters are read, the panel waits as on a first load.
+  const isAbsent = data === null && !isStale;
 
   const head = (
     <PanelHead
@@ -202,7 +209,7 @@ export function BlockerDetail({
       title={blocker?.label ?? t("detail.blockerTitle")}
       onClose={onClose}
     >
-      {data === null || (data === undefined && error !== null) ? null : (
+      {isAbsent || (data === undefined && error !== null) ? null : (
         <div className={styles.tagRow}>
           {blocker === undefined ? (
             <span aria-hidden="true" className={styles.tagWaiting}>
@@ -216,7 +223,7 @@ export function BlockerDetail({
     </PanelHead>
   );
 
-  if (data === null) {
+  if (isAbsent) {
     return (
       <>
         {head}
@@ -258,19 +265,16 @@ export function BlockerDetail({
   const isLoading = blocker === undefined || absent === null;
   const shown = isLoading ? undefined : blocker;
   // Lines, with the filters of the bar and this blocker added to them: every line of the
-  // blocker, those it frees and those it shares. The panel stays open on the blocker there.
+  // blocker, those it frees and those it shares. The panel closes on the way: under that filter
+  // it would say that every line kept is freed by the blocker alone.
   const showAll = () => {
     if (shown === undefined) return;
     update((current) =>
       withValues(current, "Blocker", [{ key: shown.key, label: shown.label }], false),
     );
-    void navigate(
-      linesAddress(
-        DEFAULT_LINES_STATE,
-        searchWithSelection("", { kind: "blocker", key: shown.key }),
-      ),
-    );
+    void navigate(linesAddress(DEFAULT_LINES_STATE));
   };
+
   return (
     <>
       {head}

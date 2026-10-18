@@ -8,6 +8,7 @@ import type { BlockerDetail } from "../../bindings/BlockerDetail";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { ViewRef } from "../../bindings/ViewRef";
 import en from "../../locales/en.json";
+import { held } from "../../test/actions";
 import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { blockerDetail } from "../../test/blockers";
@@ -95,7 +96,7 @@ describe("The panel of a blocker", () => {
     });
     const region = await panel();
     const facts = await within(region).findByRole("list", { name: text.blockerFacts });
-    expect(factValue(facts, fact.solveOrder)).toBe(text.notRanked);
+    expect(factValue(facts, fact.solveOrder)).toBe(text.noStep);
   });
 
   it("lists the lines it frees and those it shares, and opens a line that is pressed", async () => {
@@ -204,19 +205,27 @@ describe("The panel of a blocker", () => {
     const shared = within(region).getByRole("list", { name: text.shared });
     expect(within(shared).getAllByRole("button")).toHaveLength(50);
     expect(within(region).getByText(fill(text.shownOf, { shown: 50, count: 60 }))).toBeVisible();
-    const showAll = within(region).getAllByRole("button", { name: text.showAll });
-    expect(showAll).toHaveLength(2);
-    await user.click(must(showAll[0]));
+    // The two buttons are told apart by the list each stands under.
+    expect(
+      within(region).getByRole("button", { name: fill(text.showAllOf, { list: text.frees }) }),
+    ).toHaveTextContent(text.showAll);
+    const showAll = within(region).getByRole("button", {
+      name: fill(text.showAllOf, { list: text.shared }),
+    });
+    expect(showAll).toHaveTextContent(text.showAll);
+    await user.click(showAll);
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/lines");
     });
-    // Lines keeps the filters of the bar, with the blocker added; the panel stays on it.
+    // Lines keeps the filters of the bar, with the blocker added. The panel closes: under that
+    // filter it would say that every line kept is freed by the blocker alone.
     expect(filtersNow()).toEqual({
       ...SOME_TEXT,
       fields: [{ dim: "Blocker", values: [{ key: BLOCKER, label: LABEL }], negate: false }],
     });
-    expect(router.state.location.search).toBe("?blocker=Piping%7C577-PK-400");
-    expect(await panel()).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines });
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
   });
 
   it("says when the filters leave it out, and clears them", async () => {
@@ -237,6 +246,36 @@ describe("The panel of a blocker", () => {
       await within(region).findByRole("list", { name: text.blockerFacts }),
     ).toBeInTheDocument();
     expect(within(region).getByRole("heading", { level: 2, name: LABEL })).toBeInTheDocument();
+  });
+
+  it("waits with skeletons, not with the other empty state, while other filters are read", async () => {
+    const later = held<BlockerDetail | null>();
+    const detail = vi.fn(({ spec }: { spec: FilterSpec }) =>
+      spec.text === "" ? later.handler() : null,
+    );
+    const { user } = renderBlocker({ handlers: { blocker_detail: detail }, filters: SOME_TEXT });
+    const region = await panel(text.blockerTitle);
+    await user.click(await within(region).findByRole("button", { name: text.clearFilters }));
+    await waitFor(() => {
+      expect(later.handler).toHaveBeenCalled();
+    });
+    // The answer for the filters of before says nothing of the filters now: neither its empty
+    // state nor the one of a blocker missing from the snapshot stands in.
+    expect(within(region).queryByText(text.blockerFilteredTitle)).not.toBeInTheDocument();
+    expect(within(region).queryByText(text.blockerMissingTitle)).not.toBeInTheDocument();
+    expect(within(region).getByRole("list", { name: text.blockerFacts })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await act(async () => {
+      must(later.waiting[0], "the reading under the default filters").resolve(
+        blockerDetail(BLOCKER),
+      );
+      await Promise.resolve();
+    });
+    expect(
+      await within(region).findByRole("heading", { level: 2, name: LABEL }),
+    ).toBeInTheDocument();
   });
 
   it("says that a blocker is not in the snapshot under the default filters, and closes", async () => {
