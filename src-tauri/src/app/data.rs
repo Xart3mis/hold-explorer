@@ -4,7 +4,7 @@
 use chrono::DateTime;
 use hx_core::dataset::Dataset;
 use hx_core::detail::{blocker_detail, line_detail, BlockerDetail, HoldRef, LineDetail};
-use hx_core::filter::{default_age_bands, AgeBand, Dim, FieldFilter, FilterSpec};
+use hx_core::filter::{default_age_bands, AgeBand, Dim, FieldFilter, FilterSpec, Inactive};
 use hx_core::mapping::Field;
 use hx_core::query::{
     facet_counts, group_by, holds, line_page, matrix_top, summary, value_page, FacetCounts,
@@ -17,7 +17,7 @@ use ts_rs::TS;
 
 use super::error::CommandError;
 use super::snapshots::ViewRef;
-use super::{AppState, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES};
+use super::{AppState, Columns, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES};
 
 /// What the filter bar needs for the snapshot in view and a filter.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -33,6 +33,10 @@ pub struct FilterOptions {
     pub custom_dims: Vec<String>,
     /// Optional fields the snapshot has no value for; empty for a workspace without a snapshot.
     pub absent: Vec<Field>,
+    /// What the filter sets that the snapshot cannot apply, for want of a column: every data
+    /// command leaves it out, as `FilterSpec::applicable` of the core says. Empty without a
+    /// snapshot.
+    pub inactive: Inactive,
 }
 
 /// A page of holds with their positions.
@@ -66,64 +70,82 @@ fn empty_dataset() -> Dataset {
     )
 }
 
-/// The options of the filter bar for the holds of `ds` that `spec` keeps, with the snapshot's
-/// extra columns and absent fields.
-fn options(
-    ds: &Dataset,
-    spec: &FilterSpec,
-    custom_dims: Vec<String>,
-    absent: Vec<Field>,
-) -> FilterOptions {
-    let bands = default_age_bands();
-    FilterOptions {
-        total: summary(ds, spec).holds,
-        facets: facet_counts(ds, spec, &bands),
-        age_bands: bands,
-        custom_dims,
-        absent,
-    }
+/// The snapshot in view as a data command reads it.
+pub(super) struct InView<'a> {
+    /// The dataset of the snapshot in view; an empty one for a workspace without a snapshot.
+    pub(super) dataset: &'a Dataset,
+    /// The filter of the request as the snapshot can apply it: see [`FilterSpec::applicable`].
+    /// A command reads with this one, never with the filter it was sent.
+    pub(super) spec: FilterSpec,
+    /// What the filter of the request sets that the snapshot cannot apply.
+    pub(super) inactive: Inactive,
+    /// The extra columns and absent fields of the snapshot; `None` without a snapshot.
+    pub(super) columns: Option<&'a Columns>,
 }
 
 impl AppState {
-    /// Checks `view` and gives `read` the dataset of the snapshot in view, or an empty one for a
-    /// workspace without a snapshot, so the two cases cannot answer differently.
-    fn in_view<T>(
+    /// Checks `view` and gives `read` the snapshot in view with the filter of the request as it
+    /// can apply it. A workspace without a snapshot is read as an empty snapshot, so the two cases
+    /// cannot answer differently; nothing is left out of the filter then, since nothing is missing
+    /// from a snapshot that does not exist. Every data command that takes a filter reads through
+    /// this, so none can apply a filter to a column the snapshot lacks.
+    pub(super) fn in_view<T>(
         &mut self,
         view: &ViewRef,
-        read: impl FnOnce(&Dataset, bool) -> T,
+        spec: &FilterSpec,
+        read: impl FnOnce(InView<'_>) -> T,
     ) -> Result<T, CommandError> {
         self.check_view(view)?;
         Ok(match self.selected {
-            Some(selected) => read(self.dataset(selected)?, true),
-            None => read(&empty_dataset(), false),
+            Some(selected) => {
+                let (dataset, columns) = self.columns(selected)?;
+                let (spec, inactive) = spec.applicable(&columns.absent, &columns.custom_dims);
+                read(InView {
+                    dataset,
+                    spec,
+                    inactive,
+                    columns: Some(columns),
+                })
+            }
+            None => read(InView {
+                dataset: &empty_dataset(),
+                spec: spec.clone(),
+                inactive: Inactive::default(),
+                columns: None,
+            }),
         })
     }
 
     /// Checks `view` and returns the selected snapshot, or `None` for a workspace without one.
-    fn snapshot_in_view(&self, view: &ViewRef) -> Result<Option<i64>, CommandError> {
+    pub(super) fn snapshot_in_view(&self, view: &ViewRef) -> Result<Option<i64>, CommandError> {
         self.check_view(view)?;
         Ok(self.selected)
     }
 
     /// The options of the filter bar for this filter. Without a snapshot every count is zero and
-    /// `absent` is empty: nothing is missing from a snapshot that does not exist. The extra
-    /// columns and absent fields of a snapshot are found once; see [`AppState::columns`].
+    /// `absent` and `inactive` are empty: nothing is missing from a snapshot that does not exist.
+    /// The extra columns and absent fields of a snapshot are found once; see
+    /// [`AppState::columns`].
     pub fn filter_options(
         &mut self,
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<FilterOptions, CommandError> {
-        let Some(selected) = self.snapshot_in_view(view)? else {
-            let ds = empty_dataset();
-            return Ok(options(&ds, spec, ds.custom_dims(), Vec::new()));
-        };
-        let (ds, columns) = self.columns(selected)?;
-        Ok(options(
-            ds,
-            spec,
-            columns.custom_dims.clone(),
-            columns.absent.clone(),
-        ))
+        let bands = default_age_bands();
+        self.in_view(view, spec, |v| FilterOptions {
+            total: summary(v.dataset, &v.spec).holds,
+            facets: facet_counts(v.dataset, &v.spec, &bands),
+            age_bands: bands.clone(),
+            custom_dims: v
+                .columns
+                .map(|columns| columns.custom_dims.clone())
+                .unwrap_or_default(),
+            absent: v
+                .columns
+                .map(|columns| columns.absent.clone())
+                .unwrap_or_default(),
+            inactive: v.inactive,
+        })
     }
 
     /// The values of `dim` the picker offers, at most [`PICKER_VALUES`], whose label contains
@@ -135,8 +157,8 @@ impl AppState {
         search: &str,
         view: &ViewRef,
     ) -> Result<ValuePage, CommandError> {
-        self.in_view(view, |ds, _| {
-            value_page(ds, spec, dim, search, PICKER_VALUES)
+        self.in_view(view, spec, |v| {
+            value_page(v.dataset, &v.spec, dim, search, PICKER_VALUES)
         })
     }
 
@@ -148,8 +170,8 @@ impl AppState {
         offset: usize,
         view: &ViewRef,
     ) -> Result<LinePage, CommandError> {
-        self.in_view(view, |ds, _| {
-            line_page(ds, spec, query, offset, Some(PAGE_ROWS))
+        self.in_view(view, spec, |v| {
+            line_page(v.dataset, &v.spec, query, offset, Some(PAGE_ROWS))
         })
     }
 
@@ -164,7 +186,7 @@ impl AppState {
             limit: Some(query.limit.map_or(PAGE_ROWS, |limit| limit.min(PAGE_ROWS))),
             ..*query
         };
-        let page = self.in_view(view, |ds, _| holds(ds, spec, &query))?;
+        let page = self.in_view(view, spec, |v| holds(v.dataset, &v.spec, &query))?;
         Ok(HoldsView {
             total: page.total,
             widest_line_id: page.widest_line_id,
@@ -216,7 +238,7 @@ impl AppState {
         dim: &Dim,
         view: &ViewRef,
     ) -> Result<Vec<Group>, CommandError> {
-        self.in_view(view, |ds, _| group_by(ds, spec, dim))
+        self.in_view(view, spec, |v| group_by(v.dataset, &v.spec, dim))
     }
 
     /// The kept holds crossed by two dimensions, folded at [`MATRIX_SIDE`] on each side.
@@ -227,8 +249,15 @@ impl AppState {
         col_dim: &Dim,
         view: &ViewRef,
     ) -> Result<FoldedMatrix, CommandError> {
-        self.in_view(view, |ds, _| {
-            matrix_top(ds, spec, row_dim, col_dim, MATRIX_SIDE, MATRIX_SIDE)
+        self.in_view(view, spec, |v| {
+            matrix_top(
+                v.dataset,
+                &v.spec,
+                row_dim,
+                col_dim,
+                MATRIX_SIDE,
+                MATRIX_SIDE,
+            )
         })
     }
 
@@ -239,7 +268,7 @@ impl AppState {
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<SolveView, CommandError> {
-        self.in_view(view, |ds, _| solve_view(ds, spec))
+        self.in_view(view, spec, |v| solve_view(v.dataset, &v.spec))
     }
 
     /// The detail of one blocker among the kept holds; `None` when no kept hold has it.
@@ -249,9 +278,9 @@ impl AppState {
         key: &str,
         view: &ViewRef,
     ) -> Result<Option<BlockerDetail>, CommandError> {
-        self.in_view(view, |ds, _| {
-            let plan = solve_plan(ds, spec, None);
-            blocker_detail(ds, spec, &plan, key)
+        self.in_view(view, spec, |v| {
+            let plan = solve_plan(v.dataset, &v.spec, None);
+            blocker_detail(v.dataset, &v.spec, &plan, key)
         })
     }
 
@@ -264,17 +293,23 @@ impl AppState {
         key: &str,
         view: &ViewRef,
     ) -> Result<Option<GroupDetail>, CommandError> {
-        self.in_view(view, |ds, _| {
-            let group = group_by(ds, spec, dim)
+        self.in_view(view, spec, |v| {
+            let group = group_by(v.dataset, &v.spec, dim)
                 .into_iter()
                 .find(|group| group.key == key)?;
-            let mut of_group = spec.without(dim);
+            let mut of_group = v.spec.without(dim);
             of_group.fields.push(FieldFilter {
                 dim: dim.clone(),
                 values: vec![key.to_string()],
                 negate: false,
             });
-            let lines = line_page(ds, &of_group, &LineQuery::default(), 0, Some(GROUP_LINES));
+            let lines = line_page(
+                v.dataset,
+                &of_group,
+                &LineQuery::default(),
+                0,
+                Some(GROUP_LINES),
+            );
             Some(GroupDetail { group, lines })
         })
     }

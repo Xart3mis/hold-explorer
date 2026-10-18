@@ -59,7 +59,7 @@ struct Cache {
     column_builds: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
-/// What the columns of a snapshot are, which the filter options name on every call.
+/// What the columns of a snapshot are, which every data command reads to apply its filter.
 struct Columns {
     /// [`Dataset::custom_dims`].
     custom_dims: Vec<String>,

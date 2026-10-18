@@ -110,17 +110,25 @@
 }
 
 /*
- * A filter that is kept but not applied, for the snapshot in view lacks its column: no accent,
- * the border of a control, and a tag after the value, which is cut before the tag is.
+ * A filter that is kept but not applied, for the snapshot in view lacks its column: the muted
+ * look of a disabled chip, still pressable and removable, with a small icon before the field.
  */
 .chip[data-inactive] {
-  border-color: var(--color-border-strong);
-  background-color: transparent;
-  color: var(--color-text-secondary);
+  border-color: var(--color-border-default);
+  background-color: var(--color-surface-disabled);
+  color: var(--color-text-muted);
 }
 
-.tag {
-  margin-inline-start: var(--space-1-5);
+.chip[data-inactive] .field,
+.chip[data-inactive] .remove {
+  color: var(--color-text-muted);
+}
+
+.inactive {
+  display: inline-flex;
+  flex: none;
+  margin-inline-end: var(--space-1);
+  color: var(--color-text-muted);
 }
 
 .chip[data-inactive]:has(.body[data-hovered]),
@@ -144,7 +152,8 @@
   color: var(--color-text-disabled);
 }
 
-.chip[data-disabled] .field {
+.chip[data-disabled] .field,
+.chip[data-disabled] .inactive {
   color: var(--color-text-disabled);
 }
 

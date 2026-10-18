@@ -2,10 +2,6 @@
  * The filters every data screen shares. The user builds them in the filter bar; the screens send
  * them to the commands as a `FilterSpec` (`toSpec`), and the Rust side decides what they match.
  *
- * A filter that needs a column the snapshot in view has no value in stays as the user set it, but
- * is not sent (`toSpec`) until a snapshot has the column again. Which columns the snapshot lacks
- * is what any answer of its filter options says (`absent`); before one is there, none.
- *
  * They belong to a workspace for the session. They are kept in the query client, under the id of
  * the workspace, beside what the commands returned for it: opening another workspace shows that
  * workspace's filters of this session, or the default, and selecting another snapshot keeps them.
@@ -21,13 +17,11 @@ import { keys } from "../../api/keys";
 import type { AgeBand } from "../../bindings/AgeBand";
 import type { DateRange } from "../../bindings/DateRange";
 import type { Dim } from "../../bindings/Dim";
-import type { Field } from "../../bindings/Field";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { Status } from "../../bindings/Status";
 import { useCached } from "../query";
 import { isSameDim } from "./dims";
 import { useShell } from "../shell/context";
-import { useAbsentColumns } from "../view";
 import { toSpec } from "./spec";
 
 /** One value of a dimension: the key the command takes, and the label it was picked under. */
@@ -56,9 +50,6 @@ export interface Filters {
   /** `null` for no filter on the sizes. */
   sizeMismatch: boolean | null;
 }
-
-/** No column: what is absent before the filter options of the snapshot in view say otherwise. */
-const NONE: readonly Field[] = [];
 
 /** The default spec, which says what the default filters are: `openHoldsFilter` defines both. */
 const open = openHoldsFilter();
@@ -114,13 +105,8 @@ export function withValues(
 
 export interface FiltersState {
   filters: Filters;
-  /**
-   * The filter as the commands take it, without the filters on columns in `absent`. The same
-   * object while the filters are the same and the same of them are left out.
-   */
+  /** The filter as the commands take it. The same object while the filters are the same. */
   spec: FilterSpec;
-  /** The columns the snapshot in view has no value in, once its filter options say so. */
-  absent: readonly Field[];
   /** Whether the filters keep what the default keeps: the open holds. */
   isDefault: boolean;
   set: (next: Filters) => void;
@@ -164,15 +150,5 @@ export function useFilters(): FiltersState {
     set(defaultFilters);
   }, [set]);
 
-  const absent = useAbsentColumns() ?? NONE;
-
-  return {
-    filters,
-    spec: toSpec(filters, absent),
-    absent,
-    isDefault: isDefault(filters),
-    set,
-    update,
-    clear,
-  };
+  return { filters, spec: toSpec(filters), isDefault: isDefault(filters), set, update, clear };
 }

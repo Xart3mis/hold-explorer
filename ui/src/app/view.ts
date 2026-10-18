@@ -105,19 +105,16 @@ import {
   type UseMutationOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { CommandError } from "../bindings/CommandError";
-import type { Field } from "../bindings/Field";
-import type { FilterOptions } from "../bindings/FilterOptions";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
 import { listed } from "./actions/start";
-import { useCached } from "./query";
 import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
@@ -367,41 +364,18 @@ export function useSnapshotQuery<Data, const Params extends readonly unknown[]>(
   });
   // The query library reads again on `refetch` whatever `enabled` says. Here a refetch reads
   // nothing while nothing may be read, and answers with what is there. The result is a proxy of
-  // the one of the library, so the library still sees which of its parts a screen reads.
+  // the one of the library, so the library still sees which of its parts a screen reads, and its
+  // `refetch` is one function from render to render, as the library's own is.
+  const shown = useRef(query);
+  useEffect(() => {
+    shown.current = query;
+  });
+  const idle = useCallback(() => Promise.resolve(shown.current), []);
   if (isEnabled) return query;
   return new Proxy(query, {
     get: (target, key, receiver): unknown =>
-      key === "refetch"
-        ? () => Promise.resolve(target)
-        : (Reflect.get(target, key, receiver) as unknown),
+      key === "refetch" ? idle : (Reflect.get(target, key, receiver) as unknown),
   });
-}
-
-/**
- * The columns the snapshot on screen has no value in, as an answer of `filterOptions` for its
- * view names them, whichever filter it was read for: they are a fact of the snapshot, and every
- * answer for the view says the same. `undefined` while none is there. It reads nothing and never
- * gives what an answer of another view said. The filters read it to leave out what needs one of
- * those columns (ui/src/app/filters/state.tsx); anything else is read with `useSnapshotQuery`.
- */
-export function useAbsentColumns(): readonly Field[] | undefined {
-  const { start } = useShell();
-  const view = viewOf(start.open);
-  return useCached((client) => {
-    if (view === null) return undefined;
-    const answers = client.getQueriesData<FilterOptions>({
-      queryKey: keys.snapshot(view, "filterOptions" satisfies ReadingName),
-      // The pages of a paged reading are not an answer of it.
-      predicate: (query) => !isPagesKey(query.queryKey),
-    });
-    return answers.find(([, data]) => data !== undefined)?.[1]?.absent;
-  });
-}
-
-/** Whether a key is the one of a paged reading: it has the marker of `keys.snapshotPages`. */
-function isPagesKey(key: QueryKey): boolean {
-  const marker: unknown = key[4];
-  return typeof marker === "object" && marker !== null && "pages" in marker;
 }
 
 /** A page as a paged command answers one: its rows, and how many rows there are in all. */

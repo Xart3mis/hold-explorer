@@ -2,6 +2,7 @@
 import type { AgeBand } from "./AgeBand";
 import type { FacetCounts } from "./FacetCounts";
 import type { Field } from "./Field";
+import type { Inactive } from "./Inactive";
 
 /**
  * What the filter bar needs for the snapshot in view and a filter.
@@ -26,4 +27,10 @@ custom_dims: Array<string>,
 /**
  * Optional fields the snapshot has no value for; empty for a workspace without a snapshot.
  */
-absent: Array<Field>, };
+absent: Array<Field>, 
+/**
+ * What the filter sets that the snapshot cannot apply, for want of a column: every data
+ * command leaves it out, as `FilterSpec::applicable` of the core says. Empty without a
+ * snapshot.
+ */
+inactive: Inactive, };

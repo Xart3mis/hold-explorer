@@ -7,7 +7,7 @@ import type { ValuePage } from "../bindings/ValuePage";
 /**
  * The options for the newest snapshot of the workspace the tests open and the default filter:
  * 5,042 holds kept, the two status counts, the five age bands a workspace starts with, no extra
- * column, and no field without a value.
+ * column, no field without a value, and nothing the snapshot cannot apply.
  */
 export function filterOptions(overrides: Partial<FilterOptions> = {}): FilterOptions {
   return {
@@ -28,6 +28,7 @@ export function filterOptions(overrides: Partial<FilterOptions> = {}): FilterOpt
     ],
     custom_dims: [],
     absent: [],
+    inactive: { dims: [], parts: [] },
     ...overrides,
   };
 }

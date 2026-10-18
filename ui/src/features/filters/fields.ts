@@ -1,31 +1,45 @@
 import type { Dim } from "../../bindings/Dim";
+import type { Field } from "../../bindings/Field";
 import type { FilterOptions } from "../../bindings/FilterOptions";
-import { fieldNeeds, type FilterField } from "./chips";
+import type { FilterField } from "./chips";
 
-const dim = (of: Exclude<Dim, { Custom: string }>): FilterField => ({ kind: "dim", dim: of });
+/**
+ * A field of the picker, and the columns of the export it needs: a snapshot that has no value in
+ * one of them is not offered the field. A field that needs none is always offered.
+ */
+interface Offered {
+  field: FilterField;
+  needs: readonly Field[];
+}
+
+const dim = (of: Exclude<Dim, { Custom: string }>, ...needs: Field[]): Offered => ({
+  field: { kind: "dim", dim: of },
+  needs,
+});
 
 /**
  * The fields the picker lists, in its order: what the export says of a hold and what the blocker
- * rules derive from it, then its age and its dates, its sizes, and text in any of them. A snapshot
- * that has no value in a column a field needs (`fieldNeeds`) is not offered the field; a field
- * that needs none is always offered.
+ * rules derive from it, then its age and its dates, its sizes, and text in any of them. The line
+ * ID, the hold remark, and the hold type are in every snapshot, and the blocker comes from the
+ * remark. The age is counted from the creation date, and the two sizes are compared with each
+ * other, so each of those needs what it is made of.
  */
-const FIELDS: readonly FilterField[] = [
-  dim("Discipline"),
+const FIELDS: readonly Offered[] = [
+  dim("Discipline", "Discipline"),
   dim("HoldType"),
-  dim("Role"),
-  dim("Name"),
+  dim("Role", "Role"),
+  dim("Name", "Name"),
   dim("BlockerType"),
   dim("Blocker"),
   dim("Remark"),
   dim("LineId"),
-  { kind: "ageBands" },
-  { kind: "created" },
-  { kind: "released" },
-  dim("ModelSize"),
-  dim("StressCalc"),
-  { kind: "sizeMismatch" },
-  { kind: "text" },
+  { field: { kind: "ageBands" }, needs: ["Created"] },
+  { field: { kind: "created" }, needs: ["Created"] },
+  { field: { kind: "released" }, needs: ["Released", "ReleaseDate"] },
+  dim("ModelSize", "ModelSize"),
+  dim("StressCalc", "StressCalc"),
+  { field: { kind: "sizeMismatch" }, needs: ["ModelSize", "LdtSize"] },
+  { field: { kind: "text" }, needs: [] },
 ];
 
 /**
@@ -38,7 +52,9 @@ export function pickerFields(
 ): FilterField[] {
   const absent = new Set(options.absent);
   return [
-    ...FIELDS.filter((field) => !fieldNeeds(field).some((needed) => absent.has(needed))),
+    ...FIELDS.filter(({ needs }) => !needs.some((field) => absent.has(field))).map(
+      ({ field }) => field,
+    ),
     ...options.custom_dims.map((header): FilterField => ({ kind: "dim", dim: { Custom: header } })),
   ];
 }

@@ -39,12 +39,20 @@ describe("FilterChip", () => {
     expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
-  it("reads that its filter is not in this snapshot, and can still be opened and removed", async () => {
+  it("says in its name that its filter is not in this snapshot, shows its field and value, and can still be opened and removed", async () => {
     const { onPress, onRemove, user } = setup({ isInactive: true });
     const name = `Discipline Civil ${en.filterChip.notInSnapshot}`;
     const body = screen.getByRole("button", { name });
-    expect(body.closest("[data-part='filter-chip']")).toHaveAttribute("data-inactive");
-    expect(screen.getByText(en.filterChip.notInSnapshot)).toHaveAttribute("data-part", "tag");
+    const pill = body.closest<HTMLElement>("[data-part='filter-chip']");
+    if (pill === null) throw new Error("The chip holds its button.");
+    expect(pill).toHaveAttribute("data-inactive");
+    // No tag takes the room of the value: a small icon says it, hidden from assistive technology.
+    expect(pill.querySelector("[data-part='tag']")).toBeNull();
+    expect(pill.querySelector("[data-part='filter-chip-inactive']")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(body).toBeEnabled();
     await user.click(body);
     expect(onPress).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: removeDiscipline }));

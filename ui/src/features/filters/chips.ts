@@ -1,8 +1,8 @@
-import { dimId, dimName } from "../../app/filters/dims";
-import { dimNeeds, FILTER_NEEDS, lacksAny } from "../../app/filters/spec";
+import { dimId, dimName, isSameDim } from "../../app/filters/dims";
 import type { Filters } from "../../app/filters/state";
 import type { Dim } from "../../bindings/Dim";
-import type { Field } from "../../bindings/Field";
+import type { FilterPart } from "../../bindings/FilterPart";
+import type { Inactive } from "../../bindings/Inactive";
 import { formatAgeBand, formatDateRange, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 
@@ -17,18 +17,6 @@ export type FilterField =
   | { kind: "released" }
   | { kind: "sizeMismatch" }
   | { kind: "text" };
-
-/** The columns of the export a filter on this field needs. */
-export function fieldNeeds(field: FilterField): readonly Field[] {
-  switch (field.kind) {
-    case "dim":
-      return dimNeeds(field.dim);
-    case "text":
-      return [];
-    default:
-      return FILTER_NEEDS[field.kind];
-  }
-}
 
 /** A field in one word, to tell it from every other: `dim:Discipline`, `ageBands`. */
 export function fieldId(field: FilterField): string {
@@ -67,7 +55,7 @@ export interface Chip {
   value: string;
   /** The filter keeps what does not match. */
   isNegated: boolean;
-  /** The snapshot in view lacks a column the filter needs: it is kept, and not sent. */
+  /** The command left the filter out: the snapshot in view lacks a column it needs. */
   isAbsent: boolean;
   /** The filters without this one. */
   remove: (filters: Filters) => Filters;
@@ -84,15 +72,27 @@ function summary(labels: readonly string[]): string {
   return t("filters.more", { first, more: others.length });
 }
 
+/** The part of the filter, as the command names it, that each field that is not a dimension is. */
+const PARTS: Record<Exclude<FilterField["kind"], "dim" | "text">, FilterPart> = {
+  ageBands: "AgeBands",
+  created: "Created",
+  released: "Released",
+  sizeMismatch: "SizeMismatch",
+};
+
 /**
  * The chips of the filters: the fields first, in the order they were added, then the filters that
  * are not a field, in the order the picker lists them. An entry without values filters nothing
- * and has no chip, and neither has the status. A filter that needs one of the `absent` columns
- * keeps its chip, marked: `toSpec` leaves it out.
+ * and has no chip, and neither has the status. A filter the command says it left out
+ * (`FilterOptions.inactive`) keeps its chip, marked.
  */
-export function chipsOf(filters: Filters, absent: readonly Field[] = []): Chip[] {
+export function chipsOf(filters: Filters, inactive?: Inactive): Chip[] {
   const chips: Chip[] = [];
-  const isAbsent = (field: FilterField) => lacksAny(fieldNeeds(field), absent);
+  const isAbsent = (field: FilterField): boolean => {
+    if (inactive === undefined || field.kind === "text") return false;
+    if (field.kind === "dim") return inactive.dims.some((dim) => isSameDim(dim, field.dim));
+    return inactive.parts.includes(PARTS[field.kind]);
+  };
   for (const entry of filters.fields) {
     if (entry.values.length === 0) continue;
     const field: FilterField = { kind: "dim", dim: entry.dim };

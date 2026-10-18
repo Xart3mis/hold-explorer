@@ -1,10 +1,13 @@
 // Answers the commands from fixtures, so the app's pages can be opened in a plain browser. For
 // development only; see ui/src/dev/app.tsx.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { openHoldsFilter } from "../api/filter";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
 import type { Dim } from "../bindings/Dim";
+import type { Field } from "../bindings/Field";
+import type { Inactive } from "../bindings/Inactive";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { HoldQuery } from "../bindings/HoldQuery";
@@ -281,6 +284,57 @@ const MANY_FILTERS: Filters = {
   released: { from: null, to: "2026-10-07" },
   sizeMismatch: true,
 };
+
+/** The columns a filter on each built-in dimension needs, as the core says them. */
+const DIM_NEEDS: Partial<Record<string, Field[]>> = {
+  Discipline: ["Discipline"],
+  Role: ["Role"],
+  Name: ["Name"],
+  ModelSize: ["ModelSize"],
+  StressCalc: ["StressCalc"],
+};
+
+/**
+ * The filter as the core's `FilterSpec::applicable` leaves it for a snapshot that lacks `absent`
+ * and names `customDims`, with what it left out.
+ */
+function devApplicable(
+  spec: FilterSpec,
+  absent: Field[],
+  customDims: string[],
+): { applied: FilterSpec; inactive: Inactive } {
+  const lacks = (needs: Field[]) => needs.some((field) => absent.includes(field));
+  const isAbsent = (dim: Dim) =>
+    typeof dim === "string" ? lacks(DIM_NEEDS[dim] ?? []) : !customDims.includes(dim.Custom);
+  const inactive: Inactive = {
+    dims: spec.fields
+      .filter((field) => field.values.length > 0 && isAbsent(field.dim))
+      .map((field) => field.dim),
+    parts: [],
+  };
+  const applied: FilterSpec = {
+    ...spec,
+    fields: spec.fields.filter((field) => field.values.length === 0 || !isAbsent(field.dim)),
+  };
+  const isBounded = (range: FilterSpec["created"]) => range.from !== null || range.to !== null;
+  if (spec.age_bands.length > 0 && lacks(["Created"])) {
+    inactive.parts.push("AgeBands");
+    applied.age_bands = [];
+  }
+  if (isBounded(spec.created) && lacks(["Created"])) {
+    inactive.parts.push("Created");
+    applied.created = { from: null, to: null };
+  }
+  if (isBounded(spec.released) && lacks(["Released", "ReleaseDate"])) {
+    inactive.parts.push("Released");
+    applied.released = { from: null, to: null };
+  }
+  if (spec.size_mismatch !== null && lacks(["ModelSize", "LdtSize"])) {
+    inactive.parts.push("SizeMismatch");
+    applied.size_mismatch = null;
+  }
+  return { applied, inactive };
+}
 
 /** The filters a state starts with, for the workspace it opens; `null` for the default. */
 export function devFilters(state: DevState): { workspaceId: string; filters: Filters } | null {
@@ -587,8 +641,30 @@ export function installDevCommands(state: DevState, theme: Theme): string {
    * What a data command is asked with, once the view it names is the one held here. As the Rust
    * side does, a request for another view is refused.
    */
-  const inView = (payload: unknown): { spec: FilterSpec; selected: SnapshotInfo | undefined } => {
-    const { view, spec } = payload as { view?: ViewRef; spec: FilterSpec };
+  // The states of Lines and of the panel answer from holds that carry two columns the mapping
+  // did not know, and the bar offers them.
+  const isLines =
+    state.startsWith("lines-") ||
+    state.startsWith("detail-") ||
+    state.startsWith("breakdown-") ||
+    state.startsWith("blockers-");
+  const customDims = isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [];
+  const absentOf = (selected: SnapshotInfo): Field[] =>
+    selected.limited
+      ? ["Released", "ReleaseRemark", "ReleaseDate"]
+      : state === "filters-absent"
+        ? ["ModelSize", "LdtSize", "StressCalc"]
+        : [];
+
+  /**
+   * The snapshot a request names, once its view is checked, with its filter as the command
+   * applies it: without what the snapshot cannot apply, which `inactive` names.
+   */
+  const inView = (
+    payload: unknown,
+  ): { spec: FilterSpec; inactive: Inactive; selected: SnapshotInfo | undefined } => {
+    // The commands that read one line or one hold take no filter.
+    const { view, spec = openHoldsFilter() } = payload as { view?: ViewRef; spec?: FilterSpec };
     const held = start.open;
     if (!held) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
     if (view?.workspace_id !== held.workspace.id || view.snapshot_id !== held.selected) {
@@ -597,7 +673,12 @@ export function installDevCommands(state: DevState, theme: Theme): string {
         "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
       );
     }
-    return { spec, selected: held.snapshots.find(({ id }) => id === held.selected) };
+    const selected = held.snapshots.find(({ id }) => id === held.selected);
+    if (selected === undefined) {
+      return { spec, inactive: { dims: [], parts: [] }, selected };
+    }
+    const { applied, inactive } = devApplicable(spec, absentOf(selected), customDims);
+    return { spec: applied, inactive, selected };
   };
 
   const answers: Record<string, (payload: unknown) => unknown> = {
@@ -781,7 +862,7 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(200, () => devOverview(start.open, overviewShape(state), spec));
     },
     filter_options: (payload): Promise<FilterOptions> => {
-      const { spec, selected } = inView(payload);
+      const { spec, inactive, selected } = inView(payload);
       if (state === "filters-error") {
         throw failure(
           "Io",
@@ -791,11 +872,6 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(120, () => {
         // Each count is the filter with that one part replaced, as the command counts them. The
         // states of Lines count the made-up holds their tables show, so the two agree.
-        const isLines =
-          state.startsWith("lines-") ||
-          state.startsWith("detail-") ||
-          state.startsWith("breakdown-") ||
-          state.startsWith("blockers-");
         const kept = (part: Partial<FilterSpec>) =>
           selected === undefined
             ? 0
@@ -821,17 +897,9 @@ export function installDevCommands(state: DevState, theme: Theme): string {
             { min_days: 60, max_days: 89 },
             { min_days: 90, max_days: null },
           ],
-          // The states of Lines and of the panel answer from holds that carry two columns
-          // the mapping did not know, and the bar offers them.
-          custom_dims: isLines ? ["Area", "Work pack"] : state === "filters-many" ? ["Area"] : [],
-          absent:
-            selected === undefined
-              ? []
-              : selected.limited
-                ? ["Released", "ReleaseRemark", "ReleaseDate"]
-                : state === "filters-absent"
-                  ? ["ModelSize", "LdtSize", "StressCalc"]
-                  : [],
+          custom_dims: customDims,
+          absent: selected === undefined ? [] : absentOf(selected),
+          inactive,
         };
       });
     },

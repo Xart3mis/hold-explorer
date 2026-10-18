@@ -55,7 +55,7 @@ const CLOSED: Picker = {
  * which no hold is released is said to have none; only the open holds are then offered.
  */
 export function FilterBar() {
-  const { filters, absent: lacking, update, clear } = useFilters();
+  const { filters, update, clear } = useFilters();
   const { isBusy } = useStart();
   // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
   // workspace makes the bar wait for the workspace, also when a selection waits beside it.
@@ -73,9 +73,10 @@ export function FilterBar() {
   /** Whether the picker was open when the bar was drawn last: its closing gives the focus back. */
   const wasOpen = useRef(false);
 
-  // The chips say which filters are left out by the columns the spec of the filters left out.
-  const chips = chipsOf(filters, lacking);
   const counted = options.isError ? undefined : options.data;
+  // The command says which filters the snapshot cannot apply, and their chips are marked.
+  const chips = chipsOf(filters, counted?.inactive);
+  const hasInactive = chips.some((chip) => chip.isAbsent);
   // What is shown was counted for the filters, the snapshot, or the workspace of before.
   const isStale = counted !== undefined && options.isPlaceholderData;
   const absent = counted?.absent ?? [];
@@ -243,20 +244,31 @@ export function FilterBar() {
           )}
         </div>
       </div>
-      {noReleased || missing.length > 0 ? (
+      {noReleased || missing.length > 0 || hasInactive ? (
         <p data-part="filter-notes" data-stale={isStale ? "" : undefined} className={styles.notes}>
-          {noReleased ? (
-            <span data-part="filter-no-released">{t("filters.noReleased")}</span>
-          ) : null}
-          {noReleased && missing.length > 0 ? " " : null}
-          {missing.length === 0 ? null : (
-            <span data-part="filter-absent">
-              {t("filters.absent", {
-                count: missing.length,
-                columns: formatList(missing.map(exportColumn)),
-              })}
-            </span>
-          )}
+          {[
+            noReleased ? (
+              <span key="released" data-part="filter-no-released">
+                {t("filters.noReleased")}
+              </span>
+            ) : null,
+            missing.length === 0 ? null : (
+              <span key="absent" data-part="filter-absent">
+                {t("filters.absent", {
+                  count: missing.length,
+                  columns: formatList(missing.map(exportColumn)),
+                })}
+              </span>
+            ),
+            hasInactive ? (
+              <span key="inactive" data-part="filter-inactive">
+                {t("filters.inactiveKept")}
+              </span>
+            ) : null,
+          ]
+            .filter((sentence) => sentence !== null)
+            // One space between the sentences of the line.
+            .flatMap((sentence, index) => (index === 0 ? [sentence] : [" ", sentence]))}
         </p>
       ) : null}
       {options.isError ? (

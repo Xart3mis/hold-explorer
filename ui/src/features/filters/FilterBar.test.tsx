@@ -221,11 +221,22 @@ describe("FilterBar", () => {
     expect(chips(region)).toEqual(["Discipline Civil"]);
   });
 
-  it("keeps a filter on a column the snapshot lacks, marks its chip, and sends it again for a snapshot that has the column", async () => {
-    // Snapshot 2, the one in view, has no discipline; snapshot 1 has one.
+  it("sends a filter on a column the snapshot lacks as it is, marks its chip from the answer, and says it is kept", async () => {
+    // Snapshot 2, the one in view, has no discipline; snapshot 1 has one. The command says which
+    // filters it left out.
     const select = held<WorkspaceOpen>();
     const { options } = renderBar(
-      ({ view }) => filterOptions({ absent: view.snapshot_id === 2 ? ["Discipline"] : [] }),
+      ({ spec, view }) =>
+        filterOptions({
+          absent: view.snapshot_id === 2 ? ["Discipline"] : [],
+          inactive: {
+            dims:
+              view.snapshot_id === 2 && spec.fields.some((field) => field.dim === "Discipline")
+                ? ["Discipline"]
+                : [],
+            parts: [],
+          },
+        }),
       { snapshot_select: select.handler },
     );
     const region = await bar();
@@ -235,22 +246,31 @@ describe("FilterBar", () => {
         { dim: "Role", values: [value("Lead")], negate: false },
       ],
     });
-    const roleOnly = {
+    // The filter goes out whole: the command leaves out what the snapshot cannot apply.
+    const both = {
       ...openHoldsFilter(),
-      fields: [{ dim: "Role", values: ["Lead"], negate: false }],
+      fields: [
+        { dim: "Discipline", values: ["Civil"], negate: false },
+        { dim: "Role", values: ["Lead"], negate: false },
+      ],
     };
     await waitFor(() => {
       expect(options).toHaveBeenLastCalledWith({
-        spec: roleOnly,
+        spec: both,
         view: { workspace_id: workspace().id, snapshot_id: 2 },
       });
     });
+    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
     // The chip stays, and says that its filter is not in this snapshot; the other one does not.
-    expect(chips(region)).toEqual([`Discipline Civil ${en.filterChip.notInSnapshot}`, "Role Lead"]);
-    expect(chip(region, `Discipline Civil ${en.filterChip.notInSnapshot}`)).toBeEnabled();
+    await waitFor(() => {
+      expect(chips(region)).toEqual([marked, "Role Lead"]);
+    });
+    expect(chip(region, marked)).toBeEnabled();
     expect(removeButton(region, "Discipline")).toBeEnabled();
-    expect(now().filters.fields).toHaveLength(2);
-    expect(now().spec).toEqual(roleOnly);
+    expect(region.querySelector("[data-part='filter-inactive']")).toHaveTextContent(
+      text.inactiveKept,
+    );
+    expect(now().spec).toEqual(both);
 
     act(() => {
       now().select(1);
@@ -262,13 +282,6 @@ describe("FilterBar", () => {
       must(select.waiting[0], "the selection").resolve(opened({ selected: 1 }));
       await Promise.resolve();
     });
-    const both = {
-      ...openHoldsFilter(),
-      fields: [
-        { dim: "Discipline", values: ["Civil"], negate: false },
-        { dim: "Role", values: ["Lead"], negate: false },
-      ],
-    };
     await waitFor(() => {
       expect(options).toHaveBeenLastCalledWith({
         spec: both,
@@ -278,7 +291,7 @@ describe("FilterBar", () => {
     await waitFor(() => {
       expect(chips(region)).toEqual(["Discipline Civil", "Role Lead"]);
     });
-    expect(now().spec).toEqual(both);
+    expect(region.querySelector("[data-part='filter-inactive']")).toBeNull();
   });
 
   it("removes a chip by its button, and moves the focus to the chip after it", async () => {

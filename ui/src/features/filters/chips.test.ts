@@ -126,24 +126,31 @@ describe("chipsOf", () => {
     );
   });
 
-  it("marks the chip of a filter that needs a column the snapshot lacks, and keeps it", () => {
+  it("marks the chip of each filter the command says the snapshot cannot apply, and keeps it", () => {
     const absent = (chips: ReturnType<typeof chipsOf>) =>
       chips.filter((chip) => chip.isAbsent).map((chip) => chip.id);
     expect(absent(chipsOf(EVERY))).toEqual([]);
-    expect(absent(chipsOf(EVERY, ["Discipline", "Created"]))).toEqual([
+    expect(absent(chipsOf(EVERY, { dims: [], parts: [] }))).toEqual([]);
+    expect(
+      absent(
+        chipsOf(EVERY, {
+          dims: ["Discipline", { Custom: "Area" }],
+          parts: ["AgeBands", "Created", "Released", "SizeMismatch"],
+        }),
+      ),
+    ).toEqual([
       "dim:Discipline",
+      "dim:Custom:Area",
       "ageBands",
       "created",
-    ]);
-    expect(absent(chipsOf(EVERY, ["ReleaseDate", "LdtSize"]))).toEqual([
       "released",
       "sizeMismatch",
     ]);
-    // A column no filter needs marks nothing, and a custom column is never absent.
-    expect(absent(chipsOf(EVERY, ["SourceId", "Role", "StressCalc"]))).toEqual([]);
-    expect(chipsOf(EVERY, ["Discipline"]).map((chip) => chip.id)).toEqual(
-      chipsOf(EVERY).map((chip) => chip.id),
-    );
+    // A custom column is told from a built-in dimension of the same name.
+    expect(absent(chipsOf(EVERY, { dims: [{ Custom: "Discipline" }], parts: [] }))).toEqual([]);
+    expect(
+      chipsOf(EVERY, { dims: ["Discipline"], parts: ["Created"] }).map((chip) => chip.id),
+    ).toEqual(chipsOf(EVERY).map((chip) => chip.id));
   });
 
   it("removes exactly its own filter, and leaves the status as it is", () => {

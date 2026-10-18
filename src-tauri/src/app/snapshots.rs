@@ -184,35 +184,36 @@ impl AppState {
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<Option<OverviewView>, CommandError> {
-        self.check_view(view)?;
-        let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
-        let Some(selected) = self.selected else {
+        let Some(selected) = self.snapshot_in_view(view)? else {
             return Ok(None);
         };
+        let workspace = self.open.as_ref().ok_or_else(CommandError::no_workspace)?;
         let snapshot = workspace.snapshot(selected)?;
         let is_latest = workspace
             .snapshots()?
             .last()
             .is_none_or(|latest| latest.id == selected);
-        let dataset = self.dataset(selected)?;
-        Ok(Some(OverviewView {
-            snapshot,
-            is_latest,
-            summary: summary(dataset, spec),
-            by_discipline: group_by(dataset, spec, &Dim::Discipline),
-            by_hold_type: group_by(dataset, spec, &Dim::HoldType),
-            by_role: group_by(dataset, spec, &Dim::Role),
-            top_blockers: group_by(dataset, spec, &Dim::Blocker)
-                .into_iter()
-                .take(TOP_ITEMS)
-                .collect(),
-            top_lines: line_page(dataset, spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows,
-            stale: StaleCount {
-                holds: stale_count(dataset, spec, STALE_DAYS),
-                days: STALE_DAYS,
-                ages_known: ages_known(dataset, spec),
-            },
-        }))
+        self.in_view(view, spec, |v| {
+            let (dataset, spec) = (v.dataset, &v.spec);
+            Some(OverviewView {
+                snapshot,
+                is_latest,
+                summary: summary(dataset, spec),
+                by_discipline: group_by(dataset, spec, &Dim::Discipline),
+                by_hold_type: group_by(dataset, spec, &Dim::HoldType),
+                by_role: group_by(dataset, spec, &Dim::Role),
+                top_blockers: group_by(dataset, spec, &Dim::Blocker)
+                    .into_iter()
+                    .take(TOP_ITEMS)
+                    .collect(),
+                top_lines: line_page(dataset, spec, &LineQuery::default(), 0, Some(TOP_ITEMS)).rows,
+                stale: StaleCount {
+                    holds: stale_count(dataset, spec, STALE_DAYS),
+                    days: STALE_DAYS,
+                    ages_known: ages_known(dataset, spec),
+                },
+            })
+        })
     }
 
     /// How many datasets were built since the application started.

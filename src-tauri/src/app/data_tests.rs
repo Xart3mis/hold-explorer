@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use hx_core::dataset::Dataset;
-use hx_core::filter::{Dim, FilterSpec, Status};
+use hx_core::filter::{Dim, FieldFilter, FilterPart, FilterSpec, Inactive, Status};
 use hx_core::mapping::Field;
 use hx_core::query::{self, ages_known, HoldQuery, HoldSort, LineQuery, LineSort};
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -239,10 +239,15 @@ fn filter_values_never_return_more_than_the_picker_shows_and_report_the_true_tot
 #[test]
 fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
     let fx = Fixture::new();
-    let (first, second) = (fx.synth("a.xlsx", 1), fx.synth("b.xlsx", 2));
     let mut state = fx.state();
-    let older = import(&mut state, &first, "2026-09-01 00:00:00", true);
-    import(&mut state, &second, "2026-09-08 00:00:00", false);
+    let older = import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    // The newer snapshot has an extra column and lacks columns, so neither list is empty.
+    import(&mut state, &zoned(&fx), "2026-09-08 00:00:00", false);
     let options = |state: &mut AppState, spec: &FilterSpec| {
         let view = shown(state);
         state.filter_options(spec, &view).unwrap()
@@ -257,6 +262,8 @@ fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
     let again = options(&mut state, &all);
     assert_eq!(state.column_builds(), 1);
     let ds = dataset_of(&mut state);
+    assert_eq!(ds.custom_dims(), ["Zone"]);
+    assert!(ds.absent_fields().contains(&Field::Discipline));
     for answer in [once, again] {
         assert_eq!(
             (answer.custom_dims, answer.absent),
@@ -268,6 +275,157 @@ fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
     state.select_snapshot(older).unwrap();
     options(&mut state, &spec);
     assert_eq!(state.column_builds(), 2);
+}
+
+/// A file with an extra column `Zone` and no discipline, role, name, dates, release, or sizes.
+fn zoned(fx: &Fixture) -> PathBuf {
+    csv(
+        fx,
+        "zoned.csv",
+        "line_id,hold_remark,hold_type,Zone\nL-1,Pending 538-PR-100,MISC.,Z1\nL-2,b,P&ID,Z2\nL-2,c,MISC.,Z1\n",
+    )
+}
+
+/// A filter that sets, beside a filter the zoned file can apply, one on every column it lacks: a
+/// discipline, a custom column it does not have, the age, the creation and release dates, and
+/// the sizes.
+fn on_missing_columns() -> FilterSpec {
+    let date = |text: &str| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok();
+    FilterSpec {
+        status: Status::All,
+        fields: vec![
+            FieldFilter {
+                dim: Dim::Discipline,
+                values: vec!["Civil".into()],
+                negate: false,
+            },
+            FieldFilter {
+                dim: Dim::HoldType,
+                values: vec!["MISC.".into()],
+                negate: false,
+            },
+            FieldFilter {
+                dim: Dim::Custom("Area".into()),
+                values: vec!["North".into()],
+                negate: false,
+            },
+        ],
+        age_bands: vec![hx_core::filter::AgeBand {
+            min_days: Some(90),
+            max_days: None,
+        }],
+        created: hx_core::filter::DateRange {
+            from: date("2026-01-01"),
+            to: None,
+        },
+        released: hx_core::filter::DateRange {
+            from: None,
+            to: date("2026-09-30"),
+        },
+        size_mismatch: Some(true),
+        ..FilterSpec::default()
+    }
+}
+
+#[test]
+fn every_data_command_leaves_out_the_filters_on_columns_the_snapshot_lacks() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    import(&mut state, &zoned(&fx), "2026-09-29 00:00:00", true);
+    let view = shown(&state);
+    let full = on_missing_columns();
+    // What the zoned file can apply: the hold type and the status.
+    let applied = FilterSpec {
+        status: Status::All,
+        fields: vec![full.fields[1].clone()],
+        ..FilterSpec::default()
+    };
+    let ds = dataset_of(&mut state);
+    assert_eq!(
+        full.applicable(&ds.absent_fields(), &ds.custom_dims()).0,
+        applied
+    );
+    // Applied as it is, the filter would keep nothing.
+    assert_eq!(query::summary(&ds, &full).holds, 0);
+    assert_eq!(query::summary(&ds, &applied).holds, 2);
+
+    let mut answers = |spec: &FilterSpec| {
+        let options = state.filter_options(spec, &view).unwrap();
+        let blocker = query::group_by(&ds, &applied, &Dim::Blocker)[0].key.clone();
+        (
+            (options.total, options.facets),
+            state.filter_values(spec, &Dim::LineId, "", &view).unwrap(),
+            state.lines(spec, &LineQuery::default(), 0, &view).unwrap(),
+            state.holds(spec, &HoldQuery::default(), &view).unwrap(),
+            state.breakdown(spec, &Dim::Blocker, &view).unwrap(),
+            state
+                .matrix(spec, &Dim::LineId, &Dim::HoldType, &view)
+                .unwrap(),
+            state.solve_order(spec, &view).unwrap(),
+            state.blocker_detail(spec, &blocker, &view).unwrap(),
+            state
+                .group_detail(spec, &Dim::HoldType, "MISC.", &view)
+                .unwrap(),
+            state.overview(spec, &view).unwrap().map(|overview| {
+                (
+                    overview.summary,
+                    overview.by_discipline,
+                    overview.top_blockers,
+                    overview.top_lines,
+                    overview.stale,
+                )
+            }),
+        )
+    };
+    let with_all = answers(&full);
+    let with_applied = answers(&applied);
+    assert_eq!(with_all.0 .0, 2);
+    assert!(with_all.8.is_some(), "the group of the hold type is there");
+    assert_eq!(with_all, with_applied);
+}
+
+#[test]
+fn filter_options_name_the_filters_the_snapshot_cannot_apply() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let full_snapshot = import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    import(&mut state, &zoned(&fx), "2026-09-08 00:00:00", false);
+    let spec = on_missing_columns();
+    let options = state.filter_options(&spec, &shown(&state)).unwrap();
+    assert_eq!(
+        options.inactive,
+        Inactive {
+            dims: vec![Dim::Discipline, Dim::Custom("Area".into())],
+            parts: vec![
+                FilterPart::AgeBands,
+                FilterPart::Created,
+                FilterPart::Released,
+                FilterPart::SizeMismatch,
+            ],
+        }
+    );
+    assert_eq!(
+        state
+            .filter_options(&open_holds(), &shown(&state))
+            .unwrap()
+            .inactive,
+        Inactive::default()
+    );
+    // The synthetic file has every built-in column, but not the custom one.
+    state.select_snapshot(full_snapshot).unwrap();
+    let options = state.filter_options(&spec, &shown(&state)).unwrap();
+    assert_eq!(
+        options.inactive,
+        Inactive {
+            dims: vec![Dim::Custom("Area".into())],
+            parts: vec![],
+        }
+    );
 }
 
 #[test]
@@ -643,42 +801,15 @@ fn the_overview_parts_equal_the_core_functions() {
 }
 
 #[test]
-fn the_ages_are_unknown_only_when_open_holds_are_kept_and_none_has_an_age() {
+fn the_overview_says_the_ages_are_unknown_for_a_snapshot_without_creation_dates() {
+    // The rule itself is tested in the core, beside `stale_count`; this is that the Overview
+    // answers with it.
     let fx = Fixture::new();
-    let mut state = big(&fx);
-    let ds = dataset_of(&mut state);
+    let mut state = fx.state();
+    import(&mut state, &zoned(&fx), "2026-09-29 00:00:00", true);
+    let view = shown(&state);
     let spec = open_holds();
-    assert!(ages_known(&ds, &spec));
-    // The same holds without their creation dates: no open hold has an age.
-    let mut dateless = ds.clone();
-    for row in &mut dateless.rows {
-        row.age_days = None;
-    }
-    assert!(!ages_known(&dateless, &spec));
-    let all = FilterSpec {
-        status: Status::All,
-        ..open_holds()
-    };
-    assert!(!ages_known(&dateless, &all));
-    // With no open hold kept there is nothing to know: released holds have no age, and a filter
-    // that keeps nothing leaves nothing that could be stale.
-    let released = FilterSpec {
-        status: Status::Released,
-        ..open_holds()
-    };
-    assert!(ages_known(&dateless, &released));
-    let nothing = FilterSpec {
-        text: "no hold has this text".to_owned(),
-        ..open_holds()
-    };
-    assert!(ages_known(&dateless, &nothing));
-    // One open hold with an age among the kept is enough.
-    let mut one = dateless.clone();
-    let open = one
-        .rows
-        .iter_mut()
-        .find(|row| !row.hold.released)
-        .expect("the file has open holds");
-    open.age_days = Some(3);
-    assert!(ages_known(&one, &spec));
+    let stale = state.overview(&spec, &view).unwrap().unwrap().stale;
+    assert_eq!((stale.holds, stale.ages_known), (0, false));
+    assert_eq!(stale.ages_known, ages_known(&dataset_of(&mut state), &spec));
 }

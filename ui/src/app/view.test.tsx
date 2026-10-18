@@ -269,6 +269,10 @@ describe("useSnapshotQuery", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(read).not.toHaveBeenCalled();
     expect(result.current.lines.fetchStatus).toBe("idle");
+    // It is one function from render to render, as the library's own is.
+    const { refetch } = result.current.lines;
+    rerender({ enabled: false });
+    expect(result.current.lines.refetch).toBe(refetch);
 
     rerender({ enabled: true });
     await waitFor(() => {

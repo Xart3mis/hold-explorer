@@ -4,6 +4,7 @@ use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
 use crate::dataset::Row;
+use crate::mapping::Field;
 use crate::table::format_number;
 
 /// A dimension holds can be grouped and filtered by.
@@ -52,6 +53,90 @@ impl Dim {
             Dim::Custom(name) => row.hold.extra.get(name).cloned().unwrap_or_default(),
         }
     }
+}
+
+impl Dim {
+    /// The columns of the export a filter on this dimension needs, of those a snapshot can lack.
+    /// The line ID, the hold remark, and the hold type are in every snapshot, and the blocker comes
+    /// from the remark. A custom column is needed by name: see [`FilterSpec::applicable`].
+    pub fn needs(&self) -> &'static [Field] {
+        match self {
+            Dim::Discipline => &[Field::Discipline],
+            Dim::Role => &[Field::Role],
+            Dim::Name => &[Field::Name],
+            Dim::ModelSize => &[Field::ModelSize],
+            Dim::StressCalc => &[Field::StressCalc],
+            Dim::HoldType
+            | Dim::BlockerType
+            | Dim::Blocker
+            | Dim::Remark
+            | Dim::LineId
+            | Dim::Custom(_) => &[],
+        }
+    }
+}
+
+/// A part of a filter that is not a field and needs columns of the export.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum FilterPart {
+    /// `age_bands`: the age is counted from the creation date.
+    AgeBands,
+    /// `created`.
+    Created,
+    /// `released`.
+    Released,
+    /// `size_mismatch`: the two sizes are compared with each other.
+    SizeMismatch,
+}
+
+impl FilterPart {
+    /// Every part, in the order of the fields of [`FilterSpec`].
+    pub const ALL: [FilterPart; 4] = [
+        FilterPart::AgeBands,
+        FilterPart::Created,
+        FilterPart::Released,
+        FilterPart::SizeMismatch,
+    ];
+
+    /// The columns of the export this part needs.
+    pub fn needs(self) -> &'static [Field] {
+        match self {
+            FilterPart::AgeBands | FilterPart::Created => &[Field::Created],
+            FilterPart::Released => &[Field::Released, Field::ReleaseDate],
+            FilterPart::SizeMismatch => &[Field::ModelSize, Field::LdtSize],
+        }
+    }
+
+    /// Whether `spec` sets this part.
+    fn is_set(self, spec: &FilterSpec) -> bool {
+        match self {
+            FilterPart::AgeBands => !spec.age_bands.is_empty(),
+            FilterPart::Created => spec.created.is_bounded(),
+            FilterPart::Released => spec.released.is_bounded(),
+            FilterPart::SizeMismatch => spec.size_mismatch.is_some(),
+        }
+    }
+
+    /// Takes this part out of `spec`.
+    fn clear(self, spec: &mut FilterSpec) {
+        match self {
+            FilterPart::AgeBands => spec.age_bands.clear(),
+            FilterPart::Created => spec.created = DateRange::default(),
+            FilterPart::Released => spec.released = DateRange::default(),
+            FilterPart::SizeMismatch => spec.size_mismatch = None,
+        }
+    }
+}
+
+/// What a filter sets that a snapshot cannot apply, because it has no value in a column it needs.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct Inactive {
+    /// The dimensions of the field filters left out, in the order of the filter.
+    pub dims: Vec<Dim>,
+    /// The other parts left out, in the order of [`FilterPart::ALL`].
+    pub parts: Vec<FilterPart>,
 }
 
 /// Which holds a filter keeps by release state.
@@ -109,9 +194,14 @@ pub struct DateRange {
 }
 
 impl DateRange {
+    /// Whether it has a bound, and so filters.
+    fn is_bounded(&self) -> bool {
+        self.from.is_some() || self.to.is_some()
+    }
+
     /// A missing date fails a range that has any bound.
     fn admits(&self, at: Option<NaiveDateTime>) -> bool {
-        if self.from.is_none() && self.to.is_none() {
+        if !self.is_bounded() {
             return true;
         }
         let Some(date) = at.map(|t| t.date()) else {
@@ -165,6 +255,36 @@ impl FilterSpec {
         let mut spec = self.clone();
         spec.fields.retain(|filter| &filter.dim != dim);
         spec
+    }
+
+    /// This filter as a snapshot can apply it, with what it leaves out. A field filter with values
+    /// is left out when the snapshot has no value in a column its dimension needs (`absent`, as
+    /// `Dataset::absent_fields` names them) or, for a custom column, when the snapshot has no such
+    /// column (`custom_dims`, as `Dataset::custom_dims` names them); another part when it is set
+    /// and needs an absent column. Applied, such a filter would test empty values; left out, the
+    /// rest of the filter keeps what it keeps. The status and the text are always kept.
+    pub fn applicable(&self, absent: &[Field], custom_dims: &[String]) -> (FilterSpec, Inactive) {
+        let lacks = |needs: &[Field]| needs.iter().any(|field| absent.contains(field));
+        let mut spec = self.clone();
+        let mut inactive = Inactive::default();
+        spec.fields.retain(|filter| {
+            let is_absent = match &filter.dim {
+                Dim::Custom(name) => !custom_dims.contains(name),
+                dim => lacks(dim.needs()),
+            };
+            let is_kept = filter.values.is_empty() || !is_absent;
+            if !is_kept {
+                inactive.dims.push(filter.dim.clone());
+            }
+            is_kept
+        });
+        for part in FilterPart::ALL {
+            if part.is_set(&spec) && lacks(part.needs()) {
+                part.clear(&mut spec);
+                inactive.parts.push(part);
+            }
+        }
+        (spec, inactive)
     }
 
     /// Whether `row` passes every part of the filter.
@@ -569,5 +689,124 @@ mod tests {
         assert_eq!(in_bands(14), vec![1]);
         assert_eq!(in_bands(90), vec![4]);
         assert_eq!(in_bands(5000), vec![4]);
+    }
+
+    fn date(text: &str) -> Option<NaiveDate> {
+        NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()
+    }
+
+    /// One filter of every kind that needs a column, and two that need none.
+    fn every_kind() -> FilterSpec {
+        FilterSpec {
+            status: Status::All,
+            fields: vec![
+                entry(Dim::Discipline, &["Civil"], false),
+                entry(Dim::HoldType, &["MISC."], false),
+                entry(Dim::Custom("Area".into()), &["North"], true),
+                entry(Dim::Role, &[], false),
+                entry(Dim::ModelSize, &["6"], false),
+            ],
+            text: "577-PR".into(),
+            age_bands: vec![AgeBand {
+                min_days: Some(90),
+                max_days: None,
+            }],
+            created: DateRange {
+                from: date("2026-09-01"),
+                to: None,
+            },
+            released: DateRange {
+                from: None,
+                to: date("2026-09-30"),
+            },
+            size_mismatch: Some(true),
+        }
+    }
+
+    #[test]
+    fn applicable_leaves_out_what_needs_a_column_the_snapshot_lacks() {
+        let spec = every_kind();
+        let (applied, inactive) = spec.applicable(
+            &[Field::Discipline, Field::Created, Field::LdtSize],
+            &["Zone".into()],
+        );
+        assert_eq!(
+            applied.fields,
+            vec![
+                entry(Dim::HoldType, &["MISC."], false),
+                entry(Dim::Role, &[], false),
+                entry(Dim::ModelSize, &["6"], false),
+            ]
+        );
+        assert!(applied.age_bands.is_empty());
+        assert_eq!(applied.created, DateRange::default());
+        assert_eq!(applied.size_mismatch, None);
+        assert_eq!(applied.released, spec.released);
+        assert_eq!(
+            (applied.status, applied.text.as_str()),
+            (Status::All, "577-PR")
+        );
+        // The custom column the snapshot does not name is left out as well.
+        assert_eq!(
+            inactive,
+            Inactive {
+                dims: vec![Dim::Discipline, Dim::Custom("Area".into())],
+                parts: vec![
+                    FilterPart::AgeBands,
+                    FilterPart::Created,
+                    FilterPart::SizeMismatch
+                ],
+            }
+        );
+
+        let (applied, inactive) =
+            spec.applicable(&[Field::ReleaseDate, Field::ModelSize], &["Area".into()]);
+        assert_eq!(applied.released, DateRange::default());
+        assert_eq!(applied.created, spec.created);
+        assert_eq!(
+            inactive,
+            Inactive {
+                dims: vec![Dim::ModelSize],
+                parts: vec![FilterPart::Released, FilterPart::SizeMismatch],
+            }
+        );
+    }
+
+    #[test]
+    fn applicable_keeps_the_filter_whole_when_the_snapshot_has_its_columns() {
+        let spec = every_kind();
+        let (applied, inactive) =
+            spec.applicable(&[Field::SourceId, Field::StressCalc], &["Area".into()]);
+        assert_eq!(applied, spec);
+        assert_eq!(inactive, Inactive::default());
+        // A part that is not set is not inactive, whatever the snapshot lacks; nor is an entry
+        // without values, which filters nothing.
+        let (applied, inactive) = FilterSpec::default().applicable(&Field::ALL, &[]);
+        assert_eq!(applied, FilterSpec::default());
+        assert_eq!(inactive, Inactive::default());
+        let role = field(Dim::Role, &[], false);
+        assert_eq!(
+            role.applicable(&[Field::Role], &[]),
+            (role.clone(), Inactive::default())
+        );
+    }
+
+    #[test]
+    fn an_applicable_filter_keeps_what_the_filter_without_its_inactive_parts_keeps() {
+        // Every hold of the sample has a discipline: with Discipline said to be absent the
+        // filter on it is left out, so the rows kept are those of the rest of the filter.
+        let spec = FilterSpec {
+            fields: vec![
+                entry(Dim::Discipline, &["Nothing"], false),
+                entry(Dim::HoldType, &["P&ID"], false),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(count(&spec), 0);
+        let (applied, _) = spec.applicable(&[Field::Discipline], &[]);
+        assert_eq!(
+            count(&applied),
+            count(&field(Dim::HoldType, &["P&ID"], false))
+        );
     }
 }
