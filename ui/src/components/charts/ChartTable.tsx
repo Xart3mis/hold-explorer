@@ -3,7 +3,14 @@ import { useId, useMemo, useRef, type SyntheticEvent } from "react";
 import { ToggleButton } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
-import { DataTable, textChars, type DataTableColumn } from "../DataTable/DataTable";
+import {
+  columnOfHeader,
+  DataTable,
+  headerOfColumn,
+  isHeaderCut,
+  textChars,
+  type DataTableColumn,
+} from "../DataTable/DataTable";
 import { Icon } from "../Icon/Icon";
 import styles from "./ChartTable.module.css";
 import { ChartTooltip, useChartTooltip } from "./ChartTooltip";
@@ -20,12 +27,16 @@ export interface ChartTableColumn {
   isNumber?: boolean;
   /** The column that names the row; it stays in view while the others scroll sideways. */
   isRowHeader?: boolean;
+  /** The column of the values a chart folded into one, such as the last column of a heatmap. */
+  isFolded?: boolean;
 }
 
 /** A row of the table view: one text per column, formatted as the chart formats it. */
 export interface ChartTableRow {
   key: string;
   cells: readonly string[];
+  /** The row of the values a chart folded into one, such as the last row of a heatmap. */
+  isFolded?: boolean;
 }
 
 export interface ChartTableProps {
@@ -53,13 +64,6 @@ const TABLE_ROWS = 12;
  */
 const HEADER_MOST = 24;
 
-/** The column of a header an event happened in, by its id; `null` outside a header. */
-function headerOf(target: EventTarget | null): string | null {
-  const header =
-    target instanceof Element ? target.closest<HTMLElement>("[role='columnheader']") : null;
-  return header?.dataset.column ?? null;
-}
-
 /**
  * The table view of a chart: the same numbers, formatted the same, in a read-only table. Every
  * chart builds its rows from the data it draws, so the two cannot differ.
@@ -81,16 +85,17 @@ export function ChartTable({
     () =>
       new Map(
         columns
-          .filter((column) => textChars(column.header) > HEADER_MOST)
+          .filter((column) => isHeaderCut(column.header, HEADER_MOST))
           .map((column) => [column.id, column.header]),
       ),
     [columns],
   );
   const shown = tip.active === null ? undefined : cut.get(tip.active);
-  const onHeader = (event: SyntheticEvent, show: (id: string) => void) => {
-    const id = headerOf(event.target);
+  /** Shows the whole text of a cut header that the event is at; anywhere else, it goes. */
+  const onHeader = (event: SyntheticEvent, show: (id: string) => void, hide: () => void) => {
+    const id = columnOfHeader(event.target);
     if (id !== null && cut.has(id)) show(id);
-    else if (event.type === "focus") tip.blur();
+    else hide();
   };
 
   // The rows are all here, so each column is declared from the longest text it holds.
@@ -109,7 +114,17 @@ export function ChartTable({
         column.isNumber === true
           ? { chars: Math.max(1, Math.ceil(longest)) }
           : { flex: 1, minChars: Math.max(1, Math.min(TEXT_MOST, Math.ceil(longest))) },
-      cell: (row: ChartTableRow) => row.cells[index] ?? "",
+      cell: (row: ChartTableRow) => {
+        const text = row.cells[index] ?? "";
+        // A folded row or column is written in the ink the chart gives its fold.
+        return row.isFolded === true || column.isFolded === true ? (
+          <span data-folded="" className={styles.folded}>
+            {text}
+          </span>
+        ) : (
+          text
+        );
+      },
     };
   });
   return (
@@ -117,13 +132,13 @@ export function ChartTable({
       ref={area}
       className={styles.area}
       onFocus={(event) => {
-        onHeader(event, tip.focus);
+        onHeader(event, tip.focus, tip.blur);
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) tip.blur();
       }}
       onPointerOver={(event) => {
-        onHeader(event, tip.hover);
+        onHeader(event, tip.hover, tip.leave);
       }}
       onPointerLeave={tip.leave}
     >
@@ -143,9 +158,9 @@ export function ChartTable({
           shown === undefined || tip.active === null
             ? null
             : () =>
-                area.current?.querySelector(
-                  `[role='columnheader'][data-column='${CSS.escape(tip.active ?? "")}']`,
-                ) ?? null
+                area.current === null || tip.active === null
+                  ? null
+                  : headerOfColumn(area.current, tip.active)
         }
         rows={shown === undefined ? [] : [{ label: t("charts.column"), value: shown }]}
       />

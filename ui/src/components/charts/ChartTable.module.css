@@ -5,6 +5,11 @@
   min-block-size: 0;
 }
 
+/* A row or a column of folded values, in the ink the heatmap gives its fold. */
+.folded {
+  color: var(--color-text-secondary);
+}
+
 /* The toggle of the table view: a quiet button, marked as a preset is while the table shows. */
 .toggle {
   display: inline-flex;

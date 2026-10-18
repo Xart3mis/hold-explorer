@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { columnWidth, headerWidth, leavingColumns, textChars, type FitColumn } from "./columns";
+import {
+  columnWidth,
+  headerWidth,
+  isHeaderCut,
+  leavingColumns,
+  textChars,
+  type FitColumn,
+} from "./columns";
 
 const widths = { text: 8, mono: 9 };
 
@@ -51,6 +58,14 @@ describe("headerWidth", () => {
 
   it("adds the room of the arrow to a header that can be sorted", () => {
     expect(headerWidth("Holds", true, widths, 12, 20)).toBe(78);
+  });
+
+  it("makes room for at most the characters it is told, and says which headers that cuts", () => {
+    // "Holds" is 4.25 characters: two of them, and 12 px at each side.
+    expect(headerWidth("Holds", false, widths, 12, 20, 2)).toBe(40);
+    expect(isHeaderCut("Holds", 2)).toBe(true);
+    expect(isHeaderCut("Holds", 5)).toBe(false);
+    expect(isHeaderCut("Holds", undefined)).toBe(false);
   });
 });
 

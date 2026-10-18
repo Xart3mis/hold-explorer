@@ -55,6 +55,11 @@ export function textChars(text: string): number {
  * counts, and a header that can be sorted keeps the room of the arrow (`arrow`: the icon and its
  * gap).
  */
+/** Whether a column that makes room for `most` characters of its header cuts this header. */
+export function isHeaderCut(header: string, most: number | undefined): boolean {
+  return most !== undefined && textChars(header) > most;
+}
+
 export function headerWidth(
   header: string,
   allowsSorting: boolean,

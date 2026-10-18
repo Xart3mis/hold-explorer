@@ -134,7 +134,15 @@ export function Heatmap({
     return (
       <ChartTable
         aria-label={t("charts.tableName", { name })}
-        {...heatmapTable(down.all, across.all, cells, formatCell, rowsLabel)}
+        {...heatmapTable(
+          down.all,
+          across.all,
+          cells,
+          formatCell,
+          rowsLabel,
+          down.other,
+          across.other,
+        )}
         isLoading={loading}
         isStale={stale}
         className={className}
@@ -429,13 +437,18 @@ function Legend({ max, formatCell }: { max: number; formatCell: (value: number) 
   );
 }
 
-/** The table view of a heatmap: a row per row value, a column per column value, Other last. */
+/**
+ * The table view of a heatmap: a row per row value, a column per column value, Other last, its
+ * row (`otherRow`) and its column (`otherCol`) marked as folded.
+ */
 export function heatmapTable(
   rows: readonly HeatmapItem[],
   cols: readonly HeatmapItem[],
   cells: readonly (readonly number[])[],
   formatCell: (value: number) => string,
   rowsLabel: string,
+  otherRow = -1,
+  otherCol = -1,
 ): { columns: ChartTableColumn[]; rows: ChartTableRow[] } {
   return {
     columns: [
@@ -444,11 +457,13 @@ export function heatmapTable(
         id: `col-${String(index)}`,
         header: col.label,
         isNumber: true,
+        ...(index === otherCol ? { isFolded: true } : {}),
       })),
     ],
     rows: rows.map((row, r) => ({
       key: `${String(r)}:${row.key}`,
       cells: [row.label, ...cols.map((_, c) => formatCell(cells[r]?.[c] ?? 0))],
+      ...(r === otherRow ? { isFolded: true } : {}),
     })),
   };
 }

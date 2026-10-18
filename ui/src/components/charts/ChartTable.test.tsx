@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
 import { tableViewport } from "../../test/viewport";
 import { ChartTable, ChartViewToggle } from "./ChartTable";
@@ -78,6 +78,53 @@ describe("ChartTable with long headers", () => {
     expect(screen.getByRole("columnheader", { name: "Client" })).toHaveFocus();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
     await expectAccessible();
+  });
+});
+
+describe("ChartTable with long headers, under the pointer", () => {
+  tableViewport({ width: 1024, height: 400 });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const REMARK = "Hold for vendor data of the pump skid, see the latest datasheet revision";
+
+  it("shows the whole text of a cut header after the delay, and only while the pointer is on it", () => {
+    vi.useFakeTimers();
+    render(
+      <ChartTable
+        aria-label="Holds by remark, table"
+        columns={[
+          { id: "row", header: "Discipline", isRowHeader: true },
+          { id: "col-0", header: REMARK, isNumber: true },
+          { id: "col-1", header: "Client", isNumber: true },
+        ]}
+        rows={[{ key: "piping", cells: ["Piping", "12", "4"] }]}
+      />,
+    );
+    const cut = screen.getByRole("columnheader", { name: REMARK });
+    fireEvent.pointerOver(cut, { pointerType: "mouse" });
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("tooltip")).toHaveTextContent(REMARK);
+    // On a header that is whole, or on a cell, it goes.
+    fireEvent.pointerOver(screen.getByRole("columnheader", { name: "Client" }), {
+      pointerType: "mouse",
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    // A pointer that only crosses a cut header shows nothing.
+    fireEvent.pointerOver(cut, { pointerType: "mouse" });
+    fireEvent.pointerOver(screen.getByRole("rowheader", { name: "Piping" }), {
+      pointerType: "mouse",
+    });
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
 

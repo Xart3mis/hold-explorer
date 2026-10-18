@@ -113,7 +113,8 @@ export function BreakdownPage() {
   const isStale = shown !== null && (!own || query.isRefetching);
   const emptyState = shown === null || shown.groups.length > 0 ? undefined : <NoHolds />;
   const choose = (mode: string) => {
-    void navigate(breakdownAddress({ ...state, mode: mode as BreakdownMode }, location.search), {
+    const next: BreakdownMode = mode === "matrix" ? "matrix" : "list";
+    void navigate(breakdownAddress({ ...state, mode: next }, location.search), {
       replace: true,
     });
   };

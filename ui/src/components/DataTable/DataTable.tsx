@@ -57,7 +57,23 @@ import {
 import styles from "./DataTable.module.css";
 import { useCharWidths, useTableMetrics } from "./measure";
 
-export { textChars, type ColumnSize, type DataTableColumnKind } from "./columns";
+export { isHeaderCut, textChars, type ColumnSize, type DataTableColumnKind } from "./columns";
+
+/**
+ * The column a header heads, by its id, when `target` is the header of a column or is inside one;
+ * `null` elsewhere. For a screen that shows something at a header, such as the whole text of a
+ * header that was cut (`headerChars`). The header element carries its column's id for this.
+ */
+export function columnOfHeader(target: EventTarget | null): string | null {
+  const header =
+    target instanceof Element ? target.closest<HTMLElement>("[role='columnheader']") : null;
+  return header?.dataset.column ?? null;
+}
+
+/** The header of the column with this id under `root`, or `null`. */
+export function headerOfColumn(root: ParentNode, id: string): HTMLElement | null {
+  return root.querySelector<HTMLElement>(`[role='columnheader'][data-column='${CSS.escape(id)}']`);
+}
 
 /** What every column declares, whether or not it may leave a narrow table. */
 interface ColumnBase<Item> {

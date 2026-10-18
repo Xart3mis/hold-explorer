@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
@@ -12,7 +12,7 @@ import { foldedMatrix } from "../../test/breakdown";
 import { openStart, workspace } from "../../test/fixtures";
 import { choose } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
-import { holdsView } from "../../test/lines";
+import { holdsView, lineId } from "../../test/lines";
 import { SLOW } from "../../test/slow";
 
 const text = en.breakdown;
@@ -108,6 +108,29 @@ describe("Breakdown, matrix", () => {
     const grid = await findGrid();
     expect(within(grid).queryByRole("rowheader", { name: text.other })).not.toBeInTheDocument();
     expect(screen.queryByText(foldedText(12, DISCIPLINE))).not.toBeInTheDocument();
+    // Without a fold, the line that says what a press does names none.
+    expect(screen.getByText(text.pressHintUnfolded)).toBeVisible();
+    expect(screen.queryByText(text.pressHint)).not.toBeInTheDocument();
+  });
+
+  it("names the folded values apart from a real value named Other", SLOW, async () => {
+    const matrix = foldedMatrix();
+    const real = { key: "Other", label: "Other", holds: 30, lines: 9 };
+    renderMatrix({
+      matrix: () => ({
+        ...matrix,
+        cols: [...matrix.cols, real],
+        cells: matrix.cells.map((row) => [...row.slice(0, 2), 5, ...row.slice(2)]),
+      }),
+    });
+    const grid = await findGrid();
+    expect(text.other).toBe("All others");
+    expect(
+      within(grid)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual([DISCIPLINE, "Vendor data", "Client", "Other", text.other]);
+    expect(screen.getByText(foldedText(4, HOLD_TYPE))).toHaveTextContent(text.other);
   });
 
   it("swaps the rows and the columns", SLOW, async () => {
@@ -245,6 +268,13 @@ describe("Breakdown, matrix", () => {
     const rows = within(table).getAllByRole("row");
     expect(rows[1]).toHaveTextContent("Piping700400104");
     expect(rows[4]).toHaveTextContent(`${text.other}10400`);
+    // The folded row and the folded column are marked, as in the heatmap.
+    const marked = (row: HTMLElement | undefined) =>
+      [...must(row, "a row").querySelectorAll("[role='rowheader'], [role='gridcell']")].map(
+        (cell) => cell.querySelector("[data-folded]") !== null,
+      );
+    expect(marked(rows[1])).toEqual([false, false, false, true]);
+    expect(marked(rows[4])).toEqual([true, true, true, true]);
     expect(screen.queryByText(text.pressHint)).not.toBeInTheDocument();
     expect(toggle).toHaveFocus();
     await user.click(toggle);
@@ -290,8 +320,45 @@ describe("Breakdown, matrix", () => {
     await waitFor(() => {
       expect(must(grid.closest("[data-stale]"), "the dimmed heatmap")).toBeInTheDocument();
     });
-    // The matrix of before keeps the names it was read for.
+    // The matrix of before keeps the names it was read for, and offers no press meanwhile.
     expect(grid).toHaveAccessibleName(gridName());
+    expect(screen.queryByText(text.pressHint)).not.toBeInTheDocument();
+  });
+
+  it("opens nothing from the matrix of other filters while the new one is read", SLOW, async () => {
+    const { user, router } = renderMatrix({
+      matrix: ({ spec }) =>
+        spec.fields.length === 0 ? foldedMatrix() : new Promise(() => undefined),
+    });
+    const grid = await findGrid();
+    act(() => {
+      queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+        ...defaultFilters,
+        fields: [{ dim: "Role", values: [{ key: "Checker", label: "Checker" }], negate: false }],
+      });
+    });
+    await waitFor(() => {
+      expect(must(grid.closest("[data-stale]"), "the dimmed heatmap")).toBeInTheDocument();
+    });
+    await user.click(cellAt(grid, "Piping", "Client"));
+    expect(router.state.location.pathname).toBe("/breakdown");
+    expect(screen.queryByText(text.pressHint)).not.toBeInTheDocument();
+  });
+
+  it("keeps the open groups of the default dimension across a switch", SLOW, async () => {
+    const { user, router } = renderMatrix({
+      path: "/breakdown?mode=list&by=Discipline&open=Piping",
+    });
+    const table = await screen.findByRole("treegrid");
+    await within(table).findByRole("rowheader", { name: lineId(0) });
+    await user.click(screen.getByRole("radio", { name: text.modeMatrix }));
+    await findGrid();
+    await user.click(screen.getByRole("radio", { name: text.modeList }));
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?mode=list&by=Discipline&open=Piping");
+    });
+    const again = await screen.findByRole("treegrid");
+    await within(again).findByRole("rowheader", { name: lineId(0) });
   });
 
   it("shows an error with a retry when the matrix cannot be read", SLOW, async () => {

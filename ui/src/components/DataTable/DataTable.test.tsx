@@ -7,11 +7,14 @@ import { TableStateContext } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
+import { must } from "../../test/app";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
 import { Button } from "../Button/Button";
 import {
+  columnOfHeader,
   DataTable,
+  headerOfColumn,
   type DataTableColumn,
   type DataTableProps,
   type LeavingColumn,
@@ -535,6 +538,18 @@ function lineId(number: number): string {
 
 /** Where a row starts under the header, at the comfortable density: 36 px for each. */
 const ROW = 36;
+
+describe("DataTable's headers", () => {
+  it("say the column they head, to a screen that shows something at a header", () => {
+    render(table());
+    const header = screen.getByRole("columnheader", { name: "Line ID" });
+    expect(columnOfHeader(header)).toBe("id");
+    expect(columnOfHeader(must(header.firstElementChild, "the label of the header"))).toBe("id");
+    expect(columnOfHeader(screen.getAllByRole("rowheader")[0] ?? null)).toBeNull();
+    expect(headerOfColumn(document, "id")).toBe(header);
+    expect(headerOfColumn(document, "none")).toBeNull();
+  });
+});
 
 describe("DataTable's renders", () => {
   it(

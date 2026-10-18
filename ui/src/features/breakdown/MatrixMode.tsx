@@ -100,9 +100,9 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
 
   const isLoading = shown === null && !query.isError;
   const isStale = shown !== null && (!own || query.isRefetching);
-  // A matrix of other dimensions than those asked for is on its way out: its cells do not open.
-  const isCurrent =
-    shown !== null && isSameDim(shown.rows, state.rows) && isSameDim(shown.cols, state.cols);
+  // A matrix of other dimensions or other filters than those asked for is on its way out: its
+  // cells do not open, and the page offers no press.
+  const isCurrent = shown !== null && shown.key === asked;
   const matrix = shown?.matrix;
   const isEmpty = matrix !== undefined && (matrix.rows.length === 0 || matrix.cols.length === 0);
   const rowsDim = shown?.rows ?? state.rows;
@@ -130,7 +130,15 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
           ([count]) => count > 0,
         );
   const notes = [
-    ...(isChart ? [t("breakdown.pressHint")] : []),
+    ...(isChart && isCurrent
+      ? [
+          t(
+            matrix.other_row === null && matrix.other_col === null
+              ? "breakdown.pressHintUnfolded"
+              : "breakdown.pressHint",
+          ),
+        ]
+      : []),
     ...folded.map(([count, dim]) => t("breakdown.folded", { count, dim: dimName(dim) })),
   ];
 

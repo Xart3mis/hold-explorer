@@ -79,6 +79,20 @@ describe("the address of Breakdown", () => {
     }
   });
 
+  it("keeps the open groups of the default dimension while the matrix shows", () => {
+    const state: BreakdownState = { ...MATRIX, open: ["Piping", ""] };
+    expect(breakdownAddress(state)).toBe(
+      "/breakdown?mode=matrix&rows=Discipline&cols=HoldType&open=Piping%2C",
+    );
+    expect(parseBreakdownAddress(breakdownAddress(state))).toEqual(state);
+    expect(parseBreakdownAddress(breakdownAddress({ ...state, mode: "list" }))).toEqual({
+      ...state,
+      mode: "list",
+    });
+    // A dimension that cannot be read is not the default: its open groups are not its.
+    expect(parseBreakdownAddress("?mode=matrix&by=LineId&open=Piping")).toEqual(MATRIX);
+  });
+
   it("never reads the same dimension for the rows and the columns", () => {
     expect(parseBreakdownAddress("?mode=matrix&rows=HoldType&cols=HoldType")).toEqual({
       ...MATRIX,

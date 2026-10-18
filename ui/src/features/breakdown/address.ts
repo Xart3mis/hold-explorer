@@ -82,8 +82,10 @@ function matrixOf(rowsId: string | null, colsId: string | null): { rows: Dim; co
 export function parseBreakdownAddress(search: string): BreakdownState {
   const parts = partsOf(search);
   const mode: BreakdownMode = parts.get("mode") === "matrix" ? "matrix" : "list";
-  const by = dimOfId(parts.get("by"));
-  // The open groups are groups of `by`: without it, none is open.
+  // A missing `by` is the default dimension, which the address leaves out while the matrix shows,
+  // and the open groups are its groups; a `by` that cannot be read has none open.
+  const byId = parts.get("by");
+  const by = byId === null ? DEFAULT_DIM : dimOfId(byId);
   const list =
     by === null ? { by: DEFAULT_DIM, open: [] } : { by, open: openOf(parts.get("open")) };
   return { mode, ...list, ...matrixOf(parts.get("rows"), parts.get("cols")) };
