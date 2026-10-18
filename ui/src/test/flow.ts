@@ -54,13 +54,16 @@ export async function choose(
 
 /**
  * Selects the snapshot before the newest in the top bar, as a user does: the trigger, then the
- * second item of its menu. The app must be on the start of `openStart`, whose newest snapshot was
- * taken on 7 Oct 2026, with a `snapshot_select` handler.
+ * second item of its menu. The app must be on the start of `openStart`, with a `snapshot_select`
+ * handler; the trigger is found by the date of the snapshot it selects, the newest.
  */
 export async function selectOlderSnapshot(user: UserEvent): Promise<void> {
+  const open = openStart().open;
+  const selected = open?.snapshots.find((snapshot) => snapshot.id === open.selected);
+  if (selected === undefined) throw new Error("The start of openStart selects no snapshot.");
   await user.click(
     await screen.findByRole("button", {
-      name: en.snapshots.trigger.replace("{{date}}", formatDate("2026-10-07T08:00:00")),
+      name: en.snapshots.trigger.replace("{{date}}", formatDate(selected.taken_at)),
     }),
   );
   const menu = await screen.findByRole("menu", { name: en.snapshots.menu });

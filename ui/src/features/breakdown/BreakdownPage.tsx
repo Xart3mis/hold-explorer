@@ -9,7 +9,7 @@ import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
-import { useSnapshotQuery, viewText } from "../../app/view";
+import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { Group } from "../../bindings/Group";
@@ -76,9 +76,9 @@ export function BreakdownPage() {
     read: readGroups,
     enabled: hasSnapshot && isList,
   });
-  // What was read for the request on screen, kept while the next request is read.
-  // Another snapshot is another result, as another dimension or filter is.
-  const asked = `${viewText(start.open)}\u0000${dimId(state.by)}\u0000${JSON.stringify(spec)}`;
+  // What was read for the request on screen, kept while the next request is read, under the
+  // result it is.
+  const asked = query.resultKey;
   const [kept, setKept] = useState<Shown | null>(null);
   const own = query.data !== undefined && !query.isPlaceholderData;
   if (own && (kept?.key !== asked || kept.groups !== query.data)) {

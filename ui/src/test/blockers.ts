@@ -28,16 +28,17 @@ function step(
 }
 
 /**
- * The solve order of the open holds: four steps that free the 1,262 lines on hold, the last of them few. A
- * blocker item is a tag as often as a word.
+ * The solve order of the open holds: four steps that free the 1,262 lines on hold, the last of
+ * them few. A step frees no more lines than its blocker has holds, since a hold is on one line.
+ * A blocker item is a tag as often as a word.
  */
 export function solveView(): SolveView {
   return {
     rows: [
       step(1, "Piping", "Stress", "Other", 1204, 1000, 1000),
       step(2, "Process", "577-PR-400", "PR", 300, 200, 1200),
-      step(3, "Civil", "Vendor data", "Vendor", 42, 50, 1250),
-      step(4, "Piping", "Client", "Other", 7, 12, 1262),
+      step(3, "Civil", "Vendor data", "Vendor", 42, 42, 1242),
+      step(4, "Piping", "Client", "Other", 20, 20, 1262),
     ],
     lines_on_hold: 1262,
     steps_to_most: 2,
@@ -46,8 +47,9 @@ export function solveView(): SolveView {
 
 /**
  * What `blocker_detail` answers for a blocker, by its key (`<discipline>|<item>`): fourteen
- * holds at step 3 of the solve order, two lines it frees on its own and one it shares with the
- * blocker of the client's decision, and its oldest open hold, on the third line.
+ * holds, two lines it frees on its own and one it shares with the blocker of the client's
+ * decision, and its oldest open hold, on the third line. A blocker of the solve order of
+ * `solveView` is at its step there; any other, as the default one, at step 3.
  */
 export function blockerDetail(
   key = "Piping|577-PK-400",
@@ -76,7 +78,7 @@ export function blockerDetail(
       remark: "HOLD FOR VENDOR DATA OF PACKAGE UNIT 577-PK-400, REV B",
       created: "2026-05-02T00:00:00",
     }),
-    step: 3,
+    step: solveView().rows.find((row) => row.key === key)?.step ?? 3,
     ...overrides,
   };
 }

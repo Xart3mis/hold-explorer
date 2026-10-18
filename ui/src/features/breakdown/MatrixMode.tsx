@@ -5,8 +5,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimId, dimName, isSameDim } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
-import { useShell } from "../../app/shell/context";
-import { useSnapshotQuery, viewText } from "../../app/view";
+import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { FoldedMatrix } from "../../bindings/FoldedMatrix";
@@ -61,7 +60,6 @@ export interface MatrixModeProps {
  * and does not open. The two dimensions are in the address, and are never the same one.
  */
 export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
-  const { start } = useShell();
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
@@ -72,9 +70,9 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
     params: [spec, state.rows, state.cols],
     read: readMatrix,
   });
-  // What was read for the request on screen, kept while the next request is read.
-  // Another snapshot is another result, as other dimensions or another filter are.
-  const asked = `${viewText(start.open)}\u0000${dimId(state.rows)}\u0000${dimId(state.cols)}\u0000${JSON.stringify(spec)}`;
+  // What was read for the request on screen, kept while the next request is read, under the
+  // result it is.
+  const asked = query.resultKey;
   const [kept, setKept] = useState<Shown | null>(null);
   const own = query.data !== undefined && !query.isPlaceholderData;
   if (own && (kept?.key !== asked || kept.matrix !== query.data)) {
@@ -105,7 +103,7 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
   const isStale = shown !== null && (!own || query.isRefetching);
   // A matrix of other dimensions, other filters, or another snapshot than those asked for is on
   // its way out: its cells do not open, and the page offers no press.
-  const isCurrent = shown !== null && shown.key === asked;
+  const isCurrent = own;
   const matrix = shown?.matrix;
   const isEmpty = matrix !== undefined && (matrix.rows.length === 0 || matrix.cols.length === 0);
   const rowsDim = shown?.rows ?? state.rows;

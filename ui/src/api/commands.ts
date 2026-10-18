@@ -154,7 +154,7 @@ export const api = {
   holdDetail: (position: number, view: ViewRef) => call("hold_detail", { position, view }),
   /** The kept holds grouped by one dimension, largest group first. */
   breakdown: (spec: FilterSpec, dim: Dim, view: ViewRef) => call("breakdown", { spec, dim, view }),
-  /** The kept holds crossed by two dimensions, folded at 30 values on each side. */
+  /** The kept holds crossed by two dimensions, each side folded as the core folds it. */
   matrix: (spec: FilterSpec, rowDim: Dim, colDim: Dim, view: ViewRef) =>
     call("matrix", { spec, rowDim, colDim, view }),
   /** The solve order of the kept holds. */
@@ -162,7 +162,7 @@ export const api = {
   /** The detail of one blocker among the kept holds; `null` when no kept hold has it. */
   blockerDetail: (spec: FilterSpec, key: string, view: ViewRef) =>
     call("blocker_detail", { spec, key, view }),
-  /** One group of a dimension with its first 200 Lines; `null` when the filter keeps none of it. */
+  /** One group of a dimension with its first Lines; `null` when the filter keeps none of it. */
   groupDetail: (spec: FilterSpec, dim: Dim, key: string, view: ViewRef) =>
     call("group_detail", { spec, dim, key, view }),
   /** The open workspace with the snapshot that is selected; `null` without one. Changes nothing. */

@@ -36,11 +36,12 @@
  * 2. Show what the hook returns as every screen does. Of `useSnapshotQuery`: `data` is the answer
  *    for the view on screen; while `isPlaceholderData` is true it is the answer for the view or
  *    the parameters of before, to be shown dimmed and marked as busy until the new one is there;
- *    without `data` the screen shows its skeletons. It is read again whenever the view changes
- *    and whenever an action on the workspace has ended. Of `useSnapshotPages`: `rows` are the
- *    rows loaded so far, `loadMore` asks for the next page when the table nears their end,
- *    `resultKey` names the result those rows belong to (hand it to the table, so that it returns
- *    to its top when, and only when, the rows on screen are another result), and
+ *    without `data` the screen shows its skeletons. `resultKey` names the result `data` is:
+ *    hand it to a table or a chart, and keep a result under it. It is read again whenever the
+ *    view changes and whenever an action on the workspace has ended. Of `useSnapshotPages`:
+ *    `rows` are the rows loaded so far, `loadMore` asks for the next page when the table nears
+ *    their end, `resultKey` names the result those rows belong to (hand it to the table, so that
+ *    it returns to its top when, and only when, the rows on screen are another result), and
  *    `isPlaceholderData` and `isPending` mean the same. A table may call `loadMore` whenever it
  *    is near the end of its rows: the call does nothing while a page is on its way, while
  *    `error` is set, and once `hasMore` is false, which it is when the rows are all there and
@@ -105,7 +106,7 @@ import {
   type UseMutationOptions,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/commands";
 import { isCommandError } from "../api/error";
 import { keys } from "../api/keys";
@@ -142,17 +143,6 @@ const REREAD_FIRST_MS = 50;
 function viewOf(open: WorkspaceOpen | null | undefined): ViewRef | null {
   if (open === undefined || open === null) return null;
   return { workspace_id: open.workspace.id, snapshot_id: open.selected };
-}
-
-/**
- * The view an open workspace shows, as text: a part of what a screen's rows are a result of, so
- * that another snapshot, as another filter, is another result (`DataTable`'s `resultKey`). It is
- * for such a key of the screen only: never send it to a command and never key a reading by it.
- * A reading takes its view from `useSnapshotQuery` or `useSnapshotPages` (rule 1 above).
- */
-export function viewText(open: WorkspaceOpen | null): string {
-  const view = viewOf(open);
-  return view === null ? "" : `${view.workspace_id}:${String(view.snapshot_id)}`;
 }
 
 function isSameView(one: ViewRef | null, other: ViewRef | null): boolean {
@@ -337,23 +327,33 @@ export interface SnapshotQueryOptions<Data, Params extends readonly unknown[]> {
   enabled?: boolean;
 }
 
+/** What `useSnapshotQuery` returns: the result of `useQuery`, and the name of its result. */
+export type SnapshotQuery<Data> = UseQueryResult<Data> & {
+  /**
+   * The result `data` belongs to: the key it was read under, as a text, so another snapshot is
+   * another result as another filter is. It stays the same while the answer of before stands in
+   * for another, also through several changes, and changes in the render that shows the new
+   * answer. Hand it to a table or a chart as its `resultKey`, and keep a result under it.
+   */
+  resultKey: string;
+};
+
 /**
  * Reads data of the snapshot in view; see the rule at the top of this file.
  *
  * `params` is taken as the list it is written as, each entry with its own type, so `read` is
- * handed them typed without naming their types. The result is the one of `useQuery`. `error` is
- * never the kind `ViewChanged`; it is the kind `ViewUnsettled` when the view stayed refused.
- * Without an open workspace nothing is read.
+ * handed them typed without naming their types. The result is the one of `useQuery`, with the
+ * `resultKey` of its data. `error` is never the kind `ViewChanged`; it is the kind
+ * `ViewUnsettled` when the view stayed refused. Without an open workspace nothing is read.
  */
 export function useSnapshotQuery<Data, const Params extends readonly unknown[]>({
   name,
   params,
   read,
   enabled = true,
-}: SnapshotQueryOptions<Data, Params>): UseQueryResult<Data> {
+}: SnapshotQueryOptions<Data, Params>): SnapshotQuery<Data> {
   const { queryKey, isReadable, perform } = useReading(keys.snapshot, name, params);
   const isEnabled = enabled && isReadable;
-
   const query = useQuery({
     queryKey,
     queryFn:
@@ -362,20 +362,32 @@ export function useSnapshotQuery<Data, const Params extends readonly unknown[]>(
         : ({ signal }) => perform(signal, (view) => read(view, ...params)),
     enabled: isEnabled,
   });
+  // The answer that stands in is the one this reading showed last as its own, so the key it was
+  // shown under names it, also through several changes.
+  const ownKey = hashKey(queryKey);
+  const [lastOwn, setLastOwn] = useState(ownKey);
+  if (!query.isPlaceholderData && query.data !== undefined && lastOwn !== ownKey) {
+    setLastOwn(ownKey);
+  }
+  const resultKey = query.isPlaceholderData ? lastOwn : ownKey;
   // The query library reads again on `refetch` whatever `enabled` says. Here a refetch reads
   // nothing while nothing may be read, and answers with what is there. The result is a proxy of
-  // the one of the library, so the library still sees which of its parts a screen reads, and its
-  // `refetch` is one function from render to render, as the library's own is.
+  // the one of the library that adds `resultKey`, so the library still sees which of its parts a
+  // screen reads, and its `refetch` is one function from render to render, as the library's own
+  // is.
   const shown = useRef(query);
   useEffect(() => {
     shown.current = query;
   });
   const idle = useCallback(() => Promise.resolve(shown.current), []);
-  if (isEnabled) return query;
   return new Proxy(query, {
     get: (target, key, receiver): unknown =>
-      key === "refetch" ? idle : (Reflect.get(target, key, receiver) as unknown),
-  });
+      key === "resultKey"
+        ? resultKey
+        : key === "refetch" && !isEnabled
+          ? idle
+          : (Reflect.get(target, key, receiver) as unknown),
+  }) as SnapshotQuery<Data>;
 }
 
 /** A page as a paged command answers one: its rows, and how many rows there are in all. */
@@ -470,6 +482,7 @@ export function useSnapshotPages<
 }): SnapshotPages<Page["rows"][number], Page> {
   const { name, params, read, enabled = true } = options;
   const { queryKey, isReadable, perform } = useReading(keys.snapshotPages, name, params);
+  const isEnabled = enabled && isReadable;
 
   const query = useInfiniteQuery({
     queryKey,
@@ -492,7 +505,7 @@ export function useSnapshotPages<
     // invalidate `keys.snapshots`. The one other thing that reads these pages again is a page
     // that failed: the query library then takes the reading for invalid, whatever is set here.
     staleTime: Infinity,
-    enabled: enabled && isReadable,
+    enabled: isEnabled,
   });
 
   const pages = query.data?.pages;
@@ -507,12 +520,7 @@ export function useSnapshotPages<
   // workspace runs or while a reading of this key is on its way. And a page that failed is not
   // asked for again by a table that only looks whether it is near its end: that takes a retry.
   const canLoadMore =
-    enabled &&
-    isReadable &&
-    hasMore &&
-    !query.isPlaceholderData &&
-    !query.isFetching &&
-    query.error === null;
+    isEnabled && hasMore && !query.isPlaceholderData && !query.isFetching && query.error === null;
   const { fetchNextPage, refetch, isFetchNextPageError } = query;
 
   const loadMore = useCallback(() => {
@@ -520,7 +528,6 @@ export function useSnapshotPages<
     if (canLoadMore) void fetchNextPage({ cancelRefetch: false });
   }, [canLoadMore, fetchNextPage]);
 
-  const isEnabled = enabled && isReadable;
   const retry = useCallback(() => {
     // Nothing is read while nothing may be read, whatever the query library would do.
     if (!isEnabled) return;
@@ -548,17 +555,13 @@ export function useSnapshotPages<
 
 export interface WorkspaceAction<Variables, Data> {
   /**
-   * `switching` for an action after which every page shows another workspace or another
-   * snapshot: the shell keeps the page that is there, dimmed, while it runs. `changing` for the
-   * others: a new workspace, another name, an import, the demo.
+   * `switching` for an action after which every page shows another workspace: the shell keeps the
+   * page that is there, dimmed, while it runs. `selecting` for the one that selects another
+   * snapshot of the open workspace: a switching action as well, under `keys.selectingSnapshot`,
+   * so a screen can tell it from one that opens another workspace. `changing` for the others: a
+   * new workspace, another name, an import, the demo.
    */
-  kind: "switching" | "changing";
-  /**
-   * True for the action that selects another snapshot of the open workspace, a `switching` one:
-   * its key is then `keys.selectingSnapshot`, so a screen can tell it from one that opens another
-   * workspace.
-   */
-  selectsSnapshot?: boolean;
+  kind: "switching" | "selecting" | "changing";
   /**
    * Called when the action is asked for, also when it then waits its turn behind another: what
    * must change at once, such as the selection of the detail panel, which is taken out of the
@@ -582,10 +585,10 @@ export interface WorkspaceAction<Variables, Data> {
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
-  { kind, selectsSnapshot = false, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
+  { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
 ): UseMutationOptions<Data, Error, Variables> {
   return {
-    mutationKey: kind === "switching" && selectsSnapshot ? keys.selectingSnapshot : keys[kind],
+    mutationKey: kind === "selecting" ? keys.selectingSnapshot : keys[kind],
     scope: WORKSPACE_SCOPE,
     mutationFn,
     onMutate: (variables: Variables) => {

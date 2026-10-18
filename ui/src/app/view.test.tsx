@@ -852,6 +852,70 @@ describe("useSnapshotQuery", () => {
     expect(result.current.lines.error).toMatchObject({ kind: "Io" });
     expect(read).toHaveBeenCalledTimes(1);
   });
+
+  it("names the result its answer belongs to: the same while the answer of before stands in, another with the new one", async () => {
+    const waiting: { view: ViewRef; sort: string; resolve: (data: string) => void }[] = [];
+    const read = vi.fn<Read>(
+      (view, sort) =>
+        new Promise<string>((resolve) => {
+          waiting.push({ view, sort, resolve });
+        }),
+    );
+    // Every render of the screen, as the hook gave it: the key and the answer it was rendered with.
+    const seen: { key: string; data: string | undefined }[] = [];
+    const start = openStart();
+    const { result, rerender } = renderScreen(
+      ({ sort }: { sort: string }) => {
+        const query = useSnapshotQuery({ name: "lines", params: [sort], read });
+        seen.push({ key: query.resultKey, data: query.data });
+        return query;
+      },
+      { sort: "oldest" },
+      start,
+      () => start.open,
+    );
+    await waitFor(() => {
+      expect(waiting).toHaveLength(1);
+    });
+    act(() => {
+      waiting[0]?.resolve("oldest");
+    });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("oldest");
+    });
+    const oldest = result.current.lines.resultKey;
+    expect(oldest).not.toBe("");
+
+    // Another order, then another, before either answered: the answer of before stands in, and
+    // the key still names it.
+    rerender({ sort: "newest" });
+    rerender({ sort: "largest" });
+    await waitFor(() => {
+      expect(waiting).toHaveLength(3);
+    });
+    expect(result.current.lines.isPlaceholderData).toBe(true);
+    expect(result.current.lines.resultKey).toBe(oldest);
+
+    act(() => {
+      waiting[2]?.resolve("largest");
+    });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("largest");
+    });
+    const largest = result.current.lines.resultKey;
+    expect(largest).not.toBe(oldest);
+    // The key changed in the same render as the answer, never before and never after it.
+    for (const { key, data } of seen) {
+      if (data !== undefined) expect(key).toBe(data === "largest" ? largest : oldest);
+    }
+
+    // Back to an order whose answer is kept: its key comes back with it.
+    rerender({ sort: "oldest" });
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("oldest");
+    });
+    expect(result.current.lines.resultKey).toBe(oldest);
+  });
 });
 
 describe("useSnapshotPages", () => {
@@ -1844,8 +1908,7 @@ describe("workspaceAction", () => {
       mutationFn: () => Promise.resolve(null),
     });
     const selecting = workspaceAction(queryClient, {
-      kind: "switching",
-      selectsSnapshot: true,
+      kind: "selecting",
       mutationFn: () => Promise.resolve(null),
     });
     expect(switching.mutationKey).toEqual(keys.switching);
