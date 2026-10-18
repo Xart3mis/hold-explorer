@@ -200,6 +200,20 @@
   --row-fill: var(--color-accent-subtle-hover);
 }
 
+/*
+ * The open row among other selected rows, or taken out of the selection: a frame around the whole
+ * row, a thin line of the accent ink. It is drawn over the pinned cell, as the focus ring is, and
+ * the ring of a focused open row covers it.
+ */
+.row[data-open]::before {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-sticky);
+  border: var(--border-width-thin) solid var(--color-accent-text);
+  content: "";
+  pointer-events: none;
+}
+
 .cell {
   display: flex;
   align-items: center;

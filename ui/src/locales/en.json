@@ -36,6 +36,8 @@
     "loading": "Loading rows",
     "loadingMore": "Loading more rows",
     "countLoadingMore": "{{line}}. Loading more rows",
+    "countSelected": "{{line}}, {{selected}}",
+    "selectedCount": "{{count, number}} selected",
     "actions": "Actions",
     "childLoading": "Loading the rows of this group"
   },

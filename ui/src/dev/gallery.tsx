@@ -1438,6 +1438,10 @@ function Tables() {
         </Forced>
       </Forced>
       <h3 className={styles.subTitle}>
+        Several rows selected: the open row framed among them, and the count line says how many
+      </h3>
+      <SelectedRowsTable />
+      <h3 className={styles.subTitle}>
         Compact, by the table&apos;s own density, with row actions
       </h3>
       <DataTable
@@ -1504,6 +1508,34 @@ function Tables() {
         }
       />
     </Section>
+  );
+}
+
+/**
+ * A table with several rows selected beside the open one. It is real: a press opens a row and
+ * selects it alone, Ctrl and a press adds or takes out a row, Shift and a press or Shift+Up and
+ * Shift+Down select a range, Ctrl+A selects every row, and Esc clears the selection.
+ */
+function SelectedRowsTable() {
+  const [open, setOpen] = useState<string | null>(lines[1]?.id ?? null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set([lines[0], lines[1], lines[3]].flatMap((line) => (line ? [line.id] : []))),
+  );
+  return (
+    <DataTable
+      aria-label="Lines on hold, several selected"
+      columns={lineColumns}
+      rows={lines}
+      rowKey={(line) => line.id}
+      selectedKey={open}
+      onSelectionChange={setOpen}
+      selectedKeys={selected}
+      onSelectedKeysChange={setSelected}
+      totalRows={9312}
+      countText={(shown, total) => `${formatCount(shown)} of ${formatCount(total)} lines`}
+      selectedText={(count) => `${formatCount(count)} selected`}
+      height={{ maxRows: 6 }}
+    />
   );
 }
 
