@@ -84,6 +84,16 @@ const NO_LINES: readonly LineRow[] = [];
 /** The children of a group that is collapsed: it expands, and nothing of it is read yet. */
 const COLLAPSED: DataTableChildren<LineRow> = { rows: NO_LINES };
 
+/** How many groups that were read and closed again keep their lines, for a quick reopening. */
+const KEPT_CLOSED = 10;
+
+/** The groups to keep read: every open one, and the last `KEPT_CLOSED` closed ones, in order. */
+function keptGroups(read: readonly string[], open: ReadonlySet<string>): string[] {
+  const closed = read.filter((key) => !open.has(key));
+  const kept = new Set(closed.slice(-KEPT_CLOSED));
+  return read.filter((key) => open.has(key) || kept.has(key));
+}
+
 const groupKeyOf = (group: Group) => group.key;
 const lineKeyOf = (line: LineRow) => line.line_id;
 
@@ -191,15 +201,11 @@ export function ListMode({
   });
   const isNewResult = visited.result !== resultKey;
   const unread = state.open.filter((key) => isNewResult || !visited.keys.includes(key));
-  if (isNewResult || unread.length > 0) {
-    setVisited({
-      result: resultKey,
-      keys: isNewResult ? state.open : [...visited.keys, ...unread],
-    });
-  }
-  const reading = isCurrent
-    ? (isNewResult ? state.open : [...visited.keys, ...unread]).filter((key) => shownKeys.has(key))
-    : [];
+  // The groups read now: those open, and the last few that were closed, whose lines the table
+  // keeps out of sight. Older ones are let go, so what the table holds does not grow all session.
+  const now = keptGroups(isNewResult ? state.open : [...visited.keys, ...unread], open);
+  if (isNewResult || unread.length > 0) setVisited({ result: resultKey, keys: now });
+  const reading = isCurrent ? now.filter((key) => shownKeys.has(key)) : [];
 
   // When the panel closes, the focus goes back to the line that opened it, or to the table when
   // that row is no longer there.

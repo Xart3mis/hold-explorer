@@ -274,6 +274,70 @@ describe("BreakdownPage", () => {
     expect(rowNamed(table, "Civil")).toHaveAttribute("aria-expanded", "false");
   });
 
+  it(
+    "gives the focus to a group whose notice row collapses it from the keyboard",
+    SLOW,
+    async () => {
+      const { user, router } = renderBreakdown({
+        path: "/breakdown?mode=list&by=Discipline&open=Civil",
+        groupDetail: ({ key }) => (key === "Civil" ? null : groupDetail(key)),
+      });
+      const table = await groupTable();
+      const notice = await waitFor(() =>
+        must(table.querySelector<HTMLElement>("[data-part='notice-row']"), "the notice row"),
+      );
+      rowNamed(table, "Civil").focus();
+      await user.keyboard("{ArrowDown}");
+      expect(notice).toHaveFocus();
+      await user.keyboard("{Enter}");
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("?mode=list&by=Discipline");
+      });
+      await waitFor(() => {
+        expect(rowNamed(table, "Civil")).toHaveFocus();
+      });
+      await user.keyboard("{ArrowDown}");
+      expect(rowNamed(table, "(blank)")).toHaveFocus();
+    },
+  );
+
+  it(
+    "keeps the lines of the last ten groups it closed, and reads an older one again",
+    SLOW,
+    async () => {
+      const many = Array.from({ length: 12 }, (_, index) => ({
+        key: `G${String(index + 1)}`,
+        label: `Group ${String(index + 1)}`,
+        holds: 100 - index,
+        lines: 3,
+      }));
+      const { user, groupDetail: detail } = renderBreakdown({ breakdown: () => many });
+      const table = await groupTable();
+      for (const group of many) {
+        await user.click(await findRow(table, group.label));
+        await findRow(table, lineId(0));
+        await user.click(rowNamed(table, group.label));
+        await waitFor(() => {
+          expect(
+            within(table).queryByRole("rowheader", { name: lineId(0) }),
+          ).not.toBeInTheDocument();
+        });
+      }
+      const readsOf = (key: string) =>
+        detail.mock.calls.filter(([args]) => args.key === key).length;
+      expect(readsOf("G1")).toBe(1);
+      // The last one closed is still read: opening it asks for nothing.
+      await user.click(rowNamed(table, "Group 12"));
+      await findRow(table, lineId(0));
+      expect(readsOf("G12")).toBe(1);
+      await user.click(rowNamed(table, "Group 12"));
+      // The first one closed was let go: opening it reads it again.
+      await user.click(rowNamed(table, "Group 1"));
+      await findRow(table, lineId(0));
+      expect(readsOf("G1")).toBe(2);
+    },
+  );
+
   it("expands none of the groups of before while another dimension is read", SLOW, async () => {
     const {
       user,

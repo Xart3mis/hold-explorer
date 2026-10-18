@@ -584,8 +584,8 @@ describe("DataTable's renders", () => {
       rerender(<Page selected={lineIdOf(1)} tick={1} />);
       expect(dataRow(1)).toHaveAttribute("aria-selected", "true");
       // The table renders once for the selection, and the library hands its rows the state once
-      // more as it settles the selection: twice in all, where a page's render used to add more.
-      expect(renders).toBeLessThanOrEqual(2 * lines.length);
+      // more as it settles the selection: twice in all. A render more of ours would show here.
+      expect(renders).toBe(2 * lines.length);
     },
   );
 });

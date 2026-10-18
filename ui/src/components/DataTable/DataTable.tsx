@@ -34,6 +34,7 @@ import {
   TableHeader,
   TableLayout,
   TableLoadMoreItem,
+  TableStateContext,
   Virtualizer,
   type Key,
   type Selection as RacSelection,
@@ -406,6 +407,36 @@ interface Tree {
 }
 
 const TreeContext = createContext<Tree | null>(null);
+
+/**
+ * Keeps the focus of the table on a row that is drawn. The children of a collapsed row stay in
+ * the table, out of sight, so the library would keep the focus on one of them when the row
+ * collapses by any other way than Left on it: the chevron, the action of a notice row, the screen
+ * (an address that changed). When the row that collapses holds the focused row, the focus goes to
+ * that row. It draws nothing; it sits inside the table, where the table's state is.
+ */
+function KeepFocusDrawn() {
+  const state = useContext(TableStateContext);
+  const before = useRef(state?.expandedKeys);
+  useLayoutEffect(() => {
+    if (state === null) return;
+    const was = before.current;
+    const now = state.expandedKeys;
+    before.current = now;
+    const focused = state.selectionManager.focusedKey;
+    if (was === undefined || was === now || focused === null) return;
+    const key = String(focused);
+    for (const parent of was) {
+      if (now.has(parent)) continue;
+      const row = String(parent);
+      if (key.startsWith(`${row}${CHILD}`) || key.startsWith(`${row}${STATUS}`)) {
+        state.selectionManager.setFocusedKey(parent);
+        return;
+      }
+    }
+  });
+  return null;
+}
 
 const NO_STORE = new ChildStore();
 const noShape = (): undefined => undefined;
@@ -1520,7 +1551,10 @@ export function DataTable<Item, Child = never>({
           // The library counts the rows it was given. The rows of the whole result are more,
           // and it passes no count of ours on, so the count is set where it draws.
           render={(domProps) => (
-            <div {...domProps} {...(rowCount === undefined ? {} : { "aria-rowcount": rowCount })} />
+            <div {...domProps} {...(rowCount === undefined ? {} : { "aria-rowcount": rowCount })}>
+              {domProps.children}
+              {expandable ? <KeepFocusDrawn /> : null}
+            </div>
           )}
         >
           <TableHeader className={cx(styles.head)}>

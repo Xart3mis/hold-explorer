@@ -108,6 +108,12 @@ function Tree({
   );
 }
 
+/** A value a test knows to be there. */
+function must<T>(value: T | null | undefined, what: string): T {
+  if (value === null || value === undefined) throw new Error(`The test expected ${what}.`);
+  return value;
+}
+
 function treeRows(): HTMLElement[] {
   return within(screen.getByRole("treegrid")).getAllByRole("row").slice(1);
 }
@@ -208,6 +214,103 @@ describe("DataTable with rows that expand", () => {
       expect(rowNamed("Stress")).toHaveAttribute("aria-expanded", "true");
     },
   );
+
+  describe("gives the focus in the children of a row that collapses to that row", () => {
+    /** Focus on the first child of Piping, which is expanded. */
+    async function focusFirstChild(user: ReturnType<typeof userEvent.setup>) {
+      rowNamed("Piping").focus();
+      await user.keyboard("{ArrowDown}");
+      expect(rowNamed("PIPING-LINE-001")).toHaveFocus();
+    }
+
+    /** Down from the group reaches the next group: the keyboard is not left among hidden rows. */
+    async function expectOnGroup(user: ReturnType<typeof userEvent.setup>) {
+      expect(rowNamed("Piping")).toHaveAttribute("aria-expanded", "false");
+      expect(rowNamed("Piping")).toHaveFocus();
+      await user.keyboard("{ArrowDown}");
+      expect(rowNamed("Stress")).toHaveFocus();
+    }
+
+    // The children of every row are there, the same at every render, as a screen holds them.
+    const held = new Map(groups.map((group) => [group.key, readChildren(group)]));
+
+    it("by Left on a child, and Left again", async () => {
+      const user = userEvent.setup();
+      render(<Tree initiallyExpanded={["PIPING"]} childRows={(group) => held.get(group.key)} />);
+      await focusFirstChild(user);
+      await user.keyboard("{ArrowLeft}{ArrowLeft}");
+      await expectOnGroup(user);
+    });
+
+    it("by the chevron", async () => {
+      const user = userEvent.setup();
+      render(<Tree initiallyExpanded={["PIPING"]} childRows={(group) => held.get(group.key)} />);
+      await focusFirstChild(user);
+      await user.click(chevron("Piping"));
+      await expectOnGroup(user);
+    });
+
+    it("by the action of a notice row, chosen with Enter", async () => {
+      const user = userEvent.setup();
+      function Screen() {
+        const [open, setOpen] = useState<ReadonlySet<string>>(new Set(["PIPING"]));
+        return (
+          <DataTable
+            aria-label="Holds by discipline"
+            columns={columns}
+            rows={groups}
+            rowKey={(group) => group.key}
+            childRows={(group) =>
+              group.key === "PIPING"
+                ? {
+                    rows: [],
+                    notice: {
+                      text: "The filters keep none of it.",
+                      action: "Collapse",
+                      onAction: () => {
+                        setOpen(new Set());
+                      },
+                    },
+                  }
+                : held.get(group.key)
+            }
+            childKey={(member) => member.id}
+            childColumns={childColumns}
+            expandedKeys={open}
+            onExpandedChange={setOpen}
+          />
+        );
+      }
+      render(<Screen />);
+      rowNamed("Piping").focus();
+      await user.keyboard("{ArrowDown}");
+      const notice = must(document.querySelector("[data-part='notice-row']"), "the notice row");
+      expect(notice).toHaveFocus();
+      await user.keyboard("{Enter}");
+      await expectOnGroup(user);
+    });
+
+    it("by the screen, as when the address changes", async () => {
+      const user = userEvent.setup();
+      const table = (expanded: ReadonlySet<string>) => (
+        <DataTable
+          aria-label="Holds by discipline"
+          columns={columns}
+          rows={groups}
+          rowKey={(group) => group.key}
+          childRows={(group) => held.get(group.key)}
+          childKey={(member) => member.id}
+          childColumns={childColumns}
+          expandedKeys={expanded}
+          onExpandedChange={() => undefined}
+        />
+      );
+      const { rerender } = render(table(new Set(["PIPING"])));
+      await focusFirstChild(user);
+      rerender(table(new Set()));
+      await expectOnGroup(user);
+    });
+  });
 
   it("shows one skeleton child row while the children are read, which takes no focus", async () => {
     const user = userEvent.setup();
