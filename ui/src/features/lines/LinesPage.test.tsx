@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import type { UserEvent } from "@testing-library/user-event";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
@@ -13,6 +14,7 @@ import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
 import { openStart, opened, workspace } from "../../test/fixtures";
+import { selectOlderSnapshot } from "../../test/flow";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { holdRef, holdsView, lineDetail, linePage, lineId, lineRow } from "../../test/lines";
 import { SLOW } from "../../test/slow";
@@ -877,5 +879,119 @@ describe("Lines", () => {
     await user.click(screen.getByRole("radio", { name: text.modeHolds }));
     await within(await grid(text.holdsTable)).findAllByRole("rowheader");
     await expectAccessible(document.body, { page: true });
+  });
+});
+
+/** What the count line says of two selected rows, in the words of the catalog. */
+const two = (message: string) => message.replace("{{count, number}}", "2");
+
+/** Ctrl and a press on each row, in turn, as the user adds rows to a selection. */
+async function ctrlClick(user: UserEvent, ...rows: HTMLElement[]): Promise<void> {
+  await user.keyboard("{Control>}");
+  for (const row of rows) await user.click(row);
+  await user.keyboard("{/Control}");
+}
+
+/** The row of a line or hold, named by the line it is on. */
+async function rowOf(table: HTMLElement, name: string): Promise<HTMLElement> {
+  return must(
+    (await within(table).findByRole("rowheader", { name })).closest<HTMLElement>("[role='row']"),
+    `the row of ${name}`,
+  );
+}
+
+describe("Lines, with several rows selected", () => {
+  it(
+    "counts the lines selected with Ctrl and a press, and clears them when the filters change",
+    SLOW,
+    async () => {
+      const { user } = renderLines();
+      const table = await grid();
+      await ctrlClick(user, await rowOf(table, lineId(0)), await rowOf(table, lineId(2)));
+      expect(countLine()).toHaveTextContent(two(text.selectedLines_other));
+      expect(table).toHaveAttribute("aria-multiselectable", "true");
+      set(civil);
+      await waitFor(() => {
+        expect(countLine()).not.toHaveTextContent(/selected/);
+      });
+      expect(within(table).queryAllByRole("row", { selected: true })).toHaveLength(0);
+    },
+  );
+
+  it(
+    "counts the holds selected, and clears them for another sort and for the other rows",
+    SLOW,
+    async () => {
+      const { user } = renderLines({ path: "/lines?rows=holds" });
+      const table = await grid(text.holdsTable);
+      await ctrlClick(user, await rowOf(table, lineId(0)), await rowOf(table, lineId(1)));
+      expect(countLine()).toHaveTextContent(two(text.selectedHolds_other));
+      await user.click(within(table).getByRole("columnheader", { name: column.name }));
+      await waitFor(() => {
+        expect(countLine()).not.toHaveTextContent(/selected/);
+      });
+      await ctrlClick(user, await rowOf(table, lineId(0)), await rowOf(table, lineId(1)));
+      expect(countLine()).toHaveTextContent(two(text.selectedHolds_other));
+      await user.click(screen.getByRole("radio", { name: text.modeLines }));
+      const lines = await grid();
+      await rowOf(lines, lineId(0));
+      expect(countLine()).not.toHaveTextContent(/selected/);
+      // Back to the holds: what was selected there does not come back.
+      await user.click(screen.getByRole("radio", { name: text.modeHolds }));
+      await rowOf(await grid(text.holdsTable), lineId(0));
+      expect(countLine()).not.toHaveTextContent(/selected/);
+    },
+  );
+
+  it("clears the lines selected for another snapshot", SLOW, async () => {
+    const { user } = renderLines({
+      handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
+    });
+    const table = await grid();
+    await ctrlClick(user, await rowOf(table, lineId(0)), await rowOf(table, lineId(1)));
+    expect(countLine()).toHaveTextContent(two(text.selectedLines_other));
+    await selectOlderSnapshot(user);
+    await waitFor(() => {
+      expect(screen.queryByText(en.snapshots.toNewest)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(countLine()).not.toHaveTextContent(/selected/);
+    });
+  });
+
+  it(
+    "clears the selection and closes the panel on one Escape, and the row has the focus",
+    SLOW,
+    async () => {
+      const { user, router } = renderLines();
+      const table = await grid();
+      const first = await rowOf(table, lineId(0));
+      await user.click(first);
+      await screen.findByRole("complementary");
+      await ctrlClick(user, await rowOf(table, lineId(2)));
+      expect(countLine()).toHaveTextContent(two(text.selectedLines_other));
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(countLine()).not.toHaveTextContent(/selected/);
+      expect(router.state.location.search).toBe("");
+      expect(await rowOf(table, lineId(0))).toHaveFocus();
+    },
+  );
+
+  it("selects the lines that are loaded on Ctrl+A, and no others", SLOW, async () => {
+    const { user } = renderLines({
+      lines: ({ offset }) => linePage({ total: 450, offset }),
+    });
+    const table = await grid();
+    await rowOf(table, lineId(0));
+    act(() => {
+      within(table).getAllByRole("row")[1]?.focus();
+    });
+    await user.keyboard("{Control>}a{/Control}");
+    expect(countLine()).toHaveTextContent(
+      text.selectedLines_other.replace("{{count, number}}", "200"),
+    );
   });
 });

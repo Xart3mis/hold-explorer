@@ -4,6 +4,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimId, dimName } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
@@ -281,6 +282,10 @@ export function ListMode({
   // Another sort is another result: the table returns to its top.
   const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
 
+  // The groups selected beside the open line, by group key (the blank group has the empty key),
+  // for the result on screen in its sort. The lines under a group are never selected this way.
+  const selected = useSelectedRows(tableKey);
+
   /** Writes the groups that are open into the address, keeping the rest of it. */
   const setOpen = (keys: ReadonlySet<string>) => {
     void navigate(breakdownAddress({ ...state, open: [...keys] }, location.search), {
@@ -375,6 +380,9 @@ export function ListMode({
         onExpandedChange={(keys) => {
           if (isCurrent) setOpen(keys);
         }}
+        selectedKeys={selected.keys}
+        onSelectedKeysChange={selected.set}
+        selectedText={(count) => t("breakdown.selected", { count })}
         selectedChildKey={openLine}
         onChildSelectionChange={(line) => {
           chosen(line.line_id);

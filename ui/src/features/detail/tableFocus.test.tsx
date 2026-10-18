@@ -54,10 +54,12 @@ function Page({ rows }: { rows: readonly string[] }) {
               tabIndex={-1}
               aria-label={`Row ${key}`}
               onKeyDown={(event) => {
+                if (event.key === " " && (event.ctrlKey || event.shiftKey)) return;
                 if (event.key === "Enter" && key !== selectedKey) choose(key);
               }}
-              onClick={() => {
-                choose(key);
+              onClick={(event) => {
+                // A press with Ctrl or Shift selects rows and opens none, as the table does.
+                if (!event.ctrlKey && !event.shiftKey) choose(key);
               }}
             />
           ))}
@@ -198,5 +200,57 @@ describe("useTableDetailFocus", () => {
     });
     await user.keyboard("{Escape}");
     expect(search()).toBe("?line=a");
+  });
+
+  it("gives the focus back to the row that was pressed, after a press with Ctrl came before it", async () => {
+    const { user, search } = renderPage();
+    // Rows added to a selection open nothing, and are not what the panel gives the focus to.
+    await user.keyboard("{Control>}");
+    await user.click(row("b"));
+    await user.click(row("a"));
+    await user.keyboard("{/Control}");
+    expect(search()).toBe("");
+    await user.click(row("c"));
+    expect(search()).toBe("?line=c");
+    act(() => {
+      row("a").focus();
+    });
+    await user.keyboard("{Escape}");
+    expect(search()).toBe("");
+    expect(row("c")).toHaveFocus();
+  });
+
+  it("closes the panel on Escape after Ctrl+Space and Shift+Space, and gives the focus to the row that opened it", async () => {
+    const { user, search } = renderPage();
+    await user.click(row("b"));
+    expect(search()).toBe("?line=b");
+    act(() => {
+      row("a").focus();
+    });
+    await user.keyboard("{Control>} {/Control}");
+    await user.keyboard("{Shift>} {/Shift}");
+    expect(search()).toBe("?line=b");
+    await user.keyboard("{Escape}");
+    expect(search()).toBe("");
+    expect(row("b")).toHaveFocus();
+  });
+
+  it("still opens a row on Enter with the focus on the heading, after a Ctrl press", async () => {
+    const { user, search } = renderPage();
+    await user.keyboard("{Control>}");
+    await user.click(row("a"));
+    await user.keyboard("{/Control}");
+    act(() => {
+      row("b").focus();
+    });
+    await user.keyboard("{Enter}");
+    expect(search()).toBe("?line=b");
+    expect(screen.getByRole("heading", { name: "Panel" })).toHaveFocus();
+    act(() => {
+      row("a").focus();
+    });
+    await user.keyboard("{Escape}");
+    expect(search()).toBe("");
+    expect(row("b")).toHaveFocus();
   });
 });

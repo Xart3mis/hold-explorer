@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { useFilters } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
@@ -204,6 +205,8 @@ export function BlockersPage() {
   // selected step, and is handed 200 again.
   const resultKey = shown?.key ?? "";
   const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
+  // The steps selected beside the open one, by step key, for the result on screen in its sort.
+  const selected = useSelectedRows(tableKey);
   const [handed, setHanded] = useState({ key: tableKey, count: STEP_ROWS });
   const handedCount = handed.key === tableKey ? handed.count : STEP_ROWS;
   const covering = tableIndex === null ? 0 : Math.min(rows.length, rowsFor(tableIndex));
@@ -379,6 +382,9 @@ export function BlockersPage() {
               {...(isEmpty ? { emptyState: <NoSteps /> } : {})}
               onSelectionChange={selectStep}
               selectedKey={selectedKey}
+              selectedKeys={selected.keys}
+              onSelectedKeysChange={selected.set}
+              selectedText={(count) => t("blockers.selected", { count })}
               revealSelected
             />
           </div>

@@ -665,7 +665,11 @@
     "errorLines": "The lines could not be loaded",
     "errorHolds": "The holds could not be loaded",
     "leftOutLines": "Not shown at this width: {{columns}}. Open a line to read them.",
-    "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them."
+    "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them.",
+    "selectedLines_one": "{{count, number}} line selected",
+    "selectedLines_other": "{{count, number}} lines selected",
+    "selectedHolds_one": "{{count, number}} hold selected",
+    "selectedHolds_other": "{{count, number}} holds selected"
   },
   "breakdown": {
     "modes": "Show the holds as",
@@ -691,6 +695,8 @@
     },
     "count_one": "{{count, number}} group",
     "count_other": "{{count, number}} groups",
+    "selected_one": "{{count, number}} group selected",
+    "selected_other": "{{count, number}} groups selected",
     "oldest": "Oldest {{age}}",
     "openAll_one": "Open the {{count, number}} line in Lines",
     "openAll_other": "Open all {{count, number}} lines in Lines",
@@ -734,6 +740,8 @@
     "countLimited_one": "{{shown, number}} of {{count, number}} step is shown. Narrow the filters to reach the others.",
     "countLimited_other": "{{shown, number}} of {{count, number}} steps are shown. Narrow the filters to reach the others.",
     "leftOut": "Not shown at this width: {{columns}}. Open a blocker to read them.",
+    "selected_one": "{{count, number}} step selected",
+    "selected_other": "{{count, number}} steps selected",
     "error": "The solve order could not be loaded",
     "emptyTitle": "This workspace has no snapshots",
     "emptyText": "Import a holds export to add the first snapshot. Blockers then ranks what its holds wait for by the lines each one frees.",

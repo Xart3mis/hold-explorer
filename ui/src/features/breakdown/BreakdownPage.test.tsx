@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import type { UserEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
@@ -745,4 +746,91 @@ describe("BreakdownPage", () => {
     await findRow(table, lineId(0));
     await expectAccessible(document.body, { page: true });
   });
+});
+
+/** Ctrl and a press on each row, in turn, as the user adds rows to a selection. */
+async function ctrlClick(user: UserEvent, ...rows: HTMLElement[]): Promise<void> {
+  await user.keyboard("{Control>}");
+  for (const row of rows) await user.click(row);
+  await user.keyboard("{/Control}");
+}
+
+/** The count line of the groups. */
+function groupsCountLine(): HTMLElement {
+  return must(
+    document.querySelector<HTMLElement>("[data-part='breakdown-table'] p[role='status']"),
+  );
+}
+
+const twoGroups = text.selected_other.replace("{{count, number}}", "2");
+
+describe("BreakdownPage, with several groups selected", () => {
+  it(
+    "counts the groups selected with Ctrl and a press, without turning them, and clears them for another filter",
+    SLOW,
+    async () => {
+      const { user, router } = renderBreakdown({ path: "/breakdown?mode=list&by=Discipline" });
+      const table = await groupTable();
+      await ctrlClick(user, await findRow(table, "Piping"), await findRow(table, "Civil"));
+      expect(groupsCountLine()).toHaveTextContent(twoGroups);
+      expect(router.state.location.search).toBe("?mode=list&by=Discipline");
+      expect(rowNamed(table, "Piping")).toHaveAttribute("aria-selected", "true");
+      // A group is turned by a plain press, and the selection stays as it is.
+      await user.click(rowNamed(table, "Piping"));
+      await findRow(table, lineId(0));
+      expect(groupsCountLine()).toHaveTextContent(twoGroups);
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          fields: [{ dim: "Role", values: [{ key: "Checker", label: "Checker" }], negate: false }],
+        });
+      });
+      await waitFor(() => {
+        expect(groupsCountLine()).not.toHaveTextContent(/selected/);
+      });
+    },
+  );
+
+  it("selects the blank group by its empty key", SLOW, async () => {
+    const { user } = renderBreakdown({ path: "/breakdown?mode=list&by=Discipline" });
+    const table = await groupTable();
+    await ctrlClick(user, await findRow(table, "(blank)"), await findRow(table, "Civil"));
+    expect(groupsCountLine()).toHaveTextContent(twoGroups);
+    expect(rowNamed(table, "(blank)")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("clears the groups selected for another sort and for another dimension", SLOW, async () => {
+    const { user } = renderBreakdown({ path: "/breakdown?mode=list&by=Discipline" });
+    const table = await groupTable();
+    await ctrlClick(user, await findRow(table, "Piping"), await findRow(table, "Civil"));
+    expect(groupsCountLine()).toHaveTextContent(twoGroups);
+    await user.click(within(table).getByRole("columnheader", { name: text.column.lines }));
+    await waitFor(() => {
+      expect(groupsCountLine()).not.toHaveTextContent(/selected/);
+    });
+    await ctrlClick(user, await findRow(table, "Piping"), await findRow(table, "Civil"));
+    expect(groupsCountLine()).toHaveTextContent(twoGroups);
+    await choose(user, new RegExp(text.groupBy), en.import.field.HoldType);
+    const byType = await groupTable(en.import.field.HoldType);
+    await findRow(byType, "Piping");
+    expect(groupsCountLine()).not.toHaveTextContent(/selected/);
+  });
+
+  it(
+    "clears the selection and closes the panel of a line on one Escape, and the line has the focus",
+    SLOW,
+    async () => {
+      const { user } = renderBreakdown({ path: "/breakdown?mode=list&by=Discipline&open=Civil" });
+      const table = await groupTable();
+      await user.click(await findRow(table, lineId(1)));
+      await screen.findByRole("complementary");
+      await ctrlClick(user, rowNamed(table, "Piping"), rowNamed(table, "Civil"));
+      expect(groupsCountLine()).toHaveTextContent(twoGroups);
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(groupsCountLine()).not.toHaveTextContent(/selected/);
+    },
+  );
 });

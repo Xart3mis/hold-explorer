@@ -7,6 +7,7 @@ import { asCommandError } from "../../api/error";
 import { OPTIONAL_FIELDS } from "../../api/export";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotPages, type SnapshotPages } from "../../app/view";
@@ -222,6 +223,10 @@ export function LinesPage() {
   const active: Shown = mode === "lines" ? { mode, pages: lines } : { mode, pages: holds };
   const { shown, isOwn } = useShown(active);
   const shownMode: LinesMode = shown?.mode ?? mode;
+  // The rows selected beside the open one, by line ID or hold position, for the result on screen:
+  // another filter, sort, mode, or snapshot is another result, and clears them. The export menu
+  // reads them from here.
+  const selected = useSelectedRows(`${shown?.mode ?? ""}|${shown?.pages.resultKey ?? ""}`);
 
   const lineWidest = shown?.mode === "lines" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
   const holdWidest = shown?.mode === "holds" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
@@ -322,6 +327,10 @@ export function LinesPage() {
       }),
     onSelectionChange: select,
     selectedKey: selectionOf(location.search, shownMode),
+    selectedKeys: selected.keys,
+    onSelectedKeysChange: selected.set,
+    selectedText: (count: number) =>
+      t(shownMode === "holds" ? "lines.selectedHolds" : "lines.selectedLines", { count }),
   } as const;
 
   return (

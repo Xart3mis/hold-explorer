@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import type { UserEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import { keys } from "../../api/keys";
@@ -896,4 +897,83 @@ describe("BlockersPage", () => {
     await screen.findByRole("grid", { name: fill(en.charts.tableName, { name: text.curve }) });
     await expectAccessible(document.body, { page: true });
   });
+});
+
+/** Ctrl and a press on each row, in turn, as the user adds rows to a selection. */
+async function ctrlClick(user: UserEvent, ...rows: HTMLElement[]): Promise<void> {
+  await user.keyboard("{Control>}");
+  for (const row of rows) await user.click(row);
+  await user.keyboard("{/Control}");
+}
+
+/** The count line of the steps. */
+function stepsCountLine(): HTMLElement {
+  return must(document.querySelector<HTMLElement>("[data-part='steps'] p[role='status']"));
+}
+
+const twoSteps = text.selected_other.replace("{{count, number}}", "2");
+
+describe("BlockersPage, with several steps selected", () => {
+  it(
+    "counts the steps selected with Ctrl and a press, and clears them for another filter",
+    SLOW,
+    async () => {
+      const { user } = renderBlockers();
+      const table = await stepTable();
+      await ctrlClick(user, await stepRow(table, 1), await stepRow(table, 3));
+      expect(stepsCountLine()).toHaveTextContent(twoSteps);
+      expect(table).toHaveAttribute("aria-multiselectable", "true");
+      act(() => {
+        queryClient.setQueryData(keys.workspaceFilters(workspace().id), {
+          ...defaultFilters,
+          fields: [{ dim: "Role", values: [{ key: "Checker", label: "Checker" }], negate: false }],
+        });
+      });
+      await waitFor(() => {
+        expect(stepsCountLine()).not.toHaveTextContent(/selected/);
+      });
+    },
+  );
+
+  it("clears the steps selected for another sort and for another snapshot", SLOW, async () => {
+    const { user } = renderBlockers({
+      handlers: { snapshot_select: ({ id }) => opened({ selected: id }) },
+    });
+    const table = await stepTable();
+    await ctrlClick(user, await stepRow(table, 1), await stepRow(table, 2));
+    expect(stepsCountLine()).toHaveTextContent(twoSteps);
+    await user.click(within(table).getByRole("columnheader", { name: text.column.holds }));
+    await waitFor(() => {
+      expect(stepsCountLine()).not.toHaveTextContent(/selected/);
+    });
+    await ctrlClick(user, await stepRow(table, 1), await stepRow(table, 2));
+    expect(stepsCountLine()).toHaveTextContent(twoSteps);
+    await selectOlderSnapshot(user);
+    await waitFor(() => {
+      expect(screen.queryByText(en.snapshots.toNewest)).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(stepsCountLine()).not.toHaveTextContent(/selected/);
+    });
+  });
+
+  it(
+    "clears the selection and closes the panel on one Escape, and the step has the focus",
+    SLOW,
+    async () => {
+      const { user, router } = renderBlockers();
+      const table = await stepTable();
+      await user.click(await stepRow(table, 2));
+      await screen.findByRole("complementary", { name: "Process / 577-PR-400" });
+      await ctrlClick(user, await stepRow(table, 4));
+      expect(stepsCountLine()).toHaveTextContent(twoSteps);
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(stepsCountLine()).not.toHaveTextContent(/selected/);
+      expect(router.state.location.search).toBe("");
+      expect(await stepRow(table, 2)).toHaveFocus();
+    },
+  );
 });
