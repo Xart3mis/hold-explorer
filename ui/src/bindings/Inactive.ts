@@ -7,7 +7,7 @@ import type { FilterPart } from "./FilterPart";
  */
 export type Inactive = { 
 /**
- * The dimensions of the field filters left out, in the order of the filter.
+ * The dimensions of the field filters left out, each once, in the order of the filter.
  */
 dims: Array<Dim>, 
 /**

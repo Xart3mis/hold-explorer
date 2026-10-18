@@ -10,6 +10,10 @@ export type SolveView = {
  */
 rows: Array<SolveRow>, 
 /**
- * Lines on hold among the kept holds: the end the cumulative curve climbs to.
+ * Lines on hold among the planned holds: the end the cumulative curve climbs to.
  */
-lines_on_hold: number, };
+lines_on_hold: number, 
+/**
+ * Steps after which 90 percent of `lines_on_hold` are freed; 0 when there is no line.
+ */
+steps_to_most: number, };

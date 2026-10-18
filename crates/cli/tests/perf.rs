@@ -102,7 +102,7 @@ fn ten_thousand_rows_load_in_under_two_seconds_and_filter_in_under_100_ms() {
         30,
         30,
     );
-    let view = solve_view(&ds, &FilterSpec::default());
+    let view = solve_view(&solve_plan(&ds, &FilterSpec::default(), None));
     let breakdown = started.elapsed();
     assert!(folded.max_cell > 0 && !view.rows.is_empty());
     assert!(

@@ -549,7 +549,7 @@ mod tests {
             snapshot(),
         );
         let spec = spec_of(Status::Open);
-        let view = crate::solve::solve_view(&ds, &spec);
+        let view = crate::solve::solve_view(&solve_plan(&ds, &spec, None));
         let first = &view.rows[0];
         assert_eq!(
             (first.step, first.key.as_str(), first.label.as_str()),

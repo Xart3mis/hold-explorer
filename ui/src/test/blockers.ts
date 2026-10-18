@@ -40,6 +40,7 @@ export function solveView(): SolveView {
       step(4, "Piping", "Client", "Other", 7, 12, 1262),
     ],
     lines_on_hold: 1262,
+    steps_to_most: 2,
   };
 }
 

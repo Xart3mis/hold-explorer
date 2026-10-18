@@ -197,7 +197,7 @@ describe("BlockersPage", () => {
     "says where the solve order ends again once the point in focus has gone with its curve",
     SLOW,
     async () => {
-      const none: SolveView = { rows: [], lines_on_hold: 0 };
+      const none: SolveView = { rows: [], lines_on_hold: 0, steps_to_most: 0 };
       const { user } = renderBlockers({
         solveOrder: ({ spec }) => (spec.text === "" ? solveView() : none),
       });
@@ -480,7 +480,7 @@ describe("BlockersPage", () => {
     });
 
     it("offers to clear the filters that keep no hold", async () => {
-      const none: SolveView = { rows: [], lines_on_hold: 0 };
+      const none: SolveView = { rows: [], lines_on_hold: 0, steps_to_most: 0 };
       const { user, solveOrder } = renderBlockers({
         solveOrder: ({ spec }) => (spec.fields.length === 0 ? solveView() : none),
         filters: {
@@ -501,7 +501,7 @@ describe("BlockersPage", () => {
     it("says when the snapshot has no open hold, and offers all holds", async () => {
       const { user, solveOrder } = renderBlockers({
         solveOrder: ({ spec }) =>
-          spec.status === "Open" ? { rows: [], lines_on_hold: 0 } : solveView(),
+          spec.status === "Open" ? { rows: [], lines_on_hold: 0, steps_to_most: 0 } : solveView(),
       });
       const title = await screen.findByRole("heading", { level: 2, name: text.noOpenTitle });
       await user.click(

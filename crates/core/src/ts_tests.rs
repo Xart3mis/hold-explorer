@@ -292,8 +292,8 @@ fn declarations_name_the_keys_of_the_json() {
     names_the_keys_of(&blocker.oldest.unwrap());
     let folded = matrix_top(&ds, &open, &Dim::HoldType, &Dim::Discipline, 1, 1);
     names_the_keys_of(&folded);
-    names_the_keys_of(&solve_view(&ds, &open));
-    names_the_keys_of(&solve_view(&ds, &open).rows[0]);
+    names_the_keys_of(&solve_view(&plan));
+    names_the_keys_of(&solve_view(&plan).rows[0]);
     let opened = open_file(&dir.path().join("holds_07-Oct.csv")).unwrap();
     names_the_keys_of(&opened);
     let view: OpenedView = opened.view(2);

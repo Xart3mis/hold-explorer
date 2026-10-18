@@ -257,6 +257,19 @@ impl FilterSpec {
         spec
     }
 
+    /// The open holds among those this filter keeps: the filter with its status narrowed to open
+    /// holds; `None` when it keeps released holds only, of which none is open. A solve order and
+    /// the detail of a blocker rank these, since a released hold no longer holds its line.
+    pub fn open_only(&self) -> Option<FilterSpec> {
+        match self.status {
+            Status::Released => None,
+            Status::Open | Status::All => Some(FilterSpec {
+                status: Status::Open,
+                ..self.clone()
+            }),
+        }
+    }
+
     /// This filter as a snapshot can apply it, with what it leaves out. A field filter with values
     /// is left out when the snapshot has no value in a column its dimension needs (`absent`, as
     /// `Dataset::absent_fields` names them) or, for a custom column, when the snapshot has no such
@@ -789,6 +802,28 @@ mod tests {
             role.applicable(&[Field::Role], &[]),
             (role.clone(), Inactive::default())
         );
+    }
+
+    #[test]
+    fn the_open_holds_of_a_filter_keep_its_other_parts_and_are_none_under_released() {
+        let spec = every_kind();
+        assert_eq!(spec.status, Status::All);
+        assert_eq!(
+            spec.open_only(),
+            Some(FilterSpec {
+                status: Status::Open,
+                ..spec.clone()
+            })
+        );
+        assert_eq!(
+            FilterSpec::default().open_only(),
+            Some(FilterSpec::default())
+        );
+        let released = FilterSpec {
+            status: Status::Released,
+            ..spec
+        };
+        assert_eq!(released.open_only(), None);
     }
 
     #[test]

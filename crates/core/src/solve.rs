@@ -200,13 +200,15 @@ pub struct SolveRow {
 pub struct SolveView {
     /// The steps, in order.
     pub rows: Vec<SolveRow>,
-    /// Lines on hold among the kept holds: the end the cumulative curve climbs to.
+    /// Lines on hold among the planned holds: the end the cumulative curve climbs to.
     pub lines_on_hold: usize,
+    /// Steps after which 90 percent of `lines_on_hold` are freed; 0 when there is no line.
+    pub steps_to_most: usize,
 }
 
-/// The full solve order of the holds `spec` keeps, each step with its blocker looked up.
-pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView {
-    let plan = solve_plan(ds, spec, None);
+/// The solve order of `plan` as rows, each step with its blocker looked up. Give it a plan with
+/// no step limit, or `lines_on_hold` is more than its steps free.
+pub fn solve_view(plan: &SolvePlan) -> SolveView {
     let nodes: HashMap<&str, &BlockerNode> = plan
         .nodes
         .iter()
@@ -236,9 +238,17 @@ pub fn solve_view(ds: &Dataset, spec: &FilterSpec) -> SolveView {
     for node in &plan.nodes {
         lines.extend(node.lines.iter().map(String::as_str));
     }
+    let lines_on_hold = lines.len();
+    // The first step whose cumulative count reaches 90 percent, in whole numbers.
+    let steps_to_most = plan
+        .steps
+        .iter()
+        .position(|step| step.cumulative * 10 >= lines_on_hold * 9)
+        .map_or(plan.steps.len(), |index| index + 1);
     SolveView {
         rows,
-        lines_on_hold: lines.len(),
+        lines_on_hold,
+        steps_to_most,
     }
 }
 
@@ -404,7 +414,7 @@ mod tests {
         let ds = chain();
         let spec = FilterSpec::default();
         let plan = solve_plan(&ds, &spec, None);
-        let view = solve_view(&ds, &spec);
+        let view = solve_view(&plan);
         assert_eq!(view.rows.len(), plan.steps.len());
         for (index, (row, step)) in view.rows.iter().zip(&plan.steps).enumerate() {
             let node = plan.nodes.iter().find(|n| n.key == step.key).unwrap();
@@ -427,7 +437,39 @@ mod tests {
             status: crate::filter::Status::Released,
             ..Default::default()
         };
-        let view = solve_view(&chain(), &spec);
-        assert_eq!((view.rows.len(), view.lines_on_hold), (0, 0));
+        let view = solve_view(&solve_plan(&chain(), &spec, None));
+        assert_eq!(
+            (view.rows.len(), view.lines_on_hold, view.steps_to_most),
+            (0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn most_lines_are_freed_at_the_first_step_reaching_ninety_percent() {
+        // The chain frees 2, then 3, then 5 of its 5 lines: 90 percent (4.5) needs all three.
+        let view = solve_view(&solve_plan(&chain(), &FilterSpec::default(), None));
+        assert_eq!(view.steps_to_most, 3);
+
+        // One blocker on nine of ten lines frees exactly 90 percent at once; the last line, on
+        // its own blocker, is the tail.
+        let mut holds: Vec<_> = (0..9)
+            .map(|i| hold(&format!("L{i}"), "Civil", "MISC.", "Pending 538-PR-100", 1))
+            .collect();
+        holds.push(hold("SOLO", "Civil", "MISC.", "Pending 538-PR-200", 1));
+        let ds = Dataset::build(holds, RuleSet::builtin(), snapshot());
+        let view = solve_view(&solve_plan(&ds, &FilterSpec::default(), None));
+        assert_eq!((view.rows.len(), view.lines_on_hold), (2, 10));
+        assert_eq!(view.steps_to_most, 1);
+
+        // Eight of ten is short of it: the second step is needed.
+        let mut holds: Vec<_> = (0..8)
+            .map(|i| hold(&format!("L{i}"), "Civil", "MISC.", "Pending 538-PR-100", 1))
+            .collect();
+        holds.push(hold("S1", "Civil", "MISC.", "Pending 538-PR-200", 1));
+        holds.push(hold("S2", "Civil", "MISC.", "Pending 538-PR-300", 1));
+        let ds = Dataset::build(holds, RuleSet::builtin(), snapshot());
+        let view = solve_view(&solve_plan(&ds, &FilterSpec::default(), None));
+        assert_eq!((view.rows.len(), view.lines_on_hold), (3, 10));
+        assert_eq!(view.steps_to_most, 2);
     }
 }

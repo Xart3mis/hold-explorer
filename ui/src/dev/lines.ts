@@ -852,7 +852,14 @@ export function devSolveOrder(
         cumulative += gain;
         rows.push({ ...blocker.row, step: rows.length + 1, gain, cumulative });
       }
-      return { rows, lines_on_hold: onLine.length };
+      const linesOnHold = onLine.length;
+      // As the core counts it: the first step whose cumulative count reaches 90 percent.
+      const most = rows.findIndex((row) => row.cumulative * 10 >= linesOnHold * 9);
+      return {
+        rows,
+        lines_on_hold: linesOnHold,
+        steps_to_most: most === -1 ? rows.length : most + 1,
+      };
     },
   );
 }
