@@ -29,6 +29,9 @@ spec: FilterSpec,
  */
 text: ExportText, 
 /**
- * The active filters as the filter bar writes them, one per entry, for About and the report.
+ * The active filters as the filter bar writes them, one per entry, for About and the report:
+ * every filter the bar shows as set, the status among them when it is not Open, whether or
+ * not the snapshot can apply it. Empty when no filter is set, as the screen tells it; the
+ * Summary names the lines with one hold after that, as the Overview does.
  */
 filters: Array<string>, };

@@ -1763,6 +1763,7 @@ dependencies = [
  "chrono",
  "clap",
  "hx-core",
+ "hx-export",
  "hx-store",
  "hx-synth",
  "serde",

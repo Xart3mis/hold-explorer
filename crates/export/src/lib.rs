@@ -23,6 +23,7 @@ pub use sheet::{Cell, Column, ColumnKind, Sheet};
 pub use text::{csv, line_ids, tab_separated, ExportText, FILE_TEXT_KEYS, KEY_NO, KEY_YES};
 pub use views::{
     name_sheets, scope_line_ids, screen_sheets, workbook_sheets, ExportRequest, RowScope, Screen,
+    STALE_DAYS, TOP_ITEMS,
 };
 
 use serde::Serialize;

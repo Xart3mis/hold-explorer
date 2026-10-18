@@ -37,10 +37,12 @@ pub const PICKER_VALUES: usize = 200;
 pub const MATRIX_SIDE: usize = 30;
 /// Most Lines `group_detail` lists for one group.
 pub const GROUP_LINES: usize = 200;
-/// Most entries of the Overview's top blockers and top lines.
-pub const TOP_ITEMS: usize = 10;
-/// Age in days from which an open hold counts as stale.
-pub const STALE_DAYS: i64 = 90;
+/// Most entries of the Overview's top blockers and top lines: the export's, so a file lists what
+/// the Overview lists.
+pub const TOP_ITEMS: usize = hx_export::TOP_ITEMS;
+/// Age in days from which an open hold counts as stale: the export's, so a file counts what the
+/// Overview counts.
+pub const STALE_DAYS: i64 = hx_export::STALE_DAYS;
 
 /// The dataset that was built last, with the workspace and the snapshot it belongs to, the solve
 /// plan of its open holds once one was asked for, the plan of the last filter a solve order or a

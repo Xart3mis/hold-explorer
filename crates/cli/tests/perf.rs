@@ -14,6 +14,7 @@ use hx_core::query::{
 };
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, solve_view};
+use hx_export::{scope_line_ids, ExportRequest, ExportText, RowScope, Screen};
 use hx_store::{ImportOptions, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
@@ -161,4 +162,41 @@ fn ten_thousand_rows_import_into_a_workspace_in_under_a_second_and_read_back_in_
     );
 
     eprintln!("perf: workspace import {stored:?} (runs {runs:?}), dataset read {read:?}");
+}
+
+#[test]
+#[ignore = "run in a release build"]
+fn the_lines_of_every_remark_group_of_ten_thousand_rows_take_under_100_ms() {
+    let cfg = SynthConfig::new(4, 3600, 10_000);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    let loaded = load_file(&path).unwrap();
+    let ds = Dataset::build(
+        loaded.parsed.holds,
+        RuleSet::builtin(),
+        loaded.snapshot.unwrap().at,
+    );
+    let request = ExportRequest {
+        screen: Screen::Breakdown { dim: Dim::Remark },
+        columns: Vec::new(),
+        rows: RowScope::All,
+        spec: FilterSpec {
+            status: Status::All,
+            ..Default::default()
+        },
+        text: ExportText::default(),
+        filters: Vec::new(),
+    };
+    let groups = group_by(&ds, &request.spec, &Dim::Remark).len();
+
+    let started = Instant::now();
+    let ids = scope_line_ids(&ds, None, &request);
+    let took = started.elapsed();
+    assert!(!ids.is_empty());
+    assert!(
+        took < Duration::from_millis(100),
+        "the lines of {groups} remark groups took {took:?}"
+    );
+    eprintln!("perf: the lines of {groups} remark groups {took:?}");
 }

@@ -58,6 +58,7 @@ pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.dim.remark",
     "file.dim.role",
     "file.dim.stressCalc",
+    "file.listSeparator",
     "file.matrix.other",
     "file.matrix.total",
     KEY_NO,
