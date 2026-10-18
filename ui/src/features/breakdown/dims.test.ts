@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { dimNeeds } from "../../api/filter-needs";
 import type { Dim } from "../../bindings/Dim";
+import type { Field } from "../../bindings/Field";
 import { breakdownDims, dimOfId, DEFAULT_DIM } from "./dims";
 
 describe("breakdownDims", () => {
@@ -29,10 +31,14 @@ describe("breakdownDims", () => {
     ]);
   });
 
-  it("leaves out the blocker and its type with the remark they are derived from", () => {
-    expect(breakdownDims(["Remark"], [])).not.toContain("Blocker");
-    expect(breakdownDims(["Remark"], [])).not.toContain("BlockerType");
-    expect(breakdownDims(["Remark"], [])).not.toContain("Remark");
+  it("leaves out a dimension as the one table of what each needs says, and nothing else", () => {
+    const absent: Field[] = ["Role", "ModelSize", "Remark", "HoldType"];
+    for (const dim of breakdownDims([], [])) {
+      const lacks = dimNeeds(dim).some((field) => absent.includes(field));
+      expect(breakdownDims(absent, []).includes(dim)).toBe(!lacks);
+    }
+    // The remark is a required column, and the dimensions derived from it need no other.
+    expect(breakdownDims(["Remark"], [])).toContain("Blocker");
   });
 
   it("groups by discipline unless the address says otherwise", () => {

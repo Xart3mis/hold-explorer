@@ -155,7 +155,7 @@ const DISCIPLINE_ROWS = [
   "Unspecified 241 166 lines",
 ];
 
-/** Groups the command could send in any order, two of them with the same count. */
+/** Groups in an order other than largest first, two of them with the same count: shown as sent. */
 const TIED = [
   group("Process", 846, 398),
   group("Structural", 377, 190),
@@ -258,13 +258,13 @@ describe("the Overview with a snapshot", () => {
     expect(screen.getByRole("heading", { level: 2, name: text.byHoldType })).toBeInTheDocument();
   });
 
-  it("puts the rows in the order of their holds, and keeps the given order where two are equal", async () => {
+  it("keeps the rows in the order the command sends them, and sorts nothing itself", async () => {
     const { overview } = renderOverview(() => overviewView({ by_discipline: TIED }));
     await loaded(overview);
     expect(barRows(text.byDiscipline)).toEqual([
-      "Civil 1,515 612 lines",
       "Process 846 398 lines",
       "Structural 377 190 lines",
+      "Civil 1,515 612 lines",
       "Electrical 377 1 line",
       "Unspecified 241 166 lines",
     ]);
@@ -437,9 +437,9 @@ describe("the Overview with a snapshot", () => {
       const table = tableRows(text.byDiscipline);
       expect(table.map(([label]) => label)).toEqual(bars);
       expect(table).toEqual([
-        ["Civil", "1,515", "612"],
         ["Process", "846", "398"],
         ["Structural", "377", "190"],
+        ["Civil", "1,515", "612"],
         ["Electrical", "377", "1"],
         ["Unspecified", "241", "166"],
       ]);

@@ -275,10 +275,10 @@ describe("BlockersPage", () => {
         row.focus();
       });
       await user.keyboard("{Enter}");
-      const region = await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      const region = await screen.findByRole("complementary", { name: "Piping / 577-PK-400" });
       await waitFor(() => {
         expect(
-          within(region).getByRole("heading", { level: 2, name: "Civil / Vendor data" }),
+          within(region).getByRole("heading", { level: 2, name: "Piping / 577-PK-400" }),
         ).toHaveFocus();
       });
       await user.keyboard("{Escape}");
@@ -352,7 +352,7 @@ describe("BlockersPage", () => {
         chart.focus();
       });
       await user.keyboard("{End}{ArrowLeft}{Enter}");
-      const region = await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      const region = await screen.findByRole("complementary", { name: "Piping / 577-PK-400" });
       await waitFor(() => {
         expect(within(region).getByRole("heading", { level: 2 })).toHaveFocus();
       });
@@ -363,7 +363,7 @@ describe("BlockersPage", () => {
       expect(chart).toHaveFocus();
       // Escape on the curve closes a panel it opened, as Escape on the table does.
       await user.keyboard("{Enter}");
-      await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      await screen.findByRole("complementary", { name: "Piping / 577-PK-400" });
       act(() => {
         chart.focus();
       });
@@ -397,7 +397,7 @@ describe("BlockersPage", () => {
     chart.focus();
     await user.keyboard("{End}{ArrowLeft}{Enter}");
     await waitFor(() => {
-      expect(router.state.location.search).toBe("?blocker=Civil%7CVendor+data");
+      expect(router.state.location.search).toBe("?blocker=Piping%7C577-PK-400");
     });
     expect(await stepRow(await stepTable(), 3)).toHaveAttribute("aria-selected", "true");
     expect(within(chart).getByRole("option")).toHaveAttribute("aria-selected", "true");

@@ -63,8 +63,7 @@ const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
 /**
  * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
  * A bar is pressed to see the lines of its value: it filters by that value and opens Lines.
- * The rows are shown largest first. That is the order the command sends; a copy is put in that
- * order here so that it does not depend on it, and rows of the same count keep the order given.
+ * The rows are shown in the order the command sends, largest first; the interface sorts nothing.
  * The length of a bar is its row's holds as a share of the largest count of the group; no number
  * that is shown is worked out here.
  */
@@ -81,8 +80,8 @@ export function GroupSection({
   onPress,
 }: GroupSectionProps) {
   const titleId = useId();
-  const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
-  const largest = rows[0]?.holds ?? 0;
+  const rows = groups ?? [];
+  const largest = rows.reduce((most, group) => Math.max(most, group.holds), 0);
   const columns: DataTableColumn<Group>[] = [
     {
       id: "label",

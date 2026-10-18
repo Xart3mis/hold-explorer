@@ -1,4 +1,5 @@
 // The dimensions Breakdown groups the holds by, in the order of its group-by select.
+import { dimNeeds } from "../../api/filter-needs";
 import { dimId } from "../../app/filters/dims";
 import type { Dim } from "../../bindings/Dim";
 import type { Field } from "../../bindings/Field";
@@ -7,20 +8,20 @@ import type { Field } from "../../bindings/Field";
 type NamedDim = Exclude<Dim, { Custom: string }>;
 
 /**
- * The dimensions of the export Breakdown offers, in the order of the spec (9.2), with the field
- * each one needs a value in. The blocker and its type are derived from the remark, so they need
- * it. The line ID is no group: Lines lists the lines.
+ * The dimensions of the export Breakdown offers, in the order of the spec (9.2). The line ID is
+ * no group: Lines lists the lines. Which columns each one needs is the one table of
+ * ui/src/api/filter-needs.json, which the Rust side checks (`dimNeeds`).
  */
-const OFFERED: readonly (readonly [NamedDim, Field])[] = [
-  ["Discipline", "Discipline"],
-  ["HoldType", "HoldType"],
-  ["Role", "Role"],
-  ["Name", "Name"],
-  ["BlockerType", "Remark"],
-  ["Blocker", "Remark"],
-  ["Remark", "Remark"],
-  ["ModelSize", "ModelSize"],
-  ["StressCalc", "StressCalc"],
+const OFFERED: readonly NamedDim[] = [
+  "Discipline",
+  "HoldType",
+  "Role",
+  "Name",
+  "BlockerType",
+  "Blocker",
+  "Remark",
+  "ModelSize",
+  "StressCalc",
 ];
 
 /** What the page groups by when its address names nothing it offers. */
@@ -33,12 +34,13 @@ export const DEFAULT_ROWS: Dim = "Discipline";
 export const DEFAULT_COLS: Dim = "HoldType";
 
 /**
- * The dimensions the page offers for a snapshot: those of the export whose field the snapshot has
- * a value in (`absent` lists those it has none in), then the extra columns of its export.
+ * The dimensions the page offers for a snapshot: those of the export none of whose needed fields
+ * the snapshot lacks (`absent` lists those it has no value in), then the extra columns of its
+ * export.
  */
 export function breakdownDims(absent: readonly Field[], custom: readonly string[]): Dim[] {
   return [
-    ...OFFERED.filter(([, field]) => !absent.includes(field)).map(([dim]) => dim),
+    ...OFFERED.filter((dim) => !dimNeeds(dim).some((field) => absent.includes(field))),
     ...custom.map((header): Dim => ({ Custom: header })),
   ];
 }
@@ -56,5 +58,5 @@ export function dimOfId(id: string | null): Dim | null {
     const header = id.slice(CUSTOM.length);
     return header === "" ? null : { Custom: header };
   }
-  return OFFERED.find(([dim]) => dimId(dim) === id)?.[0] ?? null;
+  return OFFERED.find((dim) => dimId(dim) === id) ?? null;
 }
