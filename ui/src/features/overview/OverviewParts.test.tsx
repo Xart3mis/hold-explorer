@@ -189,6 +189,42 @@ describe("the parts of the Overview after its groups", () => {
     ).toBeVisible();
   });
 
+  it("says that the age of the holds is not known when no open hold has a creation date", async () => {
+    const view = overviewView();
+    renderOverview(() => ({
+      ...view,
+      summary: { ...view.summary, median_age_days: null },
+      stale: { holds: 0, days: 90 },
+    }));
+    await content();
+    const attention = section(text.attention);
+    expect(within(attention).getByText(text.staleUnknown)).toBeVisible();
+    expect(within(attention).queryByText(/90 days or more/)).not.toBeInTheDocument();
+    expect(within(attention).queryByRole("button")).not.toBeInTheDocument();
+    // The same under all holds, whose median age is that of the open ones.
+    set({ status: "All" });
+    await screen.findByRole("group", { name: text.allFigures });
+    expect(await within(section(text.attention)).findByText(text.staleUnknown)).toBeVisible();
+  });
+
+  it("does not say the age is unknown when no hold is kept at all", async () => {
+    const view = overviewView();
+    renderOverview(() => ({
+      ...view,
+      summary: { ...view.summary, holds: 0, lines: 0, median_age_days: null },
+      stale: { holds: 0, days: 90 },
+    }));
+    await content();
+    set({ text: "nothing" });
+    const attention = section(text.attention);
+    expect(
+      await within(attention).findByText(
+        "None of the holds the filters keep has been open for 90 days or more.",
+      ),
+    ).toBeVisible();
+    expect(within(attention).queryByText(text.staleUnknown)).not.toBeInTheDocument();
+  });
+
   it("shows blocks in the shape of the new parts on a first load, and nothing to press", async () => {
     renderOverview(() => new Promise(() => undefined));
     await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });

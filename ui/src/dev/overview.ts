@@ -1,15 +1,14 @@
 // What the development page answers for the `overview` command: made-up numbers of a plausible
 // size, so the Overview can be looked at with thirteen disciplines, with three, and with
-// twenty-five. Its top blockers and top lines are those of the made-up holds that Blockers and
-// Lines show, so a press on one opens a blocker or a line that is there. For development only;
+// twenty-five. Its top blockers, top lines, and stale holds are those of the made-up holds that
+// Blockers and Lines show, so a press on one opens what it names, as many as it says. For development only;
 // see ui/src/dev/app.tsx.
-import type { AgeBand } from "../bindings/AgeBand";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
-import { devBreakdown, devLines } from "./lines";
+import { devBreakdown, devLines, devStaleCount } from "./lines";
 
 /** How many open holds the numbers below add up to. A snapshot with another count scales them. */
 const OPEN_HOLDS = 5042;
@@ -60,38 +59,6 @@ const TOP_ITEMS = 10;
 
 /** The age that makes a hold stale, as the core counts it. */
 const STALE_DAYS = 90;
-
-/**
- * The age bands the filter picker offers on the development page, and the share of the kept holds
- * that falls in each, as its counts say (see commands.ts).
- */
-const BANDS: readonly (readonly [AgeBand, number])[] = [
-  [{ min_days: 0, max_days: 13 }, 0.08],
-  [{ min_days: 14, max_days: 29 }, 0.13],
-  [{ min_days: 30, max_days: 59 }, 0.22],
-  [{ min_days: 60, max_days: 89 }, 0.2],
-  [{ min_days: STALE_DAYS, max_days: null }, 0.37],
-];
-
-/**
- * The share of the holds a filter keeps that are stale: that of the oldest band among all the
- * bands, or among those the filter keeps. A band that is not one of the picker's counts as a
- * stale one when it starts at the stale age or later.
- */
-function staleShare(bands: readonly AgeBand[]): number {
-  if (bands.length === 0) return BANDS[BANDS.length - 1]?.[1] ?? 0;
-  let kept = 0;
-  let stale = 0;
-  for (const band of bands) {
-    const share =
-      BANDS.find(
-        ([known]) => known.min_days === band.min_days && known.max_days === band.max_days,
-      )?.[1] ?? 0;
-    kept += share;
-    if (band.min_days !== null && band.min_days >= STALE_DAYS) stale += share;
-  }
-  return kept === 0 ? 0 : stale / kept;
-}
 
 /** Twenty-five values with labels of every length, some too long for the label column. */
 const MANY: readonly Row[] = [
@@ -187,17 +154,10 @@ function overviewOfSnapshot(
       { sort: "HoldsDesc", reverse: false, single_hold_only: false, size_mismatch_only: false },
       0,
     ).rows.slice(0, TOP_ITEMS),
-    // A hold has an age only when the snapshot has dates, and only an open one. Among all holds
-    // the open ones are those that are not released.
+    // A hold has an age only when the snapshot has dates. Otherwise the stale holds are counted
+    // from the made-up holds Lines shows, so the press on them opens as many as it says.
     stale: {
-      holds:
-        shape === "no-dates" || status === "Released"
-          ? 0
-          : Math.round(
-              holds *
-                (status === "All" ? snapshot.open_count / Math.max(1, snapshot.row_count) : 1) *
-                staleShare(spec.age_bands),
-            ),
+      holds: shape === "no-dates" ? 0 : devStaleCount(snapshot, spec, STALE_DAYS),
       days: STALE_DAYS,
     },
   };

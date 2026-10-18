@@ -318,6 +318,18 @@ export function devHoldCount(snapshot: SnapshotInfo, spec: FilterSpec, matchingS
   return kept(snapshot, spec, matchingSizes).length;
 }
 
+/**
+ * How many open holds a filter keeps that are at least `days` old, as the `overview` command
+ * counts its stale holds: from the same holds the lines and the holds are read from. Under the
+ * status All the open ones among them are counted; released holds have no age.
+ */
+export function devStaleCount(snapshot: SnapshotInfo, spec: FilterSpec, days: number): number {
+  if (spec.status === "Released") return 0;
+  return kept(snapshot, { ...spec, status: "Open" }, false).filter(
+    ({ row }) => row.age_days !== null && row.age_days >= days,
+  ).length;
+}
+
 const widest = (ids: readonly string[]) => ids.reduce((most, id) => Math.max(most, id.length), 0);
 
 /** What `holds` answers on the development page. */

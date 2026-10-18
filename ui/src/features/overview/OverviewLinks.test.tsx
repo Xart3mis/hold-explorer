@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { keys } from "../../api/keys";
-import type { Filters } from "../../app/filters/state";
+import { defaultFilters, type Filters } from "../../app/filters/state";
 import { queryClient } from "../../app/query";
 import en from "../../locales/en.json";
 import { must, renderApp } from "../../test/app";
@@ -17,6 +17,22 @@ const text = en.overview;
 function filters(): Filters | undefined {
   return queryClient.getQueryData<Filters>(keys.workspaceFilters(workspace().id));
 }
+
+/** Sets the filters of the workspace the tests open, as the filter bar does. */
+function setFilters(change: Partial<Filters>): void {
+  act(() => {
+    queryClient.setQueryData<Filters>(keys.workspaceFilters(workspace().id), {
+      ...defaultFilters,
+      ...change,
+    });
+  });
+}
+
+const CIVIL = {
+  dim: "Discipline",
+  values: [{ key: "Civil", label: "Civil" }],
+  negate: false,
+} as const;
 
 /** Goes back to the Overview by the sidebar. */
 async function backToOverview(user: Awaited<ReturnType<typeof overview>>["user"]) {
@@ -219,6 +235,7 @@ describe("the lists of the Overview lead to what they name", () => {
     SLOW,
     async () => {
       const { user, router } = await overview();
+      setFilters({ fields: [CIVIL] });
       await user.click(
         within(screen.getByRole("list", { name: text.topBlockers })).getByRole("button", {
           name: /^Civil \/ DWG-220 /,
@@ -232,7 +249,7 @@ describe("the lists of the Overview lead to what they name", () => {
         await screen.findByRole("heading", { level: 1, name: en.destinations.name.blockers }),
       ).toBeInTheDocument();
       // The blocker is selected, not filtered by: the filters are as they were.
-      expect(filters()?.fields ?? []).toEqual([]);
+      expect(filters()?.fields).toEqual([CIVIL]);
     },
   );
 
@@ -308,4 +325,36 @@ describe("the lists of the Overview lead to what they name", () => {
       expect(router.state.location.search).toContain("rows=holds");
     });
   });
+});
+
+describe("the stale holds lead to exactly the holds they count", () => {
+  it.each(["All", "Released"] as const)(
+    "opens only open holds when the status is %s",
+    SLOW,
+    async (status) => {
+      // The command counts open holds only; whatever it answers, the press shows open holds.
+      const { user, router } = renderApp({
+        start: openStart(),
+        path: "/overview",
+        handlers: { overview: () => overviewView({ stale: { holds: 12, days: 90 } }) },
+      });
+      await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+      setFilters({ status, fields: [CIVIL] });
+      const attention = await screen.findByRole("list", { name: text.attention });
+      await user.click(
+        within(attention).getByRole("button", { name: /12 holds open for 90 days/ }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/lines");
+      });
+      expect(parseLinesAddress(router.state.location.search)).toEqual({
+        rows: "holds",
+        sort: "OldestFirst",
+        reverse: false,
+      });
+      expect(filters()?.status).toBe("Open");
+      expect(filters()?.ageBands).toEqual([{ min_days: 90, max_days: null }]);
+      expect(filters()?.fields).toEqual([CIVIL]);
+    },
+  );
 });

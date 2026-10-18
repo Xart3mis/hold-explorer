@@ -1,0 +1,35 @@
+/*
+ * What every section of the page after its figures shares: a title on a line as tall as a
+ * control, and what it shows under it, a stack's gap apart.
+ */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+/* The title and the switch share a line as tall as the switch, so the line is the same without it. */
+.groupHeader {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: var(--density-control-height);
+}
+
+.groupTitle {
+  min-inline-size: 0;
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* What a section says when the snapshot gives it no row. */
+.none {
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}

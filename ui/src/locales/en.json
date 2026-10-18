@@ -563,6 +563,7 @@
     "stale_other": "{{count, number}} holds open for {{days, number}} days or more",
     "staleNone": "No hold has been open for {{days, number}} days or more.",
     "staleNoneMatch": "None of the holds the filters keep has been open for {{days, number}} days or more.",
+    "staleUnknown": "How long the holds have been open is not known: no open hold has a creation date.",
     "releasedFigures": "Figures of the released holds",
     "releasedHolds": "Released holds",
     "releasedLines": "Lines with released holds",

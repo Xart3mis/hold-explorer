@@ -1,11 +1,9 @@
-import { ChevronRight, TriangleAlert, Upload } from "lucide-react";
-import { useId, useState } from "react";
-import { Button as RacButton } from "react-aria-components";
+import { Upload } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { isSameDim } from "../../app/filters/dims";
-import { useFilters, withValues, type Filters } from "../../app/filters/state";
+import { useFilters, withValues } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
@@ -13,27 +11,16 @@ import type { Dim } from "../../bindings/Dim";
 import type { Group } from "../../bindings/Group";
 import type { LineRow } from "../../bindings/LineRow";
 import type { OverviewView } from "../../bindings/OverviewView";
-import type { StaleCount } from "../../bindings/StaleCount";
 import type { Status } from "../../bindings/Status";
 import type { Summary } from "../../bindings/Summary";
-import { cx } from "../../components/cx";
 import {
-  BarRow,
-  BarRowGroup,
   Button,
-  Checkbox,
-  DataTable,
   EmptyState,
   ErrorState,
-  Icon,
   Notice,
-  Skeleton,
   StatTile,
   StatTileGroup,
-  Tag,
   VisuallyHidden,
-  type DataTableColumn,
-  textChars,
 } from "../../components";
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
@@ -42,7 +29,10 @@ import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { DEFAULT_LINES_STATE, linesAddress, withSelection } from "../lines/address";
 import { presetQuery } from "../lines/presets";
+import { Attention } from "./Attention";
+import { GroupSection, isFilteredBy } from "./GroupSection";
 import styles from "./OverviewPage.module.css";
+import { TopSection } from "./TopSection";
 
 /**
  * The three groups of the page: what each is by, in the words of the first column of its table,
@@ -62,9 +52,6 @@ type DimensionId = (typeof DIMENSIONS)[number]["id"];
  * longest bar.
  */
 const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4, role: 4 };
-
-/** How many skeleton rows stand for each list of the most holds: the command sends ten at most. */
-const TOP_SKELETON_ROWS = 6;
 
 /** What the page calls its figures and its groups, in the text catalog. */
 interface Words {
@@ -197,272 +184,16 @@ function Figures({
   );
 }
 
-interface GroupSectionProps {
-  /** What the group shows: "Open holds by discipline". */
-  title: string;
-  /** What a row of it is: "Discipline". The header of the first column of its table. */
-  column: string;
-  /**
-   * The name of its switch for assistive technology. Both switches show "Show as table"; the
-   * name adds the group, so that two controls of one page do not share a name. It starts with
-   * the words that are shown, so that the switch can also be asked for by them.
-   */
-  toTable: string;
-  /** What the group says when the command sent it no row. */
-  none: string;
-  /** The groups as the command sent them. Absent on a first load. */
-  groups?: readonly Group[];
-  skeletonRows: number;
-  /** Whether the group is shown as a table in place of its bars. */
-  asTable: boolean;
-  onAsTableChange: (asTable: boolean) => void;
-  /** Whether a value of the group is in the active filter. */
-  isFiltered: (group: Group) => boolean;
-  /** Filters by the value of a bar that is pressed. */
-  onPress: (group: Group) => void;
-}
-
-/** Whether the filters keep a value of a dimension: it is among the values of its entry. */
-function isFilteredBy(filters: Filters, dim: Dim, group: Group): boolean {
-  return filters.fields.some(
-    (entry) =>
-      isSameDim(entry.dim, dim) &&
-      !entry.negate &&
-      entry.values.some((value) => value.key === group.key),
-  );
-}
-
-/** The room the widest of the counts shown needs, so the name of the group gets the rest. */
-function countChars(counts: readonly number[]): number {
-  return Math.max(1, ...counts.map((count) => textChars(formatCount(count))));
-}
-
-/** The least room of the name of a group before its table scrolls sideways. */
-const LABEL_CHARS = 16;
-
-const ALL_ROWS = { maxRows: Number.POSITIVE_INFINITY } as const;
-
-/**
- * One group of the page: its title, the switch to its table, and its rows, as bars or as a table.
- * A bar is pressed to see the lines of its value: it filters by that value and opens Lines.
- * The rows are shown largest first. That is the order the command sends; a copy is put in that
- * order here so that it does not depend on it, and rows of the same count keep the order given.
- * The length of a bar is its row's holds as a share of the largest count of the group; no number
- * that is shown is worked out here.
- */
-function GroupSection({
-  title,
-  column,
-  toTable,
-  none,
-  groups,
-  skeletonRows,
-  asTable,
-  onAsTableChange,
-  isFiltered,
-  onPress,
-}: GroupSectionProps) {
-  const titleId = useId();
-  const rows = groups === undefined ? [] : [...groups].sort((a, b) => b.holds - a.holds);
-  const largest = rows[0]?.holds ?? 0;
-  const columns: DataTableColumn<Group>[] = [
-    {
-      id: "label",
-      header: column,
-      cell: (group) => group.label,
-      isRowHeader: true,
-      size: { flex: 1, minChars: LABEL_CHARS },
-    },
-    {
-      id: "holds",
-      header: t("overview.columnHolds"),
-      cell: (group) => formatCount(group.holds),
-      kind: "number",
-      size: { chars: countChars(rows.map((group) => group.holds)) },
-    },
-    {
-      id: "lines",
-      header: t("overview.columnLines"),
-      cell: (group) => formatCount(group.lines),
-      kind: "number",
-      isSupporting: true,
-      size: { chars: countChars(rows.map((group) => group.lines)) },
-    },
-  ];
-
-  return (
-    <section className={styles.group}>
-      <div className={styles.groupHeader}>
-        <h2 id={titleId} className={styles.groupTitle}>
-          {title}
-        </h2>
-        {rows.length === 0 ? null : (
-          <Checkbox isSelected={asTable} onChange={onAsTableChange} aria-label={toTable}>
-            {t("overview.showAsTable")}
-          </Checkbox>
-        )}
-      </div>
-      {groups === undefined ? (
-        <BarRowGroup isLoading skeletonRows={skeletonRows} aria-labelledby={titleId} />
-      ) : rows.length === 0 ? (
-        <p className={styles.none}>{none}</p>
-      ) : asTable ? (
-        <DataTable
-          aria-label={title}
-          columns={columns}
-          rows={rows}
-          // A blank value has the empty key, and a row needs a key that is not empty.
-          rowKey={(group) => `group:${group.key}`}
-          // A group is read whole, as its bars are: the page scrolls, the table does not.
-          height={ALL_ROWS}
-        />
-      ) : (
-        <BarRowGroup aria-labelledby={titleId}>
-          {rows.map((group) => (
-            <BarRow
-              key={group.key}
-              isSelected={isFiltered(group)}
-              onPress={() => {
-                onPress(group);
-              }}
-              label={group.label}
-              value={formatCount(group.holds)}
-              secondaryValue={t("overview.lines", { count: group.lines })}
-              fraction={largest > 0 ? group.holds / largest : 0}
-            />
-          ))}
-        </BarRowGroup>
-      )}
-    </section>
-  );
-}
-
-/** One list of the most holds: its title, and a row for each of what the command sent. */
-function TopSection<Item>({
-  title,
-  none,
-  items,
-  itemKey,
-  label,
-  holds,
-  isIdentifier = false,
-  onOpen,
-}: {
-  title: string;
-  /** What the list says when the command sent it no row. */
-  none: string;
-  /** The rows as the command sent them, most holds first. Absent on a first load. */
-  items?: readonly Item[];
-  itemKey: (item: Item) => string;
-  label: (item: Item) => string;
-  holds: (item: Item) => number;
-  /** Whether what a row names is an identifier, a line ID. */
-  isIdentifier?: boolean;
-  /** Opens what a row names. */
-  onOpen: (item: Item) => void;
-}) {
-  const titleId = useId();
-  // The rows keep the order the command gives; a bar is as long as its share of the largest count.
-  const largest = Math.max(0, ...(items ?? []).map(holds));
-  return (
-    <section className={styles.group}>
-      <div className={styles.groupHeader}>
-        <h2 id={titleId} className={styles.groupTitle}>
-          {title}
-        </h2>
-      </div>
-      {items === undefined ? (
-        <BarRowGroup isLoading skeletonRows={TOP_SKELETON_ROWS} aria-labelledby={titleId} />
-      ) : items.length === 0 ? (
-        <p className={styles.none}>{none}</p>
-      ) : (
-        <BarRowGroup aria-labelledby={titleId}>
-          {items.map((item) => (
-            <BarRow
-              key={itemKey(item)}
-              opens
-              isIdentifier={isIdentifier}
-              onPress={() => {
-                onOpen(item);
-              }}
-              label={label(item)}
-              value={formatCount(holds(item))}
-              fraction={largest > 0 ? holds(item) / largest : 0}
-            />
-          ))}
-        </BarRowGroup>
-      )}
-    </section>
-  );
-}
-
-/**
- * What needs attention: the open holds the filters keep that have waited long, as one entry that
- * opens them in Lines. A real state, so it carries a warning tag with its icon. When none has
- * waited that long the section says so in one quiet line, and there is nothing to press.
- */
-function Attention({
-  stale,
-  isFiltered,
-  onOpen,
-}: {
-  /** Absent on a first load. */
-  stale?: StaleCount;
-  isFiltered: boolean;
-  /** Opens the stale holds in Lines. */
-  onOpen: (stale: StaleCount) => void;
-}) {
-  const titleId = useId();
-  return (
-    <section className={styles.group}>
-      <div className={styles.groupHeader}>
-        <h2 id={titleId} className={styles.groupTitle}>
-          {t("overview.attention")}
-        </h2>
-      </div>
-      {stale === undefined ? (
-        <div className={styles.attentionList}>
-          <div className={styles.attentionSkeleton}>
-            <Skeleton />
-          </div>
-        </div>
-      ) : stale.holds === 0 ? (
-        <p className={styles.none}>
-          {t(isFiltered ? "overview.staleNoneMatch" : "overview.staleNone", { days: stale.days })}
-        </p>
-      ) : (
-        <div role="list" aria-labelledby={titleId} className={styles.attentionList}>
-          <div role="listitem" className={styles.attentionItem}>
-            <RacButton
-              onPress={() => {
-                onOpen(stale);
-              }}
-              className={cx(styles.attentionEntry)}
-            >
-              <Tag tone="warning" icon={TriangleAlert}>
-                {t("overview.staleTag")}
-              </Tag>{" "}
-              <span className={styles.attentionText}>
-                {t("overview.stale", { count: stale.holds, days: stale.days })}
-              </span>
-              <Icon icon={ChevronRight} className={styles.attentionChevron} />
-            </RacButton>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 /**
  * Overview: the headline figures of the snapshot in view; its holds by discipline, by hold type,
  * and by role; the blockers and the lines with the most holds; and what needs attention, the
- * holds that have waited long. All for the filters every data screen shares: the open holds unless the filter bar
- * under its header says otherwise. It shows what the `overview` command returns for the open
- * workspace, the selected snapshot, and those filters, and reads it again when any of them
- * changes; the numbers of before stay on screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
- * state that starts an import. A snapshot whose file lacked the hold ID or the released column
- * is said to be limited, above its figures.
+ * holds that have waited long. All for the filters every data screen shares: the open holds
+ * unless the filter bar under its header says otherwise. It shows what the `overview` command
+ * returns for the open workspace, the selected snapshot, and those filters, and reads it again
+ * when any of them changes; the numbers of before stay on screen, dimmed, until the new ones are
+ * there. A workspace without snapshots gets an empty state that starts an import. A snapshot
+ * whose file lacked the hold ID or the released column is said to be limited, above its
+ * figures.
  *
  * What the eye is told by the skeletons and by the dimming, assistive technology is told by one
  * status line that the page keeps for as long as it is open: that the overview is loading, that
@@ -479,8 +210,8 @@ export function OverviewPage() {
   });
   const { filters, spec, isDefault, update } = useFilters();
   const navigate = useNavigate();
-  /** Opens Lines in a state of its own, under the filters that are set. */
-  const openLines = (address: string) => {
+  /** Opens another destination at an address of its own, under the filters that are set. */
+  const openAt = (address: string) => {
     void navigate(address);
   };
   const words = WORDS[filters.status];
@@ -590,10 +321,10 @@ export function OverviewPage() {
             words={words}
             isFiltered={!isDefault}
             onLines={() => {
-              openLines(linesAddress(DEFAULT_LINES_STATE));
+              openAt(linesAddress(DEFAULT_LINES_STATE));
             }}
             onSingleHoldLines={() => {
-              openLines(linesAddress({ rows: "lines", query: presetQuery("single") }));
+              openAt(linesAddress({ rows: "lines", query: presetQuery("single") }));
             }}
             {...(view === undefined ? {} : { summary: view.summary })}
           />
@@ -617,7 +348,7 @@ export function OverviewPage() {
                   update((current) =>
                     withValues(current, dim, [{ key: group.key, label: group.label }], false),
                   );
-                  openLines(linesAddress(DEFAULT_LINES_STATE));
+                  openAt(linesAddress(DEFAULT_LINES_STATE));
                 }}
               />
             ))}
@@ -630,7 +361,7 @@ export function OverviewPage() {
               holds={(blocker) => blocker.holds}
               onOpen={(blocker) => {
                 // The blocker is selected on Blockers, under the filters that are set.
-                void navigate(blockersAddress(blocker.key));
+                openAt(blockersAddress(blocker.key));
               }}
             />
             <TopSection<LineRow>
@@ -643,22 +374,32 @@ export function OverviewPage() {
               isIdentifier
               onOpen={(line) => {
                 // The line is opened in the panel, over the lines most holds first.
-                openLines(
-                  linesAddress(DEFAULT_LINES_STATE, withSelection("", "lines", line.line_id)),
-                );
+                openAt(linesAddress(DEFAULT_LINES_STATE, withSelection("", "lines", line.line_id)));
               }}
             />
             <Attention
               isFiltered={!isDefault}
+              // The condition under which the median age tile says no open hold has a date: then
+              // no hold has an age, and whether one is stale is not known. Released holds have no
+              // age at all, and a filter that keeps no hold leaves nothing to know.
+              agesUnknown={
+                view !== undefined &&
+                filters.status !== "Released" &&
+                view.summary.holds > 0 &&
+                view.summary.median_age_days === null
+              }
               {...(view === undefined ? {} : { stale: view.stale })}
               onOpen={({ days }) => {
-                // The holds that have waited that long, oldest first: the age takes the band of
-                // the stale holds in place of what it was filtered by, and every other filter stays.
+                // The holds that have waited that long, oldest first. A stale hold is an open one,
+                // and the age band matches the duration of a released hold, so the status is set
+                // to the open holds; the age takes the band of the stale holds in place of what it
+                // was filtered by, and every other filter stays.
                 update((current) => ({
                   ...current,
+                  status: "Open",
                   ageBands: [{ min_days: days, max_days: null }],
                 }));
-                openLines(linesAddress({ rows: "holds", sort: "OldestFirst", reverse: false }));
+                openAt(linesAddress({ rows: "holds", sort: "OldestFirst", reverse: false }));
               }}
             />
           </div>
