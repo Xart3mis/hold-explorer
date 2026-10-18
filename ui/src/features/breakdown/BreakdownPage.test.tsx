@@ -175,7 +175,8 @@ describe("BreakdownPage", () => {
       expect(groups()).toEqual(["(blank)", "Civil", "Piping"]);
       await user.click(header("Discipline"));
       expect(header("Discipline")).toHaveAttribute("aria-sort", "ascending");
-      expect(groups()).toEqual(["(blank)", "Civil", "Piping"]);
+      // The blank group has no value, and stays last in both directions.
+      expect(groups()).toEqual(["Civil", "Piping", "(blank)"]);
       await user.click(header("Discipline"));
       expect(groups()).toEqual(["Piping", "Civil", "(blank)"]);
       expect(router.state.location.search).toBe(

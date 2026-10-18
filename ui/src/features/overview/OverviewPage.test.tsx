@@ -367,7 +367,7 @@ describe("the Overview with a snapshot", () => {
   });
 
   it(
-    "gives the counts of a group's table the room of its widest count, and its name the rest",
+    "gives a count column of a group's table the room of its sortable header when that needs more than the counts",
     SLOW,
     async () => {
       const { user, overview } = renderOverview();
@@ -441,7 +441,16 @@ describe("the Overview with a snapshot", () => {
       ]);
       await user.click(discipline);
       expect(discipline).toHaveAttribute("aria-sort", "descending");
-      expect(names()[0]).toBe("Unspecified");
+      // "Unspecified" is the blank group: it has no value, and stays last both ways.
+      expect(names()).toEqual([
+        "Structural",
+        "Process",
+        "Piping",
+        "Instrumentation",
+        "Electrical",
+        "Civil",
+        "Unspecified",
+      ]);
       // A count sorts the most first; the lines are not in the order of the holds.
       const lines = within(grid).getByRole("columnheader", { name: text.columnLines });
       await user.click(lines);
@@ -466,6 +475,23 @@ describe("the Overview with a snapshot", () => {
       await expectAccessible(document.body, { page: true });
     },
   );
+
+  it("keeps the blank group of a table last whichever way its names are sorted", SLOW, async () => {
+    const view = overviewView();
+    const { user, overview } = renderOverview(() => ({
+      ...view,
+      by_discipline: [group("Piping", 30, 9), group("(blank)", 20, 4, ""), group("Civil", 10, 2)],
+    }));
+    await loaded(overview);
+    await user.click(disciplineSwitch());
+    const grid = screen.getByRole("grid", { name: text.byDiscipline });
+    const names = () => tableRows(text.byDiscipline).map(([name]) => name);
+    const discipline = within(grid).getByRole("columnheader", { name: text.columnDiscipline });
+    await user.click(discipline);
+    expect(names()).toEqual(["Civil", "Piping", "(blank)"]);
+    await user.click(discipline);
+    expect(names()).toEqual(["Piping", "Civil", "(blank)"]);
+  });
 
   it("shows a group as a table with the same rows in the same order", SLOW, async () => {
     const { user, overview } = renderOverview();

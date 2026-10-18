@@ -126,13 +126,12 @@ export function ChartTable({
   // columns are declared once for the columns and rows they are given: new columns would have
   // the table build every row again, at each render of the chart.
   const tableColumns = useMemo(() => declareColumns(columns, rows), [columns, rows]);
-  // The sort, for the columns it was asked for: other columns (a heatmap of other dimensions)
-  // start again in the order of the chart.
-  const [asked, setAsked] = useState<{
-    columns: readonly ChartTableColumn[];
-    sort: DataTableSort;
-  }>();
-  const sort = asked?.columns === columns ? asked.sort : undefined;
+  // The sort, for the columns it was asked for, told by their ids and headers rather than by the
+  // object that holds them, which a chart may build anew at any render: other columns (a heatmap
+  // of other dimensions) start again in the order of the chart, the same columns keep the sort.
+  const signature = columnSignature(columns);
+  const [asked, setAsked] = useState<{ signature: string; sort: DataTableSort }>();
+  const sort = asked?.signature === signature ? asked.sort : undefined;
   const sorted = useTableSort(rows, tableColumns, sort, isFoldedRow);
   // Another sort is another result: the table returns to its top.
   const sortedKey =
@@ -159,7 +158,7 @@ export function ChartTable({
         rowKey={(row) => row.key}
         {...(sort === undefined ? {} : { sort })}
         onSortChange={(pressed) => {
-          setAsked({ columns, sort: nextSort(tableColumns, sort, pressed.column) });
+          setAsked({ signature, sort: nextSort(tableColumns, sort, pressed.column) });
         }}
         height={{ maxRows }}
         isLoading={isLoading === true}
@@ -181,6 +180,11 @@ export function ChartTable({
       />
     </div>
   );
+}
+
+/** What tells one set of columns from another: their ids and headers, in order. */
+function columnSignature(columns: readonly ChartTableColumn[]): string {
+  return JSON.stringify(columns.map((column) => [column.id, column.header]));
 }
 
 /** The columns of the table view, each declared from the longest text it holds in `rows`. */

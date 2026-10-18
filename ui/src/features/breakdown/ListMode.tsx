@@ -233,7 +233,8 @@ export function ListMode({
         cell: (group) => group.label,
         isRowHeader: true,
         size: { flex: 2, minChars: 20 },
-        sortValue: (group) => group.label,
+        // The blank group has no value: it stays last both ways, as a row without one does.
+        sortValue: (group) => (group.key === "" ? null : group.label),
       },
       {
         id: "share",

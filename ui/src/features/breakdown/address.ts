@@ -6,9 +6,9 @@
 //
 // In the list, `by` is the dimension the holds are grouped by (`dimId`), and `open` the groups
 // that are expanded, each key written with its own escapes so that a key may hold a comma, and
-// none written when no group is open; `sort` and `dir` the column the groups are sorted by and its
-// direction, none written while they are in the command's order (most holds first). In the matrix, `rows` and `cols` are its two dimensions,
-// never the same one. The parts of the mode that does not show are kept too, after the parts of
+// none written when no group is open; `sort` and `dir` the column the groups are sorted by and
+// its direction, none written while they are in the command's order (most holds first). In the
+// matrix, `rows` and `cols` are its two dimensions, never the same one. The parts of the mode that does not show are kept too, after the parts of
 // the one that shows, when they are not the default, so that switching back finds them as they
 // were. A part that is missing or cannot be read is the default, and no error. The line selected
 // for the detail panel is in the address too, as `line=<id>`, and every other part is kept as it

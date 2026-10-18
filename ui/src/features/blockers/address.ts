@@ -4,9 +4,9 @@
 //
 // The page shows the solve order of the holds the filters keep, which the filter bar holds, so
 // the address has two parts of its own: the blocker that is selected, by its key
-// (`<discipline>|<item>`), written as the detail panel writes a selection (ui/src/app/selection.ts),
-// and the sort of the table of the steps, none written while they are in the solve order. Every
-// other part is kept as it is.
+// (`<discipline>|<item>`), written as the detail panel writes a selection
+// (ui/src/app/selection.ts), and the sort of the table of the steps, none written while they are
+// in the solve order. Every other part is kept as it is.
 import { searchWithSelection, selectionOf } from "../../app/selection";
 import { SORT_PARTS, sortAddress, sortOfAddress, type DataTableSort } from "../../components";
 

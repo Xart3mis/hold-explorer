@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { asCommandError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
@@ -107,48 +107,52 @@ export function WelcomePage() {
       </Notice>
     ) : null;
 
-  const columns: DataTableColumn<WorkspaceView>[] = [
-    {
-      id: "name",
-      header: t("workspaces.columnName"),
-      isRowHeader: true,
-      size: { flex: 1, minChars: NAME_CHARS },
-      sortValue: (workspace) => workspace.name,
-      cell: (workspace) => (
-        <span className={styles.name}>
-          <span className={styles.nameText}>{workspace.name}</span>
-          {workspace.id === start.open?.workspace.id ? (
-            <>
-              {" "}
-              <Tag>{t("workspaces.openTag")}</Tag>
-            </>
-          ) : null}
-        </span>
-      ),
-    },
-    {
-      id: "snapshots",
-      header: t("workspaces.columnSnapshots"),
-      kind: "number",
-      size: { chars: COUNT_CHARS },
-      sortValue: (workspace) => workspace.snapshot_count,
-      sortFirst: "descending",
-      cell: (workspace) => formatCount(workspace.snapshot_count),
-    },
-    {
-      id: "latest",
-      header: t("workspaces.columnLatest"),
-      isSupporting: true,
-      // As wide as the longest date that is shown, in whatever way the locale writes one.
-      size: {
-        chars: Math.max(1, ...workspaces.map((workspace) => textChars(latest(workspace)))),
+  const openId = start.open?.workspace.id;
+  const columns = useMemo(
+    (): DataTableColumn<WorkspaceView>[] => [
+      {
+        id: "name",
+        header: t("workspaces.columnName"),
+        isRowHeader: true,
+        size: { flex: 1, minChars: NAME_CHARS },
+        sortValue: (workspace) => workspace.name,
+        cell: (workspace) => (
+          <span className={styles.name}>
+            <span className={styles.nameText}>{workspace.name}</span>
+            {workspace.id === openId ? (
+              <>
+                {" "}
+                <Tag>{t("workspaces.openTag")}</Tag>
+              </>
+            ) : null}
+          </span>
+        ),
       },
-      cell: latest,
-      // The date as the command sent it, which orders as it reads; the newest first.
-      sortValue: (workspace) => workspace.latest_taken_at,
-      sortFirst: "descending",
-    },
-  ];
+      {
+        id: "snapshots",
+        header: t("workspaces.columnSnapshots"),
+        kind: "number",
+        size: { chars: COUNT_CHARS },
+        sortValue: (workspace) => workspace.snapshot_count,
+        sortFirst: "descending",
+        cell: (workspace) => formatCount(workspace.snapshot_count),
+      },
+      {
+        id: "latest",
+        header: t("workspaces.columnLatest"),
+        isSupporting: true,
+        // As wide as the longest date that is shown, in whatever way the locale writes one.
+        size: {
+          chars: Math.max(1, ...workspaces.map((workspace) => textChars(latest(workspace)))),
+        },
+        cell: latest,
+        // The date as the command sent it, which orders as it reads; the newest first.
+        sortValue: (workspace) => workspace.latest_taken_at,
+        sortFirst: "descending",
+      },
+    ],
+    [openId, workspaces],
+  );
   const sortedWorkspaces = useTableSort(workspaces, columns, sort);
 
   const importZone = (

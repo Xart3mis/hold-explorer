@@ -143,9 +143,9 @@ function NoSteps() {
  * The steps come in one answer, and the table is handed them 200 at a time as it is scrolled, up
  * to 5,000, as Lines loads its rows. A header sorts the steps, which asks for nothing: the table
  * is handed them in the sorted order, and the address keeps the sort (`sort=<column>&dir=`); the
- * curve keeps the order of the steps whatever the sort. The curve draws by default the steps that free most lines
- * (`steps_to_most`, at least ten), and every step on request; its table view and the steps table
- * hold every step either way.
+ * curve keeps the order of the steps whatever the sort. The curve draws by default the steps
+ * that free most lines (`steps_to_most`, at least ten), and every step on request; its table
+ * view and the steps table hold every step either way.
  *
  * Another filter is read anew; the steps of before stay on screen, dimmed, until the new ones are
  * there, and the table then returns to its top. A workspace without snapshots gets an empty state

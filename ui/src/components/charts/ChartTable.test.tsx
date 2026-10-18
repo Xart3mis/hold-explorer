@@ -99,6 +99,50 @@ describe("ChartTable's sort", () => {
   });
 });
 
+describe("ChartTable's sort across renders", () => {
+  /** The columns and rows of a chart built anew at every render, as a heatmap's may be. */
+  function Chart({ tick, header = "Holds" }: { tick: number; header?: string }) {
+    const columns = [
+      { id: "discipline", header: "Discipline", isRowHeader: true },
+      { id: "holds", header, isNumber: true },
+    ];
+    const rows: ChartTableRow[] = [
+      { key: "civil", cells: ["Civil", "12"], values: ["Civil", 12] },
+      { key: "piping", cells: ["Piping", "70"], values: ["Piping", 70] },
+    ];
+    return (
+      <div data-tick={tick}>
+        <ChartTable aria-label="Holds, table" columns={columns} rows={rows} />
+      </div>
+    );
+  }
+
+  const names = () =>
+    within(screen.getByRole("grid", { name: "Holds, table" }))
+      .getAllByRole("rowheader")
+      .map((cell) => cell.textContent);
+
+  it("keeps its sort when it is handed equal columns and rows anew, and drops it for others", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<Chart tick={0} />);
+    await user.click(screen.getByRole("columnheader", { name: "Holds" }));
+    expect(names()).toEqual(["Piping", "Civil"]);
+    rerender(<Chart tick={1} />);
+    expect(screen.getByRole("columnheader", { name: "Holds" })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    expect(names()).toEqual(["Piping", "Civil"]);
+    // Other columns are another table: it starts again in the order of the chart.
+    rerender(<Chart tick={2} header="Lines" />);
+    expect(screen.getByRole("columnheader", { name: "Lines" })).toHaveAttribute(
+      "aria-sort",
+      "none",
+    );
+    expect(names()).toEqual(["Civil", "Piping"]);
+  });
+});
+
 describe("ChartTable's renders", () => {
   it("builds no row again for a render that hands it the same columns and rows", SLOW, () => {
     // Rows that count how often the table reads them: a table that builds its rows reads the key
