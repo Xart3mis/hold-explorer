@@ -1,7 +1,7 @@
 //! Aggregations behind Overview, Breakdown, Lines, and the pickers of the filter bar.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -244,14 +244,45 @@ pub fn matrix_top(
     max_rows: usize,
     max_cols: usize,
 ) -> FoldedMatrix {
+    folded(ds, spec, row_dim, col_dim, max_rows, max_cols, false)
+}
+
+/// As [`matrix_top`], but each cell counts the distinct lines of its holds; `other_row` and
+/// `other_col` count the lines of the folded values. The rows and columns, their order, and
+/// their groups are those of [`matrix_top`].
+pub fn matrix_lines(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    row_dim: &Dim,
+    col_dim: &Dim,
+    max_rows: usize,
+    max_cols: usize,
+) -> FoldedMatrix {
+    folded(ds, spec, row_dim, col_dim, max_rows, max_cols, true)
+}
+
+/// The folded matrix of [`matrix_top`] (`count_lines` false: each cell counts holds) or of
+/// [`matrix_lines`] (true: each cell counts the distinct lines of its holds).
+fn folded(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    row_dim: &Dim,
+    col_dim: &Dim,
+    max_rows: usize,
+    max_cols: usize,
+    count_lines: bool,
+) -> FoldedMatrix {
     let mut rows = Fold::new(group_by(ds, spec, row_dim), max_rows);
     let mut cols = Fold::new(group_by(ds, spec, col_dim), max_cols);
     let mut cells = vec![vec![0usize; cols.len()]; rows.len()];
+    let mut counted: HashSet<(usize, usize, &str)> = HashSet::new();
     let (mut other_row_holds, mut other_col_holds) = (0, 0);
     for row in filtered(ds, spec) {
         let r = rows.position(&row_dim.value(row));
         let c = cols.position(&col_dim.value(row));
-        cells[r][c] += 1;
+        if !count_lines || counted.insert((r, c, row.hold.line_id.as_str())) {
+            cells[r][c] += 1;
+        }
         if r == rows.kept.len() {
             other_row_holds += 1;
             rows.other_lines.insert(row.hold.line_id.clone());
@@ -1727,6 +1758,61 @@ mod tests {
         assert!(top.rows.is_empty() && top.cols.is_empty() && top.cells.is_empty());
         assert_eq!((top.other_row, top.other_col), (None, None));
         assert_eq!(top.max_cell, 0);
+    }
+
+    /// Six open holds; L1 has two holds in the same cell, L4 has holds in two folded rows.
+    fn line_folding() -> Dataset {
+        let hold_of = |line: &str, discipline: &str, hold_type: &str| {
+            hold(line, discipline, hold_type, "x", 1)
+        };
+        Dataset::build(
+            vec![
+                hold_of("L1", "Civil", "MISC."),
+                hold_of("L1", "Civil", "MISC."),
+                hold_of("L2", "Civil", "MISC."),
+                hold_of("L3", "Piping", "P&ID"),
+                hold_of("L4", "Process", "MISC."),
+                hold_of("L4", "Stress", "OTHER"),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        )
+    }
+
+    #[test]
+    fn a_line_matrix_counts_the_distinct_lines_of_each_cell() {
+        let ds = line_folding();
+        let lines = matrix_lines(&ds, &open(), &Dim::Discipline, &Dim::HoldType, 2, 1);
+        let holds = matrix_top(&ds, &open(), &Dim::Discipline, &Dim::HoldType, 2, 1);
+        // The same groups as the hold matrix, and the cells count lines.
+        assert_eq!(lines.rows, holds.rows);
+        assert_eq!(lines.cols, holds.cols);
+        assert_eq!(holds.cells, vec![vec![3, 0], vec![0, 1], vec![1, 1]]);
+        assert_eq!(lines.cells, vec![vec![2, 0], vec![0, 1], vec![1, 1]]);
+        assert_eq!(lines.max_cell, 2);
+        // Other counts the lines of the folded values: L4 for Process and Stress; L3 and L4 for
+        // OTHER and P&ID.
+        let other_row = lines.other_row.clone().unwrap();
+        assert_eq!((other_row.holds, other_row.lines), (2, 1));
+        let other_col = lines.other_col.clone().unwrap();
+        assert_eq!((other_col.holds, other_col.lines), (2, 2));
+        assert_eq!((lines.folded_rows, lines.folded_cols), (2, 2));
+    }
+
+    #[test]
+    fn a_line_matrix_with_room_for_everything_has_the_lines_of_each_pair() {
+        let ds = folding();
+        let lines = matrix_lines(&ds, &open(), &Dim::Discipline, &Dim::HoldType, 10, 10);
+        // Every hold of `folding` is on a line of its own pair, so lines equal holds there.
+        let holds = matrix_top(&ds, &open(), &Dim::Discipline, &Dim::HoldType, 10, 10);
+        assert_eq!(lines, holds);
+        let none = FilterSpec {
+            text: "no such remark".to_string(),
+            ..Default::default()
+        };
+        let empty = matrix_lines(&ds, &none, &Dim::Discipline, &Dim::HoldType, 2, 2);
+        assert!(empty.cells.is_empty() && empty.other_row.is_none());
+        assert_eq!(empty.max_cell, 0);
     }
 
     #[test]
