@@ -159,6 +159,8 @@ function overviewOfSnapshot(
     stale: {
       holds: shape === "no-dates" ? 0 : devStaleCount(snapshot, spec, STALE_DAYS),
       days: STALE_DAYS,
+      // Without dates no open hold has an age; with no open hold kept there is nothing to know.
+      ages_known: shape !== "no-dates" || status === "Released" || holds === 0,
     },
   };
 }

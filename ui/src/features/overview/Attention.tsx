@@ -12,19 +12,16 @@ import styles from "./Section.module.css";
  * What needs attention: the open holds the filters keep that have waited long, as one entry that
  * opens them in Lines. A real state, so it carries a warning tag with its icon. When none has
  * waited that long the section says so in one quiet line, and there is nothing to press. When the
- * age of the holds cannot be known, because no open hold has a creation date, it says that, and
- * not that none is stale.
+ * command says the age of the holds cannot be known, because the open holds the filters keep have
+ * no creation date, it says that, and not that none is stale.
  */
 export function Attention({
   stale,
-  agesUnknown,
   isFiltered,
   onOpen,
 }: {
   /** Absent on a first load. */
   stale?: StaleCount;
-  /** Whether no open hold the filters keep has an age: the median age is missing for that. */
-  agesUnknown: boolean;
   isFiltered: boolean;
   /** Opens the stale holds in Lines. */
   onOpen: (stale: StaleCount) => void;
@@ -45,7 +42,7 @@ export function Attention({
         </div>
       ) : stale.holds === 0 ? (
         <p className={styles.none}>
-          {agesUnknown
+          {!stale.ages_known
             ? t("overview.staleUnknown")
             : t(isFiltered ? "overview.staleNoneMatch" : "overview.staleNone", {
                 days: stale.days,

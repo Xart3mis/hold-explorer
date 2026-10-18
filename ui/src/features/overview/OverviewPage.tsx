@@ -379,15 +379,6 @@ export function OverviewPage() {
             />
             <Attention
               isFiltered={!isDefault}
-              // The condition under which the median age tile says no open hold has a date: then
-              // no hold has an age, and whether one is stale is not known. Released holds have no
-              // age at all, and a filter that keeps no hold leaves nothing to know.
-              agesUnknown={
-                view !== undefined &&
-                filters.status !== "Released" &&
-                view.summary.holds > 0 &&
-                view.summary.median_age_days === null
-              }
               {...(view === undefined ? {} : { stale: view.stale })}
               onOpen={({ days }) => {
                 // The holds that have waited that long, oldest first. A stale hold is an open one,

@@ -336,7 +336,9 @@ describe("the stale holds lead to exactly the holds they count", () => {
       const { user, router } = renderApp({
         start: openStart(),
         path: "/overview",
-        handlers: { overview: () => overviewView({ stale: { holds: 12, days: 90 } }) },
+        handlers: {
+          overview: () => overviewView({ stale: { holds: 12, days: 90, ages_known: true } }),
+        },
       });
       await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
       setFilters({ status, fields: [CIVIL] });

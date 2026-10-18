@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
 use hx_core::dataset::Dataset;
-use hx_core::filter::{Dim, FilterSpec};
+use hx_core::filter::{Dim, FilterSpec, Status};
 use hx_core::mapping::Field;
 use hx_core::query::{self, HoldQuery, HoldSort, LineQuery, LineSort};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
 use super::snapshot_tests::{import, open_holds, view_of, Fixture};
+use super::snapshots::ages_known;
 use super::{
     AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
 };
@@ -602,4 +603,48 @@ fn the_overview_parts_equal_the_core_functions() {
         overview.stale.holds,
         query::stale_count(&ds, &spec, STALE_DAYS)
     );
+    // The open holds of the file have creation dates, so their ages are known.
+    assert!(overview.stale.ages_known);
+    assert_eq!(overview.stale.ages_known, ages_known(&ds, &spec));
+}
+
+#[test]
+fn the_ages_are_unknown_only_when_open_holds_are_kept_and_none_has_an_age() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let ds = dataset_of(&mut state);
+    let spec = open_holds();
+    assert!(ages_known(&ds, &spec));
+    // The same holds without their creation dates: no open hold has an age.
+    let mut dateless = ds.clone();
+    for row in &mut dateless.rows {
+        row.age_days = None;
+    }
+    assert!(!ages_known(&dateless, &spec));
+    let all = FilterSpec {
+        status: Status::All,
+        ..open_holds()
+    };
+    assert!(!ages_known(&dateless, &all));
+    // With no open hold kept there is nothing to know: released holds have no age, and a filter
+    // that keeps nothing leaves nothing that could be stale.
+    let released = FilterSpec {
+        status: Status::Released,
+        ..open_holds()
+    };
+    assert!(ages_known(&dateless, &released));
+    let nothing = FilterSpec {
+        text: "no hold has this text".to_owned(),
+        ..open_holds()
+    };
+    assert!(ages_known(&dateless, &nothing));
+    // One open hold with an age among the kept is enough.
+    let mut one = dateless.clone();
+    let open = one
+        .rows
+        .iter_mut()
+        .find(|row| !row.hold.released)
+        .expect("the file has open holds");
+    open.age_days = Some(3);
+    assert!(ages_known(&one, &spec));
 }

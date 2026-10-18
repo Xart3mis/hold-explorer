@@ -158,7 +158,7 @@ describe("the parts of the Overview after its groups", () => {
   });
 
   it("writes one stale hold in the singular, and the days the command gives", async () => {
-    renderOverview(() => overviewView({ stale: { holds: 1, days: 120 } }));
+    renderOverview(() => overviewView({ stale: { holds: 1, days: 120, ages_known: true } }));
     await content();
     const list = screen.getByRole("list", { name: text.attention });
     expect(
@@ -169,7 +169,7 @@ describe("the parts of the Overview after its groups", () => {
   });
 
   it("says in one quiet line that no hold is stale, with no tag and nothing to press", async () => {
-    renderOverview(() => overviewView({ stale: { holds: 0, days: 90 } }));
+    renderOverview(() => overviewView({ stale: { holds: 0, days: 90, ages_known: true } }));
     await content();
     const attention = section(text.attention);
     expect(within(attention).getByText("No hold has been open for 90 days or more.")).toBeVisible();
@@ -178,7 +178,7 @@ describe("the parts of the Overview after its groups", () => {
   });
 
   it("says that none the filters keep is stale when filters are set", async () => {
-    renderOverview(() => overviewView({ stale: { holds: 0, days: 90 } }));
+    renderOverview(() => overviewView({ stale: { holds: 0, days: 90, ages_known: true } }));
     await content();
     set({ text: "PR-1042" });
     const attention = section(text.attention);
@@ -189,30 +189,28 @@ describe("the parts of the Overview after its groups", () => {
     ).toBeVisible();
   });
 
-  it("says that the age of the holds is not known when no open hold has a creation date", async () => {
+  it("says that the age of the holds is not known when the command says so", async () => {
     const view = overviewView();
-    renderOverview(() => ({
-      ...view,
-      summary: { ...view.summary, median_age_days: null },
-      stale: { holds: 0, days: 90 },
-    }));
+    // The flag decides, whatever the figures say.
+    renderOverview(() => ({ ...view, stale: { holds: 0, days: 90, ages_known: false } }));
     await content();
     const attention = section(text.attention);
     expect(within(attention).getByText(text.staleUnknown)).toBeVisible();
     expect(within(attention).queryByText(/90 days or more/)).not.toBeInTheDocument();
     expect(within(attention).queryByRole("button")).not.toBeInTheDocument();
-    // The same under all holds, whose median age is that of the open ones.
+    // Under all holds as well: the command answers the same for the open ones among them.
     set({ status: "All" });
     await screen.findByRole("group", { name: text.allFigures });
     expect(await within(section(text.attention)).findByText(text.staleUnknown)).toBeVisible();
   });
 
-  it("does not say the age is unknown when no hold is kept at all", async () => {
+  it("takes whether the ages are known from the command, not from the median age", async () => {
     const view = overviewView();
+    // No open hold kept, so no median age; but nothing is unknown, and the command says so.
     renderOverview(() => ({
       ...view,
       summary: { ...view.summary, holds: 0, lines: 0, median_age_days: null },
-      stale: { holds: 0, days: 90 },
+      stale: { holds: 0, days: 90, ages_known: true },
     }));
     await content();
     set({ text: "nothing" });
@@ -287,7 +285,7 @@ describe("the new parts of the Overview and the accessibility checker", () => {
 
     const none = renderOverview(() =>
       overviewView({
-        stale: { holds: 0, days: 90 },
+        stale: { holds: 0, days: 90, ages_known: true },
         top_blockers: [],
         top_lines: [lineRow("L-1001", 2, null)],
         by_role: [group("Lead", 2, 1)],

@@ -64,7 +64,7 @@ export function overviewView(overrides: Partial<OverviewView> = {}): OverviewVie
       group("Process / P&ID-7", 51, 40, "Process|P&ID-7"),
     ],
     top_lines: [lineRow("L-1001", 4, 212), lineRow("L-1187", 3, 160), lineRow("L-2040", 1, null)],
-    stale: { holds: 903, days: 90 },
+    stale: { holds: 903, days: 90, ages_known: true },
     ...overrides,
   };
 }

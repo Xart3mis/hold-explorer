@@ -118,7 +118,7 @@ describe("the snapshot commands", () => {
     by_role: [],
     top_blockers: [],
     top_lines: [],
-    stale: { holds: 0, days: 90 },
+    stale: { holds: 0, days: 90, ages_known: true },
   };
 
   it("sends the complete open-holds filter to the overview", async () => {

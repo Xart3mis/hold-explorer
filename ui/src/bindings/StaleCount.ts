@@ -11,4 +11,11 @@ holds: number,
 /**
  * The age that makes a hold stale.
  */
-days: number, };
+days: number, 
+/**
+ * Whether it can be known which kept open holds are stale. False only when the filter keeps
+ * open holds and none of them has an age, because none has a creation date: `holds` is then
+ * 0 for want of dates, not because no hold has waited long. True when it keeps no open hold,
+ * as there is nothing to know then.
+ */
+ages_known: boolean, };

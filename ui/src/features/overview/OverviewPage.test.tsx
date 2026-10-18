@@ -476,7 +476,7 @@ describe("the Overview with a snapshot", () => {
       by_role: [],
       top_blockers: [],
       top_lines: [],
-      stale: { holds: 0, days: 90 },
+      stale: { holds: 0, days: 90, ages_known: true },
     }));
     await loaded(overview);
     expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 0`);

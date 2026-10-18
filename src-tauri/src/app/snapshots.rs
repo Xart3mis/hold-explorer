@@ -58,6 +58,24 @@ pub struct StaleCount {
     pub holds: usize,
     /// The age that makes a hold stale.
     pub days: i64,
+    /// Whether it can be known which kept open holds are stale. False only when the filter keeps
+    /// open holds and none of them has an age, because none has a creation date: `holds` is then
+    /// 0 for want of dates, not because no hold has waited long. True when it keeps no open hold,
+    /// as there is nothing to know then.
+    pub ages_known: bool,
+}
+
+/// Whether the filter keeps no open hold, or keeps one that has an age: see
+/// [`StaleCount::ages_known`]. Only an open hold has an age. This is `median_age_days.is_some()`
+/// of the summary except when no open hold is kept, where the median is absent too but nothing
+/// is unknown.
+pub(super) fn ages_known(dataset: &Dataset, spec: &FilterSpec) -> bool {
+    let mut open = dataset
+        .rows
+        .iter()
+        .filter(|row| !row.hold.released && spec.matches(row))
+        .peekable();
+    open.peek().is_none() || open.any(|row| row.age_days.is_some())
 }
 
 impl AppState {
@@ -182,6 +200,7 @@ impl AppState {
             stale: StaleCount {
                 holds: stale_count(dataset, spec, STALE_DAYS),
                 days: STALE_DAYS,
+                ages_known: ages_known(dataset, spec),
             },
         }))
     }
