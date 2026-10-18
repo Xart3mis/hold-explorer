@@ -102,14 +102,9 @@ export function BlockersPage() {
   const { select } = useSelection();
   const titleId = useId();
   const [view, setView] = useState<ChartView>("chart");
-  // The point the pointer or the keyboard is on, whose numbers the line over the curve gives.
+  // The point the pointer or the keyboard is on, whose numbers the line over the curve gives. The
+  // chart tells it again when its points change, and that none is when it goes.
   const [active, setActive] = useState<number | null>(null);
-  // The chart says when its point leaves, but not when the chart itself goes: another result or
-  // the table view takes the point with it.
-  const [activeOf, setActiveOf] = useState<{ solve: SolveView | undefined; view: ChartView }>({
-    solve: undefined,
-    view,
-  });
   const columns = useMemo(() => stepColumns(), []);
 
   const query = useSnapshotQuery({
@@ -127,11 +122,6 @@ export function BlockersPage() {
     setKept({ solve: query.data, key: asked });
   }
   const shown: Shown | null = own ? { solve: query.data, key: asked } : kept;
-
-  if (activeOf.solve !== shown?.solve || activeOf.view !== view) {
-    setActiveOf({ solve: shown?.solve, view });
-    setActive(null);
-  }
 
   const rows = shown?.solve.rows ?? NO_ROWS;
   const points = useMemo(

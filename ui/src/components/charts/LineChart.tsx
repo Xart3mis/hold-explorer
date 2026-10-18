@@ -264,17 +264,30 @@ function Plot({
   const yTicks = ticks(0, top, Y_TICKS);
   const xTicks = ticks(first, end, X_TICKS);
 
-  // The screen hears of the shown point when it changes, and not at each of its own renders.
+  // The screen hears of the shown point when it changes, and not at each of its own renders;
+  // again when the points change, since the same place is then another point; and that none is
+  // shown when the chart goes with one shown, so what it says of the point never outlives it.
   const reportActive = useRef(onActiveChange);
-  const reported = useRef<number | null>(null);
+  const reported = useRef<{ index: number | null; points: readonly LinePoint[] }>({
+    index: null,
+    points,
+  });
   useEffect(() => {
     reportActive.current = onActiveChange;
   }, [onActiveChange]);
   useEffect(() => {
-    if (reported.current === shown) return;
-    reported.current = shown;
+    const before = reported.current;
+    if (before.index === shown && (shown === null || before.points === points)) return;
+    reported.current = { index: shown, points };
     reportActive.current?.(shown);
-  }, [shown]);
+  }, [shown, points]);
+  useEffect(() => {
+    const last = reported;
+    const report = reportActive;
+    return () => {
+      if (last.current.index !== null) report.current?.(null);
+    };
+  }, []);
 
   // The keyboard's point leads from here on: the pointer leads again when it moves.
   const moveTo = (index: number) => {

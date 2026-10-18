@@ -249,6 +249,27 @@ describe("LineChart", () => {
     expect(seen).toEqual([0, 1]);
   });
 
+  it("tells the screen its point again when its points change, and nothing once it goes", async () => {
+    const user = userEvent.setup();
+    const seen: (number | null)[] = [];
+    const onActiveChange = (index: number | null) => {
+      seen.push(index);
+    };
+    const { rerender, unmount } = render(chart({ onActiveChange }));
+    await user.tab();
+    await user.keyboard("{ArrowRight}");
+    expect(seen).toEqual([0, 1]);
+    // Another result under the focus: the point it shows is told again, as it is now.
+    rerender(chart({ onActiveChange, points: points.map((point) => ({ ...point })) }));
+    expect(seen).toEqual([0, 1, 1]);
+    // Fewer points than the one in focus: the last is shown, and told.
+    rerender(chart({ onActiveChange, points: points.slice(0, 1) }));
+    expect(seen.at(-1)).toBe(0);
+    // The chart goes with a point shown: the screen hears that none is.
+    unmount();
+    expect(seen.at(-1)).toBeNull();
+  });
+
   it("draws one point with its marker", () => {
     const { container } = render(chart({ points: [{ x: 1, y: 5, label: "Blocker 1" }] }));
     expect(container.querySelectorAll("[data-part=marker]")).toHaveLength(1);

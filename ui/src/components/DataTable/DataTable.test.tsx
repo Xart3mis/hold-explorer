@@ -694,6 +694,35 @@ describe("DataTable in a viewport", () => {
     },
   );
 
+  it(
+    "brings the selected row into view in another result of another length, and keeps it there",
+    SLOW,
+    async () => {
+      const selected = {
+        onSelectionChange: () => undefined,
+        selectedKey: lineId(300),
+        revealSelected: true,
+      };
+      const { rerender } = render(
+        table({ ...selected, rows: many.slice(0, 400), resultKey: "all" }),
+      );
+      const grid = screen.getByRole("grid");
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+      // Another filter keeps fewer rows, the selected one at row 200 of them, above the view.
+      rerender(table({ ...selected, rows: many.slice(100, 450), resultKey: "civil" }));
+      expect(grid.scrollTop).toBe(199 * ROW);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(199 * ROW);
+      scrollTable(grid, grid.scrollTop);
+      expect(screen.getByRole("rowheader", { name: lineId(300) })).toBeInTheDocument();
+      // And more rows, the selected one further down, below the view.
+      rerender(table({ ...selected, rows: many.slice(0, 1000), resultKey: "all" }));
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+    },
+  );
+
   it("does not move for a row selected outside it unless it is asked to", SLOW, () => {
     const page = many.slice(0, 400);
     const { rerender } = render(

@@ -221,6 +221,29 @@ describe("BlockersPage", () => {
     },
   );
 
+  it(
+    "keeps saying where the point in focus is when the solve order is read again",
+    SLOW,
+    async () => {
+      let reads = 0;
+      const { user } = renderBlockers({
+        solveOrder: () => {
+          reads += 1;
+          // The second answer is another one: the same steps, more lines on hold.
+          return reads === 1 ? solveView() : { ...solveView(), lines_on_hold: 1300 };
+        },
+      });
+      const chart = await curve();
+      chart.focus();
+      await user.keyboard("{ArrowRight}");
+      expect(await screen.findByText(caption(1200, 1262, 2))).toBeVisible();
+      // Read again, as after an action, with the point still in focus.
+      await act(() => queryClient.invalidateQueries({ queryKey: keys.snapshots }));
+      expect(await screen.findByText(caption(1200, 1300, 2))).toBeVisible();
+      expect(within(chart).getByRole("option")).toHaveAttribute("aria-posinset", "2");
+    },
+  );
+
   it("selects the blocker of a step pressed in the table, and marks its point", SLOW, async () => {
     const { user, router } = renderBlockers({ path: "/blockers?view=3" });
     const table = await stepTable();

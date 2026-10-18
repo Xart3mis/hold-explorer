@@ -103,8 +103,8 @@ export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
 
   const isLoading = shown === null && !query.isError;
   const isStale = shown !== null && (!own || query.isRefetching);
-  // A matrix of other dimensions or other filters than those asked for is on its way out: its
-  // cells do not open, and the page offers no press.
+  // A matrix of other dimensions, other filters, or another snapshot than those asked for is on
+  // its way out: its cells do not open, and the page offers no press.
   const isCurrent = shown !== null && shown.key === asked;
   const matrix = shown?.matrix;
   const isEmpty = matrix !== undefined && (matrix.rows.length === 0 || matrix.cols.length === 0);

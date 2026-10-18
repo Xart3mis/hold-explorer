@@ -146,7 +146,9 @@ function viewOf(open: WorkspaceOpen | null | undefined): ViewRef | null {
 
 /**
  * The view an open workspace shows, as text: a part of what a screen's rows are a result of, so
- * that another snapshot, as another filter, is another result (`DataTable`'s `resultKey`).
+ * that another snapshot, as another filter, is another result (`DataTable`'s `resultKey`). It is
+ * for such a key of the screen only: never send it to a command and never key a reading by it.
+ * A reading takes its view from `useSnapshotQuery` or `useSnapshotPages` (rule 1 above).
  */
 export function viewText(open: WorkspaceOpen | null): string {
   const view = viewOf(open);
