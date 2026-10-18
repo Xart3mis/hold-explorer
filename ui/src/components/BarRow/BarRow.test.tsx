@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { BarRow, BarRowGroup } from "./BarRow";
@@ -13,6 +13,11 @@ function bar(name: string): HTMLElement {
   if (!(found instanceof HTMLElement)) throw new Error(`The row ${name} has no bar.`);
   return found;
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("BarRow", () => {
   it("is a list for assistive technology: each row is an item that says its label and its values", () => {
@@ -106,6 +111,56 @@ describe("BarRow", () => {
     expect(row).not.toHaveAttribute("data-selected");
     // The label of an identifier is marked to be written as one; another label is not.
     expect(row.querySelector("[data-part='bar-label']")).toHaveAttribute("data-identifier");
+  });
+
+  it("shows a label that is cut in full in a tooltip on focus, and no other label", async () => {
+    // jsdom lays nothing out, so the test says which label is cut: the long one.
+    const cut = "Instrumentation and control / Client";
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(80);
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.textContent === cut ? 240 : 80;
+    });
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(private readonly changed: ResizeObserverCallback) {}
+        observe() {
+          this.changed([], this);
+        }
+        unobserve() {
+          return undefined;
+        }
+        disconnect() {
+          return undefined;
+        }
+      },
+    );
+    const user = userEvent.setup();
+    render(
+      <BarRowGroup aria-label="Top blockers">
+        <BarRow opens label="Piping / Client" value="207" fraction={1} onPress={vi.fn()} />
+        <BarRow opens label={cut} value="106" fraction={0.5} onPress={vi.fn()} />
+        <BarRow label={cut} value="106" fraction={0.5} onPress={vi.fn()} />
+      </BarRowGroup>,
+    );
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Piping / Client 207" })).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getAllByRole("button", { name: `${cut} 106` })[0]).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(cut);
+
+    // A row that filters says its label the same way.
+    await user.tab();
+    expect(screen.getAllByRole("button", { name: `${cut} 106` })[1]).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(cut);
+
+    await user.tab();
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("writes a label that is not an identifier in the body face", () => {
