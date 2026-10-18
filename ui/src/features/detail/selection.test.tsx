@@ -2,6 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
 import { describe, expect, it } from "vitest";
+import { searchForAnotherSnapshot, searchForAnotherWorkspace } from "../../app/selection";
 import { must } from "../../test/app";
 import { useSelection } from "./selection";
 
@@ -63,5 +64,47 @@ describe("useSelection", () => {
     });
     expect(search()).toBe("?rows=holds&single=1");
     expect(hook.result.current.selection).toBeNull();
+  });
+
+  it("reads a blocker from ?blocker=, its key as the address writes it", () => {
+    expect(
+      renderSelection("/blockers?blocker=Process%7C577-PR-400").hook.result.current.selection,
+    ).toEqual({ kind: "blocker", key: "Process|577-PR-400" });
+    expect(renderSelection("/blockers?blocker=").hook.result.current.selection).toBeNull();
+  });
+
+  it("selects a blocker in place of a line or a hold, and closes it, keeping the rest", () => {
+    const { hook, search } = renderSelection("/blockers?view=3&line=A&hold=4");
+    act(() => {
+      hook.result.current.select({ kind: "blocker", key: "Civil|Vendor data & more" });
+    });
+    expect(search()).toBe("?view=3&blocker=Civil%7CVendor+data+%26+more");
+    expect(hook.result.current.selection).toEqual({
+      kind: "blocker",
+      key: "Civil|Vendor data & more",
+    });
+    act(() => {
+      hook.result.current.select({ kind: "line", lineId: "A" });
+    });
+    expect(search()).toBe("?view=3&line=A");
+    act(() => {
+      hook.result.current.select({ kind: "blocker", key: "Civil|Stress" });
+    });
+    act(() => {
+      hook.result.current.close();
+    });
+    expect(search()).toBe("?view=3");
+  });
+});
+
+describe("the selection and another view", () => {
+  it("keeps a blocker for another snapshot, since its key is its text", () => {
+    expect(searchForAnotherSnapshot("?blocker=Civil%7CStress")).toBeNull();
+    expect(searchForAnotherSnapshot("?view=3&hold=4")).toBe("?view=3");
+  });
+
+  it("drops a blocker, as a line and a hold, for another workspace", () => {
+    expect(searchForAnotherWorkspace("?view=3&blocker=Civil%7CStress")).toBe("?view=3");
+    expect(searchForAnotherWorkspace("?view=3")).toBeNull();
   });
 });

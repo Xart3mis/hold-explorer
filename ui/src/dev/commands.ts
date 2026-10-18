@@ -39,6 +39,7 @@ import {
   devHolds,
   devLineDetail,
   devLines,
+  devSolveOrder,
 } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
 import { devValues } from "./values";
@@ -122,6 +123,16 @@ export const DEV_STATES = [
   "breakdown-matrix-folded",
   "breakdown-matrix-loading",
   "breakdown-matrix-error",
+  // Blockers: every state answers the solve order of the same made-up holds, a step for each of
+  // their blockers. These add the snapshot of 30,000 holds, whose solve order has thousands of
+  // steps; a first load that never ends (skeletons); and a reading that fails (an error with a
+  // retry). `lines-none` shows it under filters that keep no hold, and `empty` in a workspace
+  // without snapshots. Select a step by its address as well:
+  //   dev.html?state=open#/blockers
+  //   dev.html?state=blockers-many#/blockers?blocker=Piping%7CStress
+  "blockers-many",
+  "blockers-loading",
+  "blockers-error",
   // The import flow, with a file already open. Open them on a page of the flow:
   //   dev.html?state=import-clean#/import/review
   //   dev.html?state=import-mapping#/import/mapping
@@ -397,7 +408,8 @@ function world(state: DevState, theme: Theme): World {
       break;
     }
     case "lines-many":
-    case "breakdown-many": {
+    case "breakdown-many":
+    case "blockers-many": {
       // The newest export holds thirty thousand holds, six thousand of them released.
       const held = fourSnapshots.map((taken) =>
         taken.id === 4 ? { ...taken, row_count: 30_000, open_count: 24_000 } : taken,
@@ -445,6 +457,8 @@ function world(state: DevState, theme: Theme): World {
     case "breakdown-matrix-folded":
     case "breakdown-matrix-loading":
     case "breakdown-matrix-error":
+    case "blockers-loading":
+    case "blockers-error":
     case "detail-slow":
     case "detail-error":
     case "import-clean":
@@ -757,7 +771,8 @@ export function installDevCommands(state: DevState, theme: Theme): string {
         const isLines =
           state.startsWith("lines-") ||
           state.startsWith("detail-") ||
-          state.startsWith("breakdown-");
+          state.startsWith("breakdown-") ||
+          state.startsWith("blockers-");
         const kept = (part: Partial<FilterSpec>) =>
           selected === undefined
             ? 0
@@ -873,6 +888,14 @@ export function installDevCommands(state: DevState, theme: Theme): string {
               folded_cols: 0,
             }
           : devMatrix(selected, spec, rowDim, colDim, side),
+      );
+    },
+    solve_order: (payload) => {
+      const { spec, selected } = inView(payload);
+      if (state === "blockers-loading") return new Promise(() => undefined);
+      if (state === "blockers-error") throw failure("Io", LOCKED);
+      return later(200, () =>
+        selected === undefined ? { rows: [], lines_on_hold: 0 } : devSolveOrder(selected, spec),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

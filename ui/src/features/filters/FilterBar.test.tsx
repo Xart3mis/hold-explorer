@@ -65,6 +65,7 @@ function renderBar(answer: Answer = () => filterOptions(), handlers: Handlers = 
     pages: {
       overview: <Screen />,
       breakdown: <Screen />,
+      blockers: <Screen />,
       lines: <Screen />,
       settings: <SettingsPage />,
     },
@@ -939,7 +940,7 @@ describe("where the filter bar is", () => {
     await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines });
     expect(await screen.findByRole("group", { name: text.bar })).toBeInTheDocument();
 
-    for (const path of ["/settings", "/welcome", "/blockers", "/import"]) {
+    for (const path of ["/settings", "/welcome", "/history", "/import"]) {
       await act(() => router.navigate(path));
       await screen.findByRole("heading", { level: 1 });
       expect(router.state.location.pathname).toBe(path);

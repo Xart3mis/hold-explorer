@@ -53,9 +53,9 @@ describe("destinations", () => {
     ]);
   });
 
-  it("says that Overview, Breakdown, Lines, and Settings are built and the other five are not", () => {
+  it("says that Overview, Breakdown, Lines, Blockers, and Settings are built and the other four are not", () => {
     expect(destinations.filter((destination) => destination.available).map(({ id }) => id)).toEqual(
-      ["overview", "breakdown", "lines", "settings"],
+      ["overview", "breakdown", "lines", "blockers", "settings"],
     );
   });
 

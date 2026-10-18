@@ -631,6 +631,47 @@ describe("DataTable in a viewport", () => {
     },
   );
 
+  it("brings a row selected outside it into view at the nearer edge, when asked to", SLOW, () => {
+    const page = many.slice(0, 400);
+    const at = (number: number) => ({
+      rows: page,
+      onSelectionChange: () => undefined,
+      selectedKey: lineId(number),
+      revealSelected: true,
+    });
+    // Selected before the table is there: it is brought into view when it arrives.
+    const { rerender } = render(table(at(300)));
+    const grid = screen.getByRole("grid");
+    // The header (36 px) and 300 rows end at 10,836 px; the view is 436 px tall.
+    expect(grid.scrollTop).toBe(ROW + 300 * ROW - (400 + ROW));
+    scrollTable(grid, grid.scrollTop);
+    expect(screen.getByRole("rowheader", { name: lineId(300) })).toBeInTheDocument();
+    // Below the view: its lower edge comes to the lower edge of the view.
+    rerender(table(at(320)));
+    expect(grid.scrollTop).toBe(ROW + 320 * ROW - (400 + ROW));
+    // Above it: its upper edge comes under the header.
+    rerender(table(at(50)));
+    expect(grid.scrollTop).toBe(49 * ROW);
+    scrollTable(grid, grid.scrollTop);
+    // In view: nothing moves, and the user may scroll away from a row that was brought.
+    rerender(table(at(55)));
+    expect(grid.scrollTop).toBe(49 * ROW);
+    scrollTable(grid, 0);
+    rerender(table({ ...at(55), rows: [...page] }));
+    expect(grid.scrollTop).toBe(0);
+  });
+
+  it("does not move for a row selected outside it unless it is asked to", SLOW, () => {
+    const page = many.slice(0, 400);
+    const { rerender } = render(
+      table({ rows: page, onSelectionChange: () => undefined, selectedKey: null }),
+    );
+    const grid = screen.getByRole("grid");
+    scrollTable(grid, 0);
+    rerender(table({ rows: page, onSelectionChange: () => undefined, selectedKey: lineId(300) }));
+    expect(grid.scrollTop).toBe(0);
+  });
+
   it("gives the header its shadow once rows are scrolled beneath it", SLOW, () => {
     render(table({ rows: many.slice(0, 200) }));
     const grid = screen.getByRole("grid");

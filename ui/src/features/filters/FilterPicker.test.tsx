@@ -55,6 +55,7 @@ function renderBar(answer: Values = () => valuePage(), handlers: Handlers = {}) 
     pages: {
       overview: <Screen />,
       breakdown: <Screen />,
+      blockers: <Screen />,
       lines: <Screen />,
       settings: <SettingsPage />,
     },

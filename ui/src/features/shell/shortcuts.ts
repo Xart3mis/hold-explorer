@@ -62,9 +62,12 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target.isContentEditable || target.matches("input, textarea, select");
 }
 
-/** Whether a menu or the list of a select is open. Its keys are its own while it is. */
+/**
+ * Whether a menu or the list of a select is open. Its keys are its own while it is. A list box
+ * that stands in the page, as a line chart does (`data-in-page`), is not open: it is always there.
+ */
 function isListOpen(): boolean {
-  return document.querySelector('[role="menu"], [role="listbox"]') !== null;
+  return document.querySelector('[role="menu"], [role="listbox"]:not([data-in-page])') !== null;
 }
 
 /**

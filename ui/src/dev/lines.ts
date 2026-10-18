@@ -1,7 +1,7 @@
-// What the development page answers for the `lines`, `holds`, `breakdown`, `group_detail`, and `matrix` commands: holds made up by a
-// seeded generator, the same at every start, filtered, grouped into lines, sorted, and cut into
-// pages as the commands do it, closely enough to see the Lines destination work. For development
-// only; see ui/src/dev/app.tsx.
+// What the development page answers for the `lines`, `holds`, `breakdown`, `group_detail`,
+// `matrix`, and `solve_order` commands: holds made up by a seeded generator, the same at every
+// start, filtered, grouped into lines, sorted, and cut into pages as the commands do it, closely
+// enough to see the Lines destination work. For development only; see ui/src/dev/app.tsx.
 import type { Dim } from "../bindings/Dim";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FoldedMatrix } from "../bindings/FoldedMatrix";
@@ -16,6 +16,8 @@ import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { LineRow } from "../bindings/LineRow";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
+import type { SolveRow } from "../bindings/SolveRow";
+import type { SolveView } from "../bindings/SolveView";
 import { DISCIPLINES, HOLD_TYPES } from "./overview";
 
 /** How many rows a command answers at most. */
@@ -681,4 +683,153 @@ export function devMatrix(
     folded_rows: rows.folded,
     folded_cols: cols.folded,
   };
+}
+
+/** A heap of the blockers by what a step of the solve order takes first; see `devSolveOrder`. */
+interface Candidate {
+  /** The index of the blocker. */
+  at: number;
+  /** Lines it alone holds when it was pushed. */
+  frees: number;
+  /** Lines it is on. */
+  lines: number;
+}
+
+/** Whether `one` is taken before `other`: more lines freed, then more lines, then first seen. */
+function before(one: Candidate, other: Candidate): boolean {
+  if (one.frees !== other.frees) return one.frees > other.frees;
+  if (one.lines !== other.lines) return one.lines > other.lines;
+  return one.at < other.at;
+}
+
+function push(heap: Candidate[], item: Candidate): void {
+  heap.push(item);
+  let index = heap.length - 1;
+  while (index > 0) {
+    const parent = (index - 1) >> 1;
+    const above = heap[parent];
+    if (above === undefined || !before(item, above)) break;
+    heap[index] = above;
+    heap[parent] = item;
+    index = parent;
+  }
+}
+
+function pop(heap: Candidate[]): Candidate | undefined {
+  const top = heap[0];
+  const last = heap.pop();
+  if (top === undefined || last === undefined || heap.length === 0) return top;
+  // The last item sinks from the top until neither child is taken before it.
+  let index = 0;
+  for (;;) {
+    let best = last;
+    let bestAt = -1;
+    for (const child of [2 * index + 1, 2 * index + 2]) {
+      const item = heap[child];
+      if (item !== undefined && before(item, best)) {
+        best = item;
+        bestAt = child;
+      }
+    }
+    if (bestAt === -1) break;
+    heap[index] = best;
+    index = bestAt;
+  }
+  heap[index] = last;
+  return top;
+}
+
+/**
+ * What `solve_order` answers on the development page: the blockers of the holds a filter keeps,
+ * each step taking the blocker that frees the most lines given the steps before it, as the core
+ * ranks them, closely enough to see the curve and the table. Ties go to the blocker on more
+ * lines, then to the one seen first, where the core weighs the lines a blocker advances.
+ */
+export function devSolveOrder(
+  snapshot: SnapshotInfo,
+  spec: FilterSpec,
+  matchingSizes = false,
+): SolveView {
+  return remembered(
+    `solve:${String(snapshot.id)}:${String(matchingSizes)}:${JSON.stringify(spec)}`,
+    () => {
+      const index = new Map<string, number>();
+      const blockers: { row: Omit<SolveRow, "step" | "gain" | "cumulative">; lines: number[] }[] =
+        [];
+      const lineIndex = new Map<string, number>();
+      const onLine: Set<number>[] = [];
+      for (const { row } of kept(snapshot, spec, matchingSizes)) {
+        const key = `${row.hold.discipline}|${row.blocker.item}`;
+        let at = index.get(key);
+        if (at === undefined) {
+          at = blockers.length;
+          index.set(key, at);
+          blockers.push({
+            row: {
+              key,
+              label: `${row.hold.discipline} / ${row.blocker.item}`,
+              kind: row.blocker.kind,
+              discipline: row.hold.discipline,
+              holds: 0,
+            },
+            lines: [],
+          });
+        }
+        const blocker = blockers[at];
+        if (blocker === undefined) continue;
+        blocker.row.holds += 1;
+        let line = lineIndex.get(row.hold.line_id);
+        if (line === undefined) {
+          line = onLine.length;
+          lineIndex.set(row.hold.line_id, line);
+          onLine.push(new Set());
+        }
+        const set = onLine[line];
+        if (set !== undefined && !set.has(at)) {
+          set.add(at);
+          blocker.lines.push(line);
+        }
+      }
+      // Lines each blocker alone holds now, and the blockers that are solved.
+      const frees = blockers.map(() => 0);
+      for (const set of onLine) {
+        if (set.size !== 1) continue;
+        const [only] = set;
+        if (only !== undefined) frees[only] = (frees[only] ?? 0) + 1;
+      }
+      const heap: Candidate[] = [];
+      blockers.forEach((blocker, at) => {
+        push(heap, { at, frees: frees[at] ?? 0, lines: blocker.lines.length });
+      });
+      const solved = new Set<number>();
+      const rows: SolveRow[] = [];
+      let cumulative = 0;
+      for (let next = pop(heap); next !== undefined; next = pop(heap)) {
+        // An entry pushed before its blocker freed more lines, or after it was solved, is old.
+        if (solved.has(next.at) || next.frees !== frees[next.at]) continue;
+        const blocker = blockers[next.at];
+        if (blocker === undefined) continue;
+        solved.add(next.at);
+        let gain = 0;
+        for (const line of blocker.lines) {
+          const set = onLine[line];
+          if (set === undefined) continue;
+          set.delete(next.at);
+          if (set.size === 0) gain += 1;
+          if (set.size !== 1) continue;
+          const [only] = set;
+          if (only === undefined) continue;
+          frees[only] = (frees[only] ?? 0) + 1;
+          push(heap, {
+            at: only,
+            frees: frees[only] ?? 0,
+            lines: blockers[only]?.lines.length ?? 0,
+          });
+        }
+        cumulative += gain;
+        rows.push({ ...blocker.row, step: rows.length + 1, gain, cumulative });
+      }
+      return { rows, lines_on_hold: onLine.length };
+    },
+  );
 }

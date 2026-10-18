@@ -8,7 +8,7 @@ import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import { SLOW } from "../../test/slow";
 
-const notBuilt = ["blockers", "history", "people", "follow-up", "rules"] as const;
+const notBuilt = ["history", "people", "follow-up", "rules"] as const;
 const names = en.destinations.name;
 
 describe("ComingSoon", () => {
@@ -86,10 +86,10 @@ describe("ComingSoon", () => {
   it("is reached and left by the keyboard alone", SLOW, async () => {
     const { user, router } = renderApp({ start: openStart(), path: "/overview" });
     const nav = await screen.findByRole("navigation", { name: en.destinations.label });
-    await user.keyboard("{Control>}4{/Control}");
-    expect(router.state.location.pathname).toBe("/blockers");
+    await user.keyboard("{Control>}5{/Control}");
+    expect(router.state.location.pathname).toBe("/history");
     await waitFor(() => {
-      expect(screen.getByRole("heading", { level: 1, name: names.blockers })).toHaveFocus();
+      expect(screen.getByRole("heading", { level: 1, name: names.history })).toHaveFocus();
     });
     await user.tab();
     expect(screen.getByRole("button", { name: en.comingSoon.action })).toHaveFocus();
@@ -103,22 +103,22 @@ describe("ComingSoon", () => {
 
   it("gives way to the real page, and the sidebar tag goes, when a copy of the list marks a destination as built", async () => {
     const copy = destinations.map((destination) =>
-      destination.id === "blockers" ? { ...destination, available: true } : destination,
+      destination.id === "history" ? { ...destination, available: true } : destination,
     );
     renderApp({
       start: openStart(),
-      path: "/blockers",
+      path: "/history",
       destinations: copy,
-      pages: { ...destinationPages, blockers: <p>The real Blockers page</p> },
+      pages: { ...destinationPages, history: <p>The real History page</p> },
     });
-    expect(await screen.findByText("The real Blockers page")).toBeInTheDocument();
+    expect(await screen.findByText("The real History page")).toBeInTheDocument();
     expect(screen.queryByText(en.comingSoon.title)).not.toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: en.destinations.label });
-    expect(within(nav).getByRole("link", { name: names.blockers })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: names.history })).toBeInTheDocument();
     expect(within(nav).getAllByText(en.destinations.soon)).toHaveLength(notBuilt.length - 1);
     // The others are untouched.
     expect(
-      within(nav).getByRole("link", { name: `${names.history} ${en.destinations.soon}` }),
+      within(nav).getByRole("link", { name: `${names.people} ${en.destinations.soon}` }),
     ).toBeInTheDocument();
   });
 

@@ -6,9 +6,12 @@ import { HoldDetail } from "./HoldDetail";
 import { LineDetail } from "./LineDetail";
 import { useDetailFocus, useSelection, type Selection } from "./selection";
 
+/** What the panel shows: a line or a hold. A blocker that is selected marks its step on Blockers. */
+export type PanelSelection = Extract<NonNullable<Selection>, { kind: "line" | "hold" }>;
+
 export interface DetailPanelProps {
   /** What the panel shows: the selection the address names. */
-  selection: NonNullable<Selection>;
+  selection: PanelSelection;
   className?: string | undefined;
 }
 

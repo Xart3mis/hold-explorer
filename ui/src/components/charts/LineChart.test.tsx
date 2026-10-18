@@ -276,6 +276,17 @@ describe("LineChart", () => {
     );
   });
 
+  it("keeps its table view to twelve rows, or to the rows the screen gives", () => {
+    const maxRows = () =>
+      document
+        .querySelector<HTMLElement>("[data-height='rows']")
+        ?.style.getPropertyValue("--table-max-rows");
+    const { rerender } = render(chart({ view: "table" }));
+    expect(maxRows()).toBe("12");
+    rerender(chart({ view: "table", tableRows: 6 }));
+    expect(maxRows()).toBe("6");
+  });
+
   it("shows a skeleton on a first load and the empty state of the screen without points", () => {
     const { rerender } = render(chart({ isLoading: true }));
     expect(screen.queryByRole("listbox")).toBeNull();

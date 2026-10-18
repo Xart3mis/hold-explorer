@@ -6,9 +6,10 @@ import { searchForAnotherSnapshot, searchForAnotherWorkspace } from "../selectio
 /**
  * What the actions that change the view do to the selection of the detail panel, as the view is
  * asked for, before anything of the other view can be read: another snapshot takes out a hold,
- * whose position names another hold there or none; another workspace takes out a line and a
- * hold. Every other part of the address stays, its hash and what was passed with it included. The
- * address is the one the action is asked at: call these when it is asked for (`onAsk`).
+ * whose position names another hold there or none; another workspace takes out a line, a hold,
+ * and a blocker. Every other part of the address stays, its hash and what was passed with it
+ * included. The address is the one the action is asked at: call these when it is asked for
+ * (`onAsk`).
  */
 export function useLeaveSelection(): { forSnapshot: () => void; forWorkspace: () => void } {
   const navigate = useNavigate();
@@ -32,10 +33,10 @@ export function useLeaveSelection(): { forSnapshot: () => void; forWorkspace: ()
 /**
  * The same rule for whatever changes the view on screen, kept by the shell: whenever the open
  * workspace or the selected snapshot of the cached start changes, a hold, or for another
- * workspace a line as well, is taken out of the address that is shown then. The actions above
- * have done so already when they were asked for; this also covers what changes the view without
- * being asked for at that address: an import that ends while the user is on another page, and
- * the start brought in step with the Rust side after a view was refused five times.
+ * workspace a line and a blocker as well, is taken out of the address that is shown then. The
+ * actions above have done so already when they were asked for; this also covers what changes the
+ * view without being asked for at that address: an import that ends while the user is on another
+ * page, and the start brought in step with the Rust side after a view was refused five times.
  */
 export function useSelectionFollowsView(open: WorkspaceOpen | null): void {
   const navigate = useNavigate();

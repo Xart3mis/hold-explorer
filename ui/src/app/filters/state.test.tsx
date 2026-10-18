@@ -66,6 +66,7 @@ async function renderProbe() {
     pages: {
       overview: <Probe />,
       breakdown: <Probe />,
+      blockers: <Probe />,
       lines: <Probe />,
       settings: <Probe />,
     },

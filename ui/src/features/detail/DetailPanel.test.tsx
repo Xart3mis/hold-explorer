@@ -563,6 +563,7 @@ describe("The panel and the snapshot in view", () => {
           pages: {
             lines: <Committing into={into} />,
             breakdown: <p />,
+            blockers: <p />,
             overview: <p />,
             settings: <p />,
           },
@@ -588,7 +589,7 @@ describe("The panel and the snapshot in view", () => {
     const { router } = renderApp({
       start: openStart(),
       path: "/lines?rows=holds&hold=1",
-      pages: { lines: <p />, breakdown: <p />, overview: <p />, settings: <p /> },
+      pages: { lines: <p />, breakdown: <p />, blockers: <p />, overview: <p />, settings: <p /> },
       handlers: {
         hold_detail: hold,
         workspace_current: () => opened({ selected: 1 }),

@@ -58,6 +58,11 @@ export interface LineChartProps {
   onActiveChange?: (index: number | null) => void;
   /** The chart, or its table view. */
   view?: ChartView;
+  /**
+   * How many rows the table view shows before it scrolls; twelve unless the screen keeps it to
+   * fewer, so that a table of its own under the chart keeps its room.
+   */
+  tableRows?: number;
   /** A first load: a skeleton block as large as the plot. */
   isLoading?: boolean;
   /** A refetch: the chart of before, dimmed. */
@@ -130,6 +135,7 @@ export function LineChart({
   selectedIndex = null,
   onActiveChange,
   view = "chart",
+  tableRows,
   isLoading,
   isStale,
   emptyState,
@@ -145,6 +151,7 @@ export function LineChart({
       <ChartTable
         aria-label={t("charts.tableName", { name })}
         {...lineChartTable(points, xLabel, labelName, yLabel, formatX, formatY)}
+        {...(tableRows === undefined ? {} : { maxRows: tableRows })}
         isLoading={loading}
         isStale={stale}
         className={className}
@@ -335,6 +342,8 @@ function Plot({
     <div
       role="listbox"
       aria-label={name}
+      // A list box of the page, not one that opens over it: the shortcuts stay on around it.
+      data-in-page=""
       aria-activedescendant={`${optionId}-${String(keyIndex)}`}
       tabIndex={0}
       className={styles.box}

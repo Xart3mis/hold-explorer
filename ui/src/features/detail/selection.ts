@@ -6,8 +6,9 @@ export type { Selection } from "../../app/selection";
 
 /**
  * The selection the address names, and functions that give the address with another selection
- * or none. Only the parts `line` and `hold` are read and written; every other part of the address
- * stays as it is. The address is replaced, not pushed: a row chosen is not a step to go back to.
+ * or none. Only the parts `line`, `hold`, and `blocker` are read and written; every other part of
+ * the address stays as it is. The address is replaced, not pushed: a row chosen is not a step to
+ * go back to.
  */
 export function useSelection(): {
   selection: Selection;

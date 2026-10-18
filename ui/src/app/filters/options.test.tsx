@@ -25,6 +25,7 @@ describe("useFilterOptions", () => {
           </>
         ),
         breakdown: <p />,
+        blockers: <p />,
         lines: <p />,
         settings: <p />,
       },
@@ -47,6 +48,7 @@ describe("useFilterOptions", () => {
       pages: {
         overview: <Reader name="lines" enabled={false} />,
         breakdown: <p />,
+        blockers: <p />,
         lines: <p />,
         settings: <p />,
       },

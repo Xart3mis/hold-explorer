@@ -853,6 +853,7 @@ The center of the product. It behaves like a spreadsheet grid and looks like a r
   - *Selection:* a row that can never be selected, in a table whose other rows can, does not say "not selected": it carries no `aria-selected`.
 - **Hover:** fill `--color-surface-hover`.
 - **Selected row:** fill `--color-accent-subtle`, hover `--color-accent-subtle-hover`, `aria-selected`. Selection is a tint across the whole row. It is never a stripe on one edge.
+- **A selection made elsewhere:** where the page selects a row from outside the table as well (the curve of Blockers selects the step of its point), the table brings the selected row into view when the selection changes, and when the row arrives after it: scrolled the least that shows it whole, under the header or at the lower edge, without motion and without moving the focus. A row in view stays where it is, and the user may scroll away from it.
 - **Focus:** the inset focus ring on the row or cell. Arrow keys move it by a row, Page Up and Page Down by the height of the visible part, Home and End to the first and the last row that is loaded; Enter opens the detail panel; Esc closes the panel and returns focus to the row. A row that takes the focus is scrolled clear of the header and of the pinned column, at the width the pinned column has.
 - **Active:** fill `--color-surface-pressed` while pressed.
 - **Disabled:** a table has no disabled rows. A column that needs data the snapshot lacks is hidden, and the filter bar says once which column of the export it needs (see Filter bar, "Missing columns").
@@ -949,6 +950,7 @@ What every chart shares: the heatmap of the Breakdown matrix, the line chart of 
 | `--size-heatmap-cell-width` | `56px` | Width of a heatmap cell: room for "10,000" in tabular figures with `--space-1` at each side. |
 | `--size-heatmap-header-height` | `128px` | Height of the heatmap's column labels, which stand upright. |
 | `--size-line-chart-height` | `240px` | Height of a line chart, the band of the x axis included. |
+| `--size-line-chart-min-height` | `144px` | The least height of a line chart that gives way to a table under it in a short window (see "Line chart"). |
 | `--size-chart-axis-width` | `56px` | Width of the value axis at the leading side of a line chart: its tick labels. |
 | `--size-chart-line` | `2px` | Stroke of a line in a chart. |
 | `--size-chart-marker` | `8px` | Diameter of the marker on a point of a line. |
@@ -993,6 +995,7 @@ The key of the heatmap, one line above it, at the leading edge. It is not a cont
 A series of points joined by a line: the Blockers curve, lines freed against the step of the solve order. Up to a few thousand points.
 
 - **Plot:** `--size-line-chart-height` tall, the band of the x axis included, and as wide as its container. The value axis is at the leading side, `--size-chart-axis-width` wide.
+- **Over a table:** a line chart that stands over a table filling the same page (the curve of Blockers over its steps) gives way to the table in a short window: it is at most 35% of the height of the page's content, and never less than `--size-line-chart-min-height`, so the table keeps rows to read at 640 px. In a tall window it is `--size-line-chart-height`. The screen sets it; the chart takes the height it is given.
 - **Value axis:** from 0 at the baseline to the `yMax` the chart is given at the top, never a range the interface works out. Ticks at clean values (1, 2, or 5 times a power of ten), at most five above 0, each with a hairline gridline in `--color-chart-grid` across the plot and its label right-aligned in the axis, `--text-caption` in `--color-text-muted` with tabular figures. The baseline is a hairline in `--color-chart-axis`. The name of the value (`yLabel`) stands above the axis in the same style.
 - **x axis:** labels at clean values under the baseline (at most eight), in the same style; the name of the x value (`xLabel`) at the trailing end of the band. No vertical gridlines.
 - **Line:** one path through every point, a stroke of `--size-chart-line` in `--color-chart-neutral` with round joins and caps, no fill under it. A single series has no legend: the screen's heading names it.
@@ -1022,7 +1025,7 @@ The chart tooltip is the tooltip of "Tooltip", with rows. It names the mark the 
 The same numbers as a table, for reading exact values, for assistive technology, and for a printed page. Every chart has one.
 
 - **The toggle:** a quiet toggle button "Table view" with a table icon, placed by the screen in the row above its chart. Pressed, it has fill `--color-accent-subtle` and text `--color-text-primary`, as a marked preset; hover `--color-surface-hover`, or `--color-accent-subtle-hover` while pressed; active `--color-surface-pressed`; the focus ring. It has `aria-pressed`. Pressing it shows the table in the place of the chart, and pressing it again the chart; the focus stays on the toggle.
-- **The table:** a read-only table (see "Table") at most twelve rows tall, then it scrolls. Values are formatted as the chart formats them, so every number of the chart is in it, and only those.
+- **The table:** a read-only table (see "Table") at most twelve rows tall, then it scrolls. A screen whose chart stands over a table of its own keeps the table view to about the height of the chart, so that its own table keeps its room: Blockers keeps the table view of its curve to six rows. Values are formatted as the chart formats them, so every number of the chart is in it, and only those.
 - **Heatmap:** the first column holds the row values under the name of the row dimension and stays in view; then one column per column value, named by its full text, and All others last. The folded row and column are written in `--color-text-secondary`, as the heatmap writes their labels. An empty cell reads 0.
 - **Long headers:** a column of a table view makes room for at most 24 characters of its header, so thirty long remarks do not make a table many screens wide. A longer header is cut at the end with an ellipsis. Its accessible name keeps the whole text, and the whole text shows in a tooltip of the chart's shape (one row, "Column" and the text) at once when the header has the keyboard's focus and after `--delay-tooltip` under the pointer; it goes when the focus or the pointer moves to anything else, and on Esc. The same text is the column's label in the chart, and in the tooltip of each of its cells.
 - **Line chart:** one row per point, in the order of the points: the x value, the label, and the y value, each column named as the chart names its axes.

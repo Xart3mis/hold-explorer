@@ -1,7 +1,8 @@
 /*
  * The line chart: the name of the value above, the value axis at the leading side, the plot,
  * the band of the x axis under it, and the name of x at its trailing end. The plot and the band
- * together are as tall as the chart's height token.
+ * together are as tall as the chart's height token, or as `--line-chart-height` where the screen
+ * sets it: a chart over a table gives way to it in a short window (DESIGN.md, "Line chart").
  */
 .chart {
   transition: opacity var(--duration-fast) var(--ease-out);
@@ -46,7 +47,10 @@
 .frame {
   display: grid;
   grid-template-rows:
-    calc(var(--size-line-chart-height) - var(--line-height-tight) - var(--space-1))
+    calc(
+      var(--line-chart-height, var(--size-line-chart-height)) - var(--line-height-tight) -
+        var(--space-1)
+    )
     var(--line-height-tight);
   grid-template-columns: subgrid;
   grid-column: 1 / -1;
@@ -128,7 +132,7 @@
 
 /* A first load: one block as large as the plot, without motion. */
 .skeleton {
-  block-size: var(--size-line-chart-height);
+  block-size: var(--line-chart-height, var(--size-line-chart-height));
   border-radius: var(--radius-xs);
   background-color: var(--color-skeleton);
 }

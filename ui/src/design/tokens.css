@@ -112,6 +112,7 @@
   --size-heatmap-cell-width: 56px;
   --size-heatmap-header-height: 128px;
   --size-line-chart-height: 240px;
+  --size-line-chart-min-height: 144px;
   --size-chart-axis-width: 56px;
   --size-chart-line: 2px;
   --size-chart-marker: 8px;

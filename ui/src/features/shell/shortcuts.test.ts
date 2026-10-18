@@ -131,6 +131,21 @@ describe("handleShortcut", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("fires beside a list box that stands in the page, as a line chart does", () => {
+    const run = vi.fn();
+    const chart = document.createElement("div");
+    chart.setAttribute("role", "listbox");
+    chart.setAttribute("data-in-page", "");
+    document.body.append(chart);
+    try {
+      const event = key({ key: "3", code: "Digit3", ctrlKey: true }, chart);
+      expect(handleShortcut(event, [{ shortcut: "Ctrl+3", run }])).toBe(true);
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      chart.remove();
+    }
+  });
+
   it.each(["menu", "listbox"])("does not fire while a %s is open", (role) => {
     const run = vi.fn();
     const overlay = document.createElement("div");

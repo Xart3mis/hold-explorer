@@ -171,6 +171,13 @@ interface TableProps<Item> {
    * row does not answer to the pointer.
    */
   onSelectionChange?: (key: string) => void;
+  /**
+   * The selection is also made outside the table, as on the curve of Blockers: whenever
+   * `selectedKey` names another row, and when that row arrives, the table scrolls it into view
+   * at the nearer edge, and moves no focus. A row that is in view stays where it is. For a table
+   * whose rows do not expand.
+   */
+  revealSelected?: boolean;
   /** The sort the rows are in, to mark its column. */
   sort?: DataTableSort;
   /** Called with the sort a pressed header asks for. */
@@ -753,6 +760,7 @@ export function DataTable<Item, Child = never>({
   rowKey,
   selectedKey,
   onSelectionChange,
+  revealSelected,
   sort,
   onSortChange,
   rowActions,
@@ -1372,6 +1380,30 @@ export function DataTable<Item, Child = never>({
         : { pinned, scrollbar, width },
     );
   };
+  // The selected row the table last brought into view, so that each is brought once: when it is
+  // selected, or when it arrives after it was selected.
+  const revealed = useRef<string | null>(null);
+  const revealSelectedRow = () => {
+    const key = selectedKey ?? null;
+    // A row selected again after none was is brought again.
+    if (key === null) revealed.current = null;
+    const element = scroller.current;
+    if (revealSelected !== true || expandable || element === null) return;
+    if (key === null || key === revealed.current) return;
+    // Nothing is laid out yet, or the scroller has no height: there is no view to bring it into.
+    if (element.clientHeight === 0) return;
+    const index = rows.findIndex((item) => rowKey(item) === key);
+    if (index === -1) return;
+    revealed.current = key;
+    // Rows stand at one height under the header, which stays over the top of the visible part.
+    const top = metrics.headerHeight + index * metrics.rowHeight;
+    const bottom = top + metrics.rowHeight;
+    if (top < element.scrollTop + metrics.headerHeight) {
+      element.scrollTop = top - metrics.headerHeight;
+    } else if (bottom > element.scrollTop + element.clientHeight) {
+      element.scrollTop = bottom - element.clientHeight;
+    }
+  };
   const afterLayout = useRef<() => void>(() => undefined);
   // What tells of a resize, where there is such a thing, and the boxes it was asked to watch.
   const sizes = useRef<ResizeObserver | null>(null);
@@ -1382,6 +1414,7 @@ export function DataTable<Item, Child = never>({
   useEffect(() => {
     afterLayout.current = () => {
       measureScroller();
+      revealSelectedRow();
       lookForEnd();
     };
     // And whenever the scroller is resized, or the box it scrolls, which has another size with

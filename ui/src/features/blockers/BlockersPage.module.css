@@ -1,0 +1,57 @@
+/*
+ * The page is as tall as the content area. Its content takes the height under the bar: a notice
+ * when a reading failed, the curve, and the table of the steps, which takes the rest and scrolls
+ * inside it. The content is the container whose height the curve takes a share of.
+ */
+.content {
+  container-type: size;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-block-size: 0;
+}
+
+/* The curve: its title, the line that says where the solve order is, and its table view toggle. */
+.curve {
+  /* At most a share of the height, so the steps keep rows to read in a short window. */
+  --line-chart-height: clamp(
+    var(--size-line-chart-min-height),
+    35cqh,
+    var(--size-line-chart-height)
+  );
+
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--density-stack-gap);
+}
+
+.curveHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  align-items: baseline;
+}
+
+/* How many lines are freed at the point in view: a caption beside the title, in tabular figures. */
+.freed {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The table view toggle, at the trailing edge of the row of the title. */
+.trailing {
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+.table {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-block-size: 0;
+}

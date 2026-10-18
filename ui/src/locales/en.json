@@ -181,7 +181,6 @@
     "title": "Not available in this version",
     "action": "Go to Overview",
     "description": {
-      "blockers": "Blockers will show what the holds wait for and how the blockers depend on each other. It will rank them by the number of lines each one frees when it is solved.",
       "history": "History will compare two snapshots and list the holds that were added, released, changed, or reopened. It will also show the trend of open holds and the list of snapshots.",
       "people": "People will list, for each name on the export, the holds raised, open, and released, the oldest open hold, and the median age.",
       "follow-up": "Follow-up will hold the watchlist, the notes, and the follow-ups that are due or overdue.",
@@ -683,6 +682,36 @@
     "noneAction": "Clear all",
     "noOpenTitle": "This snapshot has no open holds",
     "noOpenText": "Every hold of this snapshot is released. Show all holds to group them.",
+    "noOpenAction": "Show all holds"
+  },
+  "blockers": {
+    "curve": "Lines freed by the solve order",
+    "axisX": "Step",
+    "axisY": "Lines freed",
+    "freed_one": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} step",
+    "freed_other": "{{freed, number}} of {{total, number}} lines freed after {{count, number}} steps",
+    "table": "Steps of the solve order",
+    "column": {
+      "step": "Step",
+      "blocker": "Blocker",
+      "kind": "Type",
+      "discipline": "Discipline",
+      "holds": "Holds",
+      "gain": "Lines freed",
+      "cumulative": "Cumulative"
+    },
+    "count_one": "{{count, number}} step",
+    "count_other": "{{count, number}} steps",
+    "leftOut": "Not shown at this width: {{columns}}. Open a blocker to read them.",
+    "error": "The solve order could not be loaded",
+    "emptyTitle": "This workspace has no snapshots",
+    "emptyText": "Import a holds export to add the first snapshot. Blockers then ranks what its holds wait for by the lines each one frees.",
+    "emptyAction": "Import",
+    "noneTitle": "No hold matches the filters",
+    "noneText": "Change a filter in the bar above, or clear them all to rank the blockers of the open holds again.",
+    "noneAction": "Clear all",
+    "noOpenTitle": "This snapshot has no open holds",
+    "noOpenText": "Every hold of this snapshot is released. Show all holds to rank their blockers.",
     "noOpenAction": "Show all holds"
   },
   "detail": {
