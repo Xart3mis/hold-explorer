@@ -362,7 +362,8 @@ describe("the Overview with a snapshot", () => {
       );
       expect(control).not.toBeChecked();
     }
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    // The third switch is that of the roles, named as these are.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
   });
 
   it(
@@ -472,10 +473,15 @@ describe("the Overview with a snapshot", () => {
       },
       by_discipline: [],
       by_hold_type: [],
+      by_role: [],
+      top_blockers: [],
+      top_lines: [],
+      stale: { holds: 0, days: 90 },
     }));
     await loaded(overview);
     expect(tile(text.openHolds)).toHaveTextContent(`${text.openHolds} 0`);
-    expect(screen.getAllByText(text.noOpenHolds)).toHaveLength(2);
+    // The three groups and the two lists of the most holds each say so.
+    expect(screen.getAllByText(text.noOpenHolds)).toHaveLength(5);
     // There are no rows to show as a table.
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
@@ -490,12 +496,9 @@ describe("the Overview with a snapshot", () => {
   it("refers to nothing the page does not show yet", async () => {
     const { overview } = renderOverview();
     const main = await loaded(overview);
-    expect(main.textContent).not.toMatch(
-      /previous|trend|blocker|attention|top lines|soon|not available/i,
-    );
-    expect(Object.values(text).join(" ")).not.toMatch(
-      /previous|trend|blocker|attention|top lines|soon|not available/i,
-    );
+    // The blockers, the lines, and what needs attention are shown now; the trend is not yet.
+    expect(main.textContent).not.toMatch(/previous|trend|soon|not available/i);
+    expect(Object.values(text).join(" ")).not.toMatch(/previous|trend|soon|not available/i);
   });
 });
 

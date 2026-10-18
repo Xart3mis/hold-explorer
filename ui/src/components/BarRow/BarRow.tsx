@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ToggleButton } from "react-aria-components";
+import { Button, ToggleButton } from "react-aria-components";
 import { t } from "../../text/i18n";
 import { cx } from "../cx";
 import { Skeleton } from "../Skeleton/Skeleton";
@@ -91,15 +91,30 @@ interface BarRowBase {
    * order takes it; every other bar is the neutral color of plain data.
    */
   ordinalStep?: 1 | 2 | 3 | 4 | 5;
+  /** The category is an identifier, a line ID: its label is written in the monospace face. */
+  isIdentifier?: boolean;
 }
 
 /** A row that filters by its category when it is pressed. */
 interface PressableBarRowProps extends BarRowBase {
   isStatic?: false;
+  opens?: false;
   /** Filters by the category, or removes it from the filter. */
   onPress: () => void;
   /** Whether the category is in the active filter. */
   isSelected?: boolean;
+}
+
+/**
+ * A row that opens what it names on another screen, in place of filtering by it: a blocker on
+ * Blockers, a line in Lines. It is a plain button: it is not on or off, so it is never selected.
+ */
+interface OpeningBarRowProps extends BarRowBase {
+  isStatic?: false;
+  opens: true;
+  /** Opens the category. */
+  onPress: () => void;
+  isSelected?: never;
 }
 
 /**
@@ -109,23 +124,31 @@ interface PressableBarRowProps extends BarRowBase {
  */
 interface StaticBarRowProps extends BarRowBase {
   isStatic: true;
+  opens?: never;
   onPress?: never;
   isSelected?: never;
 }
 
 /** A row is a button or it is not: a row that can be pressed has an action, a static row none. */
-export type BarRowProps = PressableBarRowProps | StaticBarRowProps;
+export type BarRowProps = PressableBarRowProps | OpeningBarRowProps | StaticBarRowProps;
 
 /**
  * One category as a row: its label, a bar as long as its share, and its value. An item of the
- * list its group is, and inside it a button, unless it is static.
+ * list its group is, and inside it a button, unless it is static: a toggle that filters by the
+ * category, or a plain button that opens it.
  */
 export function BarRow(props: BarRowProps) {
-  const { label, value, secondaryValue, fraction, ordinalStep } = props;
+  const { label, value, secondaryValue, fraction, ordinalStep, isIdentifier } = props;
   const share = Math.min(1, Math.max(0, fraction));
   const content = (
     <>
-      <span className={styles.label}>{label}</span>{" "}
+      <span
+        data-part="bar-label"
+        data-identifier={isIdentifier === true ? "" : undefined}
+        className={styles.label}
+      >
+        {label}
+      </span>{" "}
       <span className={styles.track}>
         <span
           data-part="bar"
@@ -148,6 +171,15 @@ export function BarRow(props: BarRowProps) {
     return (
       <div role="listitem" data-part="bar-row" className={styles.row}>
         {content}
+      </div>
+    );
+  }
+  if (props.opens === true) {
+    return (
+      <div role="listitem" className={styles.item}>
+        <Button onPress={props.onPress} data-part="bar-row" className={cx(styles.row)}>
+          {content}
+        </Button>
       </div>
     );
   }

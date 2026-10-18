@@ -1,5 +1,6 @@
-import { Upload } from "lucide-react";
+import { ChevronRight, TriangleAlert, Upload } from "lucide-react";
 import { useId, useState } from "react";
+import { Button as RacButton } from "react-aria-components";
 import { useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -10,9 +11,12 @@ import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { Group } from "../../bindings/Group";
+import type { LineRow } from "../../bindings/LineRow";
 import type { OverviewView } from "../../bindings/OverviewView";
+import type { StaleCount } from "../../bindings/StaleCount";
 import type { Status } from "../../bindings/Status";
 import type { Summary } from "../../bindings/Summary";
+import { cx } from "../../components/cx";
 import {
   BarRow,
   BarRowGroup,
@@ -21,28 +25,33 @@ import {
   DataTable,
   EmptyState,
   ErrorState,
+  Icon,
   Notice,
+  Skeleton,
   StatTile,
   StatTileGroup,
+  Tag,
   VisuallyHidden,
   type DataTableColumn,
   textChars,
 } from "../../components";
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
+import { blockersAddress } from "../blockers/address";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
-import { DEFAULT_LINES_STATE, linesAddress } from "../lines/address";
+import { DEFAULT_LINES_STATE, linesAddress, withSelection } from "../lines/address";
 import { presetQuery } from "../lines/presets";
 import styles from "./OverviewPage.module.css";
 
 /**
- * The two groups of the page: what each is by, in the words of the first column of its table, and
- * the dimension a bar of it filters by.
+ * The three groups of the page: what each is by, in the words of the first column of its table,
+ * and the dimension a bar of it filters by.
  */
 const DIMENSIONS = [
   { id: "discipline", column: "overview.columnDiscipline", dim: "Discipline" },
   { id: "holdType", column: "overview.columnHoldType", dim: "HoldType" },
+  { id: "role", column: "overview.columnRole", dim: "Role" },
 ] as const satisfies readonly { id: string; column: MessageKey; dim: Dim }[];
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
@@ -52,7 +61,10 @@ type DimensionId = (typeof DIMENSIONS)[number]["id"];
  * skeleton row, falling like rows sorted by value; more rows than that would start again at the
  * longest bar.
  */
-const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4 };
+const SKELETON_ROWS: Record<DimensionId, number> = { discipline: 6, holdType: 4, role: 4 };
+
+/** How many skeleton rows stand for each list of the most holds: the command sends ten at most. */
+const TOP_SKELETON_ROWS = 6;
 
 /** What the page calls its figures and its groups, in the text catalog. */
 interface Words {
@@ -70,7 +82,9 @@ interface Words {
 /**
  * The page shows the holds the status of the filters keeps, and names them after it: nothing on
  * it calls a released hold open. The open holds have an age and the released ones a duration;
- * among all holds the median age is that of the open ones, and its label says so.
+ * among all holds the median age is that of the open ones, and its label says so. The lists of
+ * the most holds and the stale holds have the same words under every status: neither calls the
+ * holds it counts open, and the stale holds are open ones by what they are.
  */
 const WORDS: Record<Status, Words> = {
   Open: {
@@ -80,10 +94,15 @@ const WORDS: Record<Status, Words> = {
     median: "median_age_days",
     medianLabel: "overview.medianAge",
     medianMissing: "overview.medianAgeMissing",
-    title: { discipline: "overview.byDiscipline", holdType: "overview.byHoldType" },
+    title: {
+      discipline: "overview.byDiscipline",
+      holdType: "overview.byHoldType",
+      role: "overview.byRole",
+    },
     toTable: {
       discipline: "overview.showDisciplineAsTable",
       holdType: "overview.showHoldTypeAsTable",
+      role: "overview.showRoleAsTable",
     },
   },
   Released: {
@@ -96,10 +115,12 @@ const WORDS: Record<Status, Words> = {
     title: {
       discipline: "overview.releasedByDiscipline",
       holdType: "overview.releasedByHoldType",
+      role: "overview.releasedByRole",
     },
     toTable: {
       discipline: "overview.releasedShowDisciplineAsTable",
       holdType: "overview.releasedShowHoldTypeAsTable",
+      role: "overview.releasedShowRoleAsTable",
     },
   },
   All: {
@@ -109,10 +130,15 @@ const WORDS: Record<Status, Words> = {
     median: "median_age_days",
     medianLabel: "overview.allMedianAge",
     medianMissing: "overview.medianAgeMissing",
-    title: { discipline: "overview.allByDiscipline", holdType: "overview.allByHoldType" },
+    title: {
+      discipline: "overview.allByDiscipline",
+      holdType: "overview.allByHoldType",
+      role: "overview.allByRole",
+    },
     toTable: {
       discipline: "overview.allShowDisciplineAsTable",
       holdType: "overview.allShowHoldTypeAsTable",
+      role: "overview.allShowRoleAsTable",
     },
   },
 };
@@ -121,15 +147,22 @@ const WORDS: Record<Status, Words> = {
  * The four figures of the snapshot: one container, its cells divided by hairlines. The two figures
  * of lines open Lines: all of them, and those with a single hold. The other two have no screen
  * behind them yet.
+ *
+ * The lines with a single hold are those of the snapshot while the filters are the default. Once
+ * a filter is set the command counts the holds it keeps on each line, so a line of many holds of
+ * which the filter keeps one is counted: the tile then says "Lines with one hold", which is what
+ * it counts.
  */
 function Figures({
   summary,
   words,
+  isFiltered,
   onLines,
   onSingleHoldLines,
 }: {
   summary?: Summary;
   words: Words;
+  isFiltered: boolean;
   onLines: () => void;
   onSingleHoldLines: () => void;
 }) {
@@ -147,7 +180,7 @@ function Figures({
         {...(loading ? { isLoading: true } : { value: formatCount(summary.lines) })}
       />
       <StatTile
-        label={t("overview.singleHoldLines")}
+        label={t(isFiltered ? "overview.linesWithOneHold" : "overview.singleHoldLines")}
         onPress={onSingleHoldLines}
         {...(loading ? { isLoading: true } : { value: formatCount(summary.single_hold_lines) })}
       />
@@ -304,9 +337,127 @@ function GroupSection({
   );
 }
 
+/** One list of the most holds: its title, and a row for each of what the command sent. */
+function TopSection<Item>({
+  title,
+  none,
+  items,
+  itemKey,
+  label,
+  holds,
+  isIdentifier = false,
+  onOpen,
+}: {
+  title: string;
+  /** What the list says when the command sent it no row. */
+  none: string;
+  /** The rows as the command sent them, most holds first. Absent on a first load. */
+  items?: readonly Item[];
+  itemKey: (item: Item) => string;
+  label: (item: Item) => string;
+  holds: (item: Item) => number;
+  /** Whether what a row names is an identifier, a line ID. */
+  isIdentifier?: boolean;
+  /** Opens what a row names. */
+  onOpen: (item: Item) => void;
+}) {
+  const titleId = useId();
+  // The rows keep the order the command gives; a bar is as long as its share of the largest count.
+  const largest = Math.max(0, ...(items ?? []).map(holds));
+  return (
+    <section className={styles.group}>
+      <div className={styles.groupHeader}>
+        <h2 id={titleId} className={styles.groupTitle}>
+          {title}
+        </h2>
+      </div>
+      {items === undefined ? (
+        <BarRowGroup isLoading skeletonRows={TOP_SKELETON_ROWS} aria-labelledby={titleId} />
+      ) : items.length === 0 ? (
+        <p className={styles.none}>{none}</p>
+      ) : (
+        <BarRowGroup aria-labelledby={titleId}>
+          {items.map((item) => (
+            <BarRow
+              key={itemKey(item)}
+              opens
+              isIdentifier={isIdentifier}
+              onPress={() => {
+                onOpen(item);
+              }}
+              label={label(item)}
+              value={formatCount(holds(item))}
+              fraction={largest > 0 ? holds(item) / largest : 0}
+            />
+          ))}
+        </BarRowGroup>
+      )}
+    </section>
+  );
+}
+
 /**
- * Overview: the headline figures of the snapshot in view, and its holds by discipline and by
- * hold type, for the filters every data screen shares: the open holds unless the filter bar
+ * What needs attention: the open holds the filters keep that have waited long, as one entry that
+ * opens them in Lines. A real state, so it carries a warning tag with its icon. When none has
+ * waited that long the section says so in one quiet line, and there is nothing to press.
+ */
+function Attention({
+  stale,
+  isFiltered,
+  onOpen,
+}: {
+  /** Absent on a first load. */
+  stale?: StaleCount;
+  isFiltered: boolean;
+  /** Opens the stale holds in Lines. */
+  onOpen: (stale: StaleCount) => void;
+}) {
+  const titleId = useId();
+  return (
+    <section className={styles.group}>
+      <div className={styles.groupHeader}>
+        <h2 id={titleId} className={styles.groupTitle}>
+          {t("overview.attention")}
+        </h2>
+      </div>
+      {stale === undefined ? (
+        <div className={styles.attentionList}>
+          <div className={styles.attentionSkeleton}>
+            <Skeleton />
+          </div>
+        </div>
+      ) : stale.holds === 0 ? (
+        <p className={styles.none}>
+          {t(isFiltered ? "overview.staleNoneMatch" : "overview.staleNone", { days: stale.days })}
+        </p>
+      ) : (
+        <div role="list" aria-labelledby={titleId} className={styles.attentionList}>
+          <div role="listitem" className={styles.attentionItem}>
+            <RacButton
+              onPress={() => {
+                onOpen(stale);
+              }}
+              className={cx(styles.attentionEntry)}
+            >
+              <Tag tone="warning" icon={TriangleAlert}>
+                {t("overview.staleTag")}
+              </Tag>{" "}
+              <span className={styles.attentionText}>
+                {t("overview.stale", { count: stale.holds, days: stale.days })}
+              </span>
+              <Icon icon={ChevronRight} className={styles.attentionChevron} />
+            </RacButton>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Overview: the headline figures of the snapshot in view; its holds by discipline, by hold type,
+ * and by role; the blockers and the lines with the most holds; and what needs attention, the
+ * holds that have waited long. All for the filters every data screen shares: the open holds unless the filter bar
  * under its header says otherwise. It shows what the `overview` command returns for the open
  * workspace, the selected snapshot, and those filters, and reads it again when any of them
  * changes; the numbers of before stay on screen, dimmed, until the new ones are there. A workspace without snapshots gets an empty
@@ -324,6 +475,7 @@ export function OverviewPage() {
   const [asTable, setAsTable] = useState<Record<DimensionId, boolean>>({
     discipline: false,
     holdType: false,
+    role: false,
   });
   const { filters, spec, isDefault, update } = useFilters();
   const navigate = useNavigate();
@@ -385,7 +537,9 @@ export function OverviewPage() {
   const about = view === null ? undefined : (view?.snapshot ?? selected);
 
   const groupsOf = (id: DimensionId, from: OverviewView) =>
-    id === "discipline" ? from.by_discipline : from.by_hold_type;
+    id === "discipline" ? from.by_discipline : id === "holdType" ? from.by_hold_type : from.by_role;
+  // Without filters the snapshot has no open hold; with them, none that they keep.
+  const none = t(isDefault ? "overview.noOpenHolds" : "overview.noneMatch");
 
   return (
     <Page
@@ -434,6 +588,7 @@ export function OverviewPage() {
         >
           <Figures
             words={words}
+            isFiltered={!isDefault}
             onLines={() => {
               openLines(linesAddress(DEFAULT_LINES_STATE));
             }}
@@ -449,8 +604,7 @@ export function OverviewPage() {
                 title={t(words.title[id])}
                 column={t(column)}
                 toTable={t(words.toTable[id])}
-                // Without filters the snapshot has no open hold; with them, none that they keep.
-                none={t(isDefault ? "overview.noOpenHolds" : "overview.noneMatch")}
+                none={none}
                 skeletonRows={SKELETON_ROWS[id]}
                 {...(view === undefined ? {} : { groups: groupsOf(id, view) })}
                 asTable={asTable[id]}
@@ -467,6 +621,46 @@ export function OverviewPage() {
                 }}
               />
             ))}
+            <TopSection<Group>
+              title={t("overview.topBlockers")}
+              none={none}
+              {...(view === undefined ? {} : { items: view.top_blockers })}
+              itemKey={(blocker) => blocker.key}
+              label={(blocker) => blocker.label}
+              holds={(blocker) => blocker.holds}
+              onOpen={(blocker) => {
+                // The blocker is selected on Blockers, under the filters that are set.
+                void navigate(blockersAddress(blocker.key));
+              }}
+            />
+            <TopSection<LineRow>
+              title={t("overview.topLines")}
+              none={none}
+              {...(view === undefined ? {} : { items: view.top_lines })}
+              itemKey={(line) => line.line_id}
+              label={(line) => line.line_id}
+              holds={(line) => line.holds}
+              isIdentifier
+              onOpen={(line) => {
+                // The line is opened in the panel, over the lines most holds first.
+                openLines(
+                  linesAddress(DEFAULT_LINES_STATE, withSelection("", "lines", line.line_id)),
+                );
+              }}
+            />
+            <Attention
+              isFiltered={!isDefault}
+              {...(view === undefined ? {} : { stale: view.stale })}
+              onOpen={({ days }) => {
+                // The holds that have waited that long, oldest first: the age takes the band of
+                // the stale holds in place of what it was filtered by, and every other filter stays.
+                update((current) => ({
+                  ...current,
+                  ageBands: [{ min_days: days, max_days: null }],
+                }));
+                openLines(linesAddress({ rows: "holds", sort: "OldestFirst", reverse: false }));
+              }}
+            />
           </div>
         </div>
       )}

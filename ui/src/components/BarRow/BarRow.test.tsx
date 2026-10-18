@@ -86,6 +86,38 @@ describe("BarRow", () => {
     expect(onPress).toHaveBeenCalledTimes(3);
   });
 
+  it("opens what it names as a plain button, by Enter, Space, and a click, never pressed", async () => {
+    const onPress = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <BarRowGroup aria-label="Top lines">
+        <BarRow opens isIdentifier label="L-1001" value="4" fraction={1} onPress={onPress} />
+      </BarRowGroup>,
+    );
+    const row = screen.getByRole("button", { name: "L-1001 4" });
+    expect(row).not.toHaveAttribute("aria-pressed");
+    await user.tab();
+    expect(row).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(row);
+    expect(onPress).toHaveBeenCalledTimes(3);
+    expect(row).not.toHaveAttribute("aria-pressed");
+    expect(row).not.toHaveAttribute("data-selected");
+    // The label of an identifier is marked to be written as one; another label is not.
+    expect(row.querySelector("[data-part='bar-label']")).toHaveAttribute("data-identifier");
+  });
+
+  it("writes a label that is not an identifier in the body face", () => {
+    render(
+      <BarRowGroup aria-label="Holds by discipline">
+        <BarRow label="Civil" value="1,515" fraction={1} onPress={press} />
+      </BarRowGroup>,
+    );
+    const row = screen.getByRole("button", { name: "Civil 1,515" });
+    expect(row.querySelector("[data-part='bar-label']")).not.toHaveAttribute("data-identifier");
+  });
+
   it("says when its category is in the active filter", () => {
     render(
       <BarRowGroup aria-label="Holds by discipline">
@@ -152,7 +184,7 @@ describe("BarRow", () => {
     expect(screen.getByRole("button", { name: "Civil 1,515" })).toBeInTheDocument();
   });
 
-  it("has no accessibility violation at rest, selected, and loading", async () => {
+  it("has no accessibility violation at rest, selected, opening, and loading", async () => {
     const { container, rerender } = render(
       <BarRowGroup aria-label="Holds by discipline">
         <BarRow
@@ -170,6 +202,13 @@ describe("BarRow", () => {
           isSelected
           onPress={press}
         />
+      </BarRowGroup>,
+    );
+    await expectAccessible(container);
+    rerender(
+      <BarRowGroup aria-label="Top lines">
+        <BarRow opens isIdentifier label="L-1001" value="4" fraction={1} onPress={press} />
+        <BarRow opens isIdentifier label="L-1187" value="3" fraction={0.75} onPress={press} />
       </BarRowGroup>,
     );
     await expectAccessible(container);

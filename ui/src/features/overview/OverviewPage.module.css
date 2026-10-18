@@ -22,9 +22,11 @@
 }
 
 /*
- * The two groups sit side by side while each column keeps its least width, and a content area
- * narrower than two such columns stacks them. The gap between the columns is wider than the gap
- * between sections, so the counts of one group are not read into the labels of the next.
+ * The sections after the figures, in the order of the page: the three groups, the two lists of
+ * the most holds, and what needs attention. They sit two to a row while each column keeps its
+ * least width, and a content area narrower than two such columns stacks them, so the page is
+ * read left to right, then down, in that order. The gap between the columns is wider than the
+ * gap between sections, so the counts of one section are not read into the labels of the next.
  */
 .groups {
   display: grid;
@@ -57,7 +59,7 @@
   letter-spacing: var(--letter-spacing-normal);
 }
 
-/* What a group says when the snapshot gives it no row. */
+/* What a section says when the snapshot gives it no row. */
 .none {
   color: var(--color-text-secondary);
   font: var(--text-body);
@@ -68,4 +70,68 @@
 /* What the page says about the snapshot as a whole, a header's gap above its figures. */
 .limited {
   margin-block-end: var(--space-4);
+}
+
+/*
+ * What needs attention: a list ruled like a fact list, a hairline above its first entry and one
+ * under each. An entry is one button as wide as its column, the tag of its state first and a
+ * chevron at its end, in the ink of what can be acted on, saying that it opens a screen.
+ */
+.attentionList {
+  border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.attentionItem {
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
+}
+
+.attentionEntry {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: var(--density-row-height);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-primary);
+  text-align: start;
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.attentionEntry[data-hovered] {
+  background-color: var(--color-surface-hover);
+}
+
+.attentionEntry[data-pressed] {
+  background-color: var(--color-surface-pressed);
+}
+
+.attentionEntry[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.attentionText {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--text-body-strong);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.attentionChevron {
+  flex: none;
+  color: var(--color-accent-text);
+}
+
+/* A first load: one entry's height, with a block where its text will be. */
+.attentionSkeleton {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-subtle);
 }

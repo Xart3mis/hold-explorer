@@ -201,7 +201,10 @@ describe("the Overview and the filters", () => {
       const figures = text.releasedFigures;
       expect(tile(figures, text.releasedHolds)).toHaveTextContent(`${text.releasedHolds} 4,258`);
       expect(tile(figures, text.releasedLines)).toHaveTextContent(`${text.releasedLines} 1,904`);
-      expect(tile(figures, text.singleHoldLines)).toHaveTextContent(`${text.singleHoldLines} 655`);
+      // The status is a filter: the tile counts the lines with one hold among those kept.
+      expect(tile(figures, text.linesWithOneHold)).toHaveTextContent(
+        `${text.linesWithOneHold} 655`,
+      );
       expect(tile(figures, text.releasedMedianDuration)).toHaveTextContent(
         `${text.releasedMedianDuration} 18 d`,
       );

@@ -55,6 +55,12 @@
   white-space: nowrap;
 }
 
+/* An identifier is written as one everywhere: a line ID in the monospace face. */
+.label[data-identifier] {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+}
+
 .track {
   display: block;
   min-inline-size: 0;

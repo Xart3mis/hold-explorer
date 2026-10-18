@@ -1,13 +1,15 @@
 // What the development page answers for the `overview` command: made-up numbers of a plausible
 // size, so the Overview can be looked at with thirteen disciplines, with three, and with
-// twenty-five. For development only; see ui/src/dev/app.tsx.
+// twenty-five. Its top blockers and top lines are those of the made-up holds that Blockers and
+// Lines show, so a press on one opens a blocker or a line that is there. For development only;
+// see ui/src/dev/app.tsx.
+import type { AgeBand } from "../bindings/AgeBand";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
-import type { LineRow } from "../bindings/LineRow";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
-import type { Status } from "../bindings/Status";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
+import { devBreakdown, devLines } from "./lines";
 
 /** How many open holds the numbers below add up to. A snapshot with another count scales them. */
 const OPEN_HOLDS = 5042;
@@ -53,37 +55,43 @@ export const ROLES: readonly Row[] = [
   ["Unspecified", 146, 120],
 ];
 
-/** Blockers of the first few holds, the label written as the core writes a blocker. */
-const BLOCKERS: readonly Row[] = [
-  ["Piping / PR-1042", 96, 61],
-  ["Civil / DWG-220", 74, 49],
-  ["Process / P&ID-7", 51, 40],
-  ["Instrumentation and control / DS-318", 47, 38],
-  ["Structural / CALC-55", 43, 31],
-  ["Piping / PR-1077", 39, 33],
-  ["Electrical / DWG-801", 36, 29],
-  ["Pipe stress / SC-12", 33, 28],
-  ["Materials / MTO-9", 30, 24],
-  ["Process / DATA-64", 28, 22],
-  ["Civil / DWG-231", 25, 20],
+/** How many blockers and lines the Overview lists, as the core sends them: `TOP_ITEMS`. */
+const TOP_ITEMS = 10;
+
+/** The age that makes a hold stale, as the core counts it. */
+const STALE_DAYS = 90;
+
+/**
+ * The age bands the filter picker offers on the development page, and the share of the kept holds
+ * that falls in each, as its counts say (see commands.ts).
+ */
+const BANDS: readonly (readonly [AgeBand, number])[] = [
+  [{ min_days: 0, max_days: 13 }, 0.08],
+  [{ min_days: 14, max_days: 29 }, 0.13],
+  [{ min_days: 30, max_days: 59 }, 0.22],
+  [{ min_days: 60, max_days: 89 }, 0.2],
+  [{ min_days: STALE_DAYS, max_days: null }, 0.37],
 ];
 
-/** The lines that wait longest, as many as the Overview lists. */
-const LINES_ON_TOP: readonly (readonly [string, number, number])[] = [
-  ["L-1001", 4, 212],
-  ["L-1187", 3, 188],
-  ["L-2040", 6, 171],
-  ["L-0312", 2, 160],
-  ["L-3318", 1, 149],
-  ["L-1450", 5, 143],
-  ["L-2207", 2, 131],
-  ["L-0988", 3, 120],
-  ["L-1766", 1, 118],
-  ["L-2951", 2, 104],
-];
-
-/** Open holds that are 90 days old or more, as a share of the open holds of the numbers above. */
-const STALE_SHARE = 0.18;
+/**
+ * The share of the holds a filter keeps that are stale: that of the oldest band among all the
+ * bands, or among those the filter keeps. A band that is not one of the picker's counts as a
+ * stale one when it starts at the stale age or later.
+ */
+function staleShare(bands: readonly AgeBand[]): number {
+  if (bands.length === 0) return BANDS[BANDS.length - 1]?.[1] ?? 0;
+  let kept = 0;
+  let stale = 0;
+  for (const band of bands) {
+    const share =
+      BANDS.find(
+        ([known]) => known.min_days === band.min_days && known.max_days === band.max_days,
+      )?.[1] ?? 0;
+    kept += share;
+    if (band.min_days !== null && band.min_days >= STALE_DAYS) stale += share;
+  }
+  return kept === 0 ? 0 : stale / kept;
+}
 
 /** Twenty-five values with labels of every length, some too long for the label column. */
 const MANY: readonly Row[] = [
@@ -113,21 +121,6 @@ const MANY: readonly Row[] = [
   ["Document control", 24, 21],
   ["Unspecified", 126, 97],
 ];
-
-function lineRows(shape: DevOverview): LineRow[] {
-  return LINES_ON_TOP.map(([line_id, holds, age]) => ({
-    line_id,
-    holds,
-    disciplines: ["Piping"],
-    hold_types: ["Vendor data"],
-    blockers: 1,
-    oldest_age_days: shape === "no-dates" ? null : age,
-    model_size: null,
-    ldt_size: null,
-    stress_calc: "",
-    size_mismatch: false,
-  }));
-}
 
 function groups(rows: readonly Row[], share: number): Group[] {
   return rows.map(([label, holds, lines]) => ({
@@ -162,8 +155,9 @@ function overviewOfSnapshot(
   isLatest: boolean,
   shape: DevOverview,
   holds: number,
-  status: Status,
+  spec: FilterSpec,
 ): OverviewView {
+  const { status } = spec;
   const share = holds / OPEN_HOLDS;
   const disciplines =
     shape === "many" ? MANY : shape === "few" ? DISCIPLINES.slice(0, 3) : DISCIPLINES;
@@ -186,14 +180,25 @@ function overviewOfSnapshot(
     by_discipline: scaled(disciplines, holds),
     by_hold_type: scaled(holdTypes, holds),
     by_role: scaled(ROLES, holds),
-    top_blockers: groups(BLOCKERS, share)
-      .slice(0, 10)
-      .map((group) => ({ ...group, key: group.label.replace(" / ", "|") })),
-    top_lines: lineRows(shape),
-    // A hold has an age only when the snapshot has dates, and only an open one.
+    top_blockers: devBreakdown(snapshot, spec, "Blocker", false, TOP_ITEMS),
+    top_lines: devLines(
+      snapshot,
+      spec,
+      { sort: "HoldsDesc", reverse: false, single_hold_only: false, size_mismatch_only: false },
+      0,
+    ).rows.slice(0, TOP_ITEMS),
+    // A hold has an age only when the snapshot has dates, and only an open one. Among all holds
+    // the open ones are those that are not released.
     stale: {
-      holds: shape === "no-dates" || status === "Released" ? 0 : Math.round(holds * STALE_SHARE),
-      days: 90,
+      holds:
+        shape === "no-dates" || status === "Released"
+          ? 0
+          : Math.round(
+              holds *
+                (status === "All" ? snapshot.open_count / Math.max(1, snapshot.row_count) : 1) *
+                staleShare(spec.age_bands),
+            ),
+      days: STALE_DAYS,
     },
   };
 }
@@ -234,6 +239,6 @@ export function devOverview(
     selected.id === open?.snapshots.at(-1)?.id,
     shape,
     devKept(selected, spec),
-    spec.status,
+    spec,
   );
 }
