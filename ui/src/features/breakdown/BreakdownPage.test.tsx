@@ -381,6 +381,64 @@ describe("BreakdownPage", () => {
   });
 
   it(
+    "gives the focus back to the line it was opened from, under the group it was pressed in",
+    SLOW,
+    async () => {
+      const { user, router } = renderBreakdown({
+        path: "/breakdown?mode=list&by=Discipline&open=Piping,Civil",
+      });
+      const table = await groupTable();
+      await waitFor(() => {
+        expect(within(table).getAllByRole("rowheader", { name: lineId(1) })).toHaveLength(2);
+      });
+      // The same line stands under both groups; it is pressed under the second, from a control
+      // outside the table that has the focus.
+      act(() => {
+        screen.getByRole("button", { name: en.filterChip.add }).focus();
+      });
+      const second = () =>
+        must(
+          within(table)
+            .getAllByRole("rowheader", { name: lineId(1) })[1]
+            ?.closest<HTMLElement>('[role="row"]'),
+          "the line under the second group",
+        );
+      await user.click(second());
+      await screen.findByRole("complementary", { name: lineId(1) });
+      expect(second()).toHaveFocus();
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(router.state.location.search).not.toContain("line=");
+      expect(second()).toHaveFocus();
+    },
+  );
+
+  it(
+    "opens a line on Enter with the focus on the panel's heading, and Escape gives it back",
+    SLOW,
+    async () => {
+      const { user } = renderBreakdown({ path: "/breakdown?mode=list&by=Discipline&open=Civil" });
+      const table = await groupTable();
+      const row = await findRow(table, lineId(2));
+      act(() => {
+        row.focus();
+      });
+      await user.keyboard("{Enter}");
+      const panel = await screen.findByRole("complementary", { name: lineId(2) });
+      await waitFor(() => {
+        expect(within(panel).getByRole("heading", { level: 2 })).toHaveFocus();
+      });
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(rowNamed(table, lineId(2))).toHaveFocus();
+    },
+  );
+
+  it(
     "opens all the lines of a group in Lines, filtered by its value in place of the field's",
     SLOW,
     async () => {

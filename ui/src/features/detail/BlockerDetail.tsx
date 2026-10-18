@@ -200,7 +200,8 @@ export function BlockerDetail({
   const blocker = data ?? undefined;
   // That the filters leave out the blocker, or that the snapshot has none, is said of the
   // filters it was read for: while other filters are read, the panel waits as on a first load.
-  const isAbsent = data === null && !isStale;
+  // The same filters read again keep it, dimmed.
+  const isAbsent = data === null && (!isStale || !query.isPlaceholderData);
 
   const head = (
     <PanelHead

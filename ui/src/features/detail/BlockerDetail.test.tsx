@@ -278,6 +278,29 @@ describe("The panel of a blocker", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the empty state, dimmed, while the same filters are read again", async () => {
+    const again = held<BlockerDetail | null>();
+    let reads = 0;
+    const detail = vi.fn(() => {
+      reads += 1;
+      return reads === 1 ? null : again.handler();
+    });
+    renderBlocker({ handlers: { blocker_detail: detail }, filters: SOME_TEXT });
+    const region = await panel(text.blockerTitle);
+    await within(region).findByRole("heading", { name: text.blockerFilteredTitle });
+    // Read again, as after an action, for the same view and the same filters.
+    // The answer is held, so the invalidation is not waited for.
+    act(() => {
+      void queryClient.invalidateQueries({ queryKey: keys.snapshots });
+    });
+    await waitFor(() => {
+      expect(again.handler).toHaveBeenCalled();
+    });
+    const body = must(region.querySelector("[data-part='detail-body']"));
+    expect(body).toHaveAttribute("data-stale");
+    expect(within(region).getByRole("heading", { name: text.blockerFilteredTitle })).toBeVisible();
+  });
+
   it("says that a blocker is not in the snapshot under the default filters, and closes", async () => {
     const { user, router } = renderBlocker({ handlers: { blocker_detail: () => null } });
     const region = await panel(text.blockerTitle);

@@ -52,6 +52,10 @@ export function useTableDetailFocus({
   const opener = useRef<Opener | null>(null);
   // Whether the key that is down is Enter: the choice it makes moves the focus to the panel.
   const byEnter = useRef(false);
+  // What a pointer went down on, in the table or beside it. A press reports its choice before
+  // the focus has always reached what was pressed: from a control outside the table it is still
+  // there. So a press is told by where the pointer went down, a key by where the focus is.
+  const pressed = useRef<Opener | null>(null);
 
   useEffect(() => {
     focus.setGiveBack(() => {
@@ -82,9 +86,19 @@ export function useTableDetailFocus({
     (area: HTMLElement, isTable: boolean) => {
       const learn = (event: KeyboardEvent) => {
         byEnter.current = event.key === "Enter";
+        pressed.current = null;
       };
-      const forget = () => {
+      const forget = (event: PointerEvent) => {
         byEnter.current = false;
+        const target = event.target instanceof Element ? event.target : null;
+        const key = isTable ? rowKeyOf(target) : null;
+        const control = target?.closest<HTMLElement>("[tabindex], button, a[href], input");
+        pressed.current =
+          key !== null
+            ? { kind: "row", key }
+            : control != null && area.contains(control)
+              ? { kind: "element", element: control }
+              : null;
       };
       const answer = (event: KeyboardEvent) => {
         const now = latest.current;
@@ -134,13 +148,18 @@ export function useTableDetailFocus({
     (key: string) => {
       const active = document.activeElement;
       const inTable = table.current !== null && active !== null && table.current.contains(active);
-      // A row of the table by the key the table gave it (the same line may stand under two
-      // groups); a control elsewhere by its element; the row of the key when nothing has focus.
-      opener.current = inTable
-        ? { kind: "row", key: rowKeyOf(active) ?? key }
-        : active instanceof HTMLElement && active !== document.body
-          ? { kind: "element", element: active }
-          : { kind: "row", key };
+      // What was pressed, when a pointer chose; otherwise what has the focus: a row of the table
+      // by the key the table gave it (the same line may stand under two groups), a control
+      // elsewhere by its element, or the row of the key when nothing has the focus.
+      const press = pressed.current;
+      pressed.current = null;
+      opener.current =
+        press ??
+        (inTable
+          ? { kind: "row", key: rowKeyOf(active) ?? key }
+          : active instanceof HTMLElement && active !== document.body
+            ? { kind: "element", element: active }
+            : { kind: "row", key });
       if (byEnter.current) focus.askForHeading();
       byEnter.current = false;
     },

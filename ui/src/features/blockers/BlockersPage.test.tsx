@@ -309,6 +309,26 @@ describe("BlockersPage", () => {
     },
   );
 
+  it(
+    "gives the focus back to a step pressed while the focus was outside the table",
+    SLOW,
+    async () => {
+      const { user } = renderBlockers();
+      const table = await stepTable();
+      await stepRow(table, 1);
+      act(() => {
+        screen.getByRole("button", { name: en.filterChip.add }).focus();
+      });
+      await user.click(await stepRow(table, 4));
+      await screen.findByRole("complementary", { name: "Piping / Client" });
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(await stepRow(table, 4)).toHaveFocus();
+    },
+  );
+
   it("takes the focus to the heading on Enter on the step that is open already", SLOW, async () => {
     const { user } = renderBlockers({ path: "/blockers?blocker=Process%7C577-PR-400" });
     const region = await screen.findByRole("complementary", { name: "Process / 577-PR-400" });

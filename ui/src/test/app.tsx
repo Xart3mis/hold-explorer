@@ -46,9 +46,9 @@ export interface RenderAppOptions {
  * dimensions, `solve_order` with a solve order of four steps, and `blocker_detail` with the
  * detail of the blocker asked for, unless the test gives its own. Those answers are for the view
  * the mocked Rust side holds, which is the one `start` opens and then the one the test's own
- * `workspace_open`, `workspace_create`,
- * `workspace_current`, `snapshot_select`, `demo_create`, or `import_commit` answered with: for
- * any other view they fail with the kind `ViewChanged`, as the Rust side does.
+ * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`, or
+ * `import_commit` answered with: for any other view they fail with the kind `ViewChanged`, as
+ * the Rust side does.
  */
 export function renderApp(options: RenderAppOptions = {}) {
   const start = options.start ?? startState();
