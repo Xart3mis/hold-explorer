@@ -309,6 +309,52 @@ describe("BlockersPage", () => {
     },
   );
 
+  it("takes the focus to the heading on Enter on the step that is open already", SLOW, async () => {
+    const { user } = renderBlockers({ path: "/blockers?blocker=Process%7C577-PR-400" });
+    const region = await screen.findByRole("complementary", { name: "Process / 577-PR-400" });
+    const row = await stepRow(await stepTable(), 2);
+    act(() => {
+      row.focus();
+    });
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(within(region).getByRole("heading", { level: 2 })).toHaveFocus();
+    });
+  });
+
+  it(
+    "gives the focus back to the curve when its point opened the panel, and closes on Escape there",
+    SLOW,
+    async () => {
+      const { user, router } = renderBlockers();
+      const chart = await curve();
+      act(() => {
+        chart.focus();
+      });
+      await user.keyboard("{End}{ArrowLeft}{Enter}");
+      const region = await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      await waitFor(() => {
+        expect(within(region).getByRole("heading", { level: 2 })).toHaveFocus();
+      });
+      await user.click(within(region).getByRole("button", { name: en.detail.closePanel }));
+      await waitFor(() => {
+        expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      });
+      expect(chart).toHaveFocus();
+      // Escape on the curve closes a panel it opened, as Escape on the table does.
+      await user.keyboard("{Enter}");
+      await screen.findByRole("complementary", { name: "Civil / Vendor data" });
+      act(() => {
+        chart.focus();
+      });
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(router.state.location.search).toBe("");
+      });
+      expect(chart).toHaveFocus();
+    },
+  );
+
   it(
     "shows in the panel the type, the discipline, and the holds a narrow table leaves out",
     SLOW,

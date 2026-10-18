@@ -1,5 +1,5 @@
 import { Upload } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useLocation } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -24,7 +24,8 @@ import {
 } from "../../components";
 import { formatCount, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
-import { useDetailFocus, useSelection } from "../detail/selection";
+import { useSelection } from "../detail/selection";
+import { useTableDetailFocus } from "../detail/tableFocus";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { selectedBlocker } from "./address";
@@ -41,12 +42,6 @@ function readSolveOrder(view: ViewRef, spec: FilterSpec) {
 }
 
 const stepKey = (row: SolveRow) => row.key;
-
-/** The key the table gave the row an element is in; `null` outside a row. */
-function rowKeyOf(element: EventTarget | null): string | null {
-  const row = element instanceof Element ? element.closest<HTMLElement>("[role='row']") : null;
-  return row?.dataset.key ?? null;
-}
 
 /** The solve order on screen, and the request it was read for. */
 interface Shown {
@@ -107,13 +102,7 @@ export function BlockersPage() {
   const hasSnapshot = start.open !== null && start.open.selected !== null;
   const location = useLocation();
   const { spec } = useFilters();
-  const { selection, select, close } = useSelection();
-  const focus = useDetailFocus();
-  const tableArea = useRef<HTMLDivElement>(null);
-  // The step that opened the detail panel, and whether the key that is down is Enter: a step
-  // chosen with Enter opens the panel with the focus on its heading, a step pressed keeps it.
-  const opener = useRef<string | null>(null);
-  const byEnter = useRef(false);
+  const { select } = useSelection();
   const titleId = useId();
   const [view, setView] = useState<ChartView>("chart");
   // The point the pointer or the keyboard is on, whose numbers the line over the curve gives. The
@@ -148,65 +137,9 @@ export function BlockersPage() {
     return index === -1 ? null : index;
   }, [rows, selectedKey]);
 
-  // When the panel closes, the focus goes back to the step that opened it, or to the table when
-  // that step is no longer there.
-  useEffect(() => {
-    focus.setGiveBack(() => {
-      const area = tableArea.current;
-      if (area === null) return;
-      const steps = [...area.querySelectorAll<HTMLElement>("[role='row'][data-key]")];
-      const step = steps.find((candidate) => candidate.dataset.key === opener.current);
-      (step ?? area.querySelector<HTMLElement>("[role='grid']"))?.focus();
-    });
-    return () => {
-      focus.setGiveBack(null);
-    };
-  }, [focus]);
-
-  // What the table is told by the keyboard, learned around it, as on Lines: Enter selects a step,
-  // and a step selected with it opens the panel with the focus on its heading; Enter on the step
-  // that is open already takes the focus there. Escape on the table closes the panel, and the
-  // focus goes back to the step that opened it. The listeners read what the page shows now.
-  const latest = useRef({ isOpen: selection !== null, selectedKey, close });
-  useEffect(() => {
-    latest.current = { isOpen: selection !== null, selectedKey, close };
-  });
-  const listenTo = useCallback(
-    (area: HTMLDivElement | null) => {
-      tableArea.current = area;
-      if (area === null) return;
-      const learn = (event: KeyboardEvent) => {
-        byEnter.current = event.key === "Enter";
-      };
-      const forget = () => {
-        byEnter.current = false;
-      };
-      const answer = (event: KeyboardEvent) => {
-        const now = latest.current;
-        if (event.key === "Escape" && now.isOpen && !event.defaultPrevented) {
-          event.preventDefault();
-          now.close();
-          focus.giveBack();
-          return;
-        }
-        const key = rowKeyOf(event.target);
-        if (event.key === "Enter" && key !== null && key === now.selectedKey) {
-          opener.current = key;
-          focus.focusHeading();
-        }
-      };
-      area.addEventListener("keydown", learn, { capture: true });
-      area.addEventListener("pointerdown", forget, { capture: true });
-      area.addEventListener("keydown", answer);
-      return () => {
-        area.removeEventListener("keydown", learn, { capture: true });
-        area.removeEventListener("pointerdown", forget, { capture: true });
-        area.removeEventListener("keydown", answer);
-        tableArea.current = null;
-      };
-    },
-    [focus],
-  );
+  // Enter, Escape, and the focus of the panel the steps open, as every such table has them. The
+  // curve opens it as well, and is given the focus back when it did.
+  const { listenTo, listenBeside, chosen } = useTableDetailFocus({ selectedKey });
 
   if (!hasSnapshot) {
     return (
@@ -246,9 +179,7 @@ export function BlockersPage() {
       ? null
       : t("blockers.freed", { freed: at.cumulative, total: linesOnHold, count: at.step });
   const selectStep = (key: string) => {
-    opener.current = key;
-    if (byEnter.current) focus.askForHeading();
-    byEnter.current = false;
+    chosen(key);
     select({ kind: "blocker", key });
   };
 
@@ -265,7 +196,12 @@ export function BlockersPage() {
           />
         ) : null}
         {hasContent && !isEmpty ? (
-          <section aria-labelledby={titleId} data-part="curve" className={styles.curve}>
+          <section
+            ref={listenBeside}
+            aria-labelledby={titleId}
+            data-part="curve"
+            className={styles.curve}
+          >
             <div className={styles.curveHead}>
               <SectionTitle level={2} id={titleId}>
                 {t("blockers.curve")}

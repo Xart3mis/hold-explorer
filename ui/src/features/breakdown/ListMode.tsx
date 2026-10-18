@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
@@ -20,7 +20,8 @@ import {
 } from "../../components";
 import { formatCount, formatDays, formatList, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
-import { useDetailFocus, useSelection } from "../detail/selection";
+import { useSelection } from "../detail/selection";
+import { useTableDetailFocus } from "../detail/tableFocus";
 import { DEFAULT_LINES_STATE, linesAddress } from "../lines/address";
 import { breakdownAddress, type BreakdownState } from "./address";
 import styles from "./BreakdownPage.module.css";
@@ -124,12 +125,6 @@ function LineFacts({ line }: { line: LineRow }) {
   );
 }
 
-/** The key of the row an element is in; `null` outside a row. */
-function rowKeyOf(element: EventTarget | null): string | null {
-  const row = element instanceof Element ? element.closest<HTMLElement>("[role='row']") : null;
-  return row?.dataset.key ?? null;
-}
-
 export interface ListModeProps {
   state: BreakdownState;
   spec: FilterSpec;
@@ -163,13 +158,10 @@ export function ListMode({
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
-  const { selection, select, close } = useSelection();
-  const focus = useDetailFocus();
-  const tableArea = useRef<HTMLDivElement>(null);
-  // The row that opened the detail panel, and whether the key that is down is Enter: a line
-  // chosen with Enter opens the panel with the focus on its heading, a line pressed keeps it.
-  const opener = useRef<string | null>(null);
-  const byEnter = useRef(false);
+  const { selection, select } = useSelection();
+  // Enter, Escape, and the focus of the panel this table opens, as every such table has them. A
+  // line is a child row, whose key in the table is not its line ID, so Enter on it is not told.
+  const { listenTo, chosen } = useTableDetailFocus({ selectedKey: null });
 
   const [readings, setReadings] = useState<ReadonlyMap<string, GroupReading>>(new Map());
   const onRead = useCallback((key: string, reading: GroupReading) => {
@@ -206,61 +198,6 @@ export function ListMode({
   const now = keptGroups(isNewResult ? state.open : [...visited.keys, ...unread], open);
   if (isNewResult || unread.length > 0) setVisited({ result: resultKey, keys: now });
   const reading = isCurrent ? now.filter((key) => shownKeys.has(key)) : [];
-
-  // When the panel closes, the focus goes back to the line that opened it, or to the table when
-  // that row is no longer there.
-  useEffect(() => {
-    focus.setGiveBack(() => {
-      const area = tableArea.current;
-      if (area === null) return;
-      const rows = [...area.querySelectorAll<HTMLElement>("[role='row'][data-key]")];
-      const row = rows.find((candidate) => candidate.dataset.key === opener.current);
-      (row ?? area.querySelector<HTMLElement>("[role='treegrid']"))?.focus();
-    });
-    return () => {
-      focus.setGiveBack(null);
-    };
-  }, [focus]);
-
-  // What the table is told by the keyboard, learned around it, as on Lines: Enter on a line opens
-  // the panel with the focus on its heading, and Escape on the table closes the panel.
-  const latest = useRef({ isOpen: selection !== null, close });
-  useEffect(() => {
-    latest.current = { isOpen: selection !== null, close };
-  });
-  const listenTo = useCallback(
-    (area: HTMLDivElement | null) => {
-      tableArea.current = area;
-      if (area === null) return;
-      const learn = (event: KeyboardEvent) => {
-        byEnter.current = event.key === "Enter";
-        // The row a line is chosen from: the same line may be under two groups.
-        if (event.key === "Enter") opener.current = rowKeyOf(event.target) ?? opener.current;
-      };
-      const forget = (event: PointerEvent) => {
-        byEnter.current = false;
-        opener.current = rowKeyOf(event.target) ?? opener.current;
-      };
-      const answer = (event: KeyboardEvent) => {
-        const now = latest.current;
-        if (event.key === "Escape" && now.isOpen && !event.defaultPrevented) {
-          event.preventDefault();
-          now.close();
-          focus.giveBack();
-        }
-      };
-      area.addEventListener("keydown", learn, { capture: true });
-      area.addEventListener("pointerdown", forget, { capture: true });
-      area.addEventListener("keydown", answer);
-      return () => {
-        area.removeEventListener("keydown", learn, { capture: true });
-        area.removeEventListener("pointerdown", forget, { capture: true });
-        area.removeEventListener("keydown", answer);
-        tableArea.current = null;
-      };
-    },
-    [focus],
-  );
 
   const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
   const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
@@ -393,8 +330,7 @@ export function ListMode({
         }}
         selectedChildKey={selection?.kind === "line" ? selection.lineId : null}
         onChildSelectionChange={(line) => {
-          if (byEnter.current) focus.askForHeading();
-          byEnter.current = false;
+          chosen(line.line_id);
           select({ kind: "line", lineId: line.line_id });
         }}
         height="fill"
