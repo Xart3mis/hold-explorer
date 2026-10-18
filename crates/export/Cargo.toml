@@ -9,15 +9,20 @@ rust-version = "1.92"
 [dependencies]
 chrono.workspace = true
 hx-core = { path = "../core" }
+rust_xlsxwriter.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
+calamine.workspace = true
 csv.workspace = true
 hx-synth = { path = "../synth" }
-serde_json.workspace = true
+# Already in the lock through calamine and rust_xlsxwriter, with the same features: the tests
+# read the package XML of a workbook.
+zip = { version = "8.6", default-features = false, features = ["deflate"] }
 
 [features]
 ts = ["dep:ts-rs", "hx-core/ts"]

@@ -19,7 +19,7 @@ use hx_core::query::{
 use hx_core::solve::{solve_view, SolvePlan, SolveRow};
 use serde::Deserialize;
 
-use crate::sheet::{Cell, Column, ColumnKind, Sheet};
+use crate::sheet::{Cell, Column, ColumnKind, ColumnRole, Sheet, SheetKind};
 use crate::text::ExportText;
 use crate::ExportError;
 
@@ -420,14 +420,23 @@ fn dim_name(dim: &Dim, text: &ExportText) -> Result<String, ExportError> {
     label(text, key)
 }
 
-/// One column a sheet may write: its id, its heading, its kind, the fields it needs, and how it
-/// writes an item.
+/// One column a sheet may write: its id, its heading, its kind and role, the fields it needs,
+/// and how it writes an item.
 struct Def<T> {
     id: &'static str,
     header: String,
     kind: ColumnKind,
+    role: ColumnRole,
     needs: &'static [Field],
     cell: Box<dyn Fn(&T) -> Cell>,
+}
+
+impl<T> Def<T> {
+    /// The column with `role`.
+    fn with_role(mut self, role: ColumnRole) -> Self {
+        self.role = role;
+        self
+    }
 }
 
 fn def<T>(
@@ -441,6 +450,7 @@ fn def<T>(
         id,
         header,
         kind,
+        role: ColumnRole::Plain,
         needs,
         cell: Box::new(cell),
     }
@@ -472,6 +482,7 @@ fn choose<T>(defs: Vec<Def<T>>, absent: &[Field], wanted: &[String]) -> Vec<Def<
 fn table<T>(name: String, defs: Vec<Def<T>>, items: &[T]) -> Sheet {
     Sheet {
         name,
+        kind: SheetKind::Table,
         rows: items
             .iter()
             .map(|item| defs.iter().map(|def| (def.cell)(item)).collect())
@@ -482,6 +493,7 @@ fn table<T>(name: String, defs: Vec<Def<T>>, items: &[T]) -> Sheet {
                 id: def.id.to_string(),
                 header: def.header,
                 kind: def.kind,
+                role: def.role,
             })
             .collect(),
     }
@@ -548,7 +560,8 @@ fn line_defs(text: &ExportText) -> Result<Vec<Def<LineRow>>, ExportError> {
             ColumnKind::Count,
             &[],
             |l: &LineRow| Cell::Count(l.holds),
-        ),
+        )
+        .with_role(ColumnRole::HoldCount),
         def(
             "disciplines",
             h("disciplines")?,
@@ -588,7 +601,8 @@ fn line_defs(text: &ExportText) -> Result<Vec<Def<LineRow>>, ExportError> {
             ColumnKind::Days,
             &[Field::Created],
             |l: &LineRow| l.oldest_age_days.map_or(Cell::Empty, Cell::Days),
-        ),
+        )
+        .with_role(ColumnRole::Age),
         def(
             "modelSize",
             h("modelSize")?,
@@ -736,13 +750,22 @@ fn hold_defs(text: &ExportText, status: Status) -> Result<Vec<Def<HoldItem>>, Ex
         Status::Released => "duration",
         Status::All => "days",
     };
-    defs.push(def(
-        "days",
-        h(days)?,
-        ColumnKind::Days,
-        &[Field::Created],
-        |(_, r): &HoldItem| r.days().map_or(Cell::Empty, Cell::Days),
-    ));
+    // Only the days of open holds are ages, colored as the age bands are.
+    let role = if status == Status::Open {
+        ColumnRole::Age
+    } else {
+        ColumnRole::Plain
+    };
+    defs.push(
+        def(
+            "days",
+            h(days)?,
+            ColumnKind::Days,
+            &[Field::Created],
+            |(_, r): &HoldItem| r.days().map_or(Cell::Empty, Cell::Days),
+        )
+        .with_role(role),
+    );
     defs.push(def(
         "sourceId",
         h("sourceId")?,
@@ -808,7 +831,8 @@ fn group_defs(dim: &Dim, text: &ExportText) -> Result<Vec<Def<Group>>, ExportErr
             ColumnKind::Count,
             &[],
             |g: &Group| Cell::Count(g.holds),
-        ),
+        )
+        .with_role(ColumnRole::HoldCount),
         def(
             "lines",
             label(text, "file.column.breakdown.lines")?,
@@ -860,7 +884,8 @@ fn step_defs(text: &ExportText) -> Result<Vec<Def<SolveRow>>, ExportError> {
             ColumnKind::Count,
             &[],
             |s: &SolveRow| Cell::Count(s.holds),
-        ),
+        )
+        .with_role(ColumnRole::HoldCount),
         def(
             "gain",
             h("gain")?,
@@ -946,11 +971,13 @@ fn cross_tab(
         id,
         header: header.to_string(),
         kind: ColumnKind::Count,
+        role: ColumnRole::Plain,
     };
     let mut columns = vec![Column {
         id: "label".into(),
         header: words.corner.clone(),
         kind: ColumnKind::Text,
+        role: ColumnRole::Plain,
     }];
     for (at, group) in matrix.cols.iter().enumerate() {
         columns.push(count(format!("col{at}"), &group.label));
@@ -993,6 +1020,7 @@ fn cross_tab(
     );
     Sheet {
         name,
+        kind: SheetKind::CrossTab,
         columns,
         rows,
     }
@@ -1071,16 +1099,19 @@ fn summary_sheet(
     };
     Ok(Sheet {
         name: label(text, "file.sheet.summary")?,
+        kind: SheetKind::Table,
         columns: vec![
             Column {
                 id: "figure".into(),
                 header: label(text, "file.column.summary.figure")?,
                 kind: ColumnKind::Text,
+                role: ColumnRole::Plain,
             },
             Column {
                 id: "value".into(),
                 header: label(text, "file.column.summary.value")?,
                 kind: ColumnKind::Count,
+                role: ColumnRole::Plain,
             },
         ],
         rows: vec![

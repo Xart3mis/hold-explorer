@@ -10,11 +10,14 @@ use hx_core::filter::{default_age_bands, Dim, FilterSpec};
 use hx_core::load::load_file;
 use hx_core::query::{
     facet_counts, group_by, holds, line_page, lines, matrix_top, summary, value_page, HoldQuery,
-    LineQuery,
+    HoldSort, LineQuery,
 };
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, solve_view};
-use hx_export::{scope_line_ids, ExportRequest, ExportText, RowScope, Screen};
+use hx_export::{
+    scope_line_ids, screen_sheets, workbook, workbook_sheets, About, ExportRequest, ExportText,
+    RowScope, Screen, FILE_TEXT_KEYS,
+};
 use hx_store::{ImportOptions, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
 
@@ -199,4 +202,92 @@ fn the_lines_of_every_remark_group_of_ten_thousand_rows_take_under_100_ms() {
         "the lines of {groups} remark groups took {took:?}"
     );
     eprintln!("perf: the lines of {groups} remark groups {took:?}");
+}
+
+/// Every label a file asks for, each written as its own key.
+fn file_text() -> ExportText {
+    ExportText {
+        labels: FILE_TEXT_KEYS
+            .iter()
+            .map(|key| (key.to_string(), key.to_string()))
+            .collect(),
+        months: Vec::new(),
+    }
+}
+
+#[test]
+#[ignore = "run in a release build"]
+fn an_excel_file_of_ten_thousand_holds_takes_under_two_seconds_and_the_full_workbook_four() {
+    let cfg = SynthConfig::new(4, 3600, 10_000);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    let loaded = load_file(&path).unwrap();
+    let ds = Dataset::build(
+        loaded.parsed.holds,
+        RuleSet::builtin(),
+        loaded.snapshot.unwrap().at,
+    );
+    let spec = FilterSpec {
+        status: Status::All,
+        ..Default::default()
+    };
+    let text = file_text();
+    let about = About {
+        workspace: "Perf".into(),
+        snapshot: ds.snapshot.date(),
+        file_name: "holds.xlsx".into(),
+        filters: vec!["Status: All".into()],
+        app_version: "0.1.0".into(),
+        made_at: ds.snapshot,
+        rows: ds.rows.len(),
+    };
+    let request = ExportRequest {
+        screen: Screen::Holds {
+            sort: HoldSort::FileOrder,
+            reverse: false,
+        },
+        columns: Vec::new(),
+        rows: RowScope::All,
+        spec: spec.clone(),
+        text: text.clone(),
+        filters: about.filters.clone(),
+    };
+
+    let started = Instant::now();
+    let sheets = screen_sheets(&ds, None, &ds.absent_fields(), &request).unwrap();
+    let bytes = workbook(&sheets, &about, &text).unwrap();
+    let view = started.elapsed();
+    let view_kb = bytes.len() / 1024;
+    assert_eq!(sheets[0].rows.len(), 10_000);
+    assert!(!bytes.is_empty());
+    assert!(
+        view < Duration::from_secs(2),
+        "the Excel file of 10,000 holds took {view:?}"
+    );
+
+    let started = Instant::now();
+    let plan = spec.open_only().map(|open| solve_plan(&ds, &open, None));
+    let sheets = workbook_sheets(
+        &ds,
+        plan.as_ref(),
+        &ds.absent_fields(),
+        &[],
+        &spec,
+        &about.filters,
+        &text,
+    )
+    .unwrap();
+    let bytes = workbook(&sheets, &about, &text).unwrap();
+    let full = started.elapsed();
+    assert!(!bytes.is_empty());
+    assert!(
+        full < Duration::from_secs(4),
+        "the full workbook of 10,000 holds took {full:?}"
+    );
+    eprintln!(
+        "perf: Excel of 10,000 holds {view:?} ({view_kb} KB), full workbook {full:?} ({} KB, {} sheets)",
+        bytes.len() / 1024,
+        sheets.len()
+    );
 }

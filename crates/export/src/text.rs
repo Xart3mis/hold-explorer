@@ -11,6 +11,16 @@ use crate::ExportError;
 /// Every key this crate asks [`ExportText::get`] for, sorted. `ui/src/api/file-text-keys.json`
 /// lists the same keys; a test on each side keeps the file, this list, and the catalog equal.
 pub const FILE_TEXT_KEYS: &[&str] = &[
+    "file.about.appVersion",
+    "file.about.file",
+    "file.about.filters",
+    "file.about.madeAt",
+    "file.about.noFilters",
+    "file.about.rows",
+    "file.about.snapshot",
+    "file.about.workspace",
+    "file.column.about.item",
+    "file.column.about.value",
     "file.column.blockers.blocker",
     "file.column.blockers.cumulative",
     "file.column.blockers.discipline",
@@ -62,6 +72,7 @@ pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.matrix.other",
     "file.matrix.total",
     KEY_NO,
+    "file.sheet.about",
     "file.sheet.disciplines",
     "file.sheet.holdTypes",
     "file.sheet.holds",
@@ -87,6 +98,7 @@ pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.summary.released.median",
     "file.summary.singleHoldLines",
     "file.summary.stale",
+    "file.title",
     KEY_YES,
 ];
 
@@ -261,7 +273,7 @@ pub fn line_ids(ids: &[String]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sheet::{Column, ColumnKind};
+    use crate::sheet::{Column, ColumnKind, ColumnRole, SheetKind};
 
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec",
@@ -287,6 +299,7 @@ mod tests {
             id: id.into(),
             header: header.into(),
             kind,
+            role: ColumnRole::Plain,
         }
     }
 
@@ -295,6 +308,7 @@ mod tests {
     fn sheet() -> Sheet {
         Sheet {
             name: "Lines".into(),
+            kind: SheetKind::Table,
             columns: vec![
                 column("line", "Line ID", ColumnKind::Identifier),
                 column("name", "Name", ColumnKind::Text),
@@ -383,6 +397,7 @@ mod tests {
     fn guarded_sheet(values: &[&str]) -> Sheet {
         Sheet {
             name: "x".into(),
+            kind: SheetKind::Table,
             columns: vec![
                 column("a", "A", ColumnKind::Text),
                 column("d", "Days", ColumnKind::Days),
@@ -428,6 +443,7 @@ mod tests {
     fn numbers_sizes_and_dates_are_never_prefixed() {
         let sheet = Sheet {
             name: "x".into(),
+            kind: SheetKind::Table,
             columns: vec![
                 column("d", "Days", ColumnKind::Days),
                 column("s", "Size", ColumnKind::Size),
@@ -488,6 +504,7 @@ mod tests {
         let one = |value: &str| {
             let sheet = Sheet {
                 name: "x".into(),
+                kind: SheetKind::Table,
                 columns: vec![column("a", "A", ColumnKind::Text)],
                 rows: vec![vec![Cell::Text(value.into())]],
             };
@@ -552,6 +569,7 @@ mod tests {
     fn tab_separated_turns_tabs_and_line_breaks_inside_a_value_into_spaces() {
         let sheet = Sheet {
             name: "x".into(),
+            kind: SheetKind::Table,
             columns: vec![column("a", "A\tB", ColumnKind::Text)],
             rows: vec![vec![Cell::Text("one\ttwo\r\nthree\nfour\rfive".into())]],
         };

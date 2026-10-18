@@ -1,4 +1,14 @@
 [
+  "file.about.appVersion",
+  "file.about.file",
+  "file.about.filters",
+  "file.about.madeAt",
+  "file.about.noFilters",
+  "file.about.rows",
+  "file.about.snapshot",
+  "file.about.workspace",
+  "file.column.about.item",
+  "file.column.about.value",
   "file.column.blockers.blocker",
   "file.column.blockers.cumulative",
   "file.column.blockers.discipline",
@@ -50,6 +60,7 @@
   "file.matrix.other",
   "file.matrix.total",
   "file.no",
+  "file.sheet.about",
   "file.sheet.disciplines",
   "file.sheet.holdTypes",
   "file.sheet.holds",
@@ -75,5 +86,6 @@
   "file.summary.released.median",
   "file.summary.singleHoldLines",
   "file.summary.stale",
+  "file.title",
   "file.yes"
 ]

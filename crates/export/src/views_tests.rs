@@ -1132,6 +1132,7 @@ fn named(names: &[&str]) -> Vec<String> {
         .iter()
         .map(|name| Sheet {
             name: name.to_string(),
+            kind: crate::sheet::SheetKind::Table,
             columns: Vec::new(),
             rows: Vec::new(),
         })

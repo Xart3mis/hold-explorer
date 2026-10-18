@@ -42,6 +42,20 @@ pub enum ColumnKind {
     LongText,
 }
 
+/// What a column means to a reader, beyond its kind; it decides the colors of a workbook and
+/// nothing in text.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ColumnRole {
+    /// Nothing more than its kind.
+    #[default]
+    Plain,
+    /// The age in days of open holds: a hold's age, or a line's oldest. A workbook colors it
+    /// with the age-band ramp.
+    Age,
+    /// A number of holds. A workbook draws it as a neutral data bar.
+    HoldCount,
+}
+
 /// One column of a sheet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Column {
@@ -51,6 +65,20 @@ pub struct Column {
     pub header: String,
     /// What the column holds.
     pub kind: ColumnKind,
+    /// What the column means to a reader.
+    pub role: ColumnRole,
+}
+
+/// The shape of a sheet.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SheetKind {
+    /// A table: a row per item.
+    #[default]
+    Table,
+    /// A cross-tab: the first column names the rows, every other column but the last is a
+    /// column value, the last column is the row's total, and the last row is the column totals.
+    /// A workbook colors the cells between them with the sequential blue ramp.
+    CrossTab,
 }
 
 /// One table of a file: a sheet of a workbook, a CSV file, or the text on the clipboard.
@@ -58,6 +86,8 @@ pub struct Column {
 pub struct Sheet {
     /// The name of the sheet, from the interface's catalog.
     pub name: String,
+    /// The shape of the sheet.
+    pub kind: SheetKind,
     /// The columns, in order.
     pub columns: Vec<Column>,
     /// The rows, each with one cell per column.

@@ -1818,15 +1818,18 @@ dependencies = [
 name = "hx-export"
 version = "0.1.0"
 dependencies = [
+ "calamine",
  "chrono",
  "csv",
  "hx-core",
  "hx-synth",
+ "rust_xlsxwriter",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "ts-rs",
+ "zip",
 ]
 
 [[package]]
