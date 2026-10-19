@@ -21,7 +21,7 @@ use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use data::{FilterOptions, GroupDetail, HoldsView};
-pub use error::CommandError;
+pub use error::{CommandError, ErrorKind};
 pub use export::{
     check_extension, fonts, save, Content, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
     SessionClipboard,
@@ -226,6 +226,40 @@ impl AppState {
         }
     }
 
+    /// Puts the state right after a command panicked while it held it: drops the file open for
+    /// import and every cache, and reopens the open workspace from its file, where a write that
+    /// was cut short rolled back with its transaction. The selection stays when the reopened
+    /// workspace still has that snapshot; otherwise the newest is selected. The files written
+    /// this session stay openable. When the workspace cannot be reopened, none is open and the
+    /// error says why.
+    pub fn recover(&mut self) -> Result<(), CommandError> {
+        self.draft = None;
+        self.cache = None;
+        let Some(path) = self.open.take().map(|open| open.path().to_path_buf()) else {
+            self.open_id = None;
+            self.selected = None;
+            return Ok(());
+        };
+        let reopened = Workspace::open(&path)
+            .map_err(CommandError::from)
+            .and_then(|workspace| describe(&workspace).map(|open| (workspace, open)));
+        match reopened {
+            Ok((workspace, mut open)) => {
+                let kept = self
+                    .selected
+                    .filter(|id| open.snapshots.iter().any(|snapshot| snapshot.id == *id));
+                open.selected = kept.or(open.selected);
+                self.install(workspace, &open);
+                Ok(())
+            }
+            Err(error) => {
+                self.open_id = None;
+                self.selected = None;
+                Err(error)
+            }
+        }
+    }
+
     /// Sets and saves the theme.
     pub fn set_theme(&mut self, theme: Theme) -> Result<Settings, CommandError> {
         let next = Settings {
@@ -293,7 +327,7 @@ impl AppState {
                 return Err(match list.unreadable.into_iter().find(|u| named(&u.path)) {
                     Some(unreadable) => unreadable.error.into(),
                     None => CommandError::new(
-                        "WorkspaceNotFound",
+                        ErrorKind::WorkspaceNotFound,
                         "That workspace is not in the workspace folder. It may have been moved or deleted; choose a workspace from the list, or create a new one.",
                     ),
                 });
@@ -318,7 +352,7 @@ impl AppState {
             .err()
             .map(|error| {
                 CommandError::new(
-                    "Settings",
+                    ErrorKind::Settings,
                     format!(
                         "The workspace is open, but Hold Explorer could not remember it for the next start. {}",
                         error.message

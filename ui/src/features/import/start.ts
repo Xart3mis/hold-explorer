@@ -1,8 +1,7 @@
 // The one way an import starts. The Import button, Ctrl+I, "Open a file" on the welcome page, and
 // a file dropped anywhere on the window all call `startImport`.
-import { asCommandError } from "../../api/error";
+import { asCommandError, isCommandError, type AppError } from "../../api/error";
 import { chooseImportFile } from "../../api/window";
-import type { CommandError } from "../../bindings/CommandError";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 
 /** The page that chooses the sheet of a workbook to read. */
@@ -24,7 +23,7 @@ export interface ImportRequest {
   /** How many more files were dropped together with this one. They are not imported. */
   others: number;
   /** Why no file could be chosen. */
-  error?: CommandError;
+  error?: AppError;
 }
 
 /** What the import page finds at its address: the request, and where the import was started. */
@@ -112,7 +111,7 @@ export function readImportLocation(value: unknown, home: string): ImportLocation
   };
   if (typeof path === "string" && path !== "") request.path = path;
   if (reopen === true) request.reopen = true;
-  if (isRecord(error) && typeof error.kind === "string" && typeof error.message === "string") {
+  if (isCommandError(error)) {
     request.error = { kind: error.kind, message: error.message };
   }
   return request;

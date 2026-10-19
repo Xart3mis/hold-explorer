@@ -7,7 +7,7 @@ use hx_store::{SnapshotInfo, UnreadableWorkspace, WorkspaceInfo, WorkspaceList};
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::settings::Settings;
 
 /// A workspace as the interface shows it.
@@ -36,8 +36,8 @@ pub struct UnreadableView {
     pub file_name: String,
     /// The file's full path, as text.
     pub path: String,
-    /// The store error's variant name.
-    pub kind: String,
+    /// The kind of the store error.
+    pub kind: ErrorKind,
     /// The store error's text.
     pub message: String,
 }

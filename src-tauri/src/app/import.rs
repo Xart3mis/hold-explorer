@@ -16,7 +16,7 @@ use hx_store::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::workspaces::{list_view, WorkspaceOpen, WorkspaceView};
 use super::{describe, AppState};
 
@@ -184,7 +184,7 @@ pub struct ImportDone {
 
 fn no_draft() -> CommandError {
     CommandError::new(
-        "NoDraft",
+        ErrorKind::NoDraft,
         "No file is open for import. Choose a file to import, and try again.",
     )
 }
@@ -235,7 +235,7 @@ fn replace_not_offered(snapshot_id: i64, target: &TargetChoice) -> CommandError 
         TargetChoice::New { .. } => "a new workspace has no snapshot to replace",
     };
     CommandError::new(
-        "ReplaceNotOffered",
+        ErrorKind::ReplaceNotOffered,
         format!(
             "The import asked to replace snapshot {snapshot_id}, but the review did not offer that snapshot: {why}. Nothing was replaced and nothing was imported. Review the import again, then import."
         ),
@@ -272,7 +272,7 @@ fn check_year(at: NaiveDateTime) -> Result<(), CommandError> {
         return Ok(());
     }
     Err(CommandError::new(
-        "SnapshotDateOutOfRange",
+        ErrorKind::SnapshotDateOutOfRange,
         format!(
             "The snapshot date {at} is outside the years {MIN_SNAPSHOT_YEAR} to {MAX_SNAPSHOT_YEAR}. Dates outside that range are almost always a typing mistake. Enter a date between the years {MIN_SNAPSHOT_YEAR} and {MAX_SNAPSHOT_YEAR}, for example 2026-10-07."
         ),

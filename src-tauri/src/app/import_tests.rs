@@ -13,6 +13,7 @@ use hx_synth::{generate, write_workbook, SynthConfig};
 use rust_xlsxwriter::Workbook;
 use tempfile::TempDir;
 
+use super::error::ErrorKind;
 use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::AppState;
 
@@ -142,7 +143,7 @@ fn a_file_with_other_headers_lists_the_missing_fields_and_cannot_be_reviewed_as_
         [Field::LineId, Field::Remark, Field::HoldType]
     );
     let error = state.import_review(None).unwrap_err();
-    assert_eq!(error.kind, "MissingColumns");
+    assert_eq!(error.kind, ErrorKind::MissingColumns);
     assert!(error.message.contains("Missing required columns"));
 }
 
@@ -223,7 +224,7 @@ fn choosing_a_sheet_switches_it_and_an_unknown_sheet_names_the_sheets() {
     assert_eq!(state.import_review(None).unwrap().row_count, 2);
 
     let error = state.import_choose_sheet("Gamma").unwrap_err();
-    assert_eq!(error.kind, "SheetNotFound");
+    assert_eq!(error.kind, ErrorKind::SheetNotFound);
     assert!(error.message.contains("Alpha, Beta"), "{}", error.message);
     // The draft is as it was.
     assert_eq!(state.import_review(None).unwrap().row_count, 2);
@@ -466,7 +467,10 @@ fn a_commit_into_a_new_workspace_creates_and_opens_it_with_everything_stored() {
     assert_eq!(stored.snapshots().unwrap().len(), 1);
 
     // The draft is gone.
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
 }
 
 #[test]
@@ -619,7 +623,7 @@ fn the_review_carries_the_range_of_years_the_engine_accepts() {
             Ok(_) => assert!(accepted, "{taken} was accepted"),
             Err(error) => {
                 assert!(!accepted, "{taken} was refused: {}", error.message);
-                assert_eq!(error.kind, "SnapshotDateOutOfRange");
+                assert_eq!(error.kind, ErrorKind::SnapshotDateOutOfRange);
             }
         }
     }
@@ -639,7 +643,7 @@ fn years_outside_2000_to_2100_are_refused_before_anything_is_written() {
                     panic!("no phase may be reported, got {phase:?}")
                 })
                 .unwrap_err();
-            assert_eq!(error.kind, "SnapshotDateOutOfRange");
+            assert_eq!(error.kind, ErrorKind::SnapshotDateOutOfRange);
             assert!(error.message.contains("2000"), "{}", error.message);
             assert!(error.message.contains("2100"), "{}", error.message);
             assert!(
@@ -676,7 +680,7 @@ fn a_failed_import_into_a_new_workspace_removes_it_again_and_keeps_the_open_one(
             &store_fails,
         )
         .unwrap_err();
-    assert_eq!(error.kind, "SnapshotNotFound");
+    assert_eq!(error.kind, ErrorKind::SnapshotNotFound);
     assert_eq!(fx.workspace_files(), files);
     assert_eq!(state.open_id(), id);
     assert!(state.import_review(None).is_ok());
@@ -696,7 +700,7 @@ fn a_file_imported_before_is_refused_with_already_imported() {
     let error = state
         .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
         .unwrap_err();
-    assert_eq!(error.kind, "AlreadyImported");
+    assert_eq!(error.kind, ErrorKind::AlreadyImported);
     assert_eq!(state.open_id(), id);
     assert_eq!(state.rename_workspace("A").unwrap().snapshot_count, 1);
 }
@@ -723,7 +727,7 @@ fn a_failed_import_into_a_workspace_that_is_not_open_keeps_the_open_one() {
             &no_progress,
         )
         .unwrap_err();
-    assert_eq!(error.kind, "AlreadyImported");
+    assert_eq!(error.kind, ErrorKind::AlreadyImported);
     assert_eq!(state.open_id(), open);
     // The draft is kept so the user can pick another target.
     assert!(state.import_review(None).is_ok());
@@ -808,7 +812,10 @@ fn every_method_without_a_draft_gives_no_draft() {
             .unwrap_err()
             .kind,
     ];
-    assert!(kinds.iter().all(|kind| kind == "NoDraft"), "{kinds:?}");
+    assert!(
+        kinds.iter().all(|kind| *kind == ErrorKind::NoDraft),
+        "{kinds:?}"
+    );
     state.import_cancel(None);
     assert_eq!(fx.workspace_files(), 0);
 }
@@ -820,15 +827,24 @@ fn cancel_clears_the_draft_and_opening_a_workspace_does_too() {
     let file = fx.synth("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     state.import_cancel(None);
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
     state.import_cancel(None);
 
     state.import_open(&file).unwrap();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
     state.import_open(&file).unwrap();
     state.open_workspace(&id).unwrap();
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
 }
 
 #[test]
@@ -841,7 +857,10 @@ fn a_cancel_for_the_file_that_is_open_drops_its_draft() {
         .file
         .content_hash;
     state.import_cancel(Some(&hash));
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
 }
 
 #[test]
@@ -870,7 +889,10 @@ fn a_cancel_without_a_draft_changes_nothing() {
     let mut state = fx.state();
     state.import_cancel(Some("0123456789abcdef"));
     state.import_cancel(None);
-    assert_eq!(state.import_review(None).unwrap_err().kind, "NoDraft");
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
     assert_eq!(fx.workspace_files(), 0);
 }
 
@@ -880,7 +902,7 @@ fn a_second_open_replaces_the_draft_and_a_file_that_fails_to_open_keeps_it() {
     let mut state = fx.state();
     state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
     let error = state.import_open(&fx.input("missing.xlsx")).unwrap_err();
-    assert_eq!(error.kind, "NotFound");
+    assert_eq!(error.kind, ErrorKind::NotFound);
     assert_eq!(state.import_review(None).unwrap().file_name, "one.xlsx");
     state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
     assert_eq!(state.import_review(None).unwrap().file_name, "two.xlsx");
@@ -898,7 +920,7 @@ fn a_failed_review_leaves_no_earlier_review_and_commit_reviews_again() {
     let error = state
         .import_commit(commit(new_target("A"), "2026-10-07 00:00:00"), &no_progress)
         .unwrap_err();
-    assert_eq!(error.kind, "MissingColumns");
+    assert_eq!(error.kind, ErrorKind::MissingColumns);
     assert_eq!(
         ImportError::MissingColumns {
             missing: vec![Field::LineId, Field::Remark, Field::HoldType]
@@ -949,7 +971,7 @@ fn a_workspace_that_cannot_be_removed_is_named_in_the_import_error() {
             &store_fails,
         )
         .unwrap_err();
-    assert_eq!(error.kind, "SnapshotNotFound");
+    assert_eq!(error.kind, ErrorKind::SnapshotNotFound);
     assert!(error.message.contains("\"Doomed\""), "{}", error.message);
     assert!(
         error.message.contains("could not be removed"),
@@ -1019,7 +1041,7 @@ fn a_replace_of_a_snapshot_the_review_did_not_offer_is_refused_and_nothing_is_de
                 &|phase| phases.borrow_mut().push(phase),
             )
             .unwrap_err();
-        assert_eq!(error.kind, "ReplaceNotOffered");
+        assert_eq!(error.kind, ErrorKind::ReplaceNotOffered);
         assert!(
             error.message.contains(&format!("snapshot {}", in_a.id)),
             "{}",
@@ -1058,7 +1080,7 @@ fn a_replace_of_an_id_that_does_not_exist_is_refused_before_any_write() {
             &|phase| phases.borrow_mut().push(phase),
         )
         .unwrap_err();
-    assert_eq!(error.kind, "ReplaceNotOffered");
+    assert_eq!(error.kind, ErrorKind::ReplaceNotOffered);
     assert!(error.message.contains("snapshot 999"), "{}", error.message);
     assert!(!phases.borrow().contains(&ImportPhase::Storing));
     let workspace = stored(&fx, &id);
@@ -1089,7 +1111,7 @@ fn a_replace_with_a_new_workspace_is_refused_and_no_workspace_file_is_created() 
             &|| Ok(()),
         )
         .unwrap_err();
-    assert_eq!(error.kind, "ReplaceNotOffered");
+    assert_eq!(error.kind, ErrorKind::ReplaceNotOffered);
     assert!(error.message.contains("new workspace"), "{}", error.message);
     assert_eq!(fx.workspace_files(), files);
     assert_eq!(state.open_id(), id);

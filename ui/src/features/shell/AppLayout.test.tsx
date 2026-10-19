@@ -371,7 +371,7 @@ describe("what a page reports to the shell", () => {
   const failed = {
     title: "The import of Holds_2026-10-14.xlsx did not complete",
     error: {
-      kind: "Io",
+      kind: "Io" as const,
       message:
         "The workspace file could not be written (the disk is full). Free some space, then import again.",
     },

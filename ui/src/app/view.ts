@@ -115,10 +115,10 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/commands";
-import { isCommandError } from "../api/error";
+import { isCommandError, type AppError, type InterfaceKind } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
-import type { CommandError } from "../bindings/CommandError";
+import type { ErrorKind } from "../bindings/ErrorKind";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
@@ -126,13 +126,13 @@ import { listed } from "./actions/start";
 import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
-export const VIEW_CHANGED = "ViewChanged";
+export const VIEW_CHANGED: ErrorKind = "ViewChanged";
 
 /**
  * The kind of the error a screen is given when a view was refused again after the Rust side had
  * said that it holds that view. Its message is from the text catalog.
  */
-export const VIEW_UNSETTLED = "ViewUnsettled";
+export const VIEW_UNSETTLED: InterfaceKind = "ViewUnsettled";
 
 /**
  * The actions that change the open workspace or its selection share one scope: they run one after
@@ -195,7 +195,7 @@ function isViewChanged(error: unknown): boolean {
 }
 
 /** What a screen is told when the view stays refused: what happened, why, and what to do. */
-function unsettled(): Error & CommandError {
+function unsettled(): Error & AppError {
   return Object.assign(new Error(t("errors.viewUnsettled")), { kind: VIEW_UNSETTLED });
 }
 

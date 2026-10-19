@@ -14,7 +14,7 @@ use hx_export::{
     write_file, ExportError, ExportRequest, ExportText, RowScope, Screen, FILE_TEXT_KEYS,
 };
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::export::{
     copy, fonts, render, save, Clipboard, Content, CopyFormat, ExportSaved, SaveFormat,
     SendClipboard, SessionClipboard,
@@ -356,11 +356,11 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
     let kind = |result: Result<Content, CommandError>| result.err().map(|error| error.kind);
     assert_eq!(
         kind(state.export_content(&lines(), &SaveFormat::Excel, &none)),
-        Some("NoWorkspace".into())
+        Some(ErrorKind::NoWorkspace)
     );
     assert_eq!(
         kind(state.copy_content(&lines(), &CopyFormat::Table, &none)),
-        Some("NoWorkspace".into())
+        Some(ErrorKind::NoWorkspace)
     );
 
     let mut state = small(&fx);
@@ -377,7 +377,7 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
         for (format, _) in formats() {
             assert_eq!(
                 kind(state.export_content(&lines(), &format, &stale)),
-                Some("ViewChanged".into()),
+                Some(ErrorKind::ViewChanged),
                 "{format:?} {stale:?}"
             );
             assert_eq!(
@@ -395,7 +395,7 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
         ] {
             assert_eq!(
                 kind(state.copy_content(&lines(), &format, &stale)),
-                Some("ViewChanged".into()),
+                Some(ErrorKind::ViewChanged),
                 "{format:?} {stale:?}"
             );
             assert_eq!(
@@ -418,7 +418,7 @@ fn a_file_another_program_holds_or_that_is_read_only_fails_with_file_in_use() {
     fs::set_permissions(&path, permissions).unwrap();
 
     let error = save_lines(&mut state, &SaveFormat::Csv, &path).unwrap_err();
-    assert_eq!(error.kind, "FileInUse");
+    assert_eq!(error.kind, ErrorKind::FileInUse);
     assert_eq!(
         error.message,
         ExportError::FileInUse {
@@ -435,43 +435,64 @@ fn a_missing_folder_fails_with_folder() {
     let mut state = small(&fx);
     let path = fx.dir.path().join("no such folder").join("lines.csv");
     let error = save_lines(&mut state, &SaveFormat::Csv, &path).unwrap_err();
-    assert_eq!(error.kind, "Folder");
+    assert_eq!(error.kind, ErrorKind::Folder);
 }
 
 #[test]
 fn every_export_error_keeps_its_variant_name_and_text() {
     let errors = [
-        (ExportError::FileInUse { file: "a".into() }, "FileInUse"),
+        (
+            ExportError::FileInUse { file: "a".into() },
+            ErrorKind::FileInUse,
+        ),
         (
             ExportError::Folder {
                 folder: "f".into(),
                 reason: "r".into(),
             },
-            "Folder",
+            ErrorKind::Folder,
         ),
         (
             ExportError::Write {
                 file: "a".into(),
                 reason: "r".into(),
             },
-            "Write",
+            ErrorKind::Write,
         ),
         (
             ExportError::TooManyRows {
                 sheet: "s".into(),
                 rows: 2_000_000,
             },
-            "TooManyRows",
+            ErrorKind::TooManyRows,
         ),
-        (ExportError::Workbook { reason: "r".into() }, "Workbook"),
-        (ExportError::Image { reason: "r".into() }, "Image"),
-        (ExportError::Report { reason: "r".into() }, "Report"),
-        (ExportError::Text { key: "k".into() }, "Text"),
+        (
+            ExportError::Workbook { reason: "r".into() },
+            ErrorKind::Workbook,
+        ),
+        (ExportError::Image { reason: "r".into() }, ErrorKind::Image),
+        (
+            ExportError::Report { reason: "r".into() },
+            ErrorKind::Report,
+        ),
+        (ExportError::Text { key: "k".into() }, ErrorKind::Text),
     ];
     for (error, kind) in errors {
+        // A new variant stops this from compiling: give it an example in the list above.
+        match &error {
+            ExportError::FileInUse { .. }
+            | ExportError::Folder { .. }
+            | ExportError::Write { .. }
+            | ExportError::TooManyRows { .. }
+            | ExportError::Workbook { .. }
+            | ExportError::Image { .. }
+            | ExportError::Report { .. }
+            | ExportError::Text { .. } => {}
+        }
         let text = error.to_string();
         let mapped = CommandError::from(error);
         assert_eq!(mapped.kind, kind);
+        assert_ne!(mapped.kind, ErrorKind::Internal);
         assert_eq!(mapped.message, text);
     }
 }
@@ -487,7 +508,7 @@ fn a_request_without_its_labels_fails_with_text() {
         .export_content(&asked, &SaveFormat::Excel, &view)
         .err()
         .unwrap();
-    assert_eq!(error.kind, "Text");
+    assert_eq!(error.kind, ErrorKind::Text);
 }
 
 #[test]
@@ -497,7 +518,7 @@ fn only_a_path_written_in_this_session_is_opened() {
     let path = fx.dir.path().join("lines.csv");
     assert!(!state.has_written(&path));
     let error = state.openable(&path).unwrap_err();
-    assert_eq!(error.kind, "NotWritten");
+    assert_eq!(error.kind, ErrorKind::NotWritten);
     assert_eq!(
         error.message,
         "Hold Explorer opens only files it saved in this session. Open the file from its folder."
@@ -515,7 +536,7 @@ fn only_a_path_written_in_this_session_is_opened() {
             .openable(&fx.dir.path().join("other.csv"))
             .unwrap_err()
             .kind,
-        "NotWritten"
+        ErrorKind::NotWritten
     );
     state.start();
     assert!(state.has_written(&path));
@@ -532,7 +553,7 @@ struct FakeClipboard {
 impl Clipboard for FakeClipboard {
     fn text(&mut self, text: &str) -> Result<(), CommandError> {
         if self.refuse {
-            return Err(CommandError::new("Clipboard", "refused"));
+            return Err(CommandError::new(ErrorKind::Clipboard, "refused"));
         }
         self.text = Some(text.to_string());
         Ok(())
@@ -540,7 +561,7 @@ impl Clipboard for FakeClipboard {
 
     fn image(&mut self, width: u32, height: u32, rgba: &[u8]) -> Result<(), CommandError> {
         if self.refuse {
-            return Err(CommandError::new("Clipboard", "refused"));
+            return Err(CommandError::new(ErrorKind::Clipboard, "refused"));
         }
         self.image = Some((width, height, rgba.len()));
         Ok(())
@@ -609,7 +630,7 @@ fn a_clipboard_that_refuses_fails_the_copy_with_its_error() {
         ..FakeClipboard::default()
     };
     let error = copy(content, &mut clipboard, &request.text, fonts()).unwrap_err();
-    assert_eq!(error.kind, "Clipboard");
+    assert_eq!(error.kind, ErrorKind::Clipboard);
 }
 
 #[test]
@@ -724,7 +745,7 @@ fn a_name_that_does_not_end_in_the_extension_of_its_format_is_refused() {
         ] {
             let path = out.join(&wrong);
             let error = save_lines(&mut state, &format, &path).unwrap_err();
-            assert_eq!(error.kind, "Extension", "{wrong}");
+            assert_eq!(error.kind, ErrorKind::Extension, "{wrong}");
             assert!(
                 error.message.contains(&format!("ends in .{extension}")),
                 "{}",
@@ -748,7 +769,7 @@ struct Counted {
 impl Clipboard for Counted {
     fn text(&mut self, _: &str) -> Result<(), CommandError> {
         if self.fail.load(Ordering::SeqCst) {
-            return Err(CommandError::new("Clipboard", "refused"));
+            return Err(CommandError::new(ErrorKind::Clipboard, "refused"));
         }
         self.texts.fetch_add(1, Ordering::SeqCst);
         Ok(())
@@ -768,7 +789,7 @@ fn the_session_keeps_one_clipboard_and_makes_it_again_after_a_failure() {
     let refuse_to_make = Arc::new(AtomicBool::new(false));
     let make = || -> Result<Box<dyn SendClipboard>, CommandError> {
         if refuse_to_make.load(Ordering::SeqCst) {
-            return Err(CommandError::new("Clipboard", "no clipboard"));
+            return Err(CommandError::new(ErrorKind::Clipboard, "no clipboard"));
         }
         made.fetch_add(1, Ordering::SeqCst);
         Ok(Box::new(Counted {
@@ -788,7 +809,7 @@ fn the_session_keeps_one_clipboard_and_makes_it_again_after_a_failure() {
     assert_eq!(texts.load(Ordering::SeqCst), 2);
 
     fail.store(true, Ordering::SeqCst);
-    assert_eq!(copy_once().unwrap_err().kind, "Clipboard");
+    assert_eq!(copy_once().unwrap_err().kind, ErrorKind::Clipboard);
     fail.store(false, Ordering::SeqCst);
     copy_once().unwrap();
     assert_eq!(
@@ -802,7 +823,7 @@ fn the_session_keeps_one_clipboard_and_makes_it_again_after_a_failure() {
     copy_once().unwrap_err();
     fail.store(false, Ordering::SeqCst);
     refuse_to_make.store(true, Ordering::SeqCst);
-    assert_eq!(copy_once().unwrap_err().kind, "Clipboard");
+    assert_eq!(copy_once().unwrap_err().kind, ErrorKind::Clipboard);
     refuse_to_make.store(false, Ordering::SeqCst);
     copy_once().unwrap();
     assert_eq!(made.load(Ordering::SeqCst), 3);

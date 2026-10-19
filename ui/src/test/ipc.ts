@@ -1,12 +1,13 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import type { ArgsOf, CommandName, ResultOf } from "../api/commands";
 import type { CommandError } from "../bindings/CommandError";
+import type { ErrorKind } from "../bindings/ErrorKind";
 
 /**
  * An error that carries a command's `kind` as a failed command does. A handler throws it to make
  * the command reject.
  */
-export function commandFailure(kind: string, message: string): Error & CommandError {
+export function commandFailure(kind: ErrorKind, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
 }
 

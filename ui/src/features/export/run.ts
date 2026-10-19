@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/commands";
-import { asCommandError } from "../../api/error";
+import { asCommandError, type AppError } from "../../api/error";
 import { fileName as lastPart } from "../../api/files";
 import { chooseSavePath, openSavedFile, showInFolder, type FileFormat } from "../../api/window";
 import { useShell } from "../../app/shell/context";
 import { useShownView } from "../../app/view";
-import type { CommandError } from "../../bindings/CommandError";
 import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { ExportPhase } from "../../bindings/ExportPhase";
 import type { ExportRequest } from "../../bindings/ExportRequest";
@@ -35,7 +34,7 @@ export function extensionOf(format: SaveFormat): FileFormat {
 }
 
 /** The failure of an export when no workspace is open: there is no view to send. */
-function noWorkspace(): CommandError {
+function noWorkspace(): AppError {
   return { kind: "NoWorkspace", message: t("export.noWorkspace") };
 }
 
@@ -46,7 +45,7 @@ function viewName(open: WorkspaceOpen | null | undefined): string {
 
 /** A failure, with the view on screen when it came: it is shown while that view stays. */
 interface Failure {
-  problem: CommandError;
+  problem: AppError;
   view: string;
 }
 
@@ -69,7 +68,7 @@ function useFailure() {
   }, [shown]);
   const [failure, setFailure] = useState<Failure | null>(null);
   const [settled, setSettled] = useState(0);
-  const fail = useCallback((problem: CommandError) => {
+  const fail = useCallback((problem: AppError) => {
     results += 1;
     setSettled(results);
     setFailure({ problem, view: latest.current });
@@ -114,7 +113,7 @@ export interface SaveExport {
    * Why the last save failed; `null` once the next one has a result, after `dismiss`, and once
    * another workspace or snapshot is on screen.
    */
-  problem: CommandError | null;
+  problem: AppError | null;
   /** When the last save had a result, in the order of the session's exports; 0 before one. */
   settled: number;
   /** The control of the notice that started the save that runs, which shows the spinner. */
@@ -295,7 +294,7 @@ export interface CopyExport {
    * Why the last copy failed; `null` once the next one has a result, after `dismiss`, and once
    * another workspace or snapshot is on screen.
    */
-  problem: CommandError | null;
+  problem: AppError | null;
   /** When the last copy had a result, in the order of the session's exports; 0 before one. */
   settled: number;
   /** The control of the notice that started the copy that runs, which shows the spinner. */

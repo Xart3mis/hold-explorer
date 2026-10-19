@@ -14,7 +14,7 @@
  */
 import { useIsMutating, useQuery, type QueryClient } from "@tanstack/react-query";
 import { api } from "../../api/commands";
-import { asCommandError } from "../../api/error";
+import { asCommandError, isErrorKind } from "../../api/error";
 import { keys } from "../../api/keys";
 import type { AppStart } from "../../bindings/AppStart";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
@@ -54,7 +54,10 @@ export async function readList(client: QueryClient): Promise<void> {
     });
     changeStart(client, (start) => ({ ...start, list, list_error: null }));
   } catch (error) {
-    changeStart(client, (start) => ({ ...start, list_error: asCommandError(error) }));
+    const { kind, message } = asCommandError(error);
+    // Only a command reads the folder; a kind of the interface's own cannot come from it.
+    const listError = { kind: isErrorKind(kind) ? kind : "Internal", message } as const;
+    changeStart(client, (start) => ({ ...start, list_error: listError }));
   }
 }
 

@@ -1,11 +1,13 @@
-import type { CommandError } from "../../bindings/CommandError";
 import { t } from "../../text/i18n";
 import { Button } from "../Button/Button";
 import { Notice } from "../Notice/Notice";
 
 export interface ErrorStateProps {
-  /** What the failed command returned. Its message says what happened, why, and how to fix it. */
-  error: CommandError;
+  /**
+   * What the failed command returned, or a failure the interface made in its shape. Its message
+   * says what happened, why, and how to fix it.
+   */
+  error: { kind: string; message: string };
   /** What failed, in the words of the screen. A general heading is used otherwise. */
   title?: string;
   /** Shows a retry button that calls this. */

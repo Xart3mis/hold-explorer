@@ -24,7 +24,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat,
+    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, ErrorKind,
     ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone,
     ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings,
     TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
@@ -44,7 +44,17 @@ where
                 "The application state is not available. Restart Hold Explorer; if it keeps happening, report it.",
             )
         })?;
-        let mut guard = state.lock().map_err(|_| poisoned())?;
+        let mut guard = match state.lock() {
+            Ok(guard) => guard,
+            // A command panicked while it held the state: its work was cut short, so the state
+            // is put right from the workspace file before this command runs.
+            Err(poisoned) => {
+                let mut guard = poisoned.into_inner();
+                state.clear_poison();
+                guard.recover()?;
+                guard
+            }
+        };
         work(&mut guard)
     })
     .await
@@ -63,15 +73,11 @@ where
         .map_err(task_failed)?
 }
 
-fn task_failed(error: tauri::Error) -> CommandError {
-    CommandError::internal(format!(
-        "A background task failed: {error}. Restart Hold Explorer; if it keeps happening, report it."
-    ))
-}
-
-fn poisoned() -> CommandError {
+/// What a command answers when its work panicked or was cancelled. The next command that takes
+/// the state puts it right (see `blocking`), so no restart is needed.
+fn task_failed(_: tauri::Error) -> CommandError {
     CommandError::internal(
-        "An earlier operation failed part-way, so the application state cannot be trusted. Restart Hold Explorer.",
+        "An operation failed part-way. Nothing it was doing was saved. Try again; if it happens again, report it.",
     )
 }
 
@@ -468,7 +474,7 @@ fn cannot_open(path: &Path, error: &tauri_plugin_opener::Error) -> CommandError 
         |name| name.to_string_lossy().into_owned(),
     );
     CommandError::new(
-        "Open",
+        ErrorKind::Open,
         format!(
             "Hold Explorer could not open {file}: {error}. The system may have no program for this kind of file; open it from its folder."
         ),
@@ -487,7 +493,7 @@ mod tests {
     use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
     use tempfile::TempDir;
 
-    use crate::app::{AppState, ExportPhase};
+    use crate::app::{AppState, ErrorKind, ExportPhase};
 
     const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
     const LIB: &str = include_str!("lib.rs");
@@ -696,40 +702,138 @@ mod tests {
         assert!(error.is_string(), "{error}");
     }
 
-    #[test]
-    fn after_a_panic_under_the_lock_every_command_answers_internal_and_none_panics() {
-        let harness = Harness::new();
-        let poisoned = {
-            let state = harness.app.state::<Mutex<AppState>>();
-            let mutex: &Mutex<AppState> = state.inner();
-            std::thread::scope(|scope| {
-                scope
-                    .spawn(|| {
-                        let _guard = mutex.lock().unwrap();
-                        panic!("a command panics while it holds the state");
-                    })
-                    .join()
-            })
-        };
-        assert!(poisoned.is_err(), "the thread panicked under the lock");
+    /// Panics on another thread while it holds the state lock, which leaves the lock poisoned.
+    fn poison(harness: &Harness) {
+        let state = harness.app.state::<Mutex<AppState>>();
+        let mutex: &Mutex<AppState> = state.inner();
+        let panicked = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let _guard = mutex.lock().unwrap();
+                    panic!("a command panics while it holds the state");
+                })
+                .join()
+        });
+        assert!(panicked.is_err(), "the thread panicked under the lock");
+        assert!(mutex.is_poisoned());
+    }
 
+    /// The arguments of the fixture's `name`, with `view` as the view.
+    fn args_in_view(name: &str, view: &Value) -> Value {
+        let mut args = command_args()[name].clone();
+        args["view"] = view.clone();
+        args
+    }
+
+    #[test]
+    fn after_a_panic_under_the_lock_no_command_panics_or_asks_for_a_restart() {
+        let harness = Harness::new();
         for (command, args) in command_args() {
-            let error = harness
-                .invoke(&command, &args)
-                .expect_err("no command answers from a state that cannot be trusted");
-            assert_eq!(error["kind"], "Internal", "{command}: {error}");
-            // The words only the handling of a poisoned lock uses: the answer for a state that
-            // is missing, and the one for a task that died, say to restart as well.
-            let message = error["message"].as_str().unwrap_or_default();
-            assert!(
-                message.starts_with("An earlier operation failed part-way"),
-                "{command}: {message}"
-            );
-            assert!(
-                message.contains("Restart Hold Explorer"),
-                "{command}: {message}"
-            );
+            poison(&harness);
+            match harness.invoke(&command, &args) {
+                Ok(_) => {}
+                Err(error) => {
+                    let message = error["message"]
+                        .as_str()
+                        .unwrap_or_else(|| panic!("{command} failed with {error}"));
+                    assert!(error["kind"].is_string(), "{command}: {error}");
+                    assert!(!message.contains("Restart"), "{command}: {message}");
+                }
+            }
+            let state = harness.app.state::<Mutex<AppState>>();
+            assert!(!state.is_poisoned(), "{command} left the lock poisoned");
         }
+    }
+
+    #[test]
+    fn a_command_whose_work_panics_answers_internal_and_the_next_needs_no_restart() {
+        let harness = Harness::new();
+        demo_view(&harness);
+        let error = tauri::async_runtime::block_on(super::blocking(
+            harness.app.handle().clone(),
+            |_| -> Result<(), crate::app::CommandError> {
+                panic!("the work of a command panics");
+            },
+        ))
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Internal);
+        assert_eq!(
+            error.message,
+            "An operation failed part-way. Nothing it was doing was saved. Try again; if it happens again, report it."
+        );
+        assert!(harness.app.state::<Mutex<AppState>>().is_poisoned());
+
+        let start = harness
+            .invoke("app_start", &serde_json::json!({}))
+            .expect("the page starts again without a restart");
+        let view = serde_json::json!({
+            "workspace_id": start["open"]["workspace"]["id"],
+            "snapshot_id": start["open"]["selected"],
+        });
+        assert!(view["workspace_id"].is_string(), "{start}");
+        harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .expect("the data of the reopened workspace is read");
+    }
+
+    #[test]
+    fn after_a_panic_the_workspace_is_reopened_and_the_draft_dropped() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let config = hx_synth::SynthConfig::new(7, 10, 60);
+        let file = harness._dir.path().join("holds.xlsx");
+        hx_synth::write_workbook(&hx_synth::generate(&config), &config, &file).unwrap();
+        harness
+            .invoke("import_open", &serde_json::json!({ "path": file }))
+            .expect("the file opens as the draft");
+        poison(&harness);
+
+        // The view the page holds is still the one in the state.
+        harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .expect("the data of the reopened workspace is read");
+        let current = harness
+            .invoke("workspace_current", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(current["workspace"]["id"], view["workspace_id"]);
+        assert_eq!(current["selected"], view["snapshot_id"]);
+        assert_eq!(
+            harness.outcome("import_review", &serde_json::json!({ "fields": null })),
+            "NoDraft"
+        );
+    }
+
+    #[test]
+    fn a_reopen_that_fails_after_a_panic_is_the_answer_and_leaves_no_workspace_open() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let list = harness
+            .invoke("workspace_list", &serde_json::json!({}))
+            .unwrap();
+        let folder = std::path::PathBuf::from(list["folder"].as_str().unwrap());
+        let id = view["workspace_id"].as_str().unwrap();
+        let file = folder.join(format!("{id}.holdx-ws"));
+        assert!(file.is_file());
+        std::fs::write(&file, "not a workspace").unwrap();
+        poison(&harness);
+
+        let error = harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .unwrap_err();
+        assert_eq!(error["kind"], "NotAWorkspace", "{error}");
+        let message = error["message"].as_str().unwrap_or_default();
+        assert!(message.contains(&format!("{id}.holdx-ws")), "{message}");
+        // The lock is whole again, and nothing is open.
+        assert_eq!(
+            harness
+                .invoke("workspace_current", &serde_json::json!({}))
+                .unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            harness.outcome("overview", &args_in_view("overview", &view)),
+            "NoWorkspace"
+        );
     }
 
     /// Opens the demo workspace and returns the view the interface then shows, as JSON.
@@ -820,7 +924,7 @@ mod tests {
             hx_export::write_file,
         ))
         .unwrap_err();
-        assert_eq!(error.kind, "Extension");
+        assert_eq!(error.kind, ErrorKind::Extension);
         assert!(heard.lock().unwrap().is_empty());
         assert!(!path.exists());
     }
@@ -842,7 +946,7 @@ mod tests {
             hx_export::write_file,
         ))
         .unwrap_err();
-        assert_eq!(error.kind, "Folder");
+        assert_eq!(error.kind, ErrorKind::Folder);
         let state = harness.app.state::<Mutex<AppState>>();
         assert!(!state.lock().unwrap().has_written(&path));
     }

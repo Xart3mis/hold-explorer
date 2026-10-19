@@ -1,3 +1,4 @@
+import type { AppError } from "../../api/error";
 import { Button, Notice } from "../../components";
 import { t } from "../../text/i18n";
 import type { CopyExport, SaveExport } from "./run";
@@ -6,7 +7,12 @@ import type { CopyExport, SaveExport } from "./run";
  * The kinds of failure of a save that another name puts right: a file another program holds, a
  * name with another extension, a folder that is not there, and a place that cannot be written.
  */
-const ANOTHER_NAME = new Set(["FileInUse", "Extension", "Folder", "Write"]);
+const ANOTHER_NAME: ReadonlySet<AppError["kind"]> = new Set([
+  "FileInUse",
+  "Extension",
+  "Folder",
+  "Write",
+]);
 
 export interface ExportNoticeProps {
   /** The save or the copy whose failure is shown. */

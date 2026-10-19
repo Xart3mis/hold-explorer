@@ -6,6 +6,7 @@ import { dimNeeds, partNeeds } from "../api/filter-needs";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
+import type { ErrorKind } from "../bindings/ErrorKind";
 import type { Dim } from "../bindings/Dim";
 import type { ExportPhase } from "../bindings/ExportPhase";
 import type { ExportRequest } from "../bindings/ExportRequest";
@@ -190,7 +191,7 @@ function openOnly(spec: FilterSpec): FilterSpec | null {
   return spec.status === "Released" ? null : { ...spec, status: "Open" };
 }
 
-function failure(kind: string, message: string): Error & CommandError {
+function failure(kind: ErrorKind, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
 }
 

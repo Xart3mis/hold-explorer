@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 
 const FILE_NAME: &str = "settings.json";
 const TEMP_NAME: &str = "settings.json.tmp";
@@ -80,7 +80,7 @@ pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
         .err()
         .map(|error| {
             CommandError::new(
-                "Settings",
+                ErrorKind::Settings,
                 format!(
                     "The settings file {} could not be read or moved aside ({error}), so it was left untouched and your settings cannot be saved. Move or delete the file by hand, then restart Hold Explorer.",
                     path.display()
@@ -100,7 +100,7 @@ pub(super) fn save_settings(config_dir: &Path, settings: &Settings) -> Result<()
     let path = config_dir.join(FILE_NAME);
     let failed = |error: &dyn std::fmt::Display| {
         CommandError::new(
-            "Settings",
+            ErrorKind::Settings,
             format!(
                 "Could not save the settings to {}: {error}. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.",
                 path.display()

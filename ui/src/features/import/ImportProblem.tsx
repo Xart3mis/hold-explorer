@@ -1,11 +1,11 @@
 import type { ReactNode, Ref } from "react";
-import type { CommandError } from "../../bindings/CommandError";
+import type { AppError } from "../../api/error";
 import { Notice } from "../../components";
 import { t, type MessageKey } from "../../text/i18n";
 import styles from "./Import.module.css";
 
 /** What failed, in the words of the import flow, by the kind of the error. */
-const titles: Record<string, MessageKey> = {
+const titles: Partial<Record<AppError["kind"], MessageKey>> = {
   NotFound: "import.error.NotFound",
   Unreadable: "import.error.Unreadable",
   EmptyFile: "import.error.EmptyFile",
@@ -25,7 +25,7 @@ const titles: Record<string, MessageKey> = {
 
 export interface ImportProblemProps {
   /** What the failed command returned. */
-  error: CommandError;
+  error: AppError;
   /** The title for a kind that has none of its own: what the page was doing when it failed. */
   general: MessageKey;
   /** Quiet buttons that act on the error. */

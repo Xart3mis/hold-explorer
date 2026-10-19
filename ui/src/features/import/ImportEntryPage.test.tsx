@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import type { ErrorKind } from "../../bindings/ErrorKind";
 import { describe, expect, it, vi } from "vitest";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
@@ -152,7 +153,7 @@ describe("the import page when the file cannot be opened", () => {
   const message =
     "The file /home/ada/exports/Holds_2026-10-07.xlsx was not found. It may have been moved or renamed; choose the file again.";
 
-  function failing(kind: string, text = message) {
+  function failing(kind: ErrorKind, text = message) {
     return {
       import_open: () => {
         throw commandFailure(kind, text);
@@ -160,7 +161,7 @@ describe("the import page when the file cannot be opened", () => {
     };
   }
 
-  it.each([
+  it.each<[ErrorKind, string]>([
     ["NotFound", en.import.error.NotFound],
     ["Unreadable", en.import.error.Unreadable],
     ["EmptyFile", en.import.error.EmptyFile],

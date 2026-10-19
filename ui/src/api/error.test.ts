@@ -9,6 +9,13 @@ describe("asCommandError", () => {
     });
   });
 
+  it("keeps a failure of the interface's own kinds", () => {
+    expect(asCommandError({ kind: "ViewUnsettled", message: "Try again." })).toEqual({
+      kind: "ViewUnsettled",
+      message: "Try again.",
+    });
+  });
+
   it("makes a string an Internal error with that text", () => {
     expect(asCommandError("it broke")).toEqual({ kind: "Internal", message: "it broke" });
   });
@@ -21,7 +28,14 @@ describe("asCommandError", () => {
   });
 
   it("makes anything else an Internal error", () => {
-    for (const value of [undefined, null, 7, { kind: 3 }, { kind: "X" }]) {
+    for (const value of [
+      undefined,
+      null,
+      7,
+      { kind: 3 },
+      { kind: "X" },
+      { kind: "NoWorkspce", message: "A kind no command answers with." },
+    ]) {
       const error = asCommandError(value);
       expect(error.kind).toBe("Internal");
       expect(error.message).toMatch(/\. .+\./);

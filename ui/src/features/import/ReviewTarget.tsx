@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
-import type { CommandError } from "../../bindings/CommandError";
+import type { AppError } from "../../api/error";
 import type { ImportReview } from "../../bindings/ImportReview";
 import type { SnapshotInfo } from "../../bindings/SnapshotInfo";
 import type { TargetCheck } from "../../bindings/TargetCheck";
@@ -32,7 +32,7 @@ export interface ReviewTargetProps {
   /** What the workspace would meet, once it has been checked for this date. */
   check: TargetCheck | undefined;
   /** Why the workspace could not be checked. */
-  checkError: CommandError | null;
+  checkError: AppError | null;
   isChecking: boolean;
   onCheckAgain: () => void;
   /** The snapshot of the same day that is to be replaced; `null` to keep them all. */

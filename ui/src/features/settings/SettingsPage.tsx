@@ -1,10 +1,9 @@
 import { useId, useState } from "react";
-import { asCommandError } from "../../api/error";
+import { asCommandError, type AppError } from "../../api/error";
 import { showInFolder } from "../../api/window";
 import { useThemeSetting } from "../../app/actions/theme";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
-import type { CommandError } from "../../bindings/CommandError";
 import type { Theme } from "../../bindings/Theme";
 import { Button, Notice, Select, type SelectOption } from "../../components";
 import { t } from "../../text/i18n";
@@ -23,7 +22,7 @@ function isTheme(value: string): value is Theme {
 export function SettingsPage() {
   const { start } = useShell();
   const { setTheme } = useThemeSetting();
-  const [folderError, setFolderError] = useState<CommandError | null>(null);
+  const [folderError, setFolderError] = useState<AppError | null>(null);
   const folderLabelId = useId();
 
   const themes: SelectOption[] = [

@@ -1,6 +1,6 @@
 import { useId, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { asCommandError } from "../../api/error";
+import { asCommandError, type AppError } from "../../api/error";
 import { fileName, IMPORT_EXTENSIONS } from "../../api/files";
 import { showInFolder } from "../../api/window";
 import { useDemo } from "../../app/actions/demo";
@@ -9,7 +9,6 @@ import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH } from "../../app/destinations";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
-import type { CommandError } from "../../bindings/CommandError";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
   Button,
@@ -31,7 +30,7 @@ import { NewWorkspaceForm } from "../workspaces/NewWorkspaceForm";
 import styles from "./WelcomePage.module.css";
 
 /** Where "Show in folder" was pressed, so its error shows beside what was pressed. */
-type FolderError = { at: "folder" | "files"; error: CommandError } | null;
+type FolderError = { at: "folder" | "files"; error: AppError } | null;
 
 /** The least room of the name of a workspace before the table scrolls sideways. */
 const NAME_CHARS = 20;

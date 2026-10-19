@@ -40,7 +40,7 @@ describe("mockCommands", () => {
   });
 
   it("carries a warning on an opened workspace and a list error on the start", async () => {
-    const warning = { kind: "Settings", message: "The workspace is open, but ..." };
+    const warning = { kind: "Settings" as const, message: "The workspace is open, but ..." };
     const opened: WorkspaceOpen = {
       workspace: {
         id: "0123456789abcdef",

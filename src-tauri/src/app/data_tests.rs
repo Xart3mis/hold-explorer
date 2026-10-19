@@ -59,7 +59,7 @@ fn outcomes(state: &mut AppState, view: &ViewRef) -> Vec<String> {
     let spec = open_holds();
     let kind = |error: Result<(), super::CommandError>| match error {
         Ok(()) => "Ok".to_string(),
-        Err(error) => error.kind,
+        Err(error) => format!("{:?}", error.kind),
     };
     vec![
         kind(state.filter_options(&spec, view).map(drop)),
