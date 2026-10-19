@@ -173,7 +173,8 @@ export interface ChoicePanelProps {
  * it was (DESIGN.md, Columns and rows panel).
  *
  * A remembered choice of rows that the screen does not offer now (the selected rows while none
- * is selected) shows as all rows and stays remembered unless another is chosen. The column that
+ * is selected) shows as all rows, and saving keeps the rows shown: what the panel shows is what
+ * it saves. The column that
  * names the row is always written. Every column of the file checked is kept as no columns named,
  * which writes every column the file has, whichever status it is written under.
  */
@@ -215,7 +216,7 @@ export function ChoicePanel({
     const isEvery = all.every((id) => checked.has(id));
     onSave({
       columns: isEvery ? [] : all.filter((id) => checked.has(id)),
-      rows,
+      rows: shownRows,
       status,
     });
   };

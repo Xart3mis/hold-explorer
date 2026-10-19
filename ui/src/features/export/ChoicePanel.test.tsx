@@ -1,18 +1,16 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import type { UserEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ArgsOf } from "../../api/commands";
 import { openHoldsFilter } from "../../api/filter";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
-import { must, renderApp } from "../../test/app";
+import { must } from "../../test/app";
 import { filterOptions } from "../../test/filters";
-import { openStart } from "../../test/fixtures";
-import type { Handlers } from "../../test/ipc";
 import { lineId, linePage } from "../../test/lines";
+import { ctrlClick, exportButton, itemNames, openMenu, renderAt, rowOf } from "../../test/export";
 import { SLOW } from "../../test/slow";
-import { formatCount } from "../../text/format";
 import { windowApi } from "../../test/window";
+import { formatCount } from "../../text/format";
 import { presetQuery } from "../lines/presets";
 import { DEFAULT_CHOICE, readChoice, writeChoice, type ExportChoice } from "./choices";
 import { buildRequest, FILE_COLUMNS, type ScreenState } from "./requests";
@@ -20,76 +18,16 @@ import { buildRequest, FILE_COLUMNS, type ScreenState } from "./requests";
 const menu = en.export.menu;
 const panel = en.export.panel;
 
-type SaveArgs = ArgsOf<"export_save">;
-type CopyArgs = ArgsOf<"export_copy">;
-
 const count = (text: string, value: number) =>
   text.replace("{{count, number}}", formatCount(value));
 const titleOf = (screen: string) => panel.title.replace("{{screen}}", screen);
 const saveOf = (screen: string) => panel.save.replace("{{screen}}", screen);
-
-/** The app at `path`, with the export commands answered at once and recorded. */
-function renderAt(path: string, handlers: Handlers = {}) {
-  const saves: SaveArgs[] = [];
-  const copies: CopyArgs[] = [];
-  windowApi.chooseSavePath.mockImplementation((_, extension) =>
-    Promise.resolve(`/home/ada/exports/out.${extension}`),
-  );
-  const app = renderApp({
-    start: openStart(),
-    path,
-    handlers: {
-      export_save: (args) => {
-        saves.push(args);
-        return { path: args.path, rows: 3 };
-      },
-      export_copy: (args) => {
-        copies.push(args);
-        return null;
-      },
-      ...handlers,
-    },
-  });
-  return { ...app, saves, copies };
-}
-
-async function exportButton(): Promise<HTMLElement> {
-  const button = await screen.findByRole("button", { name: menu.label });
-  await waitFor(() => {
-    expect(button).not.toHaveAttribute("aria-busy");
-  });
-  return button;
-}
-
-async function openMenu(user: UserEvent): Promise<HTMLElement> {
-  await user.click(await exportButton());
-  return screen.findByRole("menu", { name: menu.name });
-}
-
-function itemNames(open: HTMLElement): string[] {
-  return within(open)
-    .getAllByRole("menuitem")
-    .map((item) => item.querySelector('[slot="label"]')?.textContent ?? "");
-}
 
 /** Opens the panel from the menu by the pointer, and returns it. */
 async function openPanel(user: UserEvent, screenTitle = "Lines"): Promise<HTMLElement> {
   const open = await openMenu(user);
   await user.click(within(open).getByRole("menuitem", { name: menu.choice }));
   return screen.findByRole("dialog", { name: titleOf(screenTitle) });
-}
-
-async function rowOf(name: string): Promise<HTMLElement> {
-  return must(
-    (await screen.findByRole("rowheader", { name })).closest<HTMLElement>("[role='row']"),
-    `the row of ${name}`,
-  );
-}
-
-async function ctrlClick(user: UserEvent, ...rows: HTMLElement[]): Promise<void> {
-  await user.keyboard("{Control>}");
-  for (const row of rows) await user.click(row);
-  await user.keyboard("{/Control}");
 }
 
 /** The names of the columns the panel lists, in order, without the note of the row's name. */
@@ -422,15 +360,6 @@ describe("the selected rows, with none selected", () => {
     });
     expect(must(app.saves[0]).request.rows).toEqual({ kind: "All" });
 
-    // The panel shows all rows, and keeps the choice of the selected ones unless another is made.
-    const dialog = await openPanel(app.user);
-    expect(within(dialog).getByRole("radio", { name: count(panel.rowsAll, 3) })).toBeChecked();
-    await app.user.click(within(dialog).getByRole("button", { name: saveOf("Lines") }));
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    });
-    expect(readChoice("lines").rows).toBe("selected");
-
     // With rows selected, the items are as ever, and write those rows.
     await ctrlClick(app.user, await rowOf(lineId(2)));
     const again = await openMenu(app.user);
@@ -440,6 +369,45 @@ describe("the selected rows, with none selected", () => {
       expect(app.saves).toHaveLength(2);
     });
     expect(must(app.saves[1]).request.rows).toEqual({ kind: "Keys", keys: [lineId(2)] });
+  });
+
+  it("show as all rows in the panel, which saves the rows it shows", SLOW, async () => {
+    writeChoice("lines", { ...DEFAULT_CHOICE, rows: "selected" });
+    const app = renderAt("/lines");
+    await rowOf(lineId(0));
+    const dialog = await openPanel(app.user);
+    expect(within(dialog).getByRole("radio", { name: count(panel.rowsAll, 3) })).toBeChecked();
+    await app.user.click(within(dialog).getByRole("button", { name: saveOf("Lines") }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(readChoice("lines").rows).toBe("all");
+    // The menu follows the choice saved: nothing falls back any more.
+    const open = await openMenu(app.user);
+    expect(itemNames(open)).toEqual([
+      menu.excel,
+      menu.workbook,
+      menu.csv,
+      menu.report,
+      menu.copyTable,
+      menu.copyLineIds,
+      menu.choice,
+    ]);
+  });
+});
+
+describe("Ctrl+E", () => {
+  it("does nothing while the panel is open", SLOW, async () => {
+    const app = renderAt("/lines");
+    await rowOf(lineId(0));
+    await openPanel(app.user);
+    await app.user.keyboard("{Control>}e{/Control}");
+    await app.user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
+    expect(app.saves).toHaveLength(0);
   });
 });
 

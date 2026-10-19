@@ -1,7 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
-import type { UserEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ArgsOf } from "../../api/commands";
 import { openHoldsFilter } from "../../api/filter";
 import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { SaveFormat } from "../../bindings/SaveFormat";
@@ -11,8 +9,9 @@ import { must, renderApp } from "../../test/app";
 import { breakdownGroups } from "../../test/breakdown";
 import { solveView } from "../../test/blockers";
 import { openStart, opened, workspace } from "../../test/fixtures";
-import { commandFailure, type Handlers } from "../../test/ipc";
+import { commandFailure } from "../../test/ipc";
 import { lineId, linePage } from "../../test/lines";
+import { ctrlClick, exportButton, itemNames, openMenu, renderAt, rowOf } from "../../test/export";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
 import { DEFAULT_BREAKDOWN_STATE } from "../breakdown/address";
@@ -25,71 +24,9 @@ const menu = en.export.menu;
 const IN_USE =
   "Hold Explorer could not save out.xlsx: another program has it open. Close the file or choose another name.";
 
-type SaveArgs = ArgsOf<"export_save">;
-type CopyArgs = ArgsOf<"export_copy">;
-
-/** The app at `path`, with the export commands answered at once and recorded. */
-function renderAt(path: string, handlers: Handlers = {}) {
-  const saves: SaveArgs[] = [];
-  const copies: CopyArgs[] = [];
-  windowApi.chooseSavePath.mockImplementation((_, extension) =>
-    Promise.resolve(`/home/ada/exports/out.${extension}`),
-  );
-  const app = renderApp({
-    start: openStart(),
-    path,
-    handlers: {
-      export_save: (args) => {
-        saves.push(args);
-        return { path: args.path, rows: 3 };
-      },
-      export_copy: (args) => {
-        copies.push(args);
-        return null;
-      },
-      ...handlers,
-    },
-  });
-  return { ...app, saves, copies };
-}
-
-/** The Export button, once the screen has something to export. */
-async function exportButton(): Promise<HTMLElement> {
-  const button = await screen.findByRole("button", { name: menu.label });
-  await waitFor(() => {
-    expect(button).not.toHaveAttribute("aria-busy");
-  });
-  return button;
-}
-
-async function openMenu(user: UserEvent): Promise<HTMLElement> {
-  await user.click(await exportButton());
-  return screen.findByRole("menu", { name: menu.name });
-}
-
-/** The names of the items of a menu, in order: their labels, without a detail. */
-function itemNames(open: HTMLElement): string[] {
-  return within(open)
-    .getAllByRole("menuitem")
-    .map((item) => item.querySelector('[slot="label"]')?.textContent ?? "");
-}
-
 /** The request a screen sends for its state, with the default choice unless another is given. */
 function expected(state: ScreenState, table?: TableRows, choice: ExportChoice = DEFAULT_CHOICE) {
   return buildRequest(state, openHoldsFilter(), [], choice, table);
-}
-
-async function ctrlClick(user: UserEvent, ...rows: HTMLElement[]): Promise<void> {
-  await user.keyboard("{Control>}");
-  for (const row of rows) await user.click(row);
-  await user.keyboard("{/Control}");
-}
-
-async function rowOf(name: string): Promise<HTMLElement> {
-  return must(
-    (await screen.findByRole("rowheader", { name })).closest<HTMLElement>("[role='row']"),
-    `the row of ${name}`,
-  );
 }
 
 const LINES: ScreenState = { screen: "lines", query: presetQuery("all") };

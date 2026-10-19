@@ -1538,3 +1538,30 @@ fn a_groups_lines_in_one_pass_equal_those_of_a_line_page_per_group() {
         }
     }
 }
+
+#[test]
+fn holds_named_columns_the_status_does_not_write_are_left_out_without_an_error() {
+    let ds = full();
+    let asked = ["line", "status", "releasedOn", "releaseRemark", "days"];
+    let open = one(
+        ds,
+        &request(
+            holds_screen(HoldSort::FileOrder, false),
+            &asked,
+            RowScope::All,
+            status(Status::Open),
+        ),
+    );
+    assert_eq!(ids(&open), ["line", "days"]);
+    let released = one(
+        ds,
+        &request(
+            holds_screen(HoldSort::FileOrder, false),
+            &asked,
+            RowScope::All,
+            status(Status::Released),
+        ),
+    );
+    // Released holds have a release date and no status column; the file has no release remark.
+    assert_eq!(ids(&released), ["line", "releasedOn", "days"]);
+}

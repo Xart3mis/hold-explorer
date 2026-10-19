@@ -114,13 +114,16 @@ export function ExportMenu({
   const selectedCount = selected?.length ?? 0;
   const button = useRef<HTMLButtonElement>(null);
   const [isPanelOpen, setPanelOpen] = useState(false);
+  // The choice remembered for the screen, read once for it and kept as the panel saves it.
+  const [remembered, setRemembered] = useState(() => ({ screen, choice: readChoice(screen) }));
+  if (remembered.screen !== screen) setRemembered({ screen, choice: readChoice(screen) });
+  const choice = remembered.screen === screen ? remembered.choice : readChoice(screen);
   const canChoose = hasRows && hasChoice(screen);
   // The selected rows remembered while none is selected: the items that write rows write them all.
-  const fallsBack = canChoose && selectedCount === 0 && readChoice(screen).rows === "selected";
+  const fallsBack = canChoose && selectedCount === 0 && choice.rows === "selected";
 
   /** The request of the screen, with the remembered choice, or with the rows `rows` names. */
   const request = (rows?: ExportChoice["rows"]) => {
-    const choice = readChoice(screen);
     return buildRequest(
       state,
       spec,
@@ -340,8 +343,10 @@ export function ExportMenu({
               screen={screen}
               state={state}
               counts={counts}
-              onSave={(choice) => {
-                writeChoice(screen, choice);
+              choice={choice}
+              onSave={(saved) => {
+                writeChoice(screen, saved);
+                setRemembered({ screen, choice: saved });
                 close();
               }}
               onCancel={close}
@@ -357,6 +362,7 @@ interface ScreenChoicePanelProps {
   screen: ExportScreen;
   state: ScreenState;
   counts: RowCounts;
+  choice: ExportChoice;
   onSave: (choice: ExportChoice) => void;
   onCancel: () => void;
 }
@@ -366,10 +372,16 @@ interface ScreenChoicePanelProps {
  * status of the filters, and the fields the snapshot lacks. Until those are read, every optional
  * field is taken as lacking, as the tables do, so that no column is offered that will go.
  */
-function ScreenChoicePanel({ screen, state, counts, onSave, onCancel }: ScreenChoicePanelProps) {
+function ScreenChoicePanel({
+  screen,
+  state,
+  counts,
+  choice,
+  onSave,
+  onCancel,
+}: ScreenChoicePanelProps) {
   const { spec } = useFilters();
   const options = useFilterOptions();
-  const [choice] = useState(() => readChoice(screen));
   return (
     <ChoicePanel
       screen={screen}
