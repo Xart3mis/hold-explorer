@@ -242,4 +242,44 @@ describe("buildRequest", () => {
     expect(open.spec.status).toBe("Open");
     expect(open.filters).toEqual([]);
   });
+
+  it("asks for every row when the export's status is not the one the screen's rows were read under", () => {
+    const released = choice({ status: "Released" });
+    const table = { loaded: 200, selected: ["L-2", "L-1"] };
+    for (const rows of ["all", "loaded", "selected"] as const) {
+      const status = { ...released, rows };
+      // Breakdown and Blockers hold their rows whole: every group or step of the status, in the
+      // order Rust gives them.
+      expect(buildRequest(BREAKDOWN, OPEN, [], status, table).rows).toEqual({ kind: "All" });
+      expect(buildRequest(BLOCKERS, OPEN, [], status, table).rows).toEqual({ kind: "All" });
+      // Lines and the hold rows: the rows loaded or selected are rows of the Open screen.
+      expect(buildRequest(LINES, OPEN, [], status, table).rows).toEqual({ kind: "All" });
+      expect(buildRequest(HOLDS, OPEN, [], status, table).rows).toEqual({ kind: "All" });
+    }
+    // A chosen status that is the screen's own keeps the rows on screen.
+    const same = buildRequest(LINES, OPEN, [], choice({ status: "Open", rows: "selected" }), table);
+    expect(same.rows).toEqual({ kind: "Keys", keys: ["L-2", "L-1"] });
+    const shown = buildRequest(BREAKDOWN, OPEN, [], choice({ status: "Open" }), table);
+    expect(shown.rows).toEqual({ kind: "Keys", keys: ["Vendor data", "", "Process data"] });
+  });
+
+  it("writes every column when none of the remembered ones is offered for the snapshot and status", () => {
+    // Lines whose snapshot has no model size: the column is not offered.
+    const offered = lineColumns(10, ["ModelSize"]).map((column) => column.id);
+    expect(offered).not.toContain("modelSize");
+    expect(
+      buildRequest(LINES, OPEN, [], choice({ columns: ["modelSize"] }), undefined, offered).columns,
+    ).toEqual([]);
+    // Partly offered: the offered ones are written.
+    expect(
+      buildRequest(LINES, OPEN, [], choice({ columns: ["modelSize", "line"] }), undefined, offered)
+        .columns,
+    ).toEqual(["line"]);
+    // The hold rows under Open, with only the columns of the status and the release remembered.
+    const open = holdColumns(10, [], "Open").map((column) => column.id);
+    expect(
+      buildRequest(HOLDS, OPEN, [], choice({ columns: ["status", "releasedOn"] }), undefined, open)
+        .columns,
+    ).toEqual([]);
+  });
 });

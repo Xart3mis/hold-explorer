@@ -60,7 +60,7 @@ describe("exportText", () => {
     expect(text.labels["file.yes"]).toBe("Yes");
     expect(text.labels["file.no"]).toBe("No");
     expect(text.labels["file.about.noSnapshot"]).toBe("No snapshot");
-    expect(text.labels["file.summary.stale"]).toBe("Holds open for 90 days or more");
+    expect(text.labels["file.summary.stale"]).toBe("Holds open for {days} days or more");
   });
 
   it("has the twelve short month names, January first", () => {

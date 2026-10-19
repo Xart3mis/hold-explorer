@@ -224,7 +224,10 @@ interface TableProps<Item> {
   isStale?: boolean;
   /** What to show under the header when there is no row: an `EmptyState` placed for a table. */
   emptyState?: ReactNode;
-  /** `fill`: the table takes the height of its container and scrolls inside it. Otherwise it is as tall as its rows, up to `maxRows`, then scrolls. Default `{ maxRows: 12 }`. */
+  /**
+   * `fill`: the table takes the height of its container and scrolls inside it. Otherwise it is as
+   * tall as its rows, up to `maxRows`, then scrolls. Default `{ maxRows: 12 }`.
+   */
   height?: "fill" | { maxRows: number };
   /** Rows in the whole result, when `rows` is only the part loaded. */
   totalRows?: number;
@@ -802,7 +805,9 @@ function ShareState({ stateRef }: { stateRef: RefObject<TableStateValue | null> 
 
 type TableStateValue = NonNullable<ContextType<typeof TableStateContext>>;
 
-/** The rows from one key to another, both in, in the order of `keys`; empty when one is not there. */
+/**
+ * The rows from one key to another, both in, in the order of `keys`; empty when one is not there.
+ */
 function rangeOf(keys: readonly string[], from: string, to: string): string[] {
   const start = keys.indexOf(from);
   const end = keys.indexOf(to);
@@ -1565,7 +1570,7 @@ export function DataTable<Item, Child = never>({
     topSet,
     chosenKeys: severalKeys ?? NO_CHOSEN,
     change: onSelectedKeysChange,
-    openKey: selectedKey ?? null,
+    openKey,
   });
   useLayoutEffect(() => {
     picking.current = {
@@ -1575,7 +1580,7 @@ export function DataTable<Item, Child = never>({
       topSet,
       chosenKeys: severalKeys ?? NO_CHOSEN,
       change: onSelectedKeysChange,
-      openKey: selectedKey ?? null,
+      openKey,
     };
   });
   // The last row pressed or entered: one end of a range that Shift makes.

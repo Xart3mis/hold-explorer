@@ -47,7 +47,9 @@ const itemOf = (group: Group): HeatmapItem => ({ key: group.key, label: group.la
 /** The matrix as the page reads it: the reading, and the matrix on screen. */
 export interface MatrixReading {
   query: SnapshotQuery<FoldedMatrix>;
-  /** The matrix on screen: the one asked for, or the one before while it is read; `null` at first. */
+  /**
+   * The matrix on screen: the one asked for, or the one before while it is read; `null` at first.
+   */
   shown: Shown | null;
   /** The matrix on screen is the one asked for. */
   own: boolean;

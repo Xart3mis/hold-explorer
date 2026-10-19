@@ -93,8 +93,18 @@ function screenOf(state: ScreenState): Screen {
  * file has the order the user sees: all of them, or the selected ones. Asked for the selected
  * rows with none selected, or for the loaded rows of a table that has not said how many, it asks
  * for every row. The Overview and the matrix have no rows to choose.
+ *
+ * When the export's status is not the one the screen's rows were read under (`ownStatus` false),
+ * the rows on screen do not belong to the export: it asks for every row the status keeps, in the
+ * order Rust gives them, whatever rows were chosen.
  */
-function rowsOf(state: ScreenState, rows: ExportChoice["rows"], table: TableRows | undefined) {
+function rowsOf(
+  state: ScreenState,
+  rows: ExportChoice["rows"],
+  table: TableRows | undefined,
+  ownStatus: boolean,
+) {
+  if (!ownStatus) return { kind: "All" } satisfies RowScope;
   const selected = table?.selected ?? [];
   switch (state.screen) {
     case "overview":
@@ -128,8 +138,12 @@ function rowsOf(state: ScreenState, rows: ExportChoice["rows"], table: TableRows
  * filter bar as `filterTexts` writes them. The status the choice names (`Open`, `Released`, `All`)
  * replaces the filters' for this export only; `filters` keeps the filters' status. The request
  * names the status among the filters when it is not Open. The columns are the chosen ones the
- * screen has, in table order; none chosen means every column. `table` gives the rows the screen's
- * table holds, for a choice of the loaded or the selected rows.
+ * screen has, in table order; none chosen means every column. `offered`, when known, lists the
+ * columns the snapshot and the status give the file (the panel's columns): the chosen ones are
+ * kept to those, and when none of them is offered, every column is written, so a remembered
+ * choice never makes a file without columns. `table` gives the rows the screen's table holds, for
+ * a choice of the loaded or the selected rows; a status other than the filters' asks for every
+ * row (see `rowsOf`).
  */
 export function buildRequest(
   screen: ScreenState,
@@ -137,10 +151,14 @@ export function buildRequest(
   filters: string[],
   choice: ExportChoice,
   table?: TableRows,
+  offered?: readonly string[],
 ): ExportRequest {
   const status = choice.status === "filters" ? spec.status : choice.status;
   const chosen = new Set(choice.columns);
-  const columns = FILE_COLUMNS[screen.screen].filter((column) => chosen.has(column));
+  const given = offered === undefined ? undefined : new Set(offered);
+  const columns = FILE_COLUMNS[screen.screen].filter(
+    (column) => chosen.has(column) && (given === undefined || given.has(column)),
+  );
   const named =
     status === "Open"
       ? [...filters]
@@ -148,7 +166,7 @@ export function buildRequest(
   return {
     screen: screenOf(screen),
     columns,
-    rows: rowsOf(screen, choice.rows, table),
+    rows: rowsOf(screen, choice.rows, table, status === spec.status),
     spec: { ...spec, status },
     text: exportText(),
     filters: named,

@@ -76,4 +76,23 @@ describe("the remembered choice of a screen", () => {
     }).not.toThrow();
     expect(readChoice("lines")).toEqual(DEFAULT_CHOICE);
   });
+
+  it("gets back the column that names the rows when a stored choice lacks it", () => {
+    window.localStorage.setItem(
+      "hx.export.lines",
+      JSON.stringify({ columns: ["oldest", "holds"], rows: "all", status: "filters" }),
+    );
+    expect(readChoice("lines").columns).toEqual(["line", "holds", "oldest"]);
+    window.localStorage.setItem(
+      "hx.export.blockers",
+      JSON.stringify({ columns: ["gain"], rows: "all", status: "filters" }),
+    );
+    expect(readChoice("blockers").columns).toEqual(["step", "gain"]);
+    // No column chosen stays every column.
+    window.localStorage.setItem(
+      "hx.export.holds",
+      JSON.stringify({ columns: [], rows: "all", status: "filters" }),
+    );
+    expect(readChoice("holds").columns).toEqual([]);
+  });
 });

@@ -9,7 +9,10 @@ import { t, type MessageKey } from "../../text/i18n";
  */
 const LIST_SEPARATOR = "file.listSeparator";
 
-/** Two stand-ins for list items, which no text of the app holds: what is between them is the separator. */
+/**
+ * Two stand-ins for list items, which no text of the app holds: what is between them is the
+ * separator.
+ */
 const FIRST = "\uE000";
 const SECOND = "\uE001";
 

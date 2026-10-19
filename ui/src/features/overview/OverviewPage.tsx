@@ -47,7 +47,9 @@ const DIMENSIONS = [
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
 
-/** What a file of the Overview is made from: the page has no state of its own beyond the filters. */
+/**
+ * What a file of the Overview is made from: the page has no state of its own beyond the filters.
+ */
 const OVERVIEW_STATE = { screen: "overview" } as const;
 
 /**
@@ -299,7 +301,8 @@ export function OverviewPage() {
                 screen="overview"
                 state={OVERVIEW_STATE}
                 charts={charts}
-                isReady={view !== undefined && view !== null}
+                // The numbers of the request on screen, not those of before standing in.
+                isReady={view !== undefined && view !== null && !query.isPlaceholderData}
                 exports={exports}
               />
             ),

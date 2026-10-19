@@ -258,6 +258,8 @@ export function BlockersPage() {
       screen="blockers"
       state={{ screen: "blockers", shownKeys }}
       loaded={tableRows.length}
+      // Every step of the result is in the file, also those the table has not been handed yet.
+      total={sortedRows.length}
       selected={[...selected.keys]}
       charts={[
         { choice: { kind: "Curve", steps: showAll ? 0 : headTo }, label: t("blockers.curve") },

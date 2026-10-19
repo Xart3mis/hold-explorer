@@ -1,18 +1,19 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArgsOf } from "../../api/commands";
 import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import { ShellContext, type Shell } from "../../app/shell/context";
+import type { AppStart } from "../../bindings/AppStart";
 import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { ExportRequest } from "../../bindings/ExportRequest";
 import type { SaveFormat } from "../../bindings/SaveFormat";
 import { ToastRegion } from "../../components/ToastRegion/ToastRegion";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
-import { openStart } from "../../test/fixtures";
+import { openStart, opened } from "../../test/fixtures";
 import { commandFailure, mockCommands, type Handlers } from "../../test/ipc";
 import { windowApi } from "../../test/window";
 import { ExportNotice } from "./ExportNotice";
@@ -63,11 +64,8 @@ function Harness({ copyFormat = { kind: "Table" } as CopyFormat, copyRequest = R
   );
 }
 
-function setup(handlers: Handlers, props: Parameters<typeof Harness>[0] = {}) {
-  const start = openStart();
-  queryClient.clear();
-  queryClient.setQueryData(keys.start, start);
-  mockCommands(handlers);
+/** The harness under a shell whose start is `start`. */
+function app(start: AppStart, props: Parameters<typeof Harness>[0]) {
   const shell: Shell = {
     start,
     dragged: null,
@@ -75,16 +73,41 @@ function setup(handlers: Handlers, props: Parameters<typeof Harness>[0] = {}) {
     report,
     notify: vi.fn(),
   };
-  render(
+  return (
     <QueryClientProvider client={queryClient}>
       <ShellContext.Provider value={shell}>
         <ToastRegion>
           <Harness {...props} />
         </ToastRegion>
       </ShellContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return userEvent.setup();
+}
+
+/**
+ * Renders the harness for the view of `openStart`, and returns the user and `show`, which puts
+ * another start on screen, as a switch of snapshot or workspace does once it is over.
+ */
+function setupWith(handlers: Handlers, props: Parameters<typeof Harness>[0] = {}) {
+  const start = openStart();
+  queryClient.clear();
+  queryClient.setQueryData(keys.start, start);
+  mockCommands(handlers);
+  const view = render(app(start, props));
+  const show = (next: AppStart) => {
+    queryClient.setQueryData(keys.start, next);
+    view.rerender(app(next, props));
+  };
+  return { user: userEvent.setup(), show };
+}
+
+function setup(handlers: Handlers, props: Parameters<typeof Harness>[0] = {}) {
+  return setupWith(handlers, props).user;
+}
+
+/** The start of `openStart` with its older snapshot in view. */
+function olderSnapshot(): AppStart {
+  return openStart({ open: opened({ selected: 1 }) });
 }
 
 beforeEach(() => {
@@ -224,7 +247,8 @@ describe("useSaveExport", () => {
   it("offers another name, and no other try, for a name with another extension", async () => {
     windowApi.chooseSavePath.mockResolvedValue("/home/ada/exports/Lines");
     const message =
-      "Hold Explorer did not save Lines: this export is saved as a .xlsx file, and the name ends otherwise. Save it again with a name that ends in .xlsx.";
+      "Hold Explorer did not save Lines: this export is saved as a .xlsx file, and the name " +
+      "ends otherwise. Save it again with a name that ends in .xlsx.";
     const user = setup({
       export_save: () => {
         throw commandFailure("Extension", message);
@@ -239,12 +263,38 @@ describe("useSaveExport", () => {
     expect(within(notice).queryByRole("button", { name: en.common.retry })).not.toBeInTheDocument();
   });
 
-  it("shows any other failure with its message only, and is dismissed", async () => {
+  it.each([
+    [
+      "Folder",
+      "Hold Explorer could not save Lines.xlsx: the folder /home/ada/gone does not exist. Choose a folder that exists, or make it, and save again.",
+    ],
+    [
+      "Write",
+      "Hold Explorer could not write Lines.xlsx: the disk is full. Free some space, or choose another place.",
+    ],
+  ])("offers another name, and no other try, for a failure of kind %s", async (kind, message) => {
     windowApi.chooseSavePath.mockResolvedValue(PATH);
-    const message = "Hold Explorer could not write to /home/ada/exports: the folder is read-only.";
     const user = setup({
       export_save: () => {
-        throw commandFailure("Folder", message);
+        throw commandFailure(kind, message);
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(message);
+    expect(
+      within(notice).getByRole("button", { name: en.export.chooseAnother }),
+    ).toBeInTheDocument();
+    expect(within(notice).queryByRole("button", { name: en.common.retry })).not.toBeInTheDocument();
+  });
+
+  it("shows any other failure with its message only, and is dismissed", async () => {
+    windowApi.chooseSavePath.mockResolvedValue(PATH);
+    const message =
+      "Hold Explorer could not make the workbook: a sheet has more rows than Excel holds. Filter the view and save again.";
+    const user = setup({
+      export_save: () => {
+        throw commandFailure("TooManyRows", message);
       },
     });
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -256,6 +306,81 @@ describe("useSaveExport", () => {
     ).not.toBeInTheDocument();
     await expectAccessible(document.body);
     await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("a save that fails before or after its command", () => {
+  it("says a save dialog that failed, with its message, and leaves no promise rejected", async () => {
+    windowApi.chooseSavePath.mockRejectedValue(new Error("The portal did not answer."));
+    const rejected = vi.fn();
+    window.addEventListener("unhandledrejection", rejected);
+    try {
+      const user = setup({});
+      await user.click(screen.getByRole("button", { name: "Save" }));
+      const notice = await screen.findByRole("alert");
+      expect(notice).toHaveTextContent(en.export.dialogFailed);
+      expect(notice).toHaveTextContent("The portal did not answer.");
+      expect(screen.getByText("Not saving")).toBeInTheDocument();
+      // Nothing to try again with: the export is started again from the menu.
+      expect(within(notice).queryByRole("button", { name: en.common.retry })).toBeNull();
+      expect(within(notice).queryByRole("button", { name: en.export.chooseAnother })).toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(rejected).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("unhandledrejection", rejected);
+    }
+  });
+
+  it("shows an export refused because the view changed with the export's own words, and no retry", async () => {
+    windowApi.chooseSavePath.mockResolvedValue(PATH);
+    const message =
+      "The workspace or snapshot changed while the export was being prepared. Nothing was saved; export again.";
+    const user = setup({
+      export_save: () => {
+        throw commandFailure("ViewChanged", message);
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const notice = await screen.findByRole("alert");
+    expect(notice).toHaveTextContent(en.export.saveFailed);
+    expect(notice).toHaveTextContent(message);
+    expect(within(notice).queryByRole("button", { name: en.common.retry })).toBeNull();
+    expect(within(notice).queryByRole("button", { name: en.export.chooseAnother })).toBeNull();
+  });
+
+  it("drops the notice of a failure once another snapshot is in view", async () => {
+    windowApi.chooseSavePath.mockResolvedValue(PATH);
+    const sent: ArgsOf<"export_save">[] = [];
+    const { user, show } = setupWith({
+      export_save: (args) => {
+        sent.push(args);
+        throw commandFailure("FileInUse", IN_USE);
+      },
+      export_copy: () => {
+        throw commandFailure("Clipboard", "The clipboard is busy. Copy again.");
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(IN_USE);
+    act(() => {
+      show(olderSnapshot());
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // A save from the new view is sent for it, never for the one of before.
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]?.view).toEqual({ ...VIEW, snapshot_id: 1 });
+
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("alert")).toHaveLength(2);
+    });
+    act(() => {
+      show(openStart());
+    });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

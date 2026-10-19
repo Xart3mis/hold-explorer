@@ -37,7 +37,10 @@ function isOneOf<Value extends string>(options: readonly Value[], value: unknown
 
 /**
  * The choice as stored, each part that reads as one taken and every other part the default. The
- * columns the screen no longer has are dropped, and the others put in table order.
+ * columns the screen no longer has are dropped, and the others put in table order. A choice of
+ * columns always has the column that names the rows (the first of the screen's file), as the
+ * panel saves it: a stored choice that lacks it, from an older build or edited by hand, gets it
+ * back.
  */
 function parse(screen: ExportScreen, stored: unknown): ExportChoice {
   if (typeof stored !== "object" || stored === null || Array.isArray(stored)) {
@@ -47,6 +50,9 @@ function parse(screen: ExportScreen, stored: unknown): ExportChoice {
   const named = new Set(
     Array.isArray(columns) ? columns.filter((id) => typeof id === "string") : [],
   );
+  const rowName = FILE_COLUMNS[screen][0];
+  const kept = FILE_COLUMNS[screen].filter((id) => named.has(id));
+  if (kept.length > 0 && rowName !== undefined) named.add(rowName);
   return {
     columns: FILE_COLUMNS[screen].filter((id) => named.has(id)),
     rows: isOneOf(ROWS, rows) ? rows : DEFAULT_CHOICE.rows,
@@ -67,7 +73,9 @@ export function readChoice(screen: ExportScreen): ExportChoice {
   }
 }
 
-/** Remembers the columns and rows of a screen. Storage that refuses keeps nothing, and says nothing. */
+/**
+ * Remembers the columns and rows of a screen. Storage that refuses keeps nothing, and says nothing.
+ */
 export function writeChoice(screen: ExportScreen, choice: ExportChoice): void {
   try {
     window.localStorage.setItem(storageKey(screen), JSON.stringify(choice));

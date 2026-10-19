@@ -16,8 +16,8 @@ export interface SortEntry<Sort> {
 
 /**
  * The sortable columns of the lines, in the order of the table. A count, an age, a size, or the
- * lines whose sizes differ come first, as the command sorts them; a name comes from A. `Easiest` is no column's: it
- * belongs to its preset.
+ * lines whose sizes differ come first, as the command sorts them; a name comes first from A.
+ * `Easiest` sorts no column: it belongs to its preset.
  */
 export const LINE_SORTS: readonly SortEntry<LineSort>[] = [
   { column: "line", sort: "LineId", natural: "ascending" },

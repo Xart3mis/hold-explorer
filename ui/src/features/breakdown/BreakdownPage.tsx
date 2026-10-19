@@ -111,7 +111,9 @@ export function BreakdownPage() {
     <ExportMenu
       screen={exportState.screen === "breakdown" ? "breakdown" : "matrix"}
       state={exportState}
-      {...(isList ? { loaded: table.sortedGroups.length, selected: [...table.selected.keys] } : {})}
+      {...(isList
+        ? { loaded: table.sortedGroups.length, selected: [...table.selected.keys] }
+        : { isEmpty: shownMatrix !== null && shownMatrix.matrix.rows.length === 0 })}
       charts={[
         exportState.screen === "matrix"
           ? {

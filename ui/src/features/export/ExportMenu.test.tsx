@@ -8,7 +8,9 @@ import { expectAccessible } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { breakdownGroups } from "../../test/breakdown";
 import { solveView } from "../../test/blockers";
+import { selectOlderSnapshot } from "../../test/flow";
 import { openStart, opened, workspace } from "../../test/fixtures";
+import { overviewView } from "../../test/overview";
 import { commandFailure } from "../../test/ipc";
 import { lineId, linePage } from "../../test/lines";
 import { ctrlClick, exportButton, itemNames, openMenu, renderAt, rowOf } from "../../test/export";
@@ -276,7 +278,12 @@ describe("each item exports the screen as it is", () => {
   });
 
   it("takes the columns and rows remembered for the screen", async () => {
-    const choice: ExportChoice = { columns: ["holds", "line"], rows: "loaded", status: "All" };
+    // Under the filters' status: another status writes every row (see the panel's tests).
+    const choice: ExportChoice = {
+      columns: ["holds", "line"],
+      rows: "loaded",
+      status: "filters",
+    };
     writeChoice("lines", choice);
     const app = renderAt("/lines");
     await rowOf(lineId(0));
@@ -288,7 +295,7 @@ describe("each item exports the screen as it is", () => {
     const sent = must(app.saves[0]);
     expect(sent.request.columns).toEqual(["line", "holds"]);
     expect(sent.request.rows).toEqual({ kind: "First", count: 3 });
-    expect(sent.request.spec.status).toBe("All");
+    expect(sent.request.spec.status).toBe("Open");
   });
 });
 
@@ -491,13 +498,12 @@ describe("while an export runs", () => {
     expect(windowApi.chooseSavePath).toHaveBeenCalledTimes(1);
 
     finish();
+    // The copy worked, and had the last result: the notice of the save is put away (one failure
+    // stands at a time), and nothing was saved again meanwhile.
     await waitFor(() => {
-      expect(retry).not.toHaveAttribute("aria-busy");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
-    await app.user.click(retry);
-    await waitFor(() => {
-      expect(saves).toBe(2);
-    });
+    expect(saves).toBe(1);
   });
 
   it("the menu waits while the rows on screen are of another request", SLOW, async () => {
@@ -528,6 +534,171 @@ describe("while an export runs", () => {
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toHaveAttribute("data-inert");
   });
+});
+
+describe("the menu waits", () => {
+  it("while a switch of snapshot runs, and Ctrl+E saves nothing", SLOW, async () => {
+    const app = renderAt("/lines", { snapshot_select: () => new Promise(() => undefined) });
+    await rowOf(lineId(0));
+    const button = await exportButton();
+    await selectOlderSnapshot(app.user);
+    await waitFor(() => {
+      expect(button).toHaveAttribute("data-inert");
+    });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    act(() => {
+      button.focus();
+      button.blur();
+    });
+    await app.user.keyboard("{Control>}e{/Control}");
+    expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
+  });
+
+  it("on the Overview while the numbers of the snapshot before stand in", SLOW, async () => {
+    let calls = 0;
+    const app = renderAt("/overview", {
+      snapshot_select: ({ id }) => opened({ selected: id }),
+      overview: () => {
+        calls += 1;
+        return calls === 1 ? overviewView() : new Promise(() => undefined);
+      },
+    });
+    const button = await exportButton();
+    await selectOlderSnapshot(app.user);
+    await waitFor(() => {
+      expect(calls).toBeGreaterThan(1);
+    });
+    await waitFor(() => {
+      expect(button).toHaveAttribute("data-inert");
+    });
+    await app.user.keyboard("{Control>}e{/Control}");
+    expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("the phase of a save", () => {
+  it("is in the name of the button while the command runs", SLOW, async () => {
+    const app = renderAt("/lines", {
+      export_save: (args) => {
+        args.onProgress.onmessage("Writing");
+        return new Promise(() => undefined);
+      },
+    });
+    await rowOf(lineId(0));
+    await app.user.click(
+      within(await openMenu(app.user)).getByRole("menuitem", { name: menu.excel }),
+    );
+    expect(await screen.findByRole("button", { name: menu.phase.Writing })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    expect(menu.phase.Writing.startsWith(menu.label)).toBe(true);
+  });
+});
+
+describe("a saved status other than the filters'", () => {
+  it("is named in every item it changes", SLOW, async () => {
+    writeChoice("lines", { ...DEFAULT_CHOICE, status: "Released" });
+    const app = renderAt("/lines");
+    await rowOf(lineId(0));
+    const note = menu.note.Released;
+    const noted = (label: string) => label.replace("{{note}}", note);
+    expect(itemNames(await openMenu(app.user))).toEqual([
+      noted(menu.noted.excel),
+      noted(menu.noted.workbook),
+      noted(menu.noted.csv),
+      noted(menu.noted.report),
+      noted(menu.noted.copyTable),
+      noted(menu.noted.copyLineIds),
+      menu.choice,
+    ]);
+    expect(noted(menu.noted.excel)).toBe("Excel, this view (released holds)…");
+  });
+
+  it("is named in the chart items of the Overview", SLOW, async () => {
+    writeChoice("overview", { ...DEFAULT_CHOICE, status: "All" });
+    const app = renderAt("/overview");
+    const noted = (label: string) => label.replace("{{note}}", menu.note.All);
+    expect(itemNames(await openMenu(app.user))).toEqual([
+      noted(menu.noted.excel),
+      noted(menu.noted.workbook),
+      noted(menu.noted.report),
+      noted(menu.noted.chartsPng),
+      noted(menu.noted.chartsSvg),
+      noted(menu.noted.copyCharts),
+    ]);
+  });
+});
+
+describe("a screen without rows", () => {
+  it("offers no copy of its rows on Lines", SLOW, async () => {
+    const app = renderAt("/lines", { lines: () => linePage({ total: 0 }) });
+    const names = itemNames(await openMenu(app.user));
+    expect(names).not.toContain(menu.copyTable);
+    expect(names).not.toContain(menu.copyLineIds);
+    expect(names).toContain(menu.excel);
+  });
+
+  it("offers no copy of its table on an empty matrix", SLOW, async () => {
+    const app = renderAt("/breakdown?mode=matrix", {
+      matrix: () => ({
+        rows: [],
+        cols: [],
+        other_row: null,
+        other_col: null,
+        cells: [],
+        max_cell: 0,
+        folded_rows: 0,
+        folded_cols: 0,
+      }),
+    });
+    const names = itemNames(await openMenu(app.user));
+    expect(names).not.toContain(menu.copyHolds);
+    expect(names).toContain(menu.csvHolds);
+  });
+});
+
+describe("one failure at a time", () => {
+  it(
+    "a copy that works puts away the failure of a save, and a copy that fails replaces it",
+    SLOW,
+    async () => {
+      let copyFails = false;
+      const app = renderAt("/lines", {
+        export_save: () => {
+          throw commandFailure("FileInUse", IN_USE);
+        },
+        export_copy: () => {
+          if (copyFails) throw commandFailure("Clipboard", "The clipboard is busy. Copy again.");
+          return null;
+        },
+      });
+      await rowOf(lineId(0));
+      await app.user.click(
+        within(await openMenu(app.user)).getByRole("menuitem", { name: menu.excel }),
+      );
+      expect(await screen.findByRole("alert")).toHaveTextContent(IN_USE);
+      await app.user.click(
+        within(await openMenu(app.user)).getByRole("menuitem", { name: menu.copyTable }),
+      );
+      await waitFor(() => {
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      });
+
+      await app.user.click(
+        within(await openMenu(app.user)).getByRole("menuitem", { name: menu.excel }),
+      );
+      await screen.findByRole("alert");
+      copyFails = true;
+      await app.user.click(
+        within(await openMenu(app.user)).getByRole("menuitem", { name: menu.copyTable }),
+      );
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toHaveTextContent("The clipboard is busy.");
+      });
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    },
+  );
 });
 
 describe("a workspace without snapshots", () => {

@@ -484,6 +484,30 @@ describe("DataTable without selected rows", () => {
     for (const each of dataRows()) expect(each).not.toHaveAttribute("data-open");
   });
 
+  it("starts no Shift range at a row it does not open, when it opens none", async () => {
+    const user = userEvent.setup();
+    const selections: string[][] = [];
+    render(
+      <DataTable
+        aria-label="Lines on hold"
+        columns={columns}
+        rows={lines}
+        rowKey={(line) => line.id}
+        // A key it is given, but its rows do not open: no `onSelectionChange`.
+        selectedKey="LINE-B"
+        selectedKeys={new Set<string>()}
+        onSelectedKeysChange={(keys) => {
+          selections.push([...keys]);
+        }}
+      />,
+    );
+    await user.keyboard("{Shift>}");
+    await user.click(row("LINE-D"));
+    await user.keyboard("{/Shift}");
+    // The range starts at the row pressed, not at LINE-B, which is not open.
+    expect(selections.at(-1)).toEqual(["LINE-D"]);
+  });
+
   it("stays read-only without a selection handler, given selected keys alone", async () => {
     const user = userEvent.setup();
     render(

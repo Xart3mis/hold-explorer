@@ -831,6 +831,9 @@ describe("BreakdownPage, with several groups selected", () => {
         expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
       });
       expect(groupsCountLine()).not.toHaveTextContent(/selected/);
+      await waitFor(() => {
+        expect(rowNamed(table, lineId(1))).toHaveFocus();
+      });
     },
   );
 });

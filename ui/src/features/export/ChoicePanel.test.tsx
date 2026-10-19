@@ -5,6 +5,7 @@ import { openHoldsFilter } from "../../api/filter";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
 import { must } from "../../test/app";
+import { manySteps } from "../../test/blockers";
 import { filterOptions } from "../../test/filters";
 import { lineId, linePage } from "../../test/lines";
 import { ctrlClick, exportButton, itemNames, openMenu, renderAt, rowOf } from "../../test/export";
@@ -38,6 +39,12 @@ function columnNames(dialog: HTMLElement): string[] {
     .map((box) =>
       (box.getAttribute("aria-label") ?? labelOf(box)).replace(panel.always, "").trim(),
     );
+}
+
+/** The radio of a status in the panel: "All" names a choice of rows as well. */
+function statusRadio(dialog: HTMLElement, name: string): HTMLElement {
+  const group = within(dialog).getByRole("radiogroup", { name: panel.status });
+  return within(group).getByRole("radio", { name });
 }
 
 function labelOf(box: HTMLElement): string {
@@ -131,7 +138,7 @@ describe("Cancel and Escape", () => {
     const app = renderAt("/lines");
     await rowOf(lineId(0));
     const dialog = await openPanel(app.user);
-    await app.user.click(within(dialog).getByRole("radio", { name: panel.statusAll }));
+    await app.user.click(statusRadio(dialog, panel.statusAll));
     await app.user.click(within(dialog).getByRole("checkbox", { name: en.lines.column.oldest }));
     await close(app.user);
     await waitFor(() => {
@@ -174,7 +181,8 @@ describe("each control writes the choice", () => {
     expect(within(status).getByRole("radio", { name: panel.statusFilters })).toBeChecked();
 
     await app.user.click(within(rows).getByRole("radio", { name: count(panel.rowsLoaded, 200) }));
-    await app.user.click(within(status).getByRole("radio", { name: panel.statusReleased }));
+    // Open is the status the rows on screen were read under: the loaded rows stay offered.
+    await app.user.click(within(status).getByRole("radio", { name: panel.statusOpen }));
     await app.user.click(within(dialog).getByRole("checkbox", { name: en.lines.column.holds }));
     await app.user.click(within(dialog).getByRole("button", { name: saveOf("Lines") }));
     await waitFor(() => {
@@ -183,7 +191,7 @@ describe("each control writes the choice", () => {
     expect(readChoice("lines")).toEqual({
       columns: FILE_COLUMNS.lines.filter((id) => id !== "holds"),
       rows: "loaded",
-      status: "Released",
+      status: "Open",
     });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: menu.label })).toHaveFocus();
@@ -281,7 +289,7 @@ describe("the columns", () => {
         column.created,
         column.age,
       ]);
-      await app.user.click(within(dialog).getByRole("radio", { name: panel.statusAll }));
+      await app.user.click(statusRadio(dialog, panel.statusAll));
       expect(columnNames(dialog)).toEqual([
         column.line,
         column.discipline,
@@ -311,21 +319,95 @@ describe("the columns", () => {
   });
 });
 
+describe("the count of every row", () => {
+  it("on Blockers is every step, also those the table has not been handed yet", SLOW, async () => {
+    const app = renderAt("/blockers", { solve_order: () => manySteps(450, 10) });
+    await rowOf("1");
+    const dialog = await openPanel(app.user, "Blockers");
+    const rows = within(dialog).getByRole("radiogroup", { name: panel.rows });
+    expect(within(rows).getByRole("radio", { name: count(panel.rowsAll, 450) })).toBeChecked();
+  });
+});
+
+describe("a status other than the one of the rows on screen", () => {
+  it("offers every row only, uncounted, says why, and saves all rows", SLOW, async () => {
+    const app = renderAt("/lines", { lines: () => linePage({ total: 500 }) });
+    await rowOf(lineId(0));
+    await ctrlClick(app.user, await rowOf(lineId(0)), await rowOf(lineId(2)));
+    const dialog = await openPanel(app.user);
+    const rows = within(dialog).getByRole("radiogroup", { name: panel.rows });
+    const status = within(dialog).getByRole("radiogroup", { name: panel.status });
+    await app.user.click(within(rows).getByRole("radio", { name: count(panel.rowsSelected, 2) }));
+
+    await app.user.click(within(status).getByRole("radio", { name: panel.statusReleased }));
+    const radios = within(rows).getAllByRole("radio");
+    expect(radios.map((radio) => labelOf(radio).replace(panel.rowsByStatus, ""))).toEqual([
+      panel.rowsAllUncounted,
+    ]);
+    expect(radios[0]).toBeChecked();
+    expect(radios[0]).toHaveAccessibleDescription(panel.rowsByStatus);
+
+    // Back to the filters' status: the rows on screen are offered again, with their counts.
+    await app.user.click(within(status).getByRole("radio", { name: panel.statusFilters }));
+    expect(
+      within(rows)
+        .getAllByRole("radio")
+        .map((radio) => labelOf(radio)),
+    ).toEqual([
+      count(panel.rowsAll, 500),
+      count(panel.rowsLoaded, 200),
+      count(panel.rowsSelected, 2),
+    ]);
+
+    await app.user.click(within(status).getByRole("radio", { name: panel.statusAll }));
+    await app.user.click(within(dialog).getByRole("button", { name: saveOf("Lines") }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(readChoice("lines")).toEqual({ ...DEFAULT_CHOICE, rows: "all", status: "All" });
+  });
+
+  it(
+    "on Breakdown, asks for every group of the status, and the menu leaves out the selected ones",
+    SLOW,
+    async () => {
+      writeChoice("breakdown", { ...DEFAULT_CHOICE, rows: "selected", status: "Released" });
+      const app = renderAt("/breakdown");
+      const first = await screen.findAllByRole("rowheader");
+      await ctrlClick(app.user, must(first[0]?.closest<HTMLElement>("[role='row']")));
+      const open = await openMenu(app.user);
+      const names = itemNames(open);
+      expect(names.some((name) => name.startsWith("Copy selected"))).toBe(false);
+      const noted = (key: string, note: string) => key.replace("{{note}}", note);
+      const both = en.export.menu.note.both.replace("{{status}}", en.export.menu.note.Released);
+      expect(names).toContain(noted(menu.noted.excel, both));
+      await app.user.click(
+        within(open).getByRole("menuitem", { name: noted(menu.noted.excel, both) }),
+      );
+      await waitFor(() => {
+        expect(app.saves).toHaveLength(1);
+      });
+      expect(must(app.saves[0]).request.rows).toEqual({ kind: "All" });
+      expect(must(app.saves[0]).request.spec.status).toBe("Released");
+    },
+  );
+});
+
 describe("a saved choice", () => {
   it("changes the next request", SLOW, async () => {
     const app = renderAt("/lines");
     await rowOf(lineId(0));
     const dialog = await openPanel(app.user);
-    await app.user.click(within(dialog).getByRole("radio", { name: panel.statusAll }));
+    await app.user.click(statusRadio(dialog, panel.statusAll));
     await app.user.click(within(dialog).getByRole("button", { name: panel.rowName }));
     await app.user.click(within(dialog).getByRole("checkbox", { name: en.lines.column.oldest }));
     await app.user.click(within(dialog).getByRole("button", { name: saveOf("Lines") }));
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     });
-    await app.user.click(
-      within(await openMenu(app.user)).getByRole("menuitem", { name: menu.excel }),
-    );
+    // The status saved is named in the items.
+    const excel = menu.noted.excel.replace("{{note}}", menu.note.All);
+    await app.user.click(within(await openMenu(app.user)).getByRole("menuitem", { name: excel }));
     await waitFor(() => {
       expect(app.saves).toHaveLength(1);
     });

@@ -7,7 +7,10 @@ import type { ExportScreen } from "./requests";
 /** The characters a file system refuses in a name, besides the control characters. */
 const REFUSED = new Set(["\\", "/", ":", "*", "?", '"', "<", ">", "|"]);
 
-/** Whether a file system refuses this character: one of `\ / : * ? " < > |`, or a control character. */
+/**
+ * Whether a file system refuses this character: one of `\ / : * ? " < > |`, or a control
+ * character.
+ */
 function isRefused(character: string): boolean {
   const code = character.codePointAt(0) ?? 0;
   return REFUSED.has(character) || code < 0x20 || code === 0x7f;
@@ -19,10 +22,11 @@ function clean(part: string): string {
 }
 
 /**
- * The name a saved export is offered under: `HoldExplorer_<workspace>_<view>_<snapshot>.<extension>`,
- * the snapshot as its date `YYYY-MM-DD`, left out with its underscore for a workspace without a
- * snapshot. The workspace and the view keep their spaces, case, and length; each character a file
- * system refuses becomes a hyphen.
+ * The name a saved export is offered under:
+ * `HoldExplorer_<workspace>_<view>_<snapshot>.<extension>`, the snapshot as its date
+ * `YYYY-MM-DD`, left out with its underscore for a workspace without a snapshot. The workspace
+ * and the view keep their spaces, case, and length; each character a file system refuses becomes
+ * a hyphen.
  */
 export function fileName(
   workspace: string,

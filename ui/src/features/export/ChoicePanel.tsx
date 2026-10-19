@@ -114,8 +114,21 @@ const STATUS_CHOICES: readonly { value: ExportChoice["status"]; key: MessageKey 
   { value: "All", key: "export.panel.statusAll" },
 ];
 
-/** The choices of rows a screen offers, with their counts. */
-function rowChoices(state: ScreenState, counts: RowCounts): Choice[] {
+/**
+ * The choices of rows a screen offers, with their counts. Under a status other than the one the
+ * rows on screen were read under (`isOwnStatus` false), those rows are not the export's: only
+ * every row is offered, uncounted, and it says why.
+ */
+function rowChoices(state: ScreenState, counts: RowCounts, isOwnStatus: boolean): Choice[] {
+  if (!isOwnStatus) {
+    return [
+      {
+        value: "all",
+        label: t("export.panel.rowsAllUncounted"),
+        description: t("export.panel.rowsByStatus"),
+      },
+    ];
+  }
   const isPaged = state.screen === "lines" || state.screen === "holds";
   const choices: Choice[] = [
     {
@@ -173,10 +186,10 @@ export interface ChoicePanelProps {
  * it was (DESIGN.md, Columns and rows panel).
  *
  * A remembered choice of rows that the screen does not offer now (the selected rows while none
- * is selected) shows as all rows, and saving keeps the rows shown: what the panel shows is what
- * it saves. The column that
- * names the row is always written. Every column of the file checked is kept as no columns named,
- * which writes every column the file has, whichever status it is written under.
+ * is selected, or any but all under a status other than the filters') shows as all rows, and
+ * saving keeps the rows shown: what the panel shows is what it saves. The column that names the
+ * row is always written. Every column of the file checked is kept as no columns named, which
+ * writes every column the file has, whichever status it is written under.
  */
 export function ChoicePanel({
   screen,
@@ -198,9 +211,10 @@ export function ChoicePanel({
     return kept;
   });
 
-  const rowOptions = rowChoices(state, counts);
+  const exportStatus = status === "filters" ? filterStatus : status;
+  const rowOptions = rowChoices(state, counts, exportStatus === filterStatus);
   const shownRows = rowOptions.some((option) => option.value === rows) ? rows : "all";
-  const columns = panelColumns(state, absent, status === "filters" ? filterStatus : status);
+  const columns = panelColumns(state, absent, exportStatus);
   const name = screenName(screen);
   const columnsLabel = useId();
 

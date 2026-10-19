@@ -869,6 +869,7 @@
     "openFile": "Open file",
     "openFailed": "The saved file could not be opened",
     "saveFailed": "The file was not saved",
+    "dialogFailed": "The save dialog could not be opened, so nothing was saved",
     "copyFailed": "Nothing was copied",
     "chooseAnother": "Choose another name",
     "copiedRows_one": "Copied {{count, number}} row",
@@ -901,7 +902,32 @@
       "csvAll": "CSV (all rows)…",
       "copyTableAll": "Copy table (all rows)",
       "copyLineIdsAll": "Copy line IDs (all rows)",
-      "choice": "Columns and rows…"
+      "choice": "Columns and rows…",
+      "noted": {
+        "excel": "Excel, this view ({{note}})…",
+        "workbook": "Full workbook ({{note}})…",
+        "csv": "CSV ({{note}})…",
+        "report": "Status report (PDF, {{note}})…",
+        "copyTable": "Copy table ({{note}})",
+        "copyLineIds": "Copy line IDs ({{note}})",
+        "chartPng": "Chart as PNG ({{note}})…",
+        "chartSvg": "Chart as SVG ({{note}})…",
+        "copyChart": "Copy chart ({{note}})",
+        "chartsPng": "Chart as PNG ({{note}})",
+        "chartsSvg": "Chart as SVG ({{note}})",
+        "copyCharts": "Copy chart ({{note}})"
+      },
+      "note": {
+        "Open": "open holds",
+        "Released": "released holds",
+        "All": "all holds",
+        "allRows": "all rows",
+        "both": "{{status}}, all rows"
+      },
+      "phase": {
+        "Reading": "Export, reading the view…",
+        "Writing": "Export, writing the file…"
+      }
     },
     "panel": {
       "title": "Columns and rows of {{screen}}",
@@ -910,6 +936,7 @@
       "rowsAllUncounted": "All",
       "rowsLoaded": "Loaded {{count, number}}",
       "rowsSelected": "Selected {{count, number}}",
+      "rowsByStatus": "The rows on screen are those of the filters' status, so every row of this status is written.",
       "status": "Status",
       "statusFilters": "As the filters",
       "statusOpen": "Open",
@@ -1071,7 +1098,7 @@
         "median": "$t(overview.releasedMedianDuration)"
       },
       "singleHoldLines": "$t(overview.singleHoldLines)",
-      "stale": "Holds open for 90 days or more"
+      "stale": "Holds open for {days} days or more"
     }
   }
 }

@@ -581,7 +581,9 @@ function world(state: DevState, theme: Theme): World {
   return { start, snapshots, folderReadable: state !== "list-error" };
 }
 
-/** How many rows a saved export holds, as the development page tells it: those the request names. */
+/**
+ * How many rows a saved export holds, as the development page tells it: those the request names.
+ */
 function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined): number {
   if (request.rows.kind === "Keys") return request.rows.keys.length;
   if (request.rows.kind === "First") return request.rows.count;

@@ -259,7 +259,8 @@ export function MenuSubmenu({ id, label, children }: MenuSubmenuProps) {
         placement="end top"
         className={cx(styles.popover)}
         style={{ zIndex: "var(--z-dropdown)" }}
-        // The submenu lines up with its item: its first item stands level with the one it opens from.
+        // The submenu lines up with its item: its first item stands level with the one it opens
+        // from.
         {...(offset === null ? {} : { offset, crossOffset: -offset })}
       >
         <RacMenu aria-label={label} className={cx(styles.menu)}>
