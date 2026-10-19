@@ -13,7 +13,7 @@
 //! word comes from the catalog through [`ExportText`]. Nothing of the moment or the machine enters
 //! the file but the moment the head states: the same input gives the same bytes.
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
+use chrono::{DateTime as Moment, Datelike, FixedOffset, NaiveDate, Timelike};
 use hx_core::dataset::{Dataset, Row};
 use hx_core::filter::{Dim, FilterSpec, Status};
 use hx_core::query::{ages_known, holds, stale_count, summary, HoldQuery, HoldSort};
@@ -33,7 +33,7 @@ use crate::chart::{
 use crate::fonts::{Face, Fonts};
 use crate::raster;
 use crate::text::ExportText;
-use crate::views::{dim_name, STALE_DAYS};
+use crate::views::{dim_name, is_blank, STALE_DAYS};
 use crate::ExportError;
 
 /// What the report's header states.
@@ -47,9 +47,9 @@ pub struct ReportHead {
     pub filters: Vec<String>,
     /// The version of the app that made the report.
     pub app_version: String,
-    /// When the report was made, in the local time the header states. It is also the document's
-    /// creation date.
-    pub made_at: NaiveDateTime,
+    /// When the report was made, with the offset from UTC of the machine's time zone. The
+    /// header states its local time; the document's creation date states it with its offset.
+    pub made_at: Moment<FixedOffset>,
 }
 
 /// The width of an A4 page, in points.
@@ -90,8 +90,14 @@ const ROW: f32 = 28.0;
 const ROW_PAD: f32 = (ROW - LINE) / 2.0;
 /// The space at each side of a cell (`--space-2`).
 const CELL_PAD: f32 = 8.0;
+/// The space between a table and its count line (`--space-1`).
+const COUNT_GAP: f32 = 4.0;
+/// The most lines a value of the header's facts is wrapped over, as a remark is.
+const FACT_LINES: usize = 4;
 /// The label column of the header's facts (`--size-bar-label-width`).
 const FACT_LABEL: f32 = 180.0;
+/// The space between the tiles and the line under them (`--space-3`).
+const TILE_GAP: f32 = 12.0;
 /// The space inside a tile (`--space-4`).
 const TILE_PAD: f32 = 16.0;
 /// The corner of the group of tiles (`--radius-md`).
@@ -145,9 +151,11 @@ pub(crate) fn report_pages(
     fonts: &Fonts,
 ) -> Result<Vec<String>, ExportError> {
     let words = Words::of(text, spec.status, !head.filters.is_empty())?;
+    // Whether the filter keeps open holds: the one source every part that needs them reads.
+    let open = spec.open_only().is_some();
     let mut flow = Flow::new(fonts);
     header(&mut flow, head, text, &words);
-    figures(&mut flow, ds, spec, &words);
+    figures(&mut flow, ds, spec, open, &words);
     for dim in [Dim::Discipline, Dim::HoldType, Dim::Role] {
         let name = dim_name(&dim, text)?;
         let title = fill(&words.bars, &[("dim", &name)]);
@@ -169,8 +177,18 @@ pub(crate) fn report_pages(
             bars::draw(page, &blockers, &blocker, &words.holds, Face::Body);
         }
     });
-    solve_order(&mut flow, plan, &words);
-    oldest_holds(&mut flow, ds, spec, &words);
+    if open {
+        solve_order(&mut flow, plan, &words);
+        oldest_holds(&mut flow, ds, spec, &words);
+    } else {
+        // Two titles, each with the line that says why it is empty, are one part, so that a
+        // line never takes a page alone.
+        not_shown(
+            &mut flow,
+            &[&words.solve_order, &words.oldest],
+            &words.released_only,
+        );
+    }
     let version = fill(&words.version, &[("version", &head.app_version)]);
     Ok(flow.finish(|number, pages| {
         let page = fill(
@@ -387,6 +405,11 @@ fn section<'a>(flow: &mut Flow<'a>, title: &str, body: impl Fn(&mut Page<'a>)) {
     flow.page.y += SECTION_GAP;
 }
 
+/// The height of `text` in `ink`, wrapped over the width of the page.
+fn sentence_height(fonts: &Fonts, text: &str, ink: Ink) -> f32 {
+    fonts.wrap(text, ink.face, ink.size, INNER).len() as f32 * LINE
+}
+
 /// One line of `ink`'s text, wrapped over the width of the page.
 fn sentence(page: &mut Page, text: &str, ink: Ink) {
     for line in page.fonts.wrap(text, ink.face, ink.size, INNER) {
@@ -411,11 +434,12 @@ fn header(flow: &mut Flow, head: &ReportHead, text: &ExportText, words: &Words) 
     }
     page.y += 12.0;
 
+    let local = head.made_at.naive_local();
     let made_at = format!(
         "{} {:02}:{:02}",
-        text.date(head.made_at.date()),
-        head.made_at.hour(),
-        head.made_at.minute()
+        text.date(local.date()),
+        local.hour(),
+        local.minute()
     );
     let value = Ink::new(Face::Body, SMALL, TEXT);
     let muted = Ink::new(Face::Body, SMALL, TEXT_MUTED);
@@ -438,7 +462,7 @@ fn header(flow: &mut Flow, head: &ReportHead, text: &ExportText, words: &Words) 
     let label = Ink::new(Face::Body, SMALL, TEXT_SECONDARY);
     let value_x = MARGIN + FACT_LABEL + 12.0;
     for (name, value, ink) in facts {
-        let lines = flow.fonts.wrap(&value, ink.face, ink.size, right - value_x);
+        let lines = wrap_at_most(flow.fonts, &value, ink.face, right - value_x, FACT_LINES);
         let height = (lines.len().max(1) as f32 * LINE + 2.0 * ROW_PAD).max(ROW);
         // So many filters that they fill the page go on over the next.
         flow.keep(height);
@@ -467,7 +491,7 @@ enum Figure {
 /// The tiles of the Overview's figures without deltas, and the line of the stale holds; under
 /// released holds only, the tiles of holds and lines, and the statement of why the figures of
 /// age are not there.
-fn figures(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words) {
+fn figures(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, open: bool, words: &Words) {
     let figures = summary(ds, spec);
     let mut tiles = vec![
         (&words.tiles[0], Figure::Value(count(figures.holds))),
@@ -477,26 +501,48 @@ fn figures(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words) {
             Figure::Value(count(figures.single_hold_lines)),
         ),
     ];
-    let released = spec.status == Status::Released;
-    if !released {
+    if open {
         let median = match figures.median_age_days {
-            Some(days) => Figure::Value(fill(&words.days, &[("days", &days.to_string())])),
+            Some(days) => Figure::Value(fill(&words.days, &[("days", &count_days(days))])),
             None => Figure::Unknown(words.unknown.clone()),
         };
         tiles.push((&words.tiles[3], median));
     }
-    let page = &mut flow.page;
+    let (line, line_ink) = if !open {
+        (
+            words.released_only.clone(),
+            Ink::new(Face::Body, SMALL, TEXT_MUTED),
+        )
+    } else if ages_known(ds, spec) {
+        let stale = fill(
+            &words.stale,
+            &[
+                ("days", &STALE_DAYS.to_string()),
+                ("count", &count(stale_count(ds, spec, STALE_DAYS))),
+            ],
+        );
+        (stale, Ink::new(Face::Body, SMALL, TEXT_SECONDARY))
+    } else {
+        (
+            words.stale_unknown.clone(),
+            Ink::new(Face::Body, SMALL, TEXT_SECONDARY),
+        )
+    };
     let width = INNER / tiles.len() as f32;
     let label = Ink::new(Face::Body, SMALL, TEXT_SECONDARY);
     let labels: Vec<Vec<String>> = tiles
         .iter()
         .map(|(name, _)| {
-            page.fonts
+            flow.fonts
                 .wrap(name, label.face, label.size, width - 2.0 * TILE_PAD)
         })
         .collect();
     let label_lines = labels.iter().map(Vec::len).max().unwrap_or(1);
     let height = 2.0 * TILE_PAD + label_lines as f32 * LINE + 4.0 + STAT_LINE;
+    let line_height = sentence_height(flow.fonts, &line, line_ink);
+    // The tiles and the line under them are one part.
+    flow.keep(height + TILE_GAP + line_height);
+    let page = &mut flow.page;
     let top = page.y;
     page.svg
         .frame((MARGIN, top), (INNER, height), TILE_RADIUS, SURFACE, EDGE);
@@ -529,27 +575,24 @@ fn figures(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words) {
             }
         }
     }
-    page.y = top + height + 12.0;
-    let secondary = Ink::new(Face::Body, SMALL, TEXT_SECONDARY);
-    if released {
-        sentence(
-            page,
-            &words.released_only,
-            Ink::new(Face::Body, SMALL, TEXT_MUTED),
-        );
-    } else if ages_known(ds, spec) {
-        let stale = fill(
-            &words.stale,
-            &[
-                ("days", &STALE_DAYS.to_string()),
-                ("count", &count(stale_count(ds, spec, STALE_DAYS))),
-            ],
-        );
-        sentence(page, &stale, secondary);
-    } else {
-        sentence(page, &words.stale_unknown, secondary);
-    }
+    page.y = top + height + TILE_GAP;
+    sentence(page, &line, line_ink);
     page.y += SECTION_GAP;
+}
+
+/// Parts that need open holds, under a filter that keeps none: each title with `why` under it,
+/// kept together on one page.
+fn not_shown(flow: &mut Flow, titles: &[&str], why: &str) {
+    let ink = Ink::new(Face::Body, SMALL, TEXT_MUTED);
+    let one = |title: &str| title_height(flow.fonts, title) + sentence_height(flow.fonts, why, ink);
+    let height: f32 = titles.iter().map(|title| one(title)).sum::<f32>()
+        + SECTION_GAP * (titles.len() as f32 - 1.0);
+    flow.keep(height);
+    for title in titles {
+        draw_title(&mut flow.page, title);
+        sentence(&mut flow.page, why, ink);
+        flow.page.y += SECTION_GAP;
+    }
 }
 
 /// The steps of the solve order of `plan` the report lists: those after which 90 percent of the
@@ -565,22 +608,12 @@ pub(crate) fn solve_rows(plan: Option<&SolvePlan>) -> Vec<SolveRow> {
 /// The head of the solve order as a table, how many steps it lists of how many, and the curve
 /// of every step with the 90 percent step marked.
 fn solve_order(flow: &mut Flow, plan: Option<&SolvePlan>, words: &Words) {
-    let Some(plan) = plan else {
-        section(flow, &words.solve_order, |page| {
-            sentence(
-                page,
-                &words.released_only,
-                Ink::new(Face::Body, SMALL, TEXT_MUTED),
-            );
-        });
-        return;
-    };
-    let view = solve_view(plan);
-    let rows = solve_rows(Some(plan));
-    if rows.is_empty() {
+    let view = plan.map(solve_view);
+    let rows = solve_rows(plan);
+    let Some(view) = view.filter(|_| !rows.is_empty()) else {
         section(flow, &words.solve_order, |page| page.note(&words.no_holds));
         return;
-    }
+    };
     let [step, blocker, holds, gain, cumulative] = &words.solve_columns;
     let columns = vec![
         Col::number(step),
@@ -631,8 +664,7 @@ pub(crate) fn oldest_page(ds: &Dataset, spec: &FilterSpec) -> Option<(Vec<Row>, 
 
 /// A text the export left blank (empty, or the dash an import writes for a blank) is no value.
 fn given(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed == "—" {
+    if is_blank(value) {
         String::new()
     } else {
         value.to_string()
@@ -641,16 +673,7 @@ fn given(value: &str) -> String {
 
 /// The oldest open holds as a table: line, discipline, hold type, the remark wrapped, and age.
 fn oldest_holds(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words) {
-    let Some((rows, total)) = oldest_page(ds, spec) else {
-        section(flow, &words.oldest, |page| {
-            sentence(
-                page,
-                &words.released_only,
-                Ink::new(Face::Body, SMALL, TEXT_MUTED),
-            );
-        });
-        return;
-    };
+    let (rows, total) = oldest_page(ds, spec).unwrap_or_default();
     if rows.is_empty() {
         section(flow, &words.oldest, |page| page.note(&words.no_holds));
         return;
@@ -662,8 +685,8 @@ fn oldest_holds(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words)
         .fold(0.0, f32::max);
     let columns = vec![
         Col::text(line, (widest + 2.0 * CELL_PAD).ceil(), Face::Mono),
-        Col::text(discipline, 100.0, Face::Body),
-        Col::text(hold_type, 190.0, Face::Body),
+        Col::sized(discipline, 160.0),
+        Col::sized(hold_type, 220.0),
         Col::share(remark, 160.0),
         Col::number(age),
     ];
@@ -674,7 +697,7 @@ fn oldest_holds(flow: &mut Flow, ds: &Dataset, spec: &FilterSpec, words: &Words)
                 row.hold.line_id.clone(),
                 given(&row.hold.discipline),
                 given(&row.hold.hold_type),
-                row.hold.remark.clone(),
+                given(&row.hold.remark),
                 row.days().map(count_days).unwrap_or_default(),
             ]
         })
@@ -706,6 +729,9 @@ pub(crate) struct Col {
     share: bool,
     /// Whether its values are numbers, set at its trailing edge.
     number: bool,
+    /// Whether it is as wide as its widest value (at least its header, at most `width`), its
+    /// text wrapped where the widest does not fit.
+    sized: bool,
     face: Face,
 }
 
@@ -717,7 +743,21 @@ impl Col {
             width,
             share: false,
             number: false,
+            sized: false,
             face,
+        }
+    }
+
+    /// A column of text as wide as its widest value, at least its header and at most `most`,
+    /// its text wrapped where it is wider.
+    pub(crate) fn sized(header: &str, most: f32) -> Col {
+        Col {
+            header: header.to_string(),
+            width: most,
+            share: false,
+            number: false,
+            sized: true,
+            face: Face::Body,
         }
     }
 
@@ -728,6 +768,7 @@ impl Col {
             width: least,
             share: true,
             number: false,
+            sized: false,
             face: Face::Body,
         }
     }
@@ -739,6 +780,7 @@ impl Col {
             width: 0.0,
             share: false,
             number: true,
+            sized: false,
             face: Face::Body,
         }
     }
@@ -754,10 +796,11 @@ fn titled_table(flow: &mut Flow, title: &str, columns: &[Col], rows: &[Vec<Strin
     flow.keep(title_height(flow.fonts, title) + ROW + first);
     draw_title(&mut flow.page, title);
     table(flow, columns, rows);
-    flow.keep(LINE);
+    let ink = Ink::new(Face::Body, SMALL, TEXT_MUTED);
+    flow.keep(COUNT_GAP + sentence_height(flow.fonts, shown, ink));
     let page = &mut flow.page;
-    page.y += 4.0;
-    sentence(page, shown, Ink::new(Face::Body, SMALL, TEXT_MUTED));
+    page.y += COUNT_GAP;
+    sentence(page, shown, ink);
     page.y += SECTION_GAP;
 }
 
@@ -782,6 +825,12 @@ fn widths(fonts: &Fonts, columns: &[Col], rows: &[Vec<String>]) -> Vec<f32> {
                     .filter_map(|row| row.get(at))
                     .map(|value| (fonts.width(value, col.face, SMALL) + 2.0 * CELL_PAD).ceil())
                     .fold(header(col).min(NUMBER_HEADER_MAX), f32::max)
+            } else if col.sized {
+                rows.iter()
+                    .filter_map(|row| row.get(at))
+                    .map(|value| (fonts.width(value, col.face, SMALL) + 2.0 * CELL_PAD).ceil())
+                    .fold(header(col), f32::max)
+                    .min(col.width.max(header(col)))
             } else {
                 col.width
             }
@@ -825,6 +874,18 @@ fn widths(fonts: &Fonts, columns: &[Col], rows: &[Vec<String>]) -> Vec<f32> {
     widths
 }
 
+/// `text` wrapped over lines of `width`, at most `most` of them; when it needs more, the last
+/// holds the start of the rest, cut with an ellipsis.
+fn wrap_at_most(fonts: &Fonts, text: &str, face: Face, width: f32, most: usize) -> Vec<String> {
+    let mut lines = fonts.wrap(text, face, SMALL, width);
+    if lines.len() > most {
+        let rest = lines[most.saturating_sub(1)..].join(" ");
+        lines.truncate(most.saturating_sub(1));
+        lines.push(fonts.fit(&rest, face, SMALL, width));
+    }
+    lines
+}
+
 /// The lines of each cell of a row, and the height of the row.
 fn row_lines(
     fonts: &Fonts,
@@ -840,14 +901,8 @@ fn row_lines(
             let room = width - 2.0 * CELL_PAD;
             if value.is_empty() {
                 Vec::new()
-            } else if col.share {
-                let mut lines = fonts.wrap(value, col.face, SMALL, room);
-                if lines.len() > REMARK_LINES {
-                    let rest = lines[REMARK_LINES - 1..].join(" ");
-                    lines.truncate(REMARK_LINES - 1);
-                    lines.push(fonts.fit(&format!("{rest} …"), col.face, SMALL, room));
-                }
-                lines
+            } else if col.share || col.sized {
+                wrap_at_most(fonts, value, col.face, room, REMARK_LINES)
             } else {
                 vec![fonts.fit(value, col.face, SMALL, room)]
             }
@@ -924,7 +979,7 @@ pub(crate) fn table(flow: &mut Flow, columns: &[Col], rows: &[Vec<String>]) {
 fn pdf(
     pages: &[String],
     title: &str,
-    made_at: NaiveDateTime,
+    made_at: Moment<FixedOffset>,
     fonts: &Fonts,
 ) -> Result<Vec<u8>, ExportError> {
     let fault = |reason: String| ExportError::Report { reason };
@@ -951,17 +1006,26 @@ fn pdf(
         .map_err(|error| fault(format!("{error:?}")))
 }
 
-/// A moment as the PDF's date, without an offset from UTC: the local time the header states.
-fn date_time(at: NaiveDateTime) -> DateTime {
-    // Every part is in range by construction: the year is clamped, the others come from a date.
+/// A moment as the PDF's date: its local time and its offset from UTC, in whole minutes. The PDF
+/// writes the minutes of the offset with the sign of its hours, so an offset of less than an hour
+/// west of UTC (none in use today) would be written east of it.
+fn date_time(at: Moment<FixedOffset>) -> DateTime {
+    // Every part is in range by construction: the year is clamped, the others come from a date
+    // or an offset, which chrono keeps under a day.
     let part = |value: u32| u8::try_from(value).unwrap_or(0);
-    let year = u16::try_from(at.year().clamp(0, 9999)).unwrap_or(0);
+    let local = at.naive_local();
+    let year = u16::try_from(local.year().clamp(0, 9999)).unwrap_or(0);
+    let offset = at.offset().local_minus_utc();
+    let hours = i8::try_from(offset / 3600).unwrap_or(0);
+    let minutes = part(offset.unsigned_abs() % 3600 / 60);
     DateTime::new(year)
-        .month(part(at.month()))
-        .day(part(at.day()))
-        .hour(part(at.hour()))
-        .minute(part(at.minute()))
-        .second(part(at.second()))
+        .month(part(local.month()))
+        .day(part(local.day()))
+        .hour(part(local.hour()))
+        .minute(part(local.minute()))
+        .second(part(local.second()))
+        .utc_offset_hour(hours)
+        .utc_offset_minute(minutes)
 }
 
 #[cfg(test)]

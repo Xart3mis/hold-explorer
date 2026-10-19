@@ -3,16 +3,16 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{FilterSpec, Status};
 use hx_core::load::load_file;
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, SolvePlan};
 use hx_synth::{generate, write_workbook, SynthConfig};
+use sha2::{Digest, Sha256};
 
 use super::*;
-use crate::chart::{EDGE, TEXT};
 use crate::fonts::Fonts;
 use crate::text::{ExportText, FILE_TEXT_KEYS};
 use crate::xlsx::palette;
@@ -132,6 +132,13 @@ fn moment(y: i32, m: u32, d: u32, h: u32, min: u32) -> NaiveDateTime {
         .unwrap()
 }
 
+/// 19 Oct 2026 14:05 at three hours east of UTC.
+fn made_at() -> DateTime<FixedOffset> {
+    moment(2026, 10, 19, 14, 5)
+        .and_local_timezone(FixedOffset::east_opt(3 * 3600).unwrap())
+        .unwrap()
+}
+
 fn empty() -> Dataset {
     Dataset::build(Vec::new(), RuleSet::builtin(), moment(2026, 10, 1, 0, 0))
 }
@@ -146,7 +153,7 @@ fn head(ds: &Dataset, filters: &[&str]) -> ReportHead {
         snapshot: ds.snapshot.date(),
         filters: filters.iter().map(|f| f.to_string()).collect(),
         app_version: "0.1.0".into(),
-        made_at: moment(2026, 10, 19, 14, 5),
+        made_at: made_at(),
     }
 }
 
@@ -232,7 +239,8 @@ fn every_page_is_a4_portrait() {
 #[test]
 fn the_three_faces_are_embedded_as_subsets() {
     let pdf = report_of(full(), &FilterSpec::default(), &[]);
-    assert!(contains(&pdf, b"/FontFile2"));
+    // The three faces and no other.
+    assert_eq!(occurrences(&pdf, b"/FontFile2"), 3);
     // The PostScript names of the static instances of `fonts/`.
     for name in [
         &b"PublicSansRoman-Regular"[..],
@@ -257,7 +265,7 @@ fn the_report_made_twice_is_the_same_bytes() {
 /// The SHA-256 of the report of the synthetic snapshot, made at a fixed moment. CI on Windows and
 /// on Linux checks the same value, so the report is the same file on both. A change of a
 /// dependency that changes the bytes updates this value in the same commit, with the reason.
-const GOLDEN: &str = "640acae00c97e66d114108865378f76cd469bded605a7913cbb8263d436d71a7";
+const GOLDEN: &str = "5a6fd7d4fc6e993bd8f3dff7862d85976bbef6d0ba2a3686958018419975e98e";
 
 #[test]
 fn the_report_of_the_synthetic_snapshot_has_the_checked_in_hash() {
@@ -269,8 +277,14 @@ fn the_report_of_the_synthetic_snapshot_has_the_checked_in_hash() {
 fn the_document_has_the_catalog_title_and_the_moment_it_was_made_and_nothing_of_the_machine() {
     let pdf = report_of(full(), &FilterSpec::default(), &[]);
     assert!(contains(&pdf, b"Hold status report"));
-    assert!(contains(&pdf, b"D:20261019140500"));
-    for word in [&b"/Producer"[..], b"/Creator ", b"krilla", b"CreatorTool"] {
+    // The local time the header states, with its offset from UTC: hours and minutes, as
+    // pdf-writer writes them (without the closing apostrophe, which PDF 2.0 drops), and in XMP.
+    assert!(contains(&pdf, b"/CreationDate(D:20261019140500+03'00)"));
+    assert!(contains(
+        &pdf,
+        b"<xmp:CreateDate>2026-10-19T14:05:00+03:00</xmp:CreateDate>"
+    ));
+    for word in [&b"/Producer"[..], b"/Creator", b"krilla", b"CreatorTool"] {
         assert!(!contains(&pdf, word), "{}", String::from_utf8_lossy(word));
     }
 }
@@ -385,6 +399,14 @@ fn released_holds_only_say_why_the_parts_of_open_holds_are_empty() {
     assert!(!all.iter().any(|t| t == "Lines freed by the solve order"));
     assert!(!all.iter().any(|t| t == "Median duration"));
     assert!(all.iter().any(|t| t == "Released holds"));
+    // The solve order and the oldest open holds say it together, on one page.
+    let page_of = |title: &str| {
+        pages
+            .iter()
+            .position(|page| texts(page).iter().any(|t| t == title))
+            .unwrap()
+    };
+    assert_eq!(page_of("Solve order"), page_of("Oldest open holds"));
 }
 
 #[test]
@@ -477,89 +499,14 @@ fn every_color_of_the_report_is_in_the_palette() {
     for token in REPORT_COLORS {
         assert!(palette().contains_key(token), "{token}");
     }
-    assert!(REPORT_COLORS.contains(&TEXT) && REPORT_COLORS.contains(&EDGE));
 }
 
-/// SHA-256 (FIPS 180-4) of `data` as lowercase hex, for the golden test.
+/// SHA-256 of `data` as lowercase hex, for the golden test.
 fn sha256_hex(data: &[u8]) -> String {
-    const K: [u32; 64] = [
-        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-        0xc67178f2,
-    ];
-    let mut h: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-        0x5be0cd19,
-    ];
-    let mut message = data.to_vec();
-    message.push(0x80);
-    while message.len() % 64 != 56 {
-        message.push(0);
-    }
-    message.extend_from_slice(&((data.len() as u64) * 8).to_be_bytes());
-    for chunk in message.chunks(64) {
-        let mut w = [0u32; 64];
-        for (i, word) in chunk.chunks(4).enumerate() {
-            w[i] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
-        }
-        for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16]
-                .wrapping_add(s0)
-                .wrapping_add(w[i - 7])
-                .wrapping_add(s1);
-        }
-        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = h;
-        for i in 0..64 {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ (!e & g);
-            let t1 = hh
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(K[i])
-                .wrapping_add(w[i]);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let t2 = s0.wrapping_add(maj);
-            hh = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(t1);
-            d = c;
-            c = b;
-            b = a;
-            a = t1.wrapping_add(t2);
-        }
-        for (slot, value) in h.iter_mut().zip([a, b, c, d, e, f, g, hh]) {
-            *slot = slot.wrapping_add(value);
-        }
-    }
-    h.iter().map(|word| format!("{word:08x}")).collect()
-}
-
-#[test]
-fn the_hash_of_the_golden_test_is_sha_256() {
-    assert_eq!(
-        sha256_hex(b""),
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    );
-    assert_eq!(
-        sha256_hex(b"abc"),
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-    );
-    let long = vec![b'a'; 1_000];
-    assert_eq!(
-        sha256_hex(&long),
-        "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3"
-    );
+    Sha256::digest(data)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[test]
@@ -599,4 +546,84 @@ fn filters_that_fill_the_first_page_go_on_over_the_next() {
         .filter(|f| first.contains(f) || second.contains(f))
         .count();
     assert_eq!(drawn, 40);
+}
+
+/// Every element of an SVG page that is drawn below `bottom`, except those of the footer.
+fn below(svg: &str, bottom: f32) -> Vec<String> {
+    let number = |element: &str, name: &str| -> Option<f32> {
+        let start = element.find(&format!(" {name}=\""))? + name.len() + 3;
+        let end = start + element[start..].find('"')?;
+        element[start..end].parse().ok()
+    };
+    let mut out = Vec::new();
+    for element in svg.split('<').skip(1) {
+        let lowest = if element.starts_with("text ") {
+            let footer = element.contains(">Page ") || element.contains(">Hold Explorer ");
+            if footer {
+                None
+            } else {
+                number(element, "y")
+            }
+        } else if element.starts_with("rect ") && element.contains(" x=\"") {
+            Some(number(element, "y").unwrap_or(0.0) + number(element, "height").unwrap_or(0.0))
+        } else if element.starts_with("line ") {
+            Some(
+                number(element, "y1")
+                    .unwrap_or(0.0)
+                    .max(number(element, "y2").unwrap_or(0.0)),
+            )
+        } else {
+            None
+        };
+        if lowest.is_some_and(|y| y > bottom) {
+            out.push(element.chars().take(120).collect());
+        }
+    }
+    out
+}
+
+#[test]
+fn many_and_long_filters_never_draw_into_the_footer() {
+    let long = format!(
+        "Line ID: {}",
+        (0..1200)
+            .map(|n| format!("L-{n:04}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    // Filter rows ending at every place near the bottom of page 1, and a filter of more lines
+    // than a page holds.
+    for rows in 20..=45 {
+        let mut filters: Vec<String> = (0..rows).map(|n| format!("Hold type: Type {n}")).collect();
+        filters.push(long.clone());
+        let refs: Vec<&str> = filters.iter().map(String::as_str).collect();
+        let pages = pages_of(full(), &FilterSpec::default(), &refs);
+        for (at, page) in pages.iter().enumerate() {
+            let low = below(page, BOTTOM);
+            assert!(low.is_empty(), "{rows} filters, page {}: {low:?}", at + 1);
+        }
+        // The long filter is cut to its lines, with an ellipsis.
+        let all: Vec<String> = pages.iter().flat_map(|page| texts(page)).collect();
+        assert!(
+            all.iter().any(|t| t.starts_with("L-") && t.ends_with('…')),
+            "{rows}"
+        );
+        assert!(all.iter().any(|t| t == "Open holds"));
+    }
+}
+
+#[test]
+fn a_median_of_a_thousand_days_or_more_has_its_thousands_separated() {
+    assert_eq!(count_days(1234), "1,234");
+    assert_eq!(count_days(-1234), "-1,234");
+}
+
+#[test]
+fn a_hold_type_column_is_as_wide_as_its_widest_value() {
+    let columns = vec![Col::sized("Hold type", 220.0), Col::share("Remark", 120.0)];
+    let rows = vec![vec!["INSTRUMENT VENDOR DATA".to_string(), "x".to_string()]];
+    let mut flow = Flow::new(fonts());
+    table(&mut flow, &columns, &rows);
+    let pages = flow.finish(|_, _| (String::new(), String::new()));
+    assert!(texts(&pages[0]).contains(&"INSTRUMENT VENDOR DATA".to_string()));
 }

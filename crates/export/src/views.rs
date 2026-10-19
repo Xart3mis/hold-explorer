@@ -516,10 +516,15 @@ fn scoped<T>(mut items: Vec<T>, scope: &RowScope, key: impl Fn(&T) -> String) ->
     }
 }
 
-/// A text the export left blank (empty, or the dash an import writes for a blank) is no value.
-fn given(value: &str) -> Cell {
+/// Whether the export left a text blank: empty, or the dash an import writes for a blank.
+pub(crate) fn is_blank(value: &str) -> bool {
     let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed == "—" {
+    trimmed.is_empty() || trimmed == "—"
+}
+
+/// A text the export left blank is no value.
+fn given(value: &str) -> Cell {
+    if is_blank(value) {
         Cell::Empty
     } else {
         Cell::Text(value.to_string())

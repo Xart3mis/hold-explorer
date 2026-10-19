@@ -312,7 +312,7 @@ fn the_status_report_of_ten_thousand_holds_takes_under_two_seconds() {
         snapshot: ds.snapshot.date(),
         filters: Vec::new(),
         app_version: "0.1.0".into(),
-        made_at: ds.snapshot,
+        made_at: ds.snapshot.and_utc().fixed_offset(),
     };
     let text = file_text();
     let fonts = Fonts::embedded();
