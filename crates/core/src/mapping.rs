@@ -142,9 +142,9 @@ impl SavedMapping {
     /// This saved mapping with `update`, the mapping an import of a file with `headers` saves,
     /// merged into it. Every entry of `update` is taken. An entry of this mapping is kept only
     /// when its column is not in the file and its field is one `update` does not map: a field
-    /// the import mapped is replaced, and a field whose column the file has but the import left
-    /// on "no column" is removed. The entries of `update` come first, then those kept, in their
-    /// order.
+    /// the import mapped is replaced. "No column" removes a field only when its saved column is
+    /// in this file; a field whose saved column the file lacks is kept. The entries of `update`
+    /// come first, then those kept, in their order.
     pub fn merged(&self, update: &SavedMapping, headers: &[String]) -> SavedMapping {
         let in_file: std::collections::HashSet<(String, usize)> =
             column_keys(headers).into_iter().flatten().collect();

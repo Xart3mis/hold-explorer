@@ -429,8 +429,7 @@ fn of_two_files_with_one_id_the_file_named_by_the_id_is_opened() {
     let id = state.create_workspace("Plant").unwrap().workspace.id;
     let folder = fx.workspaces();
     let original = folder.join(format!("{id}.holdx-ws"));
-    // The user copied the file inside the folder, twice: both copies keep the id. Their names
-    // sort before and after the original in the listing.
+    // The user copied the file inside the folder, twice: both copies keep the id.
     for (file, name) in [("copy-1.holdx-ws", "A copy"), ("copy-2.holdx-ws", "Z copy")] {
         let copy = folder.join(file);
         std::fs::copy(&original, &copy).unwrap();

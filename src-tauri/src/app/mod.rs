@@ -331,8 +331,8 @@ impl AppState {
 
     /// Opens the workspace of this id from a listing of the folder in use. Of several files with
     /// one id, the listing has one as the workspace (the file named by the id, else the first in
-    /// byte order) and the others as copies, so a copy is never opened. When no readable workspace has the id, a file named by it that could not
-    /// be read gives its reason.
+    /// byte order) and the others as copies, so a copy is never opened. When no readable
+    /// workspace has the id, a file named by it that could not be read gives its reason.
     fn load_from(
         &self,
         list: WorkspaceList,

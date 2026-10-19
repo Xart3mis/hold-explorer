@@ -617,6 +617,7 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     }
+
     #[test]
     fn a_workspace_overwritten_with_text_is_listed_as_damaged_and_a_stray_text_file_is_not() {
         let dir = tempfile::tempdir().unwrap();
