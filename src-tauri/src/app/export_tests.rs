@@ -755,3 +755,49 @@ fn the_session_keeps_one_clipboard_and_makes_it_again_after_a_failure() {
     assert_eq!(made.load(Ordering::SeqCst), 3);
     assert_eq!(texts.load(Ordering::SeqCst), 4);
 }
+
+/// A clipboard that says when it is dropped.
+struct Dropped(Arc<AtomicBool>);
+
+impl Clipboard for Dropped {
+    fn text(&mut self, _: &str) -> Result<(), CommandError> {
+        Ok(())
+    }
+
+    fn image(&mut self, _: u32, _: u32, _: &[u8]) -> Result<(), CommandError> {
+        Ok(())
+    }
+}
+
+impl Drop for Dropped {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn release_drops_the_clipboard_held_and_the_next_copy_makes_one_again() {
+    let session = SessionClipboard::default();
+    // Releasing an empty session does nothing.
+    session.release();
+    assert!(!session.holds());
+
+    let dropped = Arc::new(AtomicBool::new(false));
+    let made = Arc::new(AtomicUsize::new(0));
+    let make = || -> Result<Box<dyn SendClipboard>, CommandError> {
+        made.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(Dropped(dropped.clone())))
+    };
+    let copy_once = || session.copy_with(Content::Text("L-1".into()), &text(), fonts(), &make);
+    copy_once().unwrap();
+    assert!(session.holds());
+    assert!(!dropped.load(Ordering::SeqCst));
+
+    session.release();
+    assert!(!session.holds());
+    assert!(dropped.load(Ordering::SeqCst), "the clipboard was dropped");
+
+    copy_once().unwrap();
+    assert!(session.holds());
+    assert_eq!(made.load(Ordering::SeqCst), 2);
+}

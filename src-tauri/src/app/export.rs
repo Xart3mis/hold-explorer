@@ -198,6 +198,25 @@ impl SessionClipboard {
         })
     }
 
+    /// Lets the clipboard go, which hands what it holds to the system's clipboard manager. The
+    /// app calls it as it exits; a copy after it makes a clipboard again.
+    pub fn release(&self) {
+        let mut kept = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        drop(kept.take());
+    }
+
+    /// Whether a clipboard is held.
+    #[cfg(test)]
+    pub(super) fn holds(&self) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some()
+    }
+
     /// [`SessionClipboard::copy`] with the function that makes a clipboard.
     pub(super) fn copy_with(
         &self,

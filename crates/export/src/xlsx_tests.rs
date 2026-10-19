@@ -45,6 +45,7 @@ fn text() -> ExportText {
         ("file.about.filters", "Filters"),
         ("file.about.noFilters", "No filters"),
         ("file.about.noSnapshot", "No snapshot"),
+        ("file.about.offset", "UTC{offset}"),
         ("file.about.rows", "Rows"),
         ("file.about.appVersion", "App version"),
         ("file.about.madeAt", "Made at"),
@@ -976,6 +977,7 @@ fn a_catalog_without_a_label_the_workbook_needs_is_refused_naming_the_key() {
         "file.sheet.about",
         "file.about.madeAt",
         "file.about.noFilters",
+        "file.about.offset",
         KEY_YES,
     ] {
         let mut lacking = text();

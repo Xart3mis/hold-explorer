@@ -18,6 +18,7 @@ use rust_xlsxwriter::{
     Worksheet, XlsxError,
 };
 
+use crate::chart::fill;
 use crate::sheet::{Cell, Column, ColumnKind, ColumnRole, Sheet, SheetKind};
 use crate::text::{ExportText, KEY_NO, KEY_YES};
 use crate::views::name_sheets;
@@ -213,7 +214,11 @@ fn about_sheet(about: &About, text: &ExportText) -> Result<Sheet, ExportError> {
     );
     rows.push(vec![label("file.about.madeAt")?, Cell::Text(made_at)]);
     // A date cell of Excel has no time zone: the offset of the local time is stated under it.
-    rows.push(vec![Cell::Empty, Cell::Text(utc_offset(about.made_at))]);
+    let offset = fill(
+        text.get("file.about.offset")?,
+        &[("offset", &about.made_at.offset().to_string())],
+    );
+    rows.push(vec![Cell::Empty, Cell::Text(offset)]);
     let column = |id: &str, key: &str| -> Result<Column, ExportError> {
         Ok(Column {
             id: id.into(),
@@ -378,11 +383,6 @@ fn cut_cell(text: &str) -> &str {
 fn excel_date(day: NaiveDate) -> Option<ExcelDateTime> {
     let year = u16::try_from(day.year()).ok()?;
     ExcelDateTime::from_ymd(year, day.month() as u8, day.day() as u8).ok()
-}
-
-/// The offset of a moment from UTC as the About sheet states it: `UTC+03:00`.
-fn utc_offset(at: DateTime<FixedOffset>) -> String {
-    format!("UTC{}", at.offset())
 }
 
 /// The Excel date and time of `at`, to the second.

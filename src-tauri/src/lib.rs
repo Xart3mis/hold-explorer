@@ -8,7 +8,7 @@ mod commands;
 use std::sync::Mutex;
 
 use tauri::window::Color;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 use app::{AppState, SessionClipboard, Theme};
 
@@ -100,11 +100,24 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(handler())
-        .run(tauri::generate_context!());
-    if let Err(error) = result {
-        eprintln!("Hold Explorer could not start: {error}");
-        std::process::exit(1);
-    }
+        .build(tauri::generate_context!());
+    let app = match result {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("Hold Explorer could not start: {error}");
+            std::process::exit(1);
+        }
+    };
+    app.run(|app, event| {
+        // The event loop ends the process without dropping what the app manages, and the system's
+        // clipboard hands what the app copied to the clipboard manager only when it is dropped:
+        // it is let go here, so a copy made just before quitting survives the app on X11.
+        if let RunEvent::Exit = event {
+            if let Some(clipboard) = app.try_state::<SessionClipboard>() {
+                clipboard.release();
+            }
+        }
+    });
 }
 
 #[cfg(test)]
