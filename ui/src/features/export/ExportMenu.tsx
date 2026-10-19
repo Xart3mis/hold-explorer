@@ -86,8 +86,7 @@ export interface ExportMenuProps {
   /**
    * Whether the screen has data to export: its own result is there (not a first load, and not an
    * older result standing in). The menu also waits while a workspace or snapshot is switched. A
-   * screen without a snapshot does not show the menu (DESIGN.md, Menu: a menu with nothing to
-   * offer is not shown).
+   * screen without a snapshot shows `ExportMenuInert` instead.
    */
   isReady: boolean;
   /**
@@ -97,6 +96,26 @@ export interface ExportMenuProps {
   isEmpty?: boolean;
   /** The save and the copy of the page, whose failure the page shows under its header. */
   exports: PageExports;
+}
+
+/**
+ * The Export button of a screen without a snapshot: in the header where the menu stands once there
+ * is one, inert, and described to assistive technology by why. It opens nothing, and `Ctrl+E` does
+ * nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
+ * shown" (DESIGN.md, Menu): the action is fixed, and the page always has it.
+ */
+export function ExportMenuInert() {
+  return (
+    <MenuButton
+      label={t("export.menu.label")}
+      menuLabel={t("export.menu.name")}
+      align="end"
+      isInert
+      description={t("export.menu.noSnapshot")}
+    >
+      <MenuSeparator />
+    </MenuButton>
+  );
 }
 
 const NO_CHARTS: readonly ExportChart[] = [];

@@ -17,7 +17,7 @@ import type { Group } from "../../bindings/Group";
 import type { ViewRef } from "../../bindings/ViewRef";
 import { Button, EmptyState, ErrorState, Select, ViewSwitch } from "../../components";
 import { t } from "../../text/i18n";
-import { ExportMenu, ExportNotices, usePageExports } from "../export/ExportMenu";
+import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
 import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
@@ -135,7 +135,7 @@ export function BreakdownPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.breakdown")}>
+      <Page title={t("destinations.name.breakdown")} actions={<ExportMenuInert />}>
         <EmptyState
           title={t("breakdown.emptyTitle")}
           action={

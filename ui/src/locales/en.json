@@ -882,6 +882,7 @@
     "menu": {
       "label": "Export",
       "name": "Export",
+      "noSnapshot": "Import a snapshot to export",
       "excel": "Excel, this view…",
       "workbook": "Full workbook…",
       "csv": "CSV…",

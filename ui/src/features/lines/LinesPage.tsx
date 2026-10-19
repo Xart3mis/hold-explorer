@@ -34,7 +34,7 @@ import { cx } from "../../components/cx";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useTableDetailFocus } from "../detail/tableFocus";
-import { ExportMenu, ExportNotices, usePageExports } from "../export/ExportMenu";
+import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
 import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
@@ -273,7 +273,7 @@ export function LinesPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.lines")}>
+      <Page title={t("destinations.name.lines")} actions={<ExportMenuInert />}>
         <EmptyState
           title={t("lines.emptyTitle")}
           action={

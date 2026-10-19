@@ -707,8 +707,8 @@ describe("a workspace without snapshots", () => {
     ["/lines", en.lines.emptyTitle],
     ["/breakdown", en.breakdown.emptyTitle],
     ["/blockers", en.blockers.emptyTitle],
-  ])("has no Export menu on %s", async (path, empty) => {
-    renderApp({
+  ])("shows the Export button inert on %s, and it opens nothing", async (path, empty) => {
+    const app = renderApp({
       path,
       start: openStart({
         open: opened({
@@ -720,7 +720,21 @@ describe("a workspace without snapshots", () => {
       handlers: { overview: () => null },
     });
     await screen.findByText(empty);
-    expect(screen.queryByRole("button", { name: menu.label })).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: menu.label });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAccessibleDescription(menu.noSnapshot);
+    await app.user.click(button);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    act(() => {
+      button.focus();
+    });
+    await app.user.keyboard("{Enter}");
+    await app.user.keyboard("{ArrowDown}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    // Ctrl+E saves nothing: no dialog is asked for.
+    await app.user.keyboard("{Control>}e{/Control}");
+    expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

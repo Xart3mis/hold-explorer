@@ -1,5 +1,5 @@
 import { Check, ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
-import type { ReactNode, Ref } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import {
   Button as RacButton,
   Header,
@@ -17,6 +17,7 @@ import { lengthToken } from "../../design/token-values";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Spinner } from "../Spinner/Spinner";
+import { VisuallyHidden } from "../VisuallyHidden/VisuallyHidden";
 import styles from "./Menu.module.css";
 
 export interface MenuButtonProps {
@@ -36,6 +37,11 @@ export interface MenuButtonProps {
    * `isPending` comes first.
    */
   isInert?: boolean;
+  /**
+   * Why the button is inert, for assistive technology: the button's accessible description. It is
+   * not shown, since nothing is told by hover alone.
+   */
+  description?: string;
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
   /**
@@ -66,6 +72,7 @@ export function MenuButton({
   icon,
   isPending = false,
   isInert = false,
+  description,
   align = "start",
   isFlush = false,
   triggerRef,
@@ -77,6 +84,8 @@ export function MenuButton({
   const offset = lengthToken("--space-1");
   const inert = !isPending && isInert;
   const busy = isPending || inert;
+  const descriptionId = useId();
+  const described = description !== undefined && inert;
   return (
     <MenuTrigger>
       <RacButton
@@ -90,6 +99,7 @@ export function MenuButton({
           <button
             {...domProps}
             aria-busy={busy ? "true" : undefined}
+            aria-describedby={described ? descriptionId : undefined}
             {...(isExpanded ? { "aria-expanded": true } : {})}
           />
         )}
@@ -98,6 +108,7 @@ export function MenuButton({
         <span className={styles.triggerLabel}>{label}</span>
         {isPending ? <Spinner /> : <Icon icon={ChevronDown} className={styles.chevron} />}
       </RacButton>
+      {described ? <VisuallyHidden id={descriptionId}>{description}</VisuallyHidden> : null}
       <Popover
         placement={align === "end" ? "bottom end" : "bottom start"}
         className={cx(styles.popover)}

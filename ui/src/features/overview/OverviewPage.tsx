@@ -25,7 +25,13 @@ import {
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 import { blockersAddress } from "../blockers/address";
-import { ExportMenu, ExportNotices, usePageExports, type ExportChart } from "../export/ExportMenu";
+import {
+  ExportMenu,
+  ExportMenuInert,
+  ExportNotices,
+  usePageExports,
+  type ExportChart,
+} from "../export/ExportMenu";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { DEFAULT_LINES_STATE, linesAddress, withSelection } from "../lines/address";
@@ -292,9 +298,9 @@ export function OverviewPage() {
       title={t("destinations.name.overview")}
       width="content"
       {...(description === undefined ? {} : { description })}
-      // A workspace without snapshots has nothing to export: the menu is not shown.
+      // A workspace without snapshots has nothing to export: the button is shown inert.
       {...(open?.selected == null
-        ? {}
+        ? { actions: <ExportMenuInert /> }
         : {
             actions: (
               <ExportMenu

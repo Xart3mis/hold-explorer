@@ -860,8 +860,13 @@ describe("the Overview of a workspace without snapshots", () => {
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
-    // One action, no snapshot to name under the title, and nothing being read.
-    expect(within(main).getAllByRole("button")).toHaveLength(1);
+    // The inert Export button and the one action, no snapshot to name under the title, and
+    // nothing being read.
+    expect(within(main).getAllByRole("button")).toHaveLength(2);
+    expect(within(main).getByRole("button", { name: en.export.menu.label })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
     expect(must(main.querySelector("header"), "the page header").querySelector("p")).toBeNull();
     expect(status(main)).toBeEmptyDOMElement();
   });
