@@ -27,6 +27,7 @@ const theme = params.get("theme") === "light" ? "Light" : "Dark";
 const density = params.get("density") === "compact" ? "Compact" : "Comfortable";
 
 document.documentElement.dataset.page = installDevCommands(state, theme, density);
+document.documentElement.dataset.density = density.toLowerCase();
 // The stored theme and density belong to another run of this page; the address decides here.
 window.localStorage.removeItem("hold-explorer.theme");
 window.localStorage.removeItem("hold-explorer.density");

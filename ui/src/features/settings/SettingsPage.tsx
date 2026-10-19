@@ -50,6 +50,8 @@ export function SettingsPage() {
   }, [savedName]);
   const saveName = () => {
     const name = draft.trim();
+    // The text shows the name as it is kept: trimmed.
+    setDraft(name);
     if (name === asked.current) return;
     asked.current = name;
     setAuthorName.mutate(name, {

@@ -368,6 +368,66 @@ describe("the author name", () => {
     expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
   });
 
+  it("reports a failed save as a toast when the page was left before it failed", async () => {
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_author_name: () => {
+          throw commandFailure("Settings", TOO_LONG);
+        },
+      },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace");
+    await user.click(screen.getByRole("link", { name: en.destinations.name.settings }));
+    const toast = await screen.findByRole("status");
+    expect(toast).toHaveTextContent("Ada Lovelace");
+    expect(toast).toHaveTextContent(TOO_LONG);
+  });
+
+  it("shows no toast for a failed save while the page is there", async () => {
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_author_name: () => {
+          throw commandFailure("Settings", TOO_LONG);
+        },
+      },
+    });
+    await page();
+    await user.type(nameField(), "Ada");
+    await user.tab();
+    expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent("Ada");
+  });
+
+  it("clears the error when a retry saves the name", async () => {
+    let fail = true;
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_author_name: ({ name }: { name: string }) => {
+          if (fail) throw commandFailure("Settings", TOO_LONG);
+          return withSettings({ author_name: name });
+        },
+      },
+    });
+    await page();
+    await user.type(nameField(), "Ada");
+    await user.tab();
+    expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+    fail = false;
+    await user.click(nameField());
+    await user.tab();
+    await waitFor(() => {
+      expect(screen.queryByText(TOO_LONG)).not.toBeInTheDocument();
+    });
+    expect(nameField()).not.toBeInvalid();
+  });
+
   it("shows on the field that a save is on its way", async () => {
     let release: (value: Settings) => void = () => undefined;
     const { user } = renderApp({

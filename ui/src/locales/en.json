@@ -274,6 +274,7 @@
     "densityCompact": "Compact",
     "densityError": "The density was not saved",
     "authorName": "Author name",
+    "authorNameNotSaved": "The author name {{name}} was not saved. {{reason}}",
     "authorNameHelp": "Notes you write are signed with this name. It is saved when you leave the field or press Enter, and can be empty.",
     "folder": "Workspaces folder",
     "folderHelp": "Every workspace is one file in this folder.",
