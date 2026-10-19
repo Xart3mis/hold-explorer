@@ -62,9 +62,11 @@ const TEXT_SECONDARY: &str = "--color-text-secondary";
 /// Axis names, ticks, the filters, and the legend.
 const TEXT_MUTED: &str = "--color-text-muted";
 /// Gridlines.
-const GRID: &str = "--color-border-subtle";
-/// The baseline, the hairline at the marked step, and the edge of an empty cell.
-const AXIS: &str = "--color-border-default";
+const GRID: &str = "--color-chart-grid";
+/// The baseline and the hairline at the marked step.
+const AXIS: &str = "--color-chart-axis";
+/// The hairline inside the edge of an empty cell of the heatmap, and of its swatch.
+const EDGE: &str = "--color-border-default";
 /// Bars and the line: one neutral for plain data.
 const NEUTRAL: &str = "--color-chart-neutral";
 /// The marker of the 90 percent step.
@@ -84,8 +86,9 @@ const RAMP: [&str; 7] = [
 
 /// Every color a chart uses, which a test finds in `palette.json`.
 #[cfg(test)]
-const CHART_COLORS: [&str; 16] = [
+const CHART_COLORS: [&str; 17] = [
     SURFACE,
+    EDGE,
     TEXT,
     TEXT_SECONDARY,
     TEXT_MUTED,
@@ -132,7 +135,7 @@ pub enum ChartChoice {
     },
     /// The cumulative curve of lines freed, the first `steps` steps (the head on screen, or all).
     Curve {
-        /// How many steps are drawn, from the first; at least one, at most all.
+        /// How many steps are drawn, from the first, at most all; 0 draws every step.
         steps: usize,
     },
 }
@@ -274,6 +277,8 @@ fn baseline(top: f32, height: f32, size: f32) -> f32 {
 /// A chart being drawn: its drawing so far, where the next part goes, and the faces.
 struct Page<'a> {
     svg: Svg,
+    /// The width of the image: [`WIDTH`], or more where a heatmap needs it to print every value.
+    width: f32,
     /// The top of the next part.
     y: f32,
     fonts: &'a Fonts,
@@ -290,6 +295,7 @@ impl<'a> Page<'a> {
     ) -> Result<Self, ExportError> {
         let mut page = Page {
             svg: Svg::default(),
+            width: WIDTH,
             y: MARGIN,
             fonts,
         };
@@ -337,11 +343,11 @@ impl<'a> Page<'a> {
         self.y += LINE;
     }
 
-    /// The SVG document: the drawing on the surface, as tall as its content and the margin
-    /// under it, in whole pixels.
+    /// The SVG document: the drawing on the surface, as wide as the page and as tall as its
+    /// content and the margin under it, in whole pixels.
     fn finish(self) -> String {
         let height = (self.y + MARGIN).ceil();
-        self.svg.document(WIDTH, height, SURFACE)
+        self.svg.document(self.width.ceil(), height, SURFACE)
     }
 }
 

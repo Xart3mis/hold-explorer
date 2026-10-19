@@ -648,3 +648,193 @@ fn every_mark_of_a_chart_reads_at_3_to_1_on_the_surface() {
         assert!(ratio >= 3.0, "{token}: {ratio:.2} to 1");
     }
 }
+
+/// 10,000 open holds, one per line, each a pair of one of 100 names and one of 100 hold types:
+/// a heatmap of the two keeps 30 of each, and the cell of All others by All others holds 4,900.
+fn crossed() -> Dataset {
+    let holds = (0..10_000)
+        .map(|n| Hold {
+            line_id: format!("L-{n:05}"),
+            name: format!("Name {:02}", n % 100),
+            hold_type: format!("Type {:02}", (n / 100) % 100),
+            remark: "WAITING FOR STRESS".into(),
+            discipline: "Piping".into(),
+            ..Default::default()
+        })
+        .collect();
+    Dataset::build(holds, RuleSet::builtin(), snapshot())
+}
+
+/// Every text of the tree with its font size.
+fn sized_texts_of(group: &usvg::Group, out: &mut Vec<(String, f32)>) {
+    for node in group.children() {
+        match node {
+            usvg::Node::Group(group) => sized_texts_of(group, out),
+            usvg::Node::Text(text) => {
+                for chunk in text.chunks() {
+                    let size = chunk
+                        .spans()
+                        .iter()
+                        .map(|s| s.font_size().get())
+                        .fold(f32::MAX, f32::min);
+                    out.push((chunk.text().to_string(), size));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Checks that every colored cell of the heatmap of `rows` by `cols` prints its value, and no
+/// other number but the legend's 0 is printed; gives the width of the image.
+fn assert_every_cell_prints_its_value(ds: &Dataset, rows: Dim, cols: Dim) -> f32 {
+    let held = matrix_top(
+        ds,
+        &FilterSpec::default(),
+        &rows,
+        &cols,
+        MATRIX_LIMIT,
+        MATRIX_LIMIT,
+    );
+    let svg = svg_of(ds, &ChartChoice::Heatmap { rows, cols }, &[]);
+    let tree = tree(&svg);
+    let mut sized = Vec::new();
+    sized_texts_of(tree.root(), &mut sized);
+    let numbers: Vec<(usize, f32)> = sized
+        .iter()
+        .filter_map(|(text, size)| {
+            text.replace(',', "")
+                .parse::<usize>()
+                .ok()
+                .map(|n| (n, *size))
+        })
+        .collect();
+    let mut printed: Vec<usize> = numbers.iter().map(|(n, _)| *n).filter(|n| *n > 0).collect();
+    let mut cells: Vec<usize> = held
+        .cells
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|n| *n > 0)
+        .collect();
+    printed.sort_unstable();
+    cells.sort_unstable();
+    assert_eq!(printed, cells, "every colored cell prints its value, once");
+    assert_eq!(
+        numbers.iter().filter(|(n, _)| *n == 0).count(),
+        1,
+        "the legend's 0"
+    );
+    for (n, size) in &numbers {
+        assert!(*size >= 9.0, "{n} at {size} px");
+    }
+    // Every colored cell is a fill of the ramp: as many as the values, and the legend's seven.
+    let ramp: Vec<u32> = (1..=7)
+        .map(|s| color(&format!("--color-chart-seq-{s}")))
+        .collect();
+    let filled = fills(&svg).iter().filter(|c| ramp.contains(c)).count();
+    assert_eq!(filled, cells.len() + 7);
+    tree.size().width()
+}
+
+#[test]
+fn every_colored_cell_of_a_folded_heatmap_with_large_counts_prints_its_value() {
+    let ds = crossed();
+    let held = matrix_top(
+        &ds,
+        &FilterSpec::default(),
+        &Dim::Name,
+        &Dim::HoldType,
+        30,
+        30,
+    );
+    let corner = *held.cells.last().unwrap().last().unwrap();
+    assert!(corner > 1_000, "{corner}");
+    assert_eq!(held.cells.len(), 31);
+    assert_eq!(held.cells[0].len(), 31);
+    let width = assert_every_cell_prints_its_value(&ds, Dim::Name, Dim::HoldType);
+    // 31 columns of "4,900" at 9 px do not fit in 960: the image is wider, in whole pixels.
+    assert!(width > WIDTH, "{width}");
+    assert_eq!(width.fract(), 0.0);
+}
+
+#[test]
+fn every_colored_cell_of_a_folded_heatmap_of_the_snapshot_prints_its_value() {
+    let width = assert_every_cell_prints_its_value(full(), Dim::Blocker, Dim::Remark);
+    assert!(width >= WIDTH);
+    let width = assert_every_cell_prints_its_value(full(), Dim::Discipline, Dim::HoldType);
+    assert_eq!(width, WIDTH, "a heatmap whose values fit is 960 wide");
+}
+
+#[test]
+fn a_curve_of_zero_steps_draws_every_step() {
+    let ds = full();
+    let view = solve_view(&plan_of(ds, &FilterSpec::default()).unwrap());
+    let svg = svg_of(ds, &ChartChoice::Curve { steps: 0 }, &[]);
+    assert_eq!(
+        svg,
+        svg_of(ds, &ChartChoice::Curve { steps: usize::MAX }, &[])
+    );
+    let path = svg.split("<path").nth(1).unwrap();
+    let d = path
+        .split(" d=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    assert_eq!(d.matches(['M', 'L']).count(), view.rows.len());
+}
+
+/// The value of attribute `name` of the element `element` of an SVG text.
+fn attribute(element: &str, name: &str) -> Option<String> {
+    element
+        .split(&format!(" {name}=\""))
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .map(str::to_string)
+}
+
+/// The vertical hairlines of `stroke` in an SVG text.
+fn verticals<'a>(svg: &'a str, stroke: &str) -> Vec<&'a str> {
+    svg.split("<line")
+        .skip(1)
+        .filter(|line| {
+            attribute(line, "stroke").as_deref() == Some(stroke)
+                && attribute(line, "x1") == attribute(line, "x2")
+                && attribute(line, "y1") != attribute(line, "y2")
+        })
+        .collect()
+}
+
+#[test]
+fn the_ninety_percent_step_has_a_hairline_through_its_marker() {
+    let ds = full();
+    let svg = svg_of(ds, &ChartChoice::Curve { steps: usize::MAX }, &[]);
+    let axis = format!("#{:06x}", color("--color-chart-axis"));
+    let selected = format!("#{:06x}", color("--color-chart-neutral-selected"));
+    let lines = verticals(&svg, &axis);
+    assert_eq!(lines.len(), 1, "one hairline at the marked step");
+    let markers: Vec<&str> = svg
+        .split("<circle")
+        .skip(1)
+        .filter(|circle| attribute(circle, "fill").as_deref() == Some(selected.as_str()))
+        .collect();
+    // The marker on the line, and the same marker beside its sentence.
+    assert_eq!(markers.len(), 2);
+    assert_eq!(attribute(lines[0], "x1"), attribute(markers[0], "cx"));
+    // A head that stops before the marked step has neither.
+    let view = solve_view(&plan_of(ds, &FilterSpec::default()).unwrap());
+    let short = svg_of(
+        ds,
+        &ChartChoice::Curve {
+            steps: view.steps_to_most - 1,
+        },
+        &[],
+    );
+    assert!(verticals(&short, &axis).is_empty());
+    assert!(!short
+        .split("<circle")
+        .skip(1)
+        .any(|circle| attribute(circle, "fill").as_deref() == Some(selected.as_str())));
+}

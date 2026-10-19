@@ -5,7 +5,7 @@ use hx_core::query::FoldedMatrix;
 
 use super::svg::{Anchor, Ink};
 use super::{
-    baseline, count, fill, Page, AXIS, INNER, LINE, MARGIN, RAMP, SMALL, SURFACE, TEXT,
+    baseline, count, fill, Page, EDGE, INNER, LINE, MARGIN, RAMP, SMALL, SURFACE, TEXT,
     TEXT_INVERSE, TEXT_MUTED, TEXT_SECONDARY,
 };
 use crate::fonts::Face;
@@ -22,6 +22,8 @@ const CELL_GAP: f32 = 2.0;
 const FOLD_GAP: f32 = 2.0;
 /// The corner of a cell and of a step of the legend (`--radius-xs`).
 const RADIUS: f32 = 2.0;
+/// The smallest size a value of a cell is printed in, where 13 px does not fit its cell.
+const VALUE_MIN: f32 = 9.0;
 /// The space between a value and the edge of its cell (`--space-1`).
 const PAD: f32 = 4.0;
 /// The width of the row labels (`--size-bar-label-width`).
@@ -102,8 +104,9 @@ fn cell_ink_token(token: &str) -> &'static str {
 }
 
 /// Draws the legend, the column labels under the name of the columns, and a row per row value:
-/// its label and its cells. A value that does not fit its cell is not printed; the cell's step
-/// and the legend still say it.
+/// its label and its cells. Every cell with a value prints it: in 13 px where the widest value
+/// fits a cell, else in the size that fits it down to [`VALUE_MIN`]; where even that does not
+/// fit the 960 pixels, the cells are made as wide as the widest value and the image wider.
 pub(super) fn draw(page: &mut Page, matrix: &FoldedMatrix, words: &Words) {
     let caption = Ink::new(Face::Body, SMALL, TEXT_MUTED);
     let max = matrix.max_cell;
@@ -117,9 +120,31 @@ pub(super) fn draw(page: &mut Page, matrix: &FoldedMatrix, words: &Words) {
         0.0
     };
     // Counts of columns are far inside the range an `f32` holds exactly.
-    let fit =
-        (INNER - LABELS - LABEL_GAP - fold_room - CELL_GAP * (n_cols as f32 - 1.0)) / n_cols as f32;
-    let cell_w = fit.min(CELL_MAX);
+    let gaps = fold_room + CELL_GAP * (n_cols as f32 - 1.0);
+    let fit = (INNER - LABELS - LABEL_GAP - gaps) / n_cols as f32;
+    let mut cell_w = fit.min(CELL_MAX);
+    let widest = matrix
+        .cells
+        .iter()
+        .flatten()
+        .filter(|value| **value > 0)
+        .map(|value| page.width(&count(*value), Ink::new(Face::Body, SMALL, TEXT)))
+        .fold(0.0, f32::max);
+    // A width in the face grows with the size in proportion.
+    let value_size = if widest + 2.0 * PAD <= cell_w {
+        SMALL
+    } else {
+        let size = ((cell_w - 2.0 * PAD) / widest * SMALL * 2.0).floor() / 2.0;
+        if size >= VALUE_MIN {
+            size
+        } else {
+            cell_w = (widest * VALUE_MIN / SMALL + 2.0 * PAD).ceil();
+            VALUE_MIN
+        }
+    };
+    page.width = page
+        .width
+        .max(grid_x + n_cols as f32 * cell_w + gaps + MARGIN);
     let col_x = |at: usize| {
         let fold = if at == matrix.cols.len() {
             fold_room
@@ -182,16 +207,19 @@ pub(super) fn draw(page: &mut Page, matrix: &FoldedMatrix, words: &Words) {
             let x = col_x(at);
             let step = ramp_step(*value, max);
             let Some(fill) = step.checked_sub(1).map(|index| RAMP[index]) else {
-                page.svg.hollow(x, top, cell_w, CELL_HEIGHT, SURFACE, AXIS);
+                page.svg.hollow(x, top, cell_w, CELL_HEIGHT, SURFACE, EDGE);
                 continue;
             };
             page.svg.rect(x, top, cell_w, CELL_HEIGHT, fill, RADIUS);
-            let value_ink = Ink::new(Face::Body, SMALL, cell_ink_token(fill));
-            let value = count(*value);
-            if page.width(&value, value_ink) + 2.0 * PAD <= cell_w {
-                page.svg
-                    .text(x + cell_w - PAD, y, &value, value_ink, Anchor::End);
-            }
+            let value_ink = Ink::new(Face::Body, value_size, cell_ink_token(fill));
+            let value_y = baseline(top, CELL_HEIGHT, value_size);
+            page.svg.text(
+                x + cell_w - PAD,
+                value_y,
+                &count(*value),
+                value_ink,
+                Anchor::End,
+            );
         }
         page.y += CELL_HEIGHT + CELL_GAP;
     }
@@ -207,7 +235,7 @@ fn legend(page: &mut Page, max: usize, words: &Words) {
     let swatch_top = top + (LINE - SWATCH) / 2.0;
     let mut x = MARGIN;
     page.svg
-        .hollow(x, swatch_top, SWATCH, SWATCH, SURFACE, AXIS);
+        .hollow(x, swatch_top, SWATCH, SWATCH, SURFACE, EDGE);
     x += SWATCH + 4.0;
     let zero = count(0);
     page.svg.text(x, y, &zero, caption, Anchor::Start);

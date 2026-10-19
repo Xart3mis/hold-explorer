@@ -1,6 +1,8 @@
 {
   "--color-border-default": "#cdd6d7",
   "--color-border-subtle": "#e2e7e8",
+  "--color-chart-axis": "#cdd6d7",
+  "--color-chart-grid": "#e2e7e8",
   "--color-chart-neutral": "#6c7b7b",
   "--color-chart-neutral-selected": "#3f5152",
   "--color-chart-ord-1": "#4281bf",

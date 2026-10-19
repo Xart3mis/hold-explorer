@@ -18,6 +18,6 @@ rows: Dim,
  */
 cols: Dim, } | { "kind": "Curve", 
 /**
- * How many steps are drawn, from the first; at least one, at most all.
+ * How many steps are drawn, from the first, at most all; 0 draws every step.
  */
 steps: number, };

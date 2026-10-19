@@ -64,13 +64,15 @@ fn ticks(from: usize, to: usize, most: usize) -> Vec<usize> {
     (first..=to).step_by(size).collect()
 }
 
-/// Draws the first `steps` steps of `view` (at least one, at most all): the name of the value
+/// Draws the first `steps` steps of `view` (every step when `steps` is 0 or more than there
+/// are): the name of the value
 /// over the axis, the plot with its ticks and gridlines, the line, the last value at the end of
 /// the line, the name of the step under the axis, and, when the step after which 90 percent of
 /// the lines are freed is drawn, its marker and a line that says it.
 pub(super) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Words) {
     let caption = Ink::new(Face::Body, SMALL, TEXT_MUTED);
-    let shown = &view.rows[..steps.clamp(1, view.rows.len())];
+    let all = view.rows.len();
+    let shown = &view.rows[..if steps == 0 { all } else { steps.min(all) }];
     let (first, last) = (shown[0].step, shown[shown.len() - 1].step);
     let top_value = view.lines_on_hold.max(1);
 
