@@ -30,6 +30,7 @@ import { t } from "../../text/i18n";
 import { useSelection } from "../detail/selection";
 import { useTableDetailFocus } from "../detail/tableFocus";
 import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
+import { TopBarExport } from "../shell/topBarSlot";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { BLOCKERS_PATH, searchWithStepSort, selectedBlocker, stepSort } from "./address";
@@ -272,7 +273,10 @@ export function BlockersPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.blockers")} actions={<ExportMenuInert />}>
+      <Page title={t("destinations.name.blockers")}>
+        <TopBarExport>
+          <ExportMenuInert />
+        </TopBarExport>
         <EmptyState
           title={t("blockers.emptyTitle")}
           action={
@@ -316,10 +320,10 @@ export function BlockersPage() {
     <Page
       title={t("destinations.name.blockers")}
       fill
-      actions={exportMenu}
       notice={<ExportNotices exports={exports} />}
       bar={<FilterBar />}
     >
+      <TopBarExport>{exportMenu}</TopBarExport>
       <div data-part="blockers" className={styles.content}>
         {query.isError ? (
           <ErrorState

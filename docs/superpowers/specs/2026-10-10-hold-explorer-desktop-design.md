@@ -280,7 +280,7 @@ The user ticks blockers as solved. The app shows lines freed now, lines one bloc
 
 ### 9.1 Shell
 
-- Top bar: workspace switcher, global search, snapshot selector, Import.
+- Top bar: workspace switcher, global search, snapshot selector, Export, Import. Export is the menu of 10.4, beside Import on every page; a page with nothing to export shows it inert.
 - Left sidebar with labeled destinations: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then Rules and Settings. A destination that is not built yet is listed like the others with a quiet "Soon" tag, and opens a screen that says what the destination will show and that it is not available in this version. With no workspace open there is no sidebar; the top bar then leads to the workspaces and to Settings.
 - A page below a destination shows a breadcrumb above its title: the ancestors as links and the page itself last. A destination shows none. The workspace is not part of the trail.
 - A filter bar under the page header of every data screen (Overview, Breakdown, Lines, and Blockers), and on no other page. The status comes first and cannot be removed; then one chip per active filter, "Add filter", "Clear all" while a filter is set, and at the trailing end the number of holds the filters keep. While an action on the workspace runs, the bar keeps its place and says why nothing can be changed.
@@ -348,7 +348,7 @@ A saved view stores destination, filters, grouping, and sort under a name. Saved
 
 ### 10.4 Export
 
-Every data screen (Overview, Breakdown, Lines, Blockers) has an Export menu in its page header, and `Ctrl+E` runs "Excel, this view" (never while a text field has the focus or an overlay is open). Items run at once with the columns and rows remembered for the screen. A workspace without a snapshot shows the Export button inert (greyed out, opening nothing, with "Import a snapshot to export" as its accessible description), and `Ctrl+E` does nothing there. Items that do not apply to a screen are left out, not shown disabled.
+Every data screen (Overview, Breakdown, Lines, Blockers) has an Export menu, which stands in the top bar beside Import and not in the page header, and `Ctrl+E` runs "Excel, this view" (never while a text field has the focus or an overlay is open). Items run at once with the columns and rows remembered for the screen. A data screen of a workspace without a snapshot shows the Export button inert (greyed out, opening nothing, with "Import a snapshot to export" as its accessible description), and `Ctrl+E` does nothing there. Every other page (Settings, the screens that are not built, the import flow, the list of workspaces with none open) shows the button inert with "Open Overview, Breakdown, Lines, or Blockers to export" as its accessible description. Items that do not apply to a screen are left out, not shown disabled.
 
 - **Excel, this view**: what the screen shows, with the active filters.
 - **Full workbook**: one action, which is also "every screen at once": About, Summary, a breakdown sheet for each dimension the snapshot has, two cross-tabs of discipline by hold type (holds and lines), Lines, Holds, and Solve order, all under the current filters.

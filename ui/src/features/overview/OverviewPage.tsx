@@ -36,6 +36,7 @@ import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { DEFAULT_LINES_STATE, linesAddress, withSelection } from "../lines/address";
 import { presetQuery } from "../lines/presets";
+import { TopBarExport } from "../shell/topBarSlot";
 import { Attention } from "./Attention";
 import { GroupSection, isFilteredBy } from "./GroupSection";
 import styles from "./OverviewPage.module.css";
@@ -298,25 +299,25 @@ export function OverviewPage() {
       title={t("destinations.name.overview")}
       width="content"
       {...(description === undefined ? {} : { description })}
-      // A workspace without snapshots has nothing to export: the button is shown inert.
-      {...(open?.selected == null
-        ? { actions: <ExportMenuInert /> }
-        : {
-            actions: (
-              <ExportMenu
-                screen="overview"
-                state={OVERVIEW_STATE}
-                charts={charts}
-                // The numbers of the request on screen, not those of before standing in.
-                isReady={view !== undefined && view !== null && !query.isPlaceholderData}
-                exports={exports}
-              />
-            ),
-            notice: <ExportNotices exports={exports} />,
-          })}
+      {...(open?.selected == null ? {} : { notice: <ExportNotices exports={exports} /> })}
       // A workspace without snapshots has nothing to filter; its empty state says what to do.
       {...(open?.selected == null ? {} : { bar: <FilterBar /> })}
     >
+      {/* A workspace without snapshots has nothing to export: the button is shown inert. */}
+      <TopBarExport>
+        {open?.selected == null ? (
+          <ExportMenuInert />
+        ) : (
+          <ExportMenu
+            screen="overview"
+            state={OVERVIEW_STATE}
+            charts={charts}
+            // The numbers of the request on screen, not those of before standing in.
+            isReady={view !== undefined && view !== null && !query.isPlaceholderData}
+            exports={exports}
+          />
+        )}
+      </TopBarExport>
       <VisuallyHidden role="status">{status}</VisuallyHidden>
       {about?.limited === true ? (
         <Notice tone="info" title={t("overview.limitedTitle")} className={styles.limited}>

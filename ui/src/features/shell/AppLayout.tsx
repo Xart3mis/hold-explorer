@@ -24,6 +24,7 @@ import { shortcutBindings, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { TopBarSlotProvider } from "./topBarSlot";
 import { useSidebarForm, useWindowMark, useWindowSize } from "./window";
 
 declare module "react-aria-components" {
@@ -269,119 +270,121 @@ function LoadedShell({ start, destinations }: ShellProps) {
   return (
     <ShellContext value={shell}>
       <DetailFocusContext value={detailFocus}>
-        <div
-          data-detail={detail === null ? undefined : isWide ? "beside" : "overlay"}
-          className={styles.layout}
-        >
-          <TopBar
-            start={start}
-            destinations={destinations}
-            renameErrorId={problem?.kind === "rename" ? problemId : undefined}
-            onProblem={setProblem}
-          />
-          {hasSidebar ? (
-            <Sidebar
+        <TopBarSlotProvider>
+          <div
+            data-detail={detail === null ? undefined : isWide ? "beside" : "overlay"}
+            className={styles.layout}
+          >
+            <TopBar
+              start={start}
               destinations={destinations}
-              addressOf={addressOf}
-              form={sidebarForm}
-              onFormChange={setSidebarForm}
+              renameErrorId={problem?.kind === "rename" ? problemId : undefined}
+              onProblem={setProblem}
             />
-          ) : null}
-          <main className={styles.content}>
-            {problem !== null ||
-            notice !== null ||
-            dropProblem !== null ||
-            warning !== null ||
-            older !== null ? (
-              <div className={styles.notices}>
-                {problem === null ? null : (
-                  <div id={problemId}>
-                    <Notice
-                      tone="danger"
-                      title={problem.title}
-                      onDismiss={() => {
-                        setProblem(null);
-                      }}
-                    >
-                      {problem.message}
-                    </Notice>
-                  </div>
-                )}
-                {notice === null ? null : (
-                  <Notice
-                    tone="info"
-                    title={notice.title}
-                    onDismiss={() => {
-                      setNotice(null);
-                    }}
-                  >
-                    {notice.text}
-                  </Notice>
-                )}
-                {dropProblem === null ? null : (
-                  <Notice
-                    tone="warning"
-                    title={t("shell.dropUnavailable")}
-                    onDismiss={() => {
-                      setDropProblem(null);
-                    }}
-                  >
-                    <span className={styles.noticeLine}>{dropProblem}</span>
-                    <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
-                  </Notice>
-                )}
-                {warning === null ? null : (
-                  <Notice
-                    tone="warning"
-                    title={t("workspaces.warningTitle")}
-                    onDismiss={() => {
-                      setDismissedWarning(warning.message);
-                    }}
-                  >
-                    {warning.message}
-                  </Notice>
-                )}
-                {older === null ? null : (
-                  <Notice
-                    tone="info"
-                    actions={
-                      <Button
-                        variant="quiet"
-                        reservesPendingSpace
-                        isPending={selectSnapshot.isPending}
-                        isInert={isBusy}
-                        onPress={() => {
-                          selectSnapshot.mutate(older.newest.id, {
-                            onSuccess: () => {
-                              setProblem(null);
-                            },
-                            onError: (error) => {
-                              setProblem({
-                                kind: "action",
-                                title: t("snapshots.selectError"),
-                                message: asCommandError(error).message,
-                              });
-                            },
-                          });
+            {hasSidebar ? (
+              <Sidebar
+                destinations={destinations}
+                addressOf={addressOf}
+                form={sidebarForm}
+                onFormChange={setSidebarForm}
+              />
+            ) : null}
+            <main className={styles.content}>
+              {problem !== null ||
+              notice !== null ||
+              dropProblem !== null ||
+              warning !== null ||
+              older !== null ? (
+                <div className={styles.notices}>
+                  {problem === null ? null : (
+                    <div id={problemId}>
+                      <Notice
+                        tone="danger"
+                        title={problem.title}
+                        onDismiss={() => {
+                          setProblem(null);
                         }}
                       >
-                        {t("snapshots.toNewest")}
-                      </Button>
-                    }
-                  >
-                    {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
-                  </Notice>
-                )}
+                        {problem.message}
+                      </Notice>
+                    </div>
+                  )}
+                  {notice === null ? null : (
+                    <Notice
+                      tone="info"
+                      title={notice.title}
+                      onDismiss={() => {
+                        setNotice(null);
+                      }}
+                    >
+                      {notice.text}
+                    </Notice>
+                  )}
+                  {dropProblem === null ? null : (
+                    <Notice
+                      tone="warning"
+                      title={t("shell.dropUnavailable")}
+                      onDismiss={() => {
+                        setDropProblem(null);
+                      }}
+                    >
+                      <span className={styles.noticeLine}>{dropProblem}</span>
+                      <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
+                    </Notice>
+                  )}
+                  {warning === null ? null : (
+                    <Notice
+                      tone="warning"
+                      title={t("workspaces.warningTitle")}
+                      onDismiss={() => {
+                        setDismissedWarning(warning.message);
+                      }}
+                    >
+                      {warning.message}
+                    </Notice>
+                  )}
+                  {older === null ? null : (
+                    <Notice
+                      tone="info"
+                      actions={
+                        <Button
+                          variant="quiet"
+                          reservesPendingSpace
+                          isPending={selectSnapshot.isPending}
+                          isInert={isBusy}
+                          onPress={() => {
+                            selectSnapshot.mutate(older.newest.id, {
+                              onSuccess: () => {
+                                setProblem(null);
+                              },
+                              onError: (error) => {
+                                setProblem({
+                                  kind: "action",
+                                  title: t("snapshots.selectError"),
+                                  message: asCommandError(error).message,
+                                });
+                              },
+                            });
+                          }}
+                        >
+                          {t("snapshots.toNewest")}
+                        </Button>
+                      }
+                    >
+                      {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
+                    </Notice>
+                  )}
+                </div>
+              ) : null}
+              <div data-stale={isSwitching ? "" : undefined} className={styles.scroll}>
+                {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
+                <Outlet key={pathname} />
               </div>
-            ) : null}
-            <div data-stale={isSwitching ? "" : undefined} className={styles.scroll}>
-              {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
-              <Outlet key={pathname} />
-            </div>
-            {dragged === null ? null : <DropFrame paths={dragged} />}
-          </main>
-          {detail === null ? null : <DetailPanel selection={detail} className={styles.detail} />}
-        </div>
+              {dragged === null ? null : <DropFrame paths={dragged} />}
+            </main>
+            {detail === null ? null : <DetailPanel selection={detail} className={styles.detail} />}
+          </div>
+        </TopBarSlotProvider>
       </DetailFocusContext>
     </ShellContext>
   );

@@ -112,8 +112,9 @@ describe("the sidebar", () => {
   it("shows the shortcut of a destination in its tooltip", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
-    // From the top of the document: the switcher, the selector, Import, Overview, Breakdown.
+    // From the top of the document: the switcher, the selector, Export, Import, Overview, Breakdown.
     (document.activeElement as HTMLElement | null)?.blur();
+    await user.tab();
     await user.tab();
     await user.tab();
     await user.tab();
@@ -306,7 +307,7 @@ describe("the size of the window", () => {
 });
 
 describe("the top bar", () => {
-  it("holds the workspace switcher, the snapshot selector, and Import, in that order", async () => {
+  it("holds the workspace switcher, the snapshot selector, Export, and Import, in that order", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
     const bar = topBar();
@@ -314,7 +315,7 @@ describe("the top bar", () => {
     const buttons = within(bar).getAllByRole("button");
     expect(
       buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual([switcher, "Snapshot 7 Oct 2026", en.shell.import]);
+    ).toEqual([switcher, "Snapshot 7 Oct 2026", en.export.menu.label, en.shell.import]);
     // The page title is not repeated in the top bar: the page header carries it.
     expect(within(bar).queryByText(names.overview)).not.toBeInTheDocument();
   });
@@ -1041,12 +1042,13 @@ describe("the keyboard", () => {
     const expected = [
       screen.getByRole("button", { name: switcher }),
       screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
+      screen.getByRole("button", { name: en.export.menu.label }),
       screen.getByRole("button", { name: en.shell.import }),
       ...within(nav).getAllByRole("link"),
       within(nav).getByRole("button", { name: en.destinations.collapse }),
       screen.getByRole("button", { name: en.comingSoon.action }),
     ];
-    expect(expected).toHaveLength(14);
+    expect(expected).toHaveLength(15);
     for (const element of expected) {
       await user.tab();
       expect(element).toHaveFocus();

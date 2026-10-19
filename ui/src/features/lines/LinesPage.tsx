@@ -35,6 +35,7 @@ import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useTableDetailFocus } from "../detail/tableFocus";
 import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
+import { TopBarExport } from "../shell/topBarSlot";
 import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
@@ -273,7 +274,10 @@ export function LinesPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.lines")} actions={<ExportMenuInert />}>
+      <Page title={t("destinations.name.lines")}>
+        <TopBarExport>
+          <ExportMenuInert />
+        </TopBarExport>
         <EmptyState
           title={t("lines.emptyTitle")}
           action={
@@ -358,7 +362,6 @@ export function LinesPage() {
     <Page
       title={t("destinations.name.lines")}
       fill
-      actions={exportMenu}
       notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
@@ -375,6 +378,7 @@ export function LinesPage() {
       }
       bar={<FilterBar />}
     >
+      <TopBarExport>{exportMenu}</TopBarExport>
       <div data-part="lines" className={styles.content}>
         {mode !== "lines" ? null : optionsRead ? (
           <PresetRow

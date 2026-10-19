@@ -99,19 +99,26 @@ export interface ExportMenuProps {
 }
 
 /**
- * The Export button of a screen without a snapshot: in the header where the menu stands once there
- * is one, unavailable, and described to assistive technology by why. It opens nothing, and `Ctrl+E` does
- * nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
+ * The Export button where there is nothing to export: in the top bar where the menu stands once
+ * there is something, unavailable, and described to assistive technology by why. A screen without
+ * a snapshot says to import one (`TopBarExport` carries it there); every other page says where
+ * export is found. It opens nothing, and `Ctrl+E` does nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
  * shown" (DESIGN.md, Menu): the action is fixed, and the page always has it.
  */
-export function ExportMenuInert() {
+export function ExportMenuInert({
+  description = t("export.menu.noSnapshot"),
+}: {
+  /** Why nothing can be exported: no snapshot by default; the top bar says where export is found. */
+  description?: string;
+}) {
   return (
     <MenuButton
       label={t("export.menu.label")}
       menuLabel={t("export.menu.name")}
       align="end"
+      variant="secondary"
       isUnavailable
-      description={t("export.menu.noSnapshot")}
+      description={description}
     />
   );
 }
@@ -192,7 +199,8 @@ function hasPagedRows(state: ScreenState): boolean {
 }
 
 /**
- * The Export menu of a data screen, at the trailing edge of its header. Each item exports at once
+ * The Export menu of a data screen, which the page puts in the top bar beside Import
+ * (`TopBarExport`). Each item exports at once
  * with the columns and rows remembered for the screen; an item that saves ends in an ellipsis,
  * since the save dialog follows. What does not apply to the screen is left out: CSV and the copies
  * of the table on the Overview, whose view is several tables; the selected rows while none is
@@ -384,6 +392,7 @@ export function ExportMenu({
         {...(phase === null ? {} : { "aria-label": phase })}
         menuLabel={t("export.menu.name")}
         align="end"
+        variant="secondary"
         isPending={isRunning}
         isInert={!ready}
         triggerRef={button}

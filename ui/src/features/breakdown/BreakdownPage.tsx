@@ -18,6 +18,7 @@ import type { ViewRef } from "../../bindings/ViewRef";
 import { Button, EmptyState, ErrorState, Select, ViewSwitch } from "../../components";
 import { t } from "../../text/i18n";
 import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
+import { TopBarExport } from "../shell/topBarSlot";
 import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
@@ -135,7 +136,10 @@ export function BreakdownPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.breakdown")} actions={<ExportMenuInert />}>
+      <Page title={t("destinations.name.breakdown")}>
+        <TopBarExport>
+          <ExportMenuInert />
+        </TopBarExport>
         <EmptyState
           title={t("breakdown.emptyTitle")}
           action={
@@ -175,7 +179,6 @@ export function BreakdownPage() {
     <Page
       title={t("destinations.name.breakdown")}
       fill
-      actions={exportMenu}
       notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
@@ -190,6 +193,7 @@ export function BreakdownPage() {
       }
       bar={<FilterBar />}
     >
+      <TopBarExport>{exportMenu}</TopBarExport>
       <div data-part="breakdown" className={styles.content}>
         {isList ? (
           <>

@@ -52,6 +52,11 @@ export interface MenuButtonProps {
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
   /**
+   * How the button looks: `quiet` (the default) has no border; `secondary` is outlined like a
+   * secondary button, for a menu button that stands among buttons in the top bar.
+   */
+  variant?: "quiet" | "secondary";
+  /**
    * The button starts a row of content: it is moved out by its own leading padding and border,
    * so its label starts on the line of what stands above and below it.
    */
@@ -82,6 +87,7 @@ export function MenuButton({
   isUnavailable = false,
   description,
   align = "start",
+  variant = "quiet",
   isFlush = false,
   triggerRef,
   isExpanded = false,
@@ -106,6 +112,7 @@ export function MenuButton({
         data-inert={inert ? "" : undefined}
         data-unavailable={unavailable ? "" : undefined}
         data-flush={isFlush ? "" : undefined}
+        data-variant={variant}
         className={cx(styles.trigger, className)}
         render={(domProps) => (
           <button
