@@ -81,6 +81,7 @@ import selectStyles from "../components/Select/Select.module.css";
 import { Toast } from "../components/ToastRegion/ToastRegion";
 import tooltipStyles from "../components/Tooltip/Tooltip.module.css";
 import { applyTheme } from "../design/theme";
+import { ChoicePanel } from "../features/export/ChoicePanel";
 import { formatCount } from "../text/format";
 import { locale } from "../text/i18n";
 import styles from "./gallery.module.css";
@@ -1026,6 +1027,51 @@ function StillPopover({ children }: { children: ReactNode }) {
         <div className={popoverStyles.body}>{children}</div>
       </div>
     </div>
+  );
+}
+
+function ChoicePanels() {
+  const still = () => undefined;
+  return (
+    <Section
+      title="Columns and rows panel"
+      note="What Columns and rows of the Export menu opens, under the Export button: the rows, the status, and the columns the exports of a screen write. Drawn here on the surface of a popover, and working: the choices change, and nothing is kept. The column that names the row is checked and disabled. The holds of Lines with fewer rows loaded than the filters keep and two selected, a remembered choice of columns, and the snapshot without stress calc; Blockers with every column, and no Loaded, since it holds its rows whole."
+    >
+      <Row>
+        <Specimen name="The holds of Lines">
+          <StillPopover>
+            <ChoicePanel
+              screen="holds"
+              state={{ screen: "holds", sort: "FileOrder", reverse: false }}
+              absent={["StressCalc", "SourceId"]}
+              filterStatus="Open"
+              counts={{ all: 9241, loaded: 200, selected: 2 }}
+              choice={{
+                columns: ["line", "discipline", "remark", "blocker", "days"],
+                rows: "loaded",
+                status: "filters",
+              }}
+              onSave={still}
+              onCancel={still}
+            />
+          </StillPopover>
+        </Specimen>
+        <Specimen name="Blockers">
+          <StillPopover>
+            <ChoicePanel
+              screen="blockers"
+              state={{ screen: "blockers", shownKeys: [] }}
+              absent={[]}
+              filterStatus="Open"
+              counts={{ all: 42, loaded: 42, selected: 0 }}
+              choice={{ columns: [], rows: "all", status: "Released" }}
+              onSave={still}
+              onCancel={still}
+            />
+          </StillPopover>
+        </Specimen>
+      </Row>
+    </Section>
   );
 }
 
@@ -2365,6 +2411,7 @@ function Page({ theme }: { theme: ThemeName }) {
           <Tags />
           <Chips />
           <Pickers />
+          <ChoicePanels />
           <Facts />
           <Disclosures />
           <Toasts />

@@ -1,8 +1,11 @@
+import { useRef, useState } from "react";
+import { OPTIONAL_FIELDS } from "../../api/plantim";
+import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import type { ChartChoice } from "../../bindings/ChartChoice";
 import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { SaveFormat } from "../../bindings/SaveFormat";
-import { MenuButton, MenuItem, MenuSeparator, MenuSubmenu } from "../../components";
+import { MenuButton, MenuItem, MenuSeparator, MenuSubmenu, Popover } from "../../components";
 import { t } from "../../text/i18n";
 import {
   ariaKeyShortcuts,
@@ -10,7 +13,8 @@ import {
   formatShortcut,
   useExportShortcut,
 } from "../shell/shortcuts";
-import { readChoice, type ExportChoice } from "./choices";
+import { ChoicePanel, hasChoice, screenName, type RowCounts } from "./ChoicePanel";
+import { readChoice, writeChoice, type ExportChoice } from "./choices";
 import { ExportNotice } from "./ExportNotice";
 import { fileView } from "./fileName";
 import { buildRequest, filterTexts, type ExportScreen, type ScreenState } from "./requests";
@@ -61,6 +65,11 @@ export interface ExportMenuProps {
   state: ScreenState;
   /** How many rows are loaded, and which are selected, on a screen with a table. */
   loaded?: number;
+  /**
+   * How many rows the filters keep, on a table that loads its rows by pages; a table the page
+   * holds whole has them all loaded.
+   */
+  total?: number | undefined;
   selected?: readonly string[];
   /** The charts this screen can save, with their names; none on Lines. */
   charts?: readonly ExportChart[];
@@ -90,6 +99,7 @@ export function ExportMenu({
   screen,
   state,
   loaded,
+  total,
   selected,
   charts = NO_CHARTS,
   isReady,
@@ -102,6 +112,11 @@ export function ExportMenu({
   const hasRows = table !== undefined;
   const isMatrix = state.screen === "matrix";
   const selectedCount = selected?.length ?? 0;
+  const button = useRef<HTMLButtonElement>(null);
+  const [isPanelOpen, setPanelOpen] = useState(false);
+  const canChoose = hasRows && hasChoice(screen);
+  // The selected rows remembered while none is selected: the items that write rows write them all.
+  const fallsBack = canChoose && selectedCount === 0 && readChoice(screen).rows === "selected";
 
   /** The request of the screen, with the remembered choice, or with the rows `rows` names. */
   const request = (rows?: ExportChoice["rows"]) => {
@@ -201,82 +216,170 @@ export function ExportMenu({
       </>
     );
 
+  const counts: RowCounts = {
+    all: total ?? loaded,
+    loaded: loaded ?? 0,
+    selected: selectedCount,
+  };
+
   return (
-    <MenuButton
-      label={t("export.menu.label")}
-      menuLabel={t("export.menu.name")}
-      align="end"
-      isPending={isRunning}
-      isInert={!isReady}
-    >
-      <MenuItem
-        id="excel"
-        detail={formatShortcut(EXPORT_SHORTCUT)}
-        keyShortcuts={ariaKeyShortcuts(EXPORT_SHORTCUT)}
-        onAction={excel}
+    <>
+      <MenuButton
+        label={t("export.menu.label")}
+        menuLabel={t("export.menu.name")}
+        align="end"
+        isPending={isRunning}
+        isInert={!isReady}
+        triggerRef={button}
+        isExpanded={isPanelOpen}
       >
-        {t("export.menu.excel")}
-      </MenuItem>
-      <MenuItem
-        id="workbook"
-        onAction={() => {
-          saveAs({ kind: "Workbook" });
-        }}
-      >
-        {t("export.menu.workbook")}
-      </MenuItem>
-      {hasTable ? (
         <MenuItem
-          id="csv"
+          id="excel"
+          detail={formatShortcut(EXPORT_SHORTCUT)}
+          keyShortcuts={ariaKeyShortcuts(EXPORT_SHORTCUT)}
+          onAction={excel}
+        >
+          {t(fallsBack ? "export.menu.excelAll" : "export.menu.excel")}
+        </MenuItem>
+        <MenuItem
+          id="workbook"
           onAction={() => {
-            saveAs({ kind: "Csv" });
+            saveAs({ kind: "Workbook" });
           }}
         >
-          {t(isMatrix ? "export.menu.csvHolds" : "export.menu.csv")}
+          {t("export.menu.workbook")}
         </MenuItem>
-      ) : null}
-      <MenuItem
-        id="report"
-        onAction={() => {
-          saveAs({ kind: "Report" });
-        }}
-      >
-        {t("export.menu.report")}
-      </MenuItem>
-      {hasTable ? (
-        <>
-          <MenuSeparator />
+        {hasTable ? (
           <MenuItem
-            id="copy-table"
+            id="csv"
             onAction={() => {
-              copyAs({ kind: "Table" });
+              saveAs({ kind: "Csv" });
             }}
           >
-            {t(isMatrix ? "export.menu.copyHolds" : "export.menu.copyTable")}
+            {t(
+              isMatrix
+                ? "export.menu.csvHolds"
+                : fallsBack
+                  ? "export.menu.csvAll"
+                  : "export.menu.csv",
+            )}
           </MenuItem>
-          {hasRows && selectedCount > 0 ? (
+        ) : null}
+        <MenuItem
+          id="report"
+          onAction={() => {
+            saveAs({ kind: "Report" });
+          }}
+        >
+          {t("export.menu.report")}
+        </MenuItem>
+        {hasTable ? (
+          <>
+            <MenuSeparator />
             <MenuItem
-              id="copy-selected"
+              id="copy-table"
               onAction={() => {
-                copyAs({ kind: "Table" }, "selected");
+                copyAs({ kind: "Table" });
               }}
             >
-              {t("export.menu.copySelected", { count: selectedCount })}
+              {t(
+                isMatrix
+                  ? "export.menu.copyHolds"
+                  : fallsBack
+                    ? "export.menu.copyTableAll"
+                    : "export.menu.copyTable",
+              )}
             </MenuItem>
-          ) : null}
-          {hasRows ? (
+            {hasRows && selectedCount > 0 ? (
+              <MenuItem
+                id="copy-selected"
+                onAction={() => {
+                  copyAs({ kind: "Table" }, "selected");
+                }}
+              >
+                {t("export.menu.copySelected", { count: selectedCount })}
+              </MenuItem>
+            ) : null}
+            {hasRows ? (
+              <MenuItem
+                id="copy-line-ids"
+                onAction={() => {
+                  copyAs({ kind: "LineIds" });
+                }}
+              >
+                {t(fallsBack ? "export.menu.copyLineIdsAll" : "export.menu.copyLineIds")}
+              </MenuItem>
+            ) : null}
+          </>
+        ) : null}
+        {chartItems}
+        {canChoose ? (
+          <>
+            <MenuSeparator />
             <MenuItem
-              id="copy-line-ids"
+              id="choice"
               onAction={() => {
-                copyAs({ kind: "LineIds" });
+                setPanelOpen(true);
               }}
             >
-              {t("export.menu.copyLineIds")}
+              {t("export.menu.choice")}
             </MenuItem>
-          ) : null}
-        </>
+          </>
+        ) : null}
+      </MenuButton>
+      {canChoose ? (
+        <Popover
+          anchor={button}
+          isOpen={isPanelOpen}
+          onOpenChange={setPanelOpen}
+          placement="bottom end"
+          aria-label={t("export.panel.title", { screen: screenName(screen) })}
+        >
+          {(close) => (
+            <ScreenChoicePanel
+              screen={screen}
+              state={state}
+              counts={counts}
+              onSave={(choice) => {
+                writeChoice(screen, choice);
+                close();
+              }}
+              onCancel={close}
+            />
+          )}
+        </Popover>
       ) : null}
-      {chartItems}
-    </MenuButton>
+    </>
+  );
+}
+
+interface ScreenChoicePanelProps {
+  screen: ExportScreen;
+  state: ScreenState;
+  counts: RowCounts;
+  onSave: (choice: ExportChoice) => void;
+  onCancel: () => void;
+}
+
+/**
+ * The panel of a screen, with what it is drawn from: the choice remembered for the screen, the
+ * status of the filters, and the fields the snapshot lacks. Until those are read, every optional
+ * field is taken as lacking, as the tables do, so that no column is offered that will go.
+ */
+function ScreenChoicePanel({ screen, state, counts, onSave, onCancel }: ScreenChoicePanelProps) {
+  const { spec } = useFilters();
+  const options = useFilterOptions();
+  const [choice] = useState(() => readChoice(screen));
+  return (
+    <ChoicePanel
+      screen={screen}
+      state={state}
+      absent={options.data?.absent ?? OPTIONAL_FIELDS}
+      filterStatus={spec.status}
+      counts={counts}
+      choice={choice}
+      onSave={onSave}
+      onCancel={onCancel}
+    />
   );
 }

@@ -240,6 +240,7 @@ export function LinesPage() {
       screen={exportState.screen === "lines" ? "lines" : "holds"}
       state={exportState}
       loaded={shown?.pages.rows.length ?? 0}
+      total={shown?.pages.total}
       selected={[...selected.keys]}
       // Only the rows of the address's own result are exported: while rows of the other mode, or
       // of other filters or another sort, stand in, the loaded count and the selection are theirs.

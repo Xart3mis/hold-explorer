@@ -134,15 +134,15 @@ describe("the Export menu offers what each screen can export", () => {
   });
 
   it.each([
-    ["Lines", "/lines", [...SAVES, ...COPIES]],
-    ["the holds of Lines", "/lines?rows=holds", [...SAVES, ...COPIES]],
-    ["the list of Breakdown", "/breakdown", [...SAVES, ...COPIES, ...CHART]],
+    ["Lines", "/lines", [...SAVES, ...COPIES, menu.choice]],
+    ["the holds of Lines", "/lines?rows=holds", [...SAVES, ...COPIES, menu.choice]],
+    ["the list of Breakdown", "/breakdown", [...SAVES, ...COPIES, ...CHART, menu.choice]],
     [
       "the matrix of Breakdown",
       "/breakdown?mode=matrix",
       [menu.excel, menu.workbook, menu.csvHolds, menu.report, menu.copyHolds, ...CHART],
     ],
-    ["Blockers", "/blockers", [...SAVES, ...COPIES, ...CHART]],
+    ["Blockers", "/blockers", [...SAVES, ...COPIES, ...CHART, menu.choice]],
   ])("on %s", async (_, path, items) => {
     const { user } = renderAt(path);
     const open = await openMenu(user);
@@ -361,7 +361,13 @@ describe("the selected rows", () => {
     await ctrlClick(app.user, await rowOf(lineId(0)), await rowOf(lineId(2)));
     const open = await openMenu(app.user);
     const label = menu.copySelected.replace("{{count, number}}", "2");
-    expect(itemNames(open)).toEqual([...SAVES, menu.copyTable, label, menu.copyLineIds]);
+    expect(itemNames(open)).toEqual([
+      ...SAVES,
+      menu.copyTable,
+      label,
+      menu.copyLineIds,
+      menu.choice,
+    ]);
     await app.user.click(within(open).getByRole("menuitem", { name: label }));
     await waitFor(() => {
       expect(app.copies).toHaveLength(1);

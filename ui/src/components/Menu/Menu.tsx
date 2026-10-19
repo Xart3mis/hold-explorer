@@ -45,6 +45,11 @@ export interface MenuButtonProps {
   isFlush?: boolean;
   /** The button, so a screen can give it the focus back after what the menu started is over. */
   triggerRef?: Ref<HTMLButtonElement>;
+  /**
+   * A popover that an item of the menu opened stands under the button: the button keeps its open
+   * look and says that what it opened is expanded, as it does while its menu is open.
+   */
+  isExpanded?: boolean;
   /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. */
   children: ReactNode;
   className?: string | undefined;
@@ -64,6 +69,7 @@ export function MenuButton({
   align = "start",
   isFlush = false,
   triggerRef,
+  isExpanded = false,
   children,
   className,
   ...props
@@ -80,7 +86,13 @@ export function MenuButton({
         data-inert={inert ? "" : undefined}
         data-flush={isFlush ? "" : undefined}
         className={cx(styles.trigger, className)}
-        render={(domProps) => <button {...domProps} aria-busy={busy ? "true" : undefined} />}
+        render={(domProps) => (
+          <button
+            {...domProps}
+            aria-busy={busy ? "true" : undefined}
+            {...(isExpanded ? { "aria-expanded": true } : {})}
+          />
+        )}
       >
         {icon ? <Icon icon={icon} /> : null}
         <span className={styles.triggerLabel}>{label}</span>
