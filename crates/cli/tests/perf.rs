@@ -218,7 +218,8 @@ fn file_text() -> ExportText {
 
 #[test]
 #[ignore = "run in a release build"]
-fn an_excel_file_of_ten_thousand_holds_takes_under_two_seconds_and_the_full_workbook_four() {
+fn the_export_files_of_ten_thousand_holds_meet_their_budgets() {
+    // Excel of one view under 2 s, the full workbook under 4 s, the PDF status report under 2 s.
     let cfg = SynthConfig::new(4, 3600, 10_000);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("holds.xlsx");
@@ -291,22 +292,8 @@ fn an_excel_file_of_ten_thousand_holds_takes_under_two_seconds_and_the_full_work
         bytes.len() / 1024,
         sheets.len()
     );
-}
 
-#[test]
-#[ignore = "run in a release build"]
-fn the_status_report_of_ten_thousand_holds_takes_under_two_seconds() {
-    let cfg = SynthConfig::new(4, 3600, 10_000);
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("holds.xlsx");
-    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
-    let loaded = load_file(&path).unwrap();
-    let ds = Dataset::build(
-        loaded.parsed.holds,
-        RuleSet::builtin(),
-        loaded.snapshot.unwrap().at,
-    );
-    let spec = FilterSpec::default();
+    let report_spec = FilterSpec::default();
     let head = ReportHead {
         workspace: "Perf".into(),
         snapshot: Some(ds.snapshot.date()),
@@ -314,13 +301,14 @@ fn the_status_report_of_ten_thousand_holds_takes_under_two_seconds() {
         app_version: "0.1.0".into(),
         made_at: ds.snapshot.and_utc().fixed_offset(),
     };
-    let text = file_text();
     let fonts = Fonts::embedded();
 
     // The solve plan the report needs is timed with it.
     let started = Instant::now();
-    let plan = spec.open_only().map(|open| solve_plan(&ds, &open, None));
-    let pdf = status_report(&ds, plan.as_ref(), &spec, &head, &text, &fonts).unwrap();
+    let plan = report_spec
+        .open_only()
+        .map(|open| solve_plan(&ds, &open, None));
+    let pdf = status_report(&ds, plan.as_ref(), &report_spec, &head, &text, &fonts).unwrap();
     let report = started.elapsed();
     assert!(pdf.starts_with(b"%PDF-"));
     assert!(

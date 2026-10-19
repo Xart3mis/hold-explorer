@@ -94,7 +94,8 @@ Required: `line_id`, `hold_remark`, `hold_type`. Everything else is optional. An
 
 ### 5.1 Layers
 
-- `crates/core`: a pure Rust library with no Tauri dependency. It owns the model, import, normalization, blocker rules, diff, statistics, forecast, and export. It is unit-tested on its own.
+- `crates/core`: a pure Rust library with no Tauri dependency. It owns the model, import, normalization, blocker rules, diff, statistics, and forecast. It is unit-tested on its own.
+- `crates/export` (`hx-export`): everything a file or the clipboard receives. The sheets of every screen, Excel workbooks, CSV and tab-separated text, charts as SVG and PNG, the PDF status report, the embedded fonts, and the safe write of a file (whole or not at all). It depends on `core`, never on Tauri, and takes every word it writes from the interface's catalog.
 - `crates/store`: SQLite schema, migrations, and queries. Depends on `core`.
 - `crates/synth`: the seeded generator of synthetic PlantIM-shaped workbooks.
 - `src-tauri`: a thin shell. Typed commands, application state, file dialogs, the update check, the single-instance guard, and the WebView2 check at startup.
@@ -299,6 +300,8 @@ As built in M1 (deltas wait for M2): the group-by list also offers name, and lea
 
 **Lines.** A table: holds, disciplines, hold types, blockers, oldest age, sizes, stress calc, size-mismatch flag, change tag, watch star. Presets: All, Single hold, Easiest to release, Oldest first, Size mismatch, New since previous snapshot. The table switches between line rows and hold rows; hold rows show the line, discipline, hold type, remark, blocker, blocker type, name, role, and created date, then the age of an open hold, or the release date and the duration of a released one. "Easiest to release" orders lines by fewest disciplines, then fewest holds. A sortable header sorts by its column and a second press reverses it; rows without the sorted value stay last in both directions. The mode, the preset or sort, and the selection are kept in the address, so a saved view can keep them later.
 
+As built in M1c-export: every column of every table sorts, by a press on its header and a second press to reverse it, with rows lacking the value last in both directions. Lines and the hold rows are sorted by Rust; the tables the interface holds whole (Breakdown groups, Blockers steps, the table views of charts) order the rows they hold by values a command returned. Two tables stay unsortable: the import mapping preview, which shows the first rows of the file in file order so that a column can be recognized, and the skipped rows of the import review, which are a sample that sorting would misrepresent. Several rows are selected as in Excel: a plain click selects one row and opens its panel; Ctrl+click adds or removes a row; Shift+click selects the range from the last pressed row; Ctrl+Space toggles the focused row and Shift+Space selects the range; Shift+Up and Shift+Down extend; Ctrl+A selects every loaded row; Escape clears the selection and closes the panel. The open row among the selected rows is marked by a deeper tint. The page holds the selection, never the address, and clears it when the rows are read again for another result.
+
 Rows load as the user scrolls, 200 at a time, and never more than 5,000 in one table; the whole result is not offered behind one scrollbar. A count line under the table always says how many rows are loaded and how many exist ("400 of 9,312 holds"), and once 5,000 are loaded it says to narrow the filters or reverse the sort to reach the rest. Column widths are declared, not measured from what the rows hold, and a line ID is never cut: the widest line ID of the whole result comes with each page.
 
 **Blockers.** Section 8.
@@ -345,25 +348,34 @@ A saved view stores destination, filters, grouping, and sort under a name. Saved
 
 ### 10.4 Export
 
-Every data screen has an export menu:
+Every data screen (Overview, Breakdown, Lines, Blockers) has an Export menu in its page header, and `Ctrl+E` runs "Excel, this view" (never while a text field has the focus or an overlay is open). Items run at once with the columns and rows remembered for the screen. A workspace without a snapshot shows no Export menu (the owner is asked to confirm this over an inert menu). Items that do not apply to a screen are left out, not shown disabled.
 
 - **Excel, this view**: what the screen shows, with the active filters.
-- **Excel, full workbook**: summary, breakdowns, cross-tabs of holds and of lines, and the data.
-- **CSV**: the current rows, UTF-8 with a byte-order mark so Excel opens it correctly.
-- **Copy**: the table or the selected rows to the clipboard, tab-separated; the list of line IDs; a chart as a PNG file or to the clipboard.
+- **Full workbook**: one action, which is also "every screen at once": About, Summary, a breakdown sheet for each dimension the snapshot has, two cross-tabs of discipline by hold type (holds and lines), Lines, Holds, and Solve order, all under the current filters.
+- **CSV**: the current rows, UTF-8 with a byte-order mark so Excel opens it correctly. Not offered on Overview, whose view is several tables.
+- **Copy**: the table, the selected rows, or the list of line IDs to the clipboard, tab-separated; a chart as an image to the clipboard. On Breakdown the matrix copies and saves the holds cross-tab.
+- **Charts**: Overview's four (by discipline, hold type, role, and top blockers), the Breakdown bars or heatmap, and the Blockers curve save as PNG or SVG, or copy.
+- **Status report (PDF)**: section 10.5.
+- **Columns and rows**: a panel, anchored to the menu, that sets the columns and the rows (all, loaded, or selected) and the status for a screen, and remembers them per screen on this computer (browser storage, as the sidebar is; not in the settings file).
 
-Workbooks use real Excel tables, a frozen header, date and number formats, wrapped remarks, and age and hold-count colors. Each has an "About this export" sheet: workspace, snapshot, filters, app version, time.
+Rules that bind every file. Words come from the interface's catalog through `ExportText` (the labels by key and the twelve short month names); Rust writes numbers and dates. Files are drawn in the light theme whatever the app's theme, with colors from `DESIGN.md`. A file is written whole or not at all: into a temporary file in the target folder, then renamed over the target. In Lines and Holds the request names the sort and Rust orders the rows as the screen does; for tables the interface holds whole, the request carries the row keys in the order on screen.
+
+CSV and copied text write flags as the catalog's Yes and No. A text cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return gets a leading single quote, so that a spreadsheet never reads it as a formula; cells that are not text never do.
+
+Workbooks use real Excel tables, a frozen header, date and number formats, and wrapped remarks. Text is in Excel's automatic black. Ages are colored by the five default age bands (none, then four light blue steps), cross-tabs by a two-step light blue scale, and hold counts by a neutral data bar. Each workbook has an "About this export" sheet: workspace, snapshot (or "No snapshot" when there is none), filters, app version, and the time with its UTC offset. A sheet that would pass Excel's row limit is refused with a message to narrow the filters.
+
+Charts print the value of every colored heatmap cell (text down to 9 px, then a wider image); bars show 30 values plus "All others".
 
 ### 10.5 Reports
 
-- **Status report (PDF)**: workspace and snapshot header; stat tiles with deltas; trend; breakdown charts; top blockers and solve order; changes since the previous snapshot; oldest holds. The report states the active filters.
-- **Changes report (Excel and PDF)**: produced from Compare, one section per kind of change.
+- **Status report (PDF)**: A4 portrait. A header with the workspace, the snapshot date, the time made with its UTC offset, and the active filters; the stat tiles without deltas; bars by discipline, hold type, and role (15 values each, the rest in "All others"); the top blockers and the head of the solve order with its curve; the oldest open holds; and the stale holds. Remarks wrap to four lines. Deltas, the trend, and changes since the previous snapshot arrive with M2 and are not drawn empty. The PDF is untagged; accessibility tagging is on the owner's backlog.
+- **Changes report (Excel and PDF)**: produced from Compare (M2), one section per kind of change.
 
-Reports render identically on Windows and Linux, embed their fonts, and need no external program.
+Reports render identically on Windows and Linux (a golden hash in the tests), embed their fonts (Public Sans and Reddit Mono, read from no system font), and need no external program.
 
 ### 10.6 After saving
 
-A notice offers "Open file" and "Show in folder". Filenames follow `HoldExplorer_<workspace>_<view>_<snapshot date>`.
+A notice offers "Open file" and "Show in folder". "Open file" works only for a file saved in this session; "Show in folder" reveals it. A copy says what was copied. Filenames follow `HoldExplorer_<workspace>_<view>_<snapshot date>`, and `export_save` refuses a file name whose extension does not match the format.
 
 ## 11. Follow-up, aging, performance, forecast
 
@@ -434,10 +446,10 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 - An import failure names its cause and its fix: a file that is not found; a file that cannot be read (not a workbook or text file, corrupt, password-protected, or not permitted); an empty file; no recognizable sheet (the sheets found are listed); a chosen sheet that is not in the file; missing required columns (listed, and the mapping step opens); no data rows; or no row from which a hold could be read (the message gives the number of skipped rows and an example).
 - An import either completes or changes nothing. A workspace whose last write was interrupted opens in its last complete state.
 - A workspace file that cannot be opened is named with its reason and what to do: update the app, close the other program, or restore a copy. It is never changed and never hides other workspaces.
-- An export to a file that is open elsewhere says to close the file or choose another name.
+- An export to a file that is open elsewhere says to close the file or choose another name (kind `FileInUse`). A folder that cannot be written, a name whose extension does not match the format, and a clipboard that cannot be set each say what happened and how to fix it. Nothing is left half written.
 - A second launch focuses the running window; two instances never write the same data.
 - A settings file that cannot be read is set aside, never overwritten; when it cannot even be set aside, the app works with defaults and refuses to save settings until the file is dealt with. A failure to save settings never stops a workspace from opening.
-- The window may ask the system for three things only: to choose a file to open, to choose where to save a file, and to show a file in its folder. The app itself opens a file it has just written, with the system's program for that file, and no other file. It cannot open web addresses, and its pages can load nothing from another host.
+- The window may ask the system for three things only: to choose a file to open, to choose where to save a file, and to show a file in its folder. Its permissions are exactly four: `core:default`, `dialog:allow-open`, `dialog:allow-save`, and `opener:allow-reveal-item-in-dir`. The app itself opens a file it has just written, with the system's program for that file, through a command that accepts only a path saved in this session, and no other file. It cannot open web addresses, and its pages can load nothing from another host.
 - A crash writes a log to the data folder. About offers "Copy diagnostics". The app sends no telemetry.
 - When WebView2 is missing on Windows, a native message with a download link appears before any window opens. The per-user WebView2 installer needs no admin rights.
 
@@ -471,13 +483,13 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 
 Each milestone ships a usable app. Each gets its own implementation plan, or several when the milestone is large.
 
-**M1 Core.** Project setup; `PRODUCT.md` and `DESIGN.md`; synthetic generator; import flow with mapping and review; workspaces; shell; Overview, Breakdown, Lines; detail panel; built-in rules; solve-order list; filters; global search; saved views; Excel, CSV, and copy export; default age bands; keyboard and command palette; settings; update check; release pipeline. M1 reaches parity with the HTML tool. M1 stores every import as a snapshot and always shows the newest one; the schema is history-capable from the start, so M2 needs no data migration. Deltas, comparison, and viewing older snapshots arrive in M2, and until then stat tiles show values without deltas.
+**M1 Core.** Project setup; `PRODUCT.md` and `DESIGN.md`; synthetic generator; import flow with mapping and review; workspaces; shell; Overview, Breakdown, Lines; detail panel; built-in rules; solve-order list; filters; global search; saved views; Excel, CSV, and copy export (completed by M1c-export: every column sorts, several rows are selected, and the Export menu writes Excel, CSV, copied text, charts as SVG and PNG, and the PDF status report); default age bands; keyboard and command palette; settings; update check; release pipeline. M1 reaches parity with the HTML tool. M1 stores every import as a snapshot and always shows the newest one; the schema is history-capable from the start, so M2 needs no data migration. Deltas, comparison, and viewing older snapshots arrive in M2, and until then stat tiles show values without deltas.
 
 **M2 History.** Multiple snapshots, events, bulk import, snapshot manager, viewing an older snapshot, Compare, the changes screen after import, delta badges, Trends, line timeline, history bundle, changes report in Excel.
 
 **M3 Blockers.** Rules editor, overrides, remark clean-up, graph with solve path, line chain, what-if scenarios.
 
-**M4 Follow-up and reports.** Notes, follow-ups, watchlist, age-band settings, Performance, Forecast, People, PDF reports, chart PNG export.
+**M4 Follow-up and reports.** Notes, follow-ups, watchlist, age-band settings, Performance, Forecast, People. (The PDF status report and chart PNG export moved to M1c-export; the changes report stays with Compare in M2.)
 
 ## 19. Out of scope
 

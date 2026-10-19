@@ -119,7 +119,7 @@ const MARK_COLORS: [&str; 2] = [NEUTRAL, NEUTRAL_SELECTED];
 #[serde(tag = "kind")]
 pub enum ChartChoice {
     /// Bars of the kept holds by one dimension (Overview's three, and Breakdown's list),
-    /// largest first, at most 30 bars, the rest folded into "All others".
+    /// largest first, 30 bars and "All others" for the rest.
     Bars {
         /// The dimension the holds are grouped by.
         dim: Dim,
