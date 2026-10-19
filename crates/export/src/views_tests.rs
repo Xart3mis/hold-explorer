@@ -744,6 +744,11 @@ fn blockers_have_the_steps_of_the_solve_order() {
         })
         .collect();
     assert_eq!(sheet.rows, want);
+    // A blocker of a blank remark is written "(blank)", never with the dash of the import.
+    assert!(sheet
+        .rows
+        .iter()
+        .all(|r| !matches!(&r[1], Cell::Text(t) if t.ends_with(" / —"))));
     let picked = one(
         ds,
         &request(

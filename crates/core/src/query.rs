@@ -81,14 +81,20 @@ pub struct Group {
     pub lines: usize,
 }
 
-/// How a blocker is written for display: `<discipline> / <item>`.
+/// How a blocker is written for display: `<discipline> / <item>`, with `(blank)` for the item
+/// of a blank remark.
 pub(crate) fn blocker_label(discipline: &str, item: &str) -> String {
+    let item = if item == crate::words::NONE {
+        crate::words::BLANK
+    } else {
+        item
+    };
     format!("{discipline} / {item}")
 }
 
 pub(crate) fn label_for(dim: &Dim, key: &str, row: &Row) -> String {
     if key.is_empty() {
-        return "(blank)".to_string();
+        return crate::words::BLANK.to_string();
     }
     match dim {
         Dim::Remark => row.hold.remark.clone(),

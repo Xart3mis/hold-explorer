@@ -52,7 +52,9 @@ describe("the text catalog", () => {
 
   it("keeps the tone of PRODUCT.md: no em dash, no exclamation mark, none of the banned words", () => {
     for (const [key, text] of texts) {
-      expect(text, key).not.toMatch(/\u2014|--|!/);
+      // `common.none` is no text: it is the dash the core writes for a blank role, kept in the
+      // catalog so `ui/src/api/core-words.json` can be checked against it.
+      expect(text, key).not.toMatch(key === "common.none" ? /--|!/ : /\u2014|--|!/);
       // "Yes" is banned as the label of a button (PRODUCT.md). `file.yes` is no label: it is the
       // value a file writes in a cell of a yes-or-no column, beside `file.no`.
       const banned =
