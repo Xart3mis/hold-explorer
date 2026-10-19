@@ -67,7 +67,7 @@ fn not_a_regular_file(path: &Path) -> ImportError {
     )
 }
 
-/// The file is larger than `limit`; `size` is as much of its size as is known.
+/// The file is `size` bytes, larger than `limit`.
 fn too_large(path: &Path, size: u64, limit: u64) -> ImportError {
     let megabytes = |bytes: u64| bytes.div_ceil(1024 * 1024);
     unreadable(
@@ -97,7 +97,14 @@ fn read_within(
         .read_to_end(&mut bytes)
         .map_err(|e| read_error(path, e))?;
     if bytes.len() as u64 > limit {
-        return Err(too_large(path, bytes.len() as u64, limit));
+        // Only that it is over the limit is known: the rest was not read.
+        return Err(unreadable(
+            path,
+            format!(
+                "the file grew while it was read and is larger than the {} MB limit; split the export into smaller files",
+                limit.div_ceil(1024 * 1024)
+            ),
+        ));
     }
     Ok(bytes)
 }
@@ -783,7 +790,8 @@ mod tests {
         let ImportError::Unreadable { detail, .. } = &err else {
             panic!("{err:?}");
         };
-        assert!(detail.contains("over the limit of 1 MB"), "{detail}");
+        assert!(detail.contains("larger than the 1 MB limit"), "{detail}");
+        assert!(!detail.contains("2 MB"), "{detail}");
         assert!(
             detail.contains("split the export into smaller files"),
             "{detail}"

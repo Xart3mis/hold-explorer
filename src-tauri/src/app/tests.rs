@@ -423,51 +423,74 @@ fn a_second_start_after_the_workspace_file_was_deleted_answers_no_workspace() {
 }
 
 #[test]
-fn of_two_files_with_one_id_the_first_name_is_opened_and_the_copy_is_named() {
+fn of_two_files_with_one_id_the_file_named_by_the_id_is_opened() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("Plant").unwrap().workspace.id;
     let folder = fx.workspaces();
     let original = folder.join(format!("{id}.holdx-ws"));
-    // The user copied the file inside the folder, twice: both copies keep the id. '+' sorts
-    // before every hex digit of the id, '~' after.
-    for (file, name) in [
-        ("+copy.holdx-ws", "First copy"),
-        ("~copy.holdx-ws", "Last copy"),
-    ] {
+    // The user copied the file inside the folder, twice: both copies keep the id. Their names
+    // sort before and after the original in the listing.
+    for (file, name) in [("copy-1.holdx-ws", "A copy"), ("copy-2.holdx-ws", "Z copy")] {
         let copy = folder.join(file);
         std::fs::copy(&original, &copy).unwrap();
         Workspace::open(&copy).unwrap().rename(name).unwrap();
     }
     let list = state.list_workspaces().unwrap();
-    let listed: Vec<&str> = list.workspaces.iter().map(|w| w.name.as_str()).collect();
-    assert_eq!(listed, ["First copy"]);
-    let copies: Vec<(&str, ErrorKind)> = list
+    let listed: Vec<String> = list.workspaces.into_iter().map(|w| w.name).collect();
+    assert_eq!(listed, ["Plant"]);
+    let copies: Vec<(String, ErrorKind)> = list
         .unreadable
-        .iter()
-        .map(|u| (u.file_name.as_str(), u.kind))
+        .into_iter()
+        .map(|u| (u.file_name, u.kind))
         .collect();
-    let own = format!("{id}.holdx-ws");
     assert_eq!(
         copies,
         [
-            (own.as_str(), ErrorKind::DuplicateWorkspace),
-            ("~copy.holdx-ws", ErrorKind::DuplicateWorkspace)
+            ("copy-1.holdx-ws".to_string(), ErrorKind::DuplicateWorkspace),
+            ("copy-2.holdx-ws".to_string(), ErrorKind::DuplicateWorkspace)
         ]
     );
-    assert_eq!(
-        list.unreadable[1].message,
-        "This file is a copy of the workspace in +copy.holdx-ws. Two files with one workspace cannot both be opened; move this one to another folder to keep it."
-    );
 
-    assert_eq!(
-        state.open_workspace(&id).unwrap().workspace.name,
-        "First copy"
-    );
+    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "Plant");
     assert_eq!(
         state.start().open.map(|open| open.workspace.name),
-        Some("First copy".to_string())
+        Some("Plant".to_string())
     );
+
+    // Without a file named by the id, one of the copies is opened as before.
+    drop(state);
+    std::fs::remove_file(&original).unwrap();
+    let mut state = fx.state();
+    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "A copy");
+}
+
+#[test]
+fn a_copy_whose_name_sorts_before_the_id_is_listed_as_the_copy() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("Plant").unwrap().workspace.id;
+    let folder = fx.workspaces();
+    let original = folder.join(format!("{id}.holdx-ws"));
+    // '+' sorts before every hex digit of the id.
+    let copy = folder.join("+copy.holdx-ws");
+    std::fs::copy(&original, &copy).unwrap();
+    Workspace::open(&copy)
+        .unwrap()
+        .rename("First copy")
+        .unwrap();
+
+    let list = state.list_workspaces().unwrap();
+    let listed: Vec<&str> = list.workspaces.iter().map(|w| w.name.as_str()).collect();
+    assert_eq!(listed, ["Plant"]);
+    assert_eq!(list.unreadable.len(), 1);
+    assert_eq!(list.unreadable[0].file_name, "+copy.holdx-ws");
+    assert_eq!(list.unreadable[0].kind, ErrorKind::DuplicateWorkspace);
+    assert_eq!(
+        list.unreadable[0].message,
+        format!("This file is a copy of the workspace in {id}.holdx-ws. Two files with one workspace cannot both be opened; move this one to another folder to keep it.")
+    );
+    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "Plant");
 }
 
 #[test]

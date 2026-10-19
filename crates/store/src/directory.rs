@@ -1,6 +1,7 @@
 //! Finding, matching, and deleting the workspace files in a folder.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -36,8 +37,9 @@ pub struct UnreadableWorkspace {
 /// A file named like a workspace that is not a database at all is damaged and listed as
 /// unreadable (`NotADatabase`); a database that is not a workspace is left out of both lists.
 /// Neither is touched. Of several files that hold one workspace (the user copied a file inside
-/// the folder), the file whose name sorts first in byte order is listed as the workspace and
-/// each other as unreadable (`DuplicateWorkspace`), so opening by id never picks a copy. A
+/// the folder), the file named as the app names that workspace (by its id) is listed as the
+/// workspace, or, when none is, the file whose name sorts first in byte order; each other is
+/// listed as unreadable (`DuplicateWorkspace`), so opening by id never picks a copy. A
 /// workspace a newer version wrote is listed as unreadable and never written to. A folder that
 /// does not exist has no workspaces; an error is returned only when the folder itself cannot be
 /// read.
@@ -62,31 +64,16 @@ pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
             paths.push(path);
         }
     }
-    // By name in byte order, so that of several files with one id the first is the workspace.
+    // By name in byte order, so that of several files with one id and none named by it, the
+    // first is the workspace.
     paths.sort_by(|a, b| {
         let name = |path: &Path| path.file_name().map(|n| n.as_encoded_bytes().to_vec());
         name(a).cmp(&name(b))
     });
-    // The id of each workspace listed so far, with the name of its file.
-    let mut seen: HashMap<String, String> = HashMap::new();
+    let mut readable = Vec::new();
     for path in paths {
         match Workspace::open(&path).and_then(|workspace| workspace.info()) {
-            Ok(info) => match seen.get(&info.id) {
-                Some(original) => list.unreadable.push(UnreadableWorkspace {
-                    path,
-                    error: StoreError::DuplicateWorkspace {
-                        original: original.clone(),
-                    },
-                }),
-                None => {
-                    let name = path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().into_owned())
-                        .unwrap_or_default();
-                    seen.insert(info.id.clone(), name);
-                    list.workspaces.push(info);
-                }
-            },
+            Ok(info) => readable.push(info),
             Err(StoreError::NotAWorkspace { .. }) if is_not_a_database(&path) => {
                 list.unreadable.push(UnreadableWorkspace {
                     error: StoreError::NotADatabase {
@@ -97,6 +84,36 @@ pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
             }
             Err(StoreError::NotAWorkspace { .. }) => {}
             Err(error) => list.unreadable.push(UnreadableWorkspace { path, error }),
+        }
+    }
+    // The file that is the workspace of each id: the one named as the app names it, else the
+    // first in byte order.
+    let named_by_id = |info: &WorkspaceInfo| info.path.file_stem() == Some(OsStr::new(&info.id));
+    let mut winners: HashMap<String, PathBuf> = HashMap::new();
+    for info in &readable {
+        match winners.get(&info.id) {
+            None => {
+                winners.insert(info.id.clone(), info.path.clone());
+            }
+            Some(_) if named_by_id(info) => {
+                winners.insert(info.id.clone(), info.path.clone());
+            }
+            Some(_) => {}
+        }
+    }
+    for info in readable {
+        match winners.get(&info.id) {
+            Some(winner) if *winner != info.path => {
+                let original = winner
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                list.unreadable.push(UnreadableWorkspace {
+                    path: info.path,
+                    error: StoreError::DuplicateWorkspace { original },
+                });
+            }
+            _ => list.workspaces.push(info),
         }
     }
     list.workspaces
@@ -633,42 +650,70 @@ mod tests {
     }
 
     #[test]
-    fn of_two_files_with_one_id_the_first_name_is_listed_and_the_others_are_copies() {
+    fn of_files_with_one_id_the_file_named_by_the_id_is_listed_and_a_copy_before_it_is_named() {
         let dir = tempfile::tempdir().unwrap();
         let original = Workspace::create(dir.path(), "Plant")
             .unwrap()
             .info()
             .unwrap();
+        let own = format!("{}.holdx-ws", original.id);
         // '+' sorts before every hex digit of the id, '~' after.
         let first = dir.path().join("+copy.holdx-ws");
         let last = dir.path().join("~copy.holdx-ws");
         for copy in [&first, &last] {
             std::fs::copy(&original.path, copy).unwrap();
         }
-        let before: Vec<Vec<u8>> = [&original.path, &first, &last]
-            .iter()
-            .map(|f| std::fs::read(f).unwrap())
-            .collect();
+        let files = [&original.path, &first, &last];
+        let before: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(f).unwrap()).collect();
 
         let list = list_workspaces(dir.path()).unwrap();
-        assert_eq!(list.workspaces.len(), 1, "{:?}", list.workspaces);
-        assert_eq!(list.workspaces[0].path, first);
-        assert_eq!(list.workspaces[0].id, original.id);
+        assert_eq!(list.workspaces, vec![original.clone()]);
         let copy = |path: &PathBuf| UnreadableWorkspace {
             path: path.clone(),
             error: StoreError::DuplicateWorkspace {
-                original: "+copy.holdx-ws".into(),
+                original: own.clone(),
             },
         };
-        assert_eq!(list.unreadable, vec![copy(&original.path), copy(&last)]);
+        assert_eq!(list.unreadable, vec![copy(&first), copy(&last)]);
         assert_eq!(
             list.unreadable[0].error.to_string(),
-            "This file is a copy of the workspace in +copy.holdx-ws. Two files with one workspace cannot both be opened; move this one to another folder to keep it."
+            format!("This file is a copy of the workspace in {own}. Two files with one workspace cannot both be opened; move this one to another folder to keep it.")
         );
-        let after: Vec<Vec<u8>> = [&original.path, &first, &last]
-            .iter()
-            .map(|f| std::fs::read(f).unwrap())
-            .collect();
+        let after: Vec<Vec<u8>> = files.iter().map(|f| std::fs::read(f).unwrap()).collect();
         assert_eq!(after, before);
+    }
+
+    #[test]
+    fn of_files_with_one_id_none_named_by_it_the_first_in_byte_order_is_listed() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let made = Workspace::create(elsewhere.path(), "Plant")
+            .unwrap()
+            .info()
+            .unwrap();
+        let names = ["b-copy.holdx-ws", "a-copy.holdx-ws", "c-copy.holdx-ws"];
+        for name in names {
+            std::fs::copy(&made.path, dir.path().join(name)).unwrap();
+        }
+        let list = list_workspaces(dir.path()).unwrap();
+        let listed: Vec<&Path> = list.workspaces.iter().map(|w| w.path.as_path()).collect();
+        assert_eq!(listed, [dir.path().join("a-copy.holdx-ws")]);
+        let copies: Vec<(PathBuf, StoreError)> = list
+            .unreadable
+            .into_iter()
+            .map(|u| (u.path, u.error))
+            .collect();
+        let copy = |name: &str| {
+            (
+                dir.path().join(name),
+                StoreError::DuplicateWorkspace {
+                    original: "a-copy.holdx-ws".into(),
+                },
+            )
+        };
+        assert_eq!(
+            copies,
+            vec![copy("b-copy.holdx-ws"), copy("c-copy.holdx-ws")]
+        );
     }
 }
