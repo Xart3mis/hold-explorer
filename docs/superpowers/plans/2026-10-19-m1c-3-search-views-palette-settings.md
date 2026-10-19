@@ -469,3 +469,9 @@ export const SHORTCUTS: readonly ShortcutEntry[];
 - Rust hardening listed for M1c-3: typed error kinds and panic recovery Task 4; settings set-aside surfaced, transient reads, duplicate ids, bounded read, merged mapping, shared desktop test fixtures Task 5; absolute workspace folder Task 7. Structured error data beside `message` (missing fields, sheet names) is left for when the interface needs it (no screen reads it today).
 - Export beside Import: Task 1.
 - Owner decisions: "(blank)" and the Blockers header Task 2; second click, dashed chip, open row marker Task 3; saved views in the sidebar Task 11; folder move Task 7; search choosing Task 9; full palette Task 12.
+
+## Corrections during the build (2026-10-20)
+
+- Decision 16 (owner, 2026-10-19): the Blockers export is named by blocker; "Step" follows as an optional column.
+- Task 4 (owner, 2026-10-20): the panic message is "An operation failed part-way, so what it was doing may not have been saved. Check, then try again; if it happens again, report it."
+- Task 5 (controller, from the Task 4 review, spec 5.3): a file with the workspace file extension that is not a SQLite database at all (damaged beyond recognition) is listed as unreadable with kind `NotAWorkspace` and a message saying it is damaged and to restore a copy, instead of being left out of the list in silence. A file without the workspace extension stays out of both lists, untouched. Test: a workspace-named file overwritten with text is listed unreadable; a stray `notes.txt` is not listed.
