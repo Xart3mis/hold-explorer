@@ -88,3 +88,29 @@ fn the_request_declares_the_fields_the_interface_sends() {
         assert!(scope.contains(kind), "{kind} in {scope}");
     }
 }
+
+#[test]
+fn the_chart_choice_declares_each_chart_the_interface_asks_for() {
+    use crate::chart::ChartChoice;
+    ChartChoice::export_all(&Config::from_env()).unwrap();
+    assert!(export_dir().join("ChartChoice.ts").is_file());
+    let choice = bare(&declaration::<ChartChoice>());
+    for kind in [
+        r#""kind": "Bars", dim: Dim"#,
+        r#""kind": "TopBlockers""#,
+        r#""kind": "Heatmap", rows: Dim, cols: Dim"#,
+        r#""kind": "Curve", steps: number"#,
+    ] {
+        assert!(choice.contains(kind), "{kind} in {choice}");
+    }
+    let parsed: ChartChoice =
+        serde_json::from_str(r#"{"kind":"Heatmap","rows":"Discipline","cols":"HoldType"}"#)
+            .unwrap();
+    assert_eq!(
+        parsed,
+        ChartChoice::Heatmap {
+            rows: hx_core::filter::Dim::Discipline,
+            cols: hx_core::filter::Dim::HoldType,
+        }
+    );
+}

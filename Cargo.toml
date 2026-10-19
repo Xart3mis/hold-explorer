@@ -16,6 +16,9 @@ csv = "1"
 encoding_rs = "0.8.42"
 fancy-regex = "0.19"
 regex = "1"
+# Without system-fonts: an image is drawn with the embedded faces only. Pinned so that it shares
+# usvg 0.47 with krilla-svg.
+resvg = { version = "=0.47.0", default-features = false, features = ["text"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 rust_xlsxwriter = "0.99"
 serde = { version = "1", features = ["derive"] }
@@ -29,6 +32,8 @@ tauri-plugin-opener = "~2.7"
 tauri-plugin-single-instance = "~2.5"
 tauri-plugin-window-state = "~2.5"
 thiserror = "2"
+# The version fontdb reads faces with.
+ttf-parser = "0.25"
 ts-rs = { version = "12.0", features = ["chrono-impl"] }
 zip = { version = "8.6", default-features = false, features = ["deflate"] }
 

@@ -1,6 +1,8 @@
 {
+  "--color-border-default": "#cdd6d7",
   "--color-border-subtle": "#e2e7e8",
   "--color-chart-neutral": "#6c7b7b",
+  "--color-chart-neutral-selected": "#3f5152",
   "--color-chart-ord-1": "#4281bf",
   "--color-chart-ord-2": "#246cad",
   "--color-chart-ord-3": "#0e5794",
@@ -13,7 +15,9 @@
   "--color-chart-seq-5": "#2f72b1",
   "--color-chart-seq-6": "#165993",
   "--color-chart-seq-7": "#094171",
+  "--color-chart-text-inverse": "#f8fafd",
   "--color-surface-app": "#f8fbfb",
   "--color-text-muted": "#546465",
-  "--color-text-primary": "#162525"
+  "--color-text-primary": "#162525",
+  "--color-text-secondary": "#3f5152"
 }

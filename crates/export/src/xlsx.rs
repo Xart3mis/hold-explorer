@@ -63,7 +63,7 @@ const DATETIME_FORMAT: &str = "d mmm yyyy hh:mm";
 const PALETTE: &str = include_str!("../palette.json");
 
 /// The colors of the light theme, by token, read once from `palette.json`.
-fn palette() -> &'static HashMap<String, String> {
+pub(crate) fn palette() -> &'static HashMap<String, String> {
     static COLORS: OnceLock<HashMap<String, String>> = OnceLock::new();
     COLORS.get_or_init(|| {
         serde_json::from_str(PALETTE)
@@ -72,7 +72,7 @@ fn palette() -> &'static HashMap<String, String> {
 }
 
 /// The color of `token` as `0xRRGGBB`.
-fn color(token: &str) -> u32 {
+pub(crate) fn color(token: &str) -> u32 {
     palette()
         .get(token)
         .and_then(|hex| u32::from_str_radix(hex.trim_start_matches('#'), 16).ok())

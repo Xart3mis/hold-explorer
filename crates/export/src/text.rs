@@ -10,6 +10,8 @@ use crate::ExportError;
 
 /// Every key this crate asks [`ExportText::get`] for, sorted. `ui/src/api/file-text-keys.json`
 /// lists the same keys; a test on each side keeps the file, this list, and the catalog equal.
+/// A label that holds a value has its place written `{name}` with single braces (the charts'
+/// `file.chart.*`), which the interface leaves as it is and this crate fills.
 pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.about.appVersion",
     "file.about.file",
@@ -19,6 +21,17 @@ pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.about.rows",
     "file.about.snapshot",
     "file.about.workspace",
+    "file.chart.bars",
+    "file.chart.curve",
+    "file.chart.fewer",
+    "file.chart.freed",
+    "file.chart.heatmap",
+    "file.chart.holds",
+    "file.chart.more",
+    "file.chart.mostFreed",
+    "file.chart.noHolds",
+    "file.chart.step",
+    "file.chart.topBlockers",
     "file.column.about.item",
     "file.column.about.value",
     "file.column.blockers.blocker",

@@ -60,3 +60,12 @@ Real project files never enter this repository. Tests generate synthetic workboo
 ## License
 
 MIT
+
+## Third-party fonts
+
+The interface and the files Hold Explorer writes use two typefaces under the SIL Open Font License 1.1:
+
+- Public Sans, copyright 2015 The Public Sans Project Authors.
+- Reddit Mono, copyright 2020-23 Reddit, Inc.
+
+The interface bundles them from npm (`@fontsource-variable/public-sans` and `@fontsource-variable/reddit-mono`). The export crate embeds static instances of them in `crates/export/fonts/`, with their license texts (`OFL-PublicSans.txt`, `OFL-RedditMono.txt`) and a `README.md` that says where they come from and how they were made. The fonts are under their own license, not under the MIT license of this project.

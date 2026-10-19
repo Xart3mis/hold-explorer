@@ -14,7 +14,10 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod chart;
 pub mod file;
+pub mod fonts;
+pub mod raster;
 pub mod sheet;
 pub mod text;
 pub mod views;
@@ -69,6 +72,12 @@ pub enum ExportError {
     #[error("Hold Explorer could not make the workbook: {reason}. This is a fault of Hold Explorer: save again, and report it if it happens again.")]
     Workbook {
         /// What the workbook writer said.
+        reason: String,
+    },
+    /// A chart could not be drawn: a fault of the application.
+    #[error("Hold Explorer could not draw the chart: {reason}. This is a fault of Hold Explorer: try again, and report it if it happens again.")]
+    Image {
+        /// What the drawing said.
         reason: String,
     },
     /// A label the request lacks: a fault of the application.

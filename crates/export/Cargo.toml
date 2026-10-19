@@ -9,11 +9,13 @@ rust-version = "1.92"
 [dependencies]
 chrono.workspace = true
 hx-core = { path = "../core" }
+resvg.workspace = true
 rust_xlsxwriter.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
+ttf-parser.workspace = true
 ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]

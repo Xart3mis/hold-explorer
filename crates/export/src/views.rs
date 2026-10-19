@@ -403,7 +403,7 @@ fn label(text: &ExportText, key: &str) -> Result<String, ExportError> {
 }
 
 /// The name of a dimension as the interface writes it: a custom dimension is its header.
-fn dim_name(dim: &Dim, text: &ExportText) -> Result<String, ExportError> {
+pub(crate) fn dim_name(dim: &Dim, text: &ExportText) -> Result<String, ExportError> {
     let key = match dim {
         Dim::Custom(header) => return Ok(header.clone()),
         Dim::Discipline => "file.dim.discipline",
