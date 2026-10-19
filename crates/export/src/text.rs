@@ -199,8 +199,12 @@ impl<'a> Flags<'a> {
             Cell::Text(text) => as_text(text),
             Cell::Count(count) => count.to_string(),
             Cell::Days(days) => days.to_string(),
-            // A non-finite size is no size. `Display` of a finite `f64` never uses an exponent.
-            Cell::Size(size) if size.is_finite() => size.to_string(),
+            // A non-finite size is no size. A size is rounded to two decimals, as the workbook
+            // rounds it, and never written as `-0`. `Display` of a finite `f64` never uses an
+            // exponent.
+            Cell::Size(size) if size.is_finite() => {
+                ((size * 100.0).round() / 100.0 + 0.0).to_string()
+            }
             Cell::Size(_) => String::new(),
             Cell::Date(day) => date(*day),
             Cell::Flag(true) => self.yes.to_string(),
@@ -629,5 +633,29 @@ mod tests {
         );
         let ours: Vec<String> = FILE_TEXT_KEYS.iter().map(|k| k.to_string()).collect();
         assert_eq!(ours, fixture);
+    }
+
+    #[test]
+    fn sizes_are_rounded_to_two_decimals_as_the_workbook_rounds_them() {
+        let sheet = Sheet {
+            name: "x".into(),
+            kind: SheetKind::Table,
+            columns: vec![column("s", "Size", ColumnKind::Size)],
+            rows: vec![
+                vec![Cell::Size(0.1 + 0.2)],
+                vec![Cell::Size(2.0 / 3.0)],
+                vec![Cell::Size(-0.001)],
+                vec![Cell::Size(6.0)],
+            ],
+        };
+        let bytes = csv(&sheet, &text()).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&bytes[3..]).unwrap(),
+            "Size\r\n0.3\r\n0.67\r\n0\r\n6\r\n"
+        );
+        assert_eq!(
+            tab_separated(&sheet, &text()).unwrap(),
+            "Size\n0.3\n0.67\n0\n6\n"
+        );
     }
 }

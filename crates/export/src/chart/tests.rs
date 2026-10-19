@@ -838,3 +838,69 @@ fn the_ninety_percent_step_has_a_hairline_through_its_marker() {
         .skip(1)
         .any(|circle| attribute(circle, "fill").as_deref() == Some(selected.as_str())));
 }
+
+#[test]
+fn a_saved_svg_has_its_text_as_paths_and_keeps_its_title() {
+    let ds = full();
+    let spec = FilterSpec::default();
+    let plan = plan_of(ds, &spec);
+    for (chart, title) in [
+        (ChartChoice::Bars { dim: Dim::Blocker }, "Holds by Blocker"),
+        (ChartChoice::TopBlockers, "Top blockers"),
+        (
+            ChartChoice::Heatmap {
+                rows: Dim::Discipline,
+                cols: Dim::Blocker,
+            },
+            "Holds by Discipline and Blocker",
+        ),
+        (
+            ChartChoice::Curve { steps: usize::MAX },
+            "Lines freed by the solve order",
+        ),
+    ] {
+        let filters = ["Discipline: Piping & more".to_string()];
+        let drawn =
+            chart_svg(ds, plan.as_ref(), &spec, &chart, &filters, &text(), fonts()).unwrap();
+        let saved =
+            chart_svg_file(ds, plan.as_ref(), &spec, &chart, &filters, &text(), fonts()).unwrap();
+        assert!(!saved.contains("<text"), "{chart:?}: {saved}");
+        assert!(!saved.contains("font-family"), "{chart:?}");
+        assert!(
+            saved.contains(&format!("<title>{title}</title>")),
+            "{chart:?}: {}",
+            &saved[..saved.len().min(400)]
+        );
+        // The same drawing: the saved file reads back at the size of the chart, and its title
+        // comes before anything is drawn.
+        let (drawn, saved_tree) = (tree(&drawn), tree(&saved));
+        assert_eq!(drawn.size(), saved_tree.size(), "{chart:?}");
+        assert!(saved.find("<title>") < saved.find("<path"), "{chart:?}");
+    }
+}
+
+#[test]
+fn a_saved_svg_escapes_its_title() {
+    let ds = named(&["A & B".to_string()]);
+    let spec = FilterSpec::default();
+    let mut words = text();
+    words.labels.insert(
+        "file.chart.topBlockers".into(),
+        "Top <blockers> & \"more\"".into(),
+    );
+    let saved = chart_svg_file(
+        &ds,
+        None,
+        &spec,
+        &ChartChoice::TopBlockers,
+        &[],
+        &words,
+        fonts(),
+    )
+    .unwrap();
+    assert!(
+        saved.contains("<title>Top &lt;blockers&gt; &amp; &quot;more&quot;</title>"),
+        "{saved}"
+    );
+    tree(&saved);
+}

@@ -81,7 +81,7 @@ const WORDS: [(&str, &str); 54] = [
     ("file.summary.released.lines", "Lines with released holds"),
     ("file.summary.released.median", "Median duration"),
     ("file.summary.singleHoldLines", "Single-hold lines"),
-    ("file.summary.stale", "Holds open for 90 days or more"),
+    ("file.summary.stale", "Holds open for {days} days or more"),
     ("file.title", "Hold Explorer export"),
 ];
 

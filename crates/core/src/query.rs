@@ -382,7 +382,8 @@ pub enum LineSort {
     LdtSize,
     /// Stress calculation ascending, without regard to case.
     StressCalc,
-    /// Most distinct hold types first.
+    /// Most distinct hold types first, the blank type not counted; a line with no other type
+    /// stays last.
     HoldTypes,
     /// Lines whose sizes differ first; ties end in line ID order.
     SizeMismatch,
@@ -760,7 +761,19 @@ pub fn line_page(
         ),
         LineSort::HoldTypes => order_by(
             &mut out,
-            |line| Some(line.hold_types.len()),
+            // The blank type is no type, as the table's cell leaves it out; a line with no other
+            // type has no value and stays last.
+            |line| {
+                let given = line
+                    .hold_types
+                    .iter()
+                    .filter(|kind| {
+                        let kind = kind.trim();
+                        !kind.is_empty() && kind != DASH
+                    })
+                    .count();
+                (given > 0).then_some(given)
+            },
             |a, b| b.cmp(a),
             reverse,
             by_id,
@@ -2026,5 +2039,35 @@ mod tests {
         assert_eq!(order(LineSort::HoldTypes, true), "BCAD");
         assert_eq!(order(LineSort::SizeMismatch, false), "ADBC");
         assert_eq!(order(LineSort::SizeMismatch, true), "BCAD");
+    }
+
+    #[test]
+    fn the_hold_type_count_leaves_out_the_blank_type_and_a_line_with_none_stays_last() {
+        // E has only the blank type, which its cell leaves out: it has no value, and stays last.
+        // F has one type besides the blank one, so it counts one, as B does.
+        let ds = Dataset::build(
+            vec![
+                hold("E", "Civil", DASH, "x", 1),
+                hold("F", "Civil", DASH, "x", 1),
+                hold("F", "Civil", "MISC.", "x", 2),
+                hold("A", "Civil", "MISC.", "x", 1),
+                hold("A", "Civil", "P&ID", "x", 2),
+                hold("B", "Civil", "ISO", "x", 1),
+            ],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        let order = |reverse: bool| {
+            line_ids(
+                &ds,
+                &LineQuery {
+                    sort: LineSort::HoldTypes,
+                    reverse,
+                    ..Default::default()
+                },
+            )
+        };
+        assert_eq!(order(false), "ABFE");
+        assert_eq!(order(true), "BFAE");
     }
 }

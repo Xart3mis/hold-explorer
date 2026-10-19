@@ -158,6 +158,39 @@ pub fn chart_svg(
     text: &ExportText,
     fonts: &Fonts,
 ) -> Result<String, ExportError> {
+    Ok(chart_page(ds, plan, spec, chart, filters, text, fonts)?.finish())
+}
+
+/// The chart as the SVG file a user saves: the drawing of [`chart_svg`] with its text turned
+/// into outlines of the embedded faces, so that it looks the same on every machine whatever
+/// fonts it has, and with the chart's title as its `<title>` for a reader of the file.
+///
+/// `Err(ExportError::Text)` when `text` lacks a label; `Err(ExportError::Image)` when the
+/// drawing cannot be read back: a fault of the application.
+pub fn chart_svg_file(
+    ds: &Dataset,
+    plan: Option<&SolvePlan>,
+    spec: &FilterSpec,
+    chart: &ChartChoice,
+    filters: &[String],
+    text: &ExportText,
+    fonts: &Fonts,
+) -> Result<String, ExportError> {
+    let page = chart_page(ds, plan, spec, chart, filters, text, fonts)?;
+    let title = page.title.clone();
+    crate::raster::outlined(&page.finish(), &title, fonts)
+}
+
+/// The page of a chart, drawn and not yet finished.
+fn chart_page<'a>(
+    ds: &Dataset,
+    plan: Option<&SolvePlan>,
+    spec: &FilterSpec,
+    chart: &ChartChoice,
+    filters: &[String],
+    text: &ExportText,
+    fonts: &'a Fonts,
+) -> Result<Page<'a>, ExportError> {
     let none = text.get("file.chart.noHolds")?;
     let holds = text.get("file.chart.holds")?;
     match chart {
@@ -179,7 +212,7 @@ pub fn chart_svg(
                     dim_face(dim),
                 );
             }
-            Ok(page.finish())
+            Ok(page)
         }
         ChartChoice::TopBlockers => {
             let mut page = Page::new(text.get("file.chart.topBlockers")?, filters, text, fonts)?;
@@ -190,7 +223,7 @@ pub fn chart_svg(
                 let name = dim_name(&Dim::Blocker, text)?;
                 bars::draw(&mut page, &bars, &name, holds, Face::Body);
             }
-            Ok(page.finish())
+            Ok(page)
         }
         ChartChoice::Heatmap { rows, cols } => {
             let (rows_name, cols_name) = (dim_name(rows, text)?, dim_name(cols, text)?);
@@ -212,7 +245,7 @@ pub fn chart_svg(
             } else {
                 heatmap::draw(&mut page, &matrix, &words);
             }
-            Ok(page.finish())
+            Ok(page)
         }
         ChartChoice::Curve { steps } => {
             let words = curve::Words {
@@ -227,7 +260,7 @@ pub fn chart_svg(
                 }
                 _ => page.note(none),
             }
-            Ok(page.finish())
+            Ok(page)
         }
     }
 }
@@ -315,6 +348,8 @@ pub(crate) struct Page<'a> {
     /// The top of the next part.
     pub(crate) y: f32,
     pub(crate) fonts: &'a Fonts,
+    /// The title of a chart image, written whole; empty on a page of the report.
+    title: String,
 }
 
 impl<'a> Page<'a> {
@@ -327,6 +362,7 @@ impl<'a> Page<'a> {
         fonts: &'a Fonts,
     ) -> Result<Self, ExportError> {
         let mut page = Page::boxed(fonts, WIDTH, MARGIN, INNER, MARGIN);
+        page.title = title.to_string();
         let strong = Ink::new(Face::BodyStrong, TITLE, TEXT);
         for line in fonts.wrap(title, Face::BodyStrong, TITLE, INNER) {
             let y = baseline(page.y, TITLE_LINE, TITLE);
@@ -363,6 +399,7 @@ impl<'a> Page<'a> {
             inner,
             y: top,
             fonts,
+            title: String::new(),
         }
     }
 

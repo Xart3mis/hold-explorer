@@ -504,7 +504,17 @@ export function devLines(
             byId,
           );
         case "HoldTypes":
-          return orderBy(rows, (line) => line.hold_types.length, descending, reverse, byId);
+          // The blank type is no type, as the cell leaves it out; a line with none stays last.
+          return orderBy(
+            rows,
+            (line) => {
+              const given = line.hold_types.filter((kind) => kind.trim() !== "" && kind !== "—");
+              return given.length > 0 ? given.length : null;
+            },
+            descending,
+            reverse,
+            byId,
+          );
         case "SizeMismatch":
           return orderBy(rows, (line) => (line.size_mismatch ? 1 : 0), descending, reverse, byId);
       }

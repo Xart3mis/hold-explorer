@@ -65,10 +65,10 @@ fn ticks(from: usize, to: usize, most: usize) -> Vec<usize> {
 }
 
 /// Draws the first `steps` steps of `view` (every step when `steps` is 0 or more than there
-/// are): the name of the value
-/// over the axis, the plot with its ticks and gridlines, the line, the last value at the end of
-/// the line, the name of the step under the axis, and, when the step after which 90 percent of
-/// the lines are freed is drawn, its marker and a line that says it.
+/// are): the name of the value over the axis, the plot with its ticks and gridlines, the line,
+/// the last value at the end of the line, the name of the step under the axis, and, when the
+/// step after which 90 percent of the lines are freed is drawn, its marker and a line that says
+/// it.
 pub(crate) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Words) {
     let caption = Ink::new(Face::Body, SMALL, TEXT_MUTED);
     let all = view.rows.len();

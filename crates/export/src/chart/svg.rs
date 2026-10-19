@@ -45,7 +45,7 @@ pub(crate) fn px(value: f32) -> String {
 }
 
 /// `text` with the five characters XML gives a meaning to written as entities.
-fn escape(text: &str) -> String {
+pub(crate) fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {

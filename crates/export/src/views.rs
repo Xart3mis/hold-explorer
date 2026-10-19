@@ -19,6 +19,7 @@ use hx_core::query::{
 use hx_core::solve::{solve_view, SolvePlan, SolveRow};
 use serde::Deserialize;
 
+use crate::chart::fill;
 use crate::sheet::{Cell, Column, ColumnKind, ColumnRole, Sheet, SheetKind};
 use crate::text::ExportText;
 use crate::ExportError;
@@ -458,15 +459,21 @@ fn def<T>(
 
 /// The columns of `defs` whose fields the snapshot has, in table order when `wanted` is empty,
 /// and otherwise those `wanted` names, in its order. An id `wanted` names twice, or that names no
-/// column of the screen, adds nothing.
+/// column of the screen, adds nothing. When `wanted` names none of the columns the snapshot has
+/// (a remembered choice of columns this snapshot or status does not write), every present column
+/// is written, as when none was chosen: a file is never left without columns.
 fn choose<T>(defs: Vec<Def<T>>, absent: &[Field], wanted: &[String]) -> Vec<Def<T>> {
-    let present = defs
+    let present: Vec<Def<T>> = defs
         .into_iter()
-        .filter(|def| !def.needs.iter().any(|field| absent.contains(field)));
-    if wanted.is_empty() {
-        return present.collect();
+        .filter(|def| !def.needs.iter().any(|field| absent.contains(field)))
+        .collect();
+    if !wanted
+        .iter()
+        .any(|id| present.iter().any(|def| def.id == id))
+    {
+        return present;
     }
-    let mut slots: Vec<Option<Def<T>>> = present.map(Some).collect();
+    let mut slots: Vec<Option<Def<T>>> = present.into_iter().map(Some).collect();
     wanted
         .iter()
         .filter_map(|id| {
@@ -674,7 +681,7 @@ fn hold_defs(text: &ExportText, status: Status) -> Result<Vec<Def<HoldItem>>, Ex
             h("discipline")?,
             ColumnKind::Text,
             &[Field::Discipline],
-            |(_, r): &HoldItem| Cell::Text(r.hold.discipline.clone()),
+            |(_, r): &HoldItem| text_or_empty(&r.hold.discipline),
         ),
         def(
             "holdType",
@@ -1133,7 +1140,13 @@ fn summary_sheet(
                 &format!("file.summary.{words}.median"),
                 median.map_or(Cell::Empty, Cell::Days),
             )?,
-            row("file.summary.stale", stale)?,
+            vec![
+                Cell::Text(fill(
+                    text.get("file.summary.stale")?,
+                    &[("days", &STALE_DAYS.to_string())],
+                )),
+                stale,
+            ],
         ],
     })
 }

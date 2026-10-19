@@ -4,8 +4,9 @@
 //! never read, so nothing of the machine enters the drawing.
 
 use resvg::tiny_skia::{Color, Pixmap, Transform};
-use resvg::usvg::{ImageHrefResolver, Options, Tree};
+use resvg::usvg::{ImageHrefResolver, Options, Tree, WriteOptions};
 
+use crate::chart::svg::escape;
 use crate::fonts::{Fonts, SANS_FAMILY};
 use crate::xlsx::color;
 use crate::ExportError;
@@ -33,6 +34,30 @@ pub fn rgba(svg: &str, fonts: &Fonts) -> Result<(u32, u32, Vec<u8>), ExportError
     // The surface under the drawing is opaque, so every pixel is, and its premultiplied
     // channels are its plain ones.
     Ok((pixmap.width(), pixmap.height(), pixmap.take()))
+}
+
+/// The SVG read with the embedded faces and written again with every text as the outlines of
+/// its glyphs, with `title` as the document's `<title>`: a file that looks the same on every
+/// machine, whatever fonts it has.
+///
+/// `Err(ExportError::Image)` when the SVG cannot be read: a fault of the application.
+pub(crate) fn outlined(svg: &str, title: &str, fonts: &Fonts) -> Result<String, ExportError> {
+    let tree = Tree::from_str(svg, &options(fonts)).map_err(|error| ExportError::Image {
+        reason: error.to_string(),
+    })?;
+    // `preserve_text` is off by default: the writer draws each text as paths.
+    let written = tree.to_string(&WriteOptions::default());
+    let title = format!("<title>{}</title>", escape(title));
+    // The title goes first inside the root element, before anything drawn.
+    let opened = written
+        .find("<svg")
+        .and_then(|start| written[start..].find('>').map(|end| start + end + 1));
+    match opened {
+        Some(at) => Ok(format!("{}{title}{}", &written[..at], &written[at..])),
+        None => Err(ExportError::Image {
+            reason: "the outlined drawing has no root element".into(),
+        }),
+    }
 }
 
 /// How a drawing of this crate is read: with the embedded faces only, and without reading an

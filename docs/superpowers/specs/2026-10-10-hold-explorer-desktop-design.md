@@ -348,7 +348,7 @@ A saved view stores destination, filters, grouping, and sort under a name. Saved
 
 ### 10.4 Export
 
-Every data screen (Overview, Breakdown, Lines, Blockers) has an Export menu in its page header, and `Ctrl+E` runs "Excel, this view" (never while a text field has the focus or an overlay is open). Items run at once with the columns and rows remembered for the screen. A workspace without a snapshot shows no Export menu (the owner is asked to confirm this over an inert menu). Items that do not apply to a screen are left out, not shown disabled.
+Every data screen (Overview, Breakdown, Lines, Blockers) has an Export menu in its page header, and `Ctrl+E` runs "Excel, this view" (never while a text field has the focus or an overlay is open). Items run at once with the columns and rows remembered for the screen. A workspace without a snapshot shows no Export menu. Items that do not apply to a screen are left out, not shown disabled.
 
 - **Excel, this view**: what the screen shows, with the active filters.
 - **Full workbook**: one action, which is also "every screen at once": About, Summary, a breakdown sheet for each dimension the snapshot has, two cross-tabs of discipline by hold type (holds and lines), Lines, Holds, and Solve order, all under the current filters.

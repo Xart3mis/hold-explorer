@@ -1440,12 +1440,12 @@ fn an_empty_discipline_or_remark_is_an_empty_cell() {
         &ds,
         &request(
             holds_screen(HoldSort::FileOrder, false),
-            &["remark"],
+            &["discipline", "remark"],
             RowScope::All,
             status(Status::Open),
         ),
     );
-    assert_eq!(holds.rows, vec![vec![Cell::Empty]]);
+    assert_eq!(holds.rows, vec![vec![Cell::Empty, Cell::Empty]]);
 }
 
 #[test]
@@ -1564,4 +1564,66 @@ fn holds_named_columns_the_status_does_not_write_are_left_out_without_an_error()
     );
     // Released holds have a release date and no status column; the file has no release remark.
     assert_eq!(ids(&released), ["line", "releasedOn", "days"]);
+}
+
+#[test]
+fn lines_asked_only_for_columns_the_snapshot_lacks_write_every_present_column() {
+    let ds = limited();
+    let every = one(
+        &ds,
+        &request(
+            lines_screen(LineSort::HoldsDesc),
+            &[],
+            RowScope::All,
+            status(Status::Open),
+        ),
+    );
+    let asked = one(
+        &ds,
+        &request(
+            lines_screen(LineSort::HoldsDesc),
+            &["modelSize"],
+            RowScope::All,
+            status(Status::Open),
+        ),
+    );
+    assert!(!ids(&asked).is_empty());
+    assert_eq!(ids(&asked), ids(&every));
+    assert_eq!(asked.rows, every.rows);
+}
+
+#[test]
+fn holds_asked_only_for_columns_the_status_does_not_write_write_every_present_column() {
+    let ds = full();
+    let open = |columns: &[&str]| {
+        one(
+            ds,
+            &request(
+                holds_screen(HoldSort::FileOrder, false),
+                columns,
+                RowScope::All,
+                status(Status::Open),
+            ),
+        )
+    };
+    let asked = open(&["status", "releasedOn"]);
+    let every = open(&[]);
+    assert!(!ids(&asked).is_empty());
+    assert_eq!(ids(&asked), ids(&every));
+    assert_eq!(asked.rows.len(), every.rows.len());
+}
+
+#[test]
+fn the_summary_names_the_age_of_a_stale_hold_from_the_threshold() {
+    let mut words = text();
+    words.labels.insert(
+        "file.summary.stale".into(),
+        "Holds open for {days} days or more".into(),
+    );
+    let sheet = summary_sheet(full(), &status(Status::Open), &[], &words).unwrap();
+    let last = first_cells(&sheet).last().cloned();
+    assert_eq!(
+        last.as_deref(),
+        Some(format!("Holds open for {STALE_DAYS} days or more").as_str())
+    );
 }
