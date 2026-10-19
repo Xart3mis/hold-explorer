@@ -33,7 +33,7 @@ As M1c-1 to M1c-export: each task gives its files, the exact interface later tas
 13. **Second click resets** (owner, 2026-10-18): pressing the sidebar item of the current destination returns it to its default address: selection, scroll, mode, grouping, and sort reset; filters stay.
 14. **Not in this snapshot chip** (owner, 2026-10-18): a filter chip whose field the snapshot lacks has full-contrast text, a dashed outline, and "not in this snapshot" in its tooltip and accessible name.
 15. **Open row marker** (owner, 2026-10-19): the open row among selected rows carries a small accent mark in its first cell, on top of its deeper tint; not a coloured side stripe, which DESIGN.md bans.
-16. **Blockers export header** (owner, 2026-10-19): the column that names each row of the Blockers export is headed "Blocker", not "Step".
+16. **Blockers export row name** (owner, 2026-10-19, corrected the same day): the Blockers export is named by blocker: the `blocker` column ("Blocker") is its row-name column, first in every file and always written; `step` ("Step") follows it as an ordinary optional column.
 17. **Export sits beside Import** (owner, 2026-10-19): the Export menu moves from the page header of the data screens to the top bar, next to Import, in every page; where a page has nothing to export it shows inert, saying where export is found.
 
 ## Global Constraints
