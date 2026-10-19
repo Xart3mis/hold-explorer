@@ -76,7 +76,13 @@ export const unreadable: UnreadableView = {
 export function startState(overrides: Partial<AppStart> = {}): AppStart {
   return {
     version: "0.1.0",
-    settings: { theme: "Dark", workspace_dir: null, last_workspace: null },
+    settings: {
+      theme: "Dark",
+      density: "Comfortable",
+      author_name: "",
+      workspace_dir: null,
+      last_workspace: null,
+    },
     list: {
       workspaces: [],
       unreadable: [],

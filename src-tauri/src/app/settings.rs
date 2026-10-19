@@ -25,6 +25,20 @@ pub enum Theme {
     System,
 }
 
+/// How tightly rows and controls are packed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum Density {
+    /// The roomy default.
+    #[default]
+    Comfortable,
+    /// Shorter rows and controls.
+    Compact,
+}
+
+/// The longest author name, in characters, after trimming.
+pub(super) const AUTHOR_NAME_LIMIT: usize = 80;
+
 /// What the user has chosen. A missing field takes its default.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 #[serde(default)]
@@ -32,6 +46,10 @@ pub enum Theme {
 pub struct Settings {
     /// The colour theme.
     pub theme: Theme,
+    /// How tightly rows and controls are packed.
+    pub density: Density,
+    /// The name notes are signed with (from M4); trimmed, at most 80 characters; empty is none.
+    pub author_name: String,
     /// Where workspaces are kept; `None` means the default folder.
     pub workspace_dir: Option<String>,
     /// The id of the workspace that was open last.

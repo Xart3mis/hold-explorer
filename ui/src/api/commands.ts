@@ -22,6 +22,7 @@ import type { ImportDone } from "../bindings/ImportDone";
 import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
+import type { Density } from "../bindings/Density";
 import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
@@ -51,6 +52,8 @@ type ExportProgress = Channel<ExportPhase>;
 interface CommandMap {
   app_start: { args: Record<string, never>; result: AppStart };
   settings_set_theme: { args: { theme: Theme }; result: Settings };
+  settings_set_density: { args: { density: Density }; result: Settings };
+  settings_set_author_name: { args: { name: string }; result: Settings };
   workspace_list: { args: Record<string, never>; result: WorkspaceListView };
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
   workspace_open: { args: { id: string }; result: WorkspaceOpen };
@@ -138,6 +141,8 @@ function call<K extends Exclude<CommandName, WorkspaceCommandName>>(
  */
 export const api = {
   setTheme: (theme: Theme) => call("settings_set_theme", { theme }),
+  setDensity: (density: Density) => call("settings_set_density", { density }),
+  setAuthorName: (name: string) => call("settings_set_author_name", { name }),
   workspaceList: () => call("workspace_list", {}),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),

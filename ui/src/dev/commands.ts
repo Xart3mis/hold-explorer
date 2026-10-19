@@ -24,6 +24,7 @@ import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
+import type { Density } from "../bindings/Density";
 import type { Theme } from "../bindings/Theme";
 import type { ValuePage } from "../bindings/ValuePage";
 import type { ViewRef } from "../bindings/ViewRef";
@@ -452,7 +453,7 @@ interface World {
   folderReadable: boolean;
 }
 
-function world(state: DevState, theme: Theme): World {
+function world(state: DevState, theme: Theme, density: Density): World {
   const snapshots = new Map<string, SnapshotInfo[]>([
     [unit573.id, fourSnapshots],
     [tankFarm.id, fourSnapshots.slice(0, 2)],
@@ -460,7 +461,13 @@ function world(state: DevState, theme: Theme): World {
   ]);
   const start: AppStart = {
     version: "0.1.0",
-    settings: { theme, workspace_dir: null, last_workspace: null },
+    settings: {
+      theme,
+      density,
+      author_name: "",
+      workspace_dir: null,
+      last_workspace: null,
+    },
     list: { workspaces: [], unreadable: [], folder: FOLDER },
     list_error: null,
     open: null,
@@ -608,8 +615,12 @@ function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined
  * state. Returns the marker of the development page. A dragged file is played from the console:
  * `hxDev.enter(["/exports/Holds.xlsx"])`, `hxDev.leave()`, `hxDev.drop([...])`.
  */
-export function installDevCommands(state: DevState, theme: Theme): string {
-  const { start, snapshots, folderReadable } = world(state, theme);
+export function installDevCommands(
+  state: DevState,
+  theme: Theme,
+  density: Density = "Comfortable",
+): string {
+  const { start, snapshots, folderReadable } = world(state, theme, density);
   let nextId = 1;
   let nextSnapshot = 5;
   let overviewReadings = 0;
@@ -719,6 +730,24 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       if (chosen === "Dark" || chosen === "Light" || chosen === "System") {
         start.settings = { ...start.settings, theme: chosen };
       }
+      return start.settings;
+    },
+    settings_set_density: (payload) => {
+      const chosen = text(payload, "density");
+      if (chosen === "Comfortable" || chosen === "Compact") {
+        start.settings = { ...start.settings, density: chosen };
+      }
+      return start.settings;
+    },
+    settings_set_author_name: (payload) => {
+      const name = text(payload, "name").trim();
+      if (Array.from(name).length > 80) {
+        throw failure(
+          "Settings",
+          "The name is longer than 80 characters, so it was not saved. Shorten it, then save it again.",
+        );
+      }
+      start.settings = { ...start.settings, author_name: name };
       return start.settings;
     },
     workspace_list: () => {

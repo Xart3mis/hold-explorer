@@ -34,6 +34,8 @@ function onTheWire(payload: unknown): unknown {
 const calls: Record<CommandName, () => Promise<unknown>> = {
   app_start: () => workspaceApi.appStart(),
   settings_set_theme: () => api.setTheme(fixture.settings_set_theme.theme),
+  settings_set_density: () => api.setDensity(fixture.settings_set_density.density),
+  settings_set_author_name: () => api.setAuthorName(fixture.settings_set_author_name.name),
   workspace_list: () => api.workspaceList(),
   workspace_create: () => workspaceApi.workspaceCreate(fixture.workspace_create.name),
   workspace_open: () => workspaceApi.workspaceOpen(fixture.workspace_open.id),

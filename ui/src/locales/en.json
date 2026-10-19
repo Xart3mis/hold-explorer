@@ -268,6 +268,13 @@
     "themeLight": "Light",
     "themeSystem": "System",
     "themeError": "The theme was not saved",
+    "density": "Density",
+    "densityHelp": "Compact makes rows and controls shorter. The text stays the same size.",
+    "densityComfortable": "Comfortable",
+    "densityCompact": "Compact",
+    "densityError": "The density was not saved",
+    "authorName": "Author name",
+    "authorNameHelp": "Notes you write are signed with this name. It is saved when you leave the field or press Enter, and can be empty.",
     "folder": "Workspaces folder",
     "folderHelp": "Every workspace is one file in this folder.",
     "version": "Version"

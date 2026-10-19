@@ -17,16 +17,21 @@
 }
 
 /*
- * The theme has three short options, so its box is no wider than they need. The helper line
- * under it keeps the width of a line of text.
+ * The theme and the density have a few short options, so their box is no wider than they need.
+ * The helper line under it keeps the width of a line of text.
  */
-.theme {
+.choice {
   align-items: flex-start;
   max-inline-size: var(--layout-prose-max-width);
 }
 
-.theme > button {
+.choice > button {
   inline-size: var(--size-bar-label-width);
+}
+
+/* The author name is a line of text, no wider than a line of prose. */
+.name {
+  max-inline-size: var(--layout-prose-max-width);
 }
 
 /* A value that is shown and not edited, in the anatomy of a field: label, value, helper line. */

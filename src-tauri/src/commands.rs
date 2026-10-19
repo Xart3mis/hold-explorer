@@ -24,10 +24,11 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, ErrorKind,
-    ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone,
-    ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings,
-    TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, Density,
+    ErrorKind, ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit,
+    ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard,
+    Settings, TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen,
+    WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -109,6 +110,24 @@ pub async fn settings_set_theme<R: Runtime>(
     theme: Theme,
 ) -> Result<Settings, CommandError> {
     blocking(app, move |state| state.set_theme(theme)).await
+}
+
+/// Sets and saves the density.
+#[tauri::command]
+pub async fn settings_set_density<R: Runtime>(
+    app: AppHandle<R>,
+    density: Density,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_density(density)).await
+}
+
+/// Sets and saves the name notes are signed with.
+#[tauri::command]
+pub async fn settings_set_author_name<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_author_name(&name)).await
 }
 
 /// The workspaces in the workspace folder.
@@ -640,6 +659,8 @@ mod tests {
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
                 ("overview", "ViewChanged"),
+                ("settings_set_author_name", "Ok"),
+                ("settings_set_density", "Ok"),
                 ("settings_set_theme", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),

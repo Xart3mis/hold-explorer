@@ -39,6 +39,8 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
     tauri::generate_handler![
         commands::app_start,
         commands::settings_set_theme,
+        commands::settings_set_density,
+        commands::settings_set_author_name,
         commands::workspace_list,
         commands::workspace_create,
         commands::workspace_open,

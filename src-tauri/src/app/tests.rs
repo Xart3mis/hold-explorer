@@ -9,7 +9,7 @@ use hx_synth::{generate, write_workbook, SynthConfig};
 use tempfile::TempDir;
 
 use super::error::{CommandError, ErrorKind};
-use super::settings::{load_settings, save_settings, Settings, Theme};
+use super::settings::{load_settings, save_settings, Density, Settings, Theme};
 use super::snapshots::ViewRef;
 use super::test_support::Fixture;
 use super::AppState;
@@ -62,10 +62,73 @@ fn a_theme_is_saved_and_read_back() {
 }
 
 #[test]
+fn a_density_is_saved_and_read_back() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    assert_eq!(Settings::default().density, Density::Comfortable);
+    let settings = state.set_density(Density::Compact).unwrap();
+    assert_eq!(settings.density, Density::Compact);
+    assert_eq!(settings.theme, Theme::Dark);
+    assert_eq!(load_settings(&fx.config()).density, Density::Compact);
+    assert_eq!(fx.state().start().settings.density, Density::Compact);
+}
+
+#[test]
+fn an_older_settings_file_reads_the_new_fields_as_their_defaults() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    std::fs::write(
+        fx.config().join("settings.json"),
+        r#"{ "theme": "Light", "workspace_dir": null, "last_workspace": null }"#,
+    )
+    .unwrap();
+    let settings = load_settings(&fx.config());
+    assert_eq!(settings.theme, Theme::Light);
+    assert_eq!(settings.density, Density::Comfortable);
+    assert_eq!(settings.author_name, "");
+    assert!(!fx.config().join("settings.json.unreadable").exists());
+}
+
+#[test]
+fn an_author_name_is_trimmed_saved_and_read_back() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let settings = state.set_author_name("  Ada Lovelace \t").unwrap();
+    assert_eq!(settings.author_name, "Ada Lovelace");
+    assert_eq!(load_settings(&fx.config()).author_name, "Ada Lovelace");
+    // Nothing but spaces is no name.
+    assert_eq!(state.set_author_name("   ").unwrap().author_name, "");
+    assert_eq!(load_settings(&fx.config()).author_name, "");
+}
+
+#[test]
+fn an_author_name_of_eighty_characters_is_kept_and_one_more_is_refused() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    // Eighty characters, counted as characters and not as bytes.
+    let longest = "é".repeat(80);
+    assert_eq!(
+        state
+            .set_author_name(&format!(" {longest} "))
+            .unwrap()
+            .author_name,
+        longest
+    );
+    let error = state.set_author_name(&"é".repeat(81)).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Settings);
+    assert!(error.message.contains("80"), "{}", error.message);
+    // The refused name changed nothing, in memory or on disk.
+    assert_eq!(state.settings().author_name, longest);
+    assert_eq!(load_settings(&fx.config()).author_name, longest);
+}
+
+#[test]
 fn settings_are_written_through_a_temporary_file_that_is_gone_afterwards() {
     let fx = Fixture::new();
     let settings = Settings {
         theme: Theme::System,
+        density: Density::Compact,
+        author_name: "Ada Lovelace".into(),
         workspace_dir: Some("/somewhere".into()),
         last_workspace: Some("abc".into()),
     };

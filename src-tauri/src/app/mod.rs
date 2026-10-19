@@ -29,7 +29,7 @@ pub use export::{
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
 };
-pub use settings::{Settings, Theme};
+pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
@@ -286,6 +286,39 @@ impl AppState {
     pub fn set_theme(&mut self, theme: Theme) -> Result<Settings, CommandError> {
         let next = Settings {
             theme,
+            ..self.settings.clone()
+        };
+        self.save(&next)?;
+        self.settings = next;
+        Ok(self.settings.clone())
+    }
+
+    /// Sets and saves the density.
+    pub fn set_density(&mut self, density: Density) -> Result<Settings, CommandError> {
+        let next = Settings {
+            density,
+            ..self.settings.clone()
+        };
+        self.save(&next)?;
+        self.settings = next;
+        Ok(self.settings.clone())
+    }
+
+    /// Sets and saves the name notes are signed with. The name is trimmed; more than 80
+    /// characters after that is refused and nothing changes.
+    pub fn set_author_name(&mut self, name: &str) -> Result<Settings, CommandError> {
+        let name = name.trim();
+        if name.chars().count() > settings::AUTHOR_NAME_LIMIT {
+            return Err(CommandError::new(
+                ErrorKind::Settings,
+                format!(
+                    "The name is longer than {} characters, so it was not saved. Shorten it, then save it again.",
+                    settings::AUTHOR_NAME_LIMIT
+                ),
+            ));
+        }
+        let next = Settings {
+            author_name: name.to_string(),
             ..self.settings.clone()
         };
         self.save(&next)?;

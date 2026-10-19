@@ -6,7 +6,13 @@ import type { Settings } from "../bindings/Settings";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { checkUnhandledCommands, commandFailure, expectUnhandled, mockCommands } from "./ipc";
 
-const settings: Settings = { theme: "Light", workspace_dir: null, last_workspace: null };
+const settings: Settings = {
+  theme: "Light",
+  density: "Comfortable",
+  author_name: "",
+  workspace_dir: null,
+  last_workspace: null,
+};
 
 describe("mockCommands", () => {
   it("returns the typed result of a handler and passes the arguments by their command keys", async () => {

@@ -7,7 +7,13 @@ import { openStart } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { useThemeSetting } from "./theme";
 
-const settings = (theme: Theme): Settings => ({ theme, workspace_dir: null, last_workspace: null });
+const settings = (theme: Theme): Settings => ({
+  theme,
+  density: "Comfortable",
+  author_name: "",
+  workspace_dir: null,
+  last_workspace: null,
+});
 
 describe("changing the theme", () => {
   it("keeps the second of two changes when the first fails after the second was asked for", async () => {

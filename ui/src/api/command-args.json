@@ -1,6 +1,8 @@
 {
   "app_start": {},
   "settings_set_theme": { "theme": "Light" },
+  "settings_set_density": { "density": "Compact" },
+  "settings_set_author_name": { "name": "Ada Lovelace" },
   "workspace_list": {},
   "workspace_create": { "name": "Unit 573 piping" },
   "workspace_open": { "id": "a1b2c3d4e5f60718" },
