@@ -228,21 +228,25 @@ impl AppState {
 
     /// Puts the state right after a command panicked while it held it: drops the file open for
     /// import and every cache, and reopens the open workspace from its file, where a write that
-    /// was cut short rolled back with its transaction. The selection stays when the reopened
+    /// was cut short rolled back with its transaction. A workspace an import had taken out of the
+    /// state when it panicked is found again by its id. The selection stays when the reopened
     /// workspace still has that snapshot; otherwise the newest is selected. The files written
     /// this session stay openable. When the workspace cannot be reopened, none is open and the
     /// error says why.
     pub fn recover(&mut self) -> Result<(), CommandError> {
         self.draft = None;
         self.cache = None;
-        let Some(path) = self.open.take().map(|open| open.path().to_path_buf()) else {
-            self.open_id = None;
-            self.selected = None;
-            return Ok(());
+        let path = self.open.take().map(|open| open.path().to_path_buf());
+        let reopened = match (path, self.open_id.clone()) {
+            (Some(path), _) => Workspace::open(&path)
+                .map_err(CommandError::from)
+                .and_then(|workspace| describe(&workspace).map(|open| (workspace, open))),
+            (None, Some(id)) => self.load(&id),
+            (None, None) => {
+                self.selected = None;
+                return Ok(());
+            }
         };
-        let reopened = Workspace::open(&path)
-            .map_err(CommandError::from)
-            .and_then(|workspace| describe(&workspace).map(|open| (workspace, open)));
         match reopened {
             Ok((workspace, mut open)) => {
                 let kept = self
@@ -255,7 +259,13 @@ impl AppState {
             Err(error) => {
                 self.open_id = None;
                 self.selected = None;
-                Err(error)
+                Err(CommandError::new(
+                    error.kind,
+                    format!(
+                        "After an operation failed part-way, the workspace could not be reopened: {}",
+                        error.message
+                    ),
+                ))
             }
         }
     }

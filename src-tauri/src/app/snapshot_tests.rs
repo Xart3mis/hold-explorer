@@ -667,6 +667,13 @@ fn a_recover_whose_reopen_fails_leaves_no_workspace_open_and_says_why() {
 
     let error = state.recover().unwrap_err();
     assert_eq!(error.kind, ErrorKind::NotAWorkspace);
+    assert!(
+        error.message.starts_with(
+            "After an operation failed part-way, the workspace could not be reopened: The file "
+        ),
+        "{}",
+        error.message
+    );
     assert!(error.message.contains("holdx-ws"), "{}", error.message);
     assert_eq!(state.current().unwrap(), None);
     assert_eq!(

@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use hx_core::error::ImportError;
@@ -566,10 +567,67 @@ fn every_import_error_keeps_its_variant_name_and_text() {
     }
 }
 
+/// The variant names of `pub enum {name}` in `source`, read from its source text: the lines of
+/// its body at four spaces' indent that start with an uppercase letter.
+fn variant_names(source: &str, name: &str) -> BTreeSet<String> {
+    let start = source
+        .find(&format!("pub enum {name} {{"))
+        .unwrap_or_else(|| panic!("the source declares {name}"));
+    source[start..]
+        .lines()
+        .skip(1)
+        .take_while(|line| *line != "}")
+        .filter_map(|line| line.strip_prefix("    "))
+        .filter(|line| line.starts_with(|c: char| c.is_ascii_uppercase()))
+        .map(|line| {
+            line.chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect()
+        })
+        .collect()
+}
+
+/// The variant name an error serializes with.
+fn tag<E: serde::Serialize>(error: &E) -> String {
+    serde_json::to_value(error).unwrap()["kind"]
+        .as_str()
+        .expect("the error is tagged with its kind")
+        .to_string()
+}
+
 #[test]
-fn no_store_or_import_error_maps_to_internal() {
-    // The examples name every variant, by the exhaustive matches above; the export errors are
-    // checked the same way in `export_tests`.
+fn every_variant_of_the_three_errors_has_an_example_and_none_maps_to_internal() {
+    // The variants are read from the enums' own source, so a variant added without an example
+    // fails here.
+    let store: BTreeSet<String> = store_errors().iter().map(|(e, _)| tag(e)).collect();
+    let import: BTreeSet<String> = import_errors().iter().map(|(e, _)| tag(e)).collect();
+    let export: BTreeSet<String> = super::export_tests::export_errors()
+        .iter()
+        .map(|(e, _)| tag(e))
+        .collect();
+    assert_eq!(
+        store,
+        variant_names(
+            include_str!("../../../crates/store/src/error.rs"),
+            "StoreError"
+        )
+    );
+    assert_eq!(
+        import,
+        variant_names(
+            include_str!("../../../crates/core/src/error.rs"),
+            "ImportError"
+        )
+    );
+    assert_eq!(
+        export,
+        variant_names(
+            include_str!("../../../crates/export/src/lib.rs"),
+            "ExportError"
+        )
+    );
+    assert!(!store.is_empty() && !import.is_empty() && !export.is_empty());
+
     let kinds: Vec<ErrorKind> = store_errors()
         .into_iter()
         .map(|(error, _)| CommandError::from(error).kind)
@@ -578,8 +636,12 @@ fn no_store_or_import_error_maps_to_internal() {
                 .into_iter()
                 .map(|(error, _)| CommandError::from(error).kind),
         )
+        .chain(
+            super::export_tests::export_errors()
+                .into_iter()
+                .map(|(error, _)| CommandError::from(error).kind),
+        )
         .collect();
-    assert_eq!(kinds.len(), 16);
     assert!(!kinds.contains(&ErrorKind::Internal), "{kinds:?}");
 }
 

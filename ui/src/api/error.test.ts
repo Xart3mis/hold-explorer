@@ -16,6 +16,13 @@ describe("asCommandError", () => {
     });
   });
 
+  it("keeps the message of an object with an unknown kind, as an Internal error", () => {
+    expect(asCommandError({ kind: "NoWorkspce", message: "No workspace is open." })).toEqual({
+      kind: "Internal",
+      message: "No workspace is open.",
+    });
+  });
+
   it("makes a string an Internal error with that text", () => {
     expect(asCommandError("it broke")).toEqual({ kind: "Internal", message: "it broke" });
   });
@@ -28,14 +35,7 @@ describe("asCommandError", () => {
   });
 
   it("makes anything else an Internal error", () => {
-    for (const value of [
-      undefined,
-      null,
-      7,
-      { kind: 3 },
-      { kind: "X" },
-      { kind: "NoWorkspce", message: "A kind no command answers with." },
-    ]) {
+    for (const value of [undefined, null, 7, { kind: 3 }, { kind: "X" }]) {
       const error = asCommandError(value);
       expect(error.kind).toBe("Internal");
       expect(error.message).toMatch(/\. .+\./);

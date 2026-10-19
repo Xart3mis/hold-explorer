@@ -438,9 +438,9 @@ fn a_missing_folder_fails_with_folder() {
     assert_eq!(error.kind, ErrorKind::Folder);
 }
 
-#[test]
-fn every_export_error_keeps_its_variant_name_and_text() {
-    let errors = [
+/// One example of every `ExportError` variant with the kind it must report.
+pub(super) fn export_errors() -> Vec<(ExportError, ErrorKind)> {
+    vec![
         (
             ExportError::FileInUse { file: "a".into() },
             ErrorKind::FileInUse,
@@ -476,7 +476,12 @@ fn every_export_error_keeps_its_variant_name_and_text() {
             ErrorKind::Report,
         ),
         (ExportError::Text { key: "k".into() }, ErrorKind::Text),
-    ];
+    ]
+}
+
+#[test]
+fn every_export_error_keeps_its_variant_name_and_text() {
+    let errors = export_errors();
     for (error, kind) in errors {
         // A new variant stops this from compiling: give it an example in the list above.
         match &error {

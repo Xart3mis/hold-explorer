@@ -38,6 +38,17 @@ where
     T: Send + 'static,
     F: FnOnce(&mut AppState) -> Result<T, CommandError> + Send + 'static,
 {
+    locked(app, false, work).await
+}
+
+/// [`blocking`]. When `starts_over`, `work` rebuilds the state itself, so a workspace that
+/// cannot be reopened after a panic is not its answer: `work` finds out about it on its own.
+async fn locked<R, T, F>(app: AppHandle<R>, starts_over: bool, work: F) -> Result<T, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(&mut AppState) -> Result<T, CommandError> + Send + 'static,
+{
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.try_state::<Mutex<AppState>>().ok_or_else(|| {
             CommandError::internal(
@@ -51,7 +62,10 @@ where
             Err(poisoned) => {
                 let mut guard = poisoned.into_inner();
                 state.clear_poison();
-                guard.recover()?;
+                let recovered = guard.recover();
+                if !starts_over {
+                    recovered?;
+                }
                 guard
             }
         };
@@ -77,14 +91,15 @@ where
 /// the state puts it right (see `blocking`), so no restart is needed.
 fn task_failed(_: tauri::Error) -> CommandError {
     CommandError::internal(
-        "An operation failed part-way. Nothing it was doing was saved. Try again; if it happens again, report it.",
+        "An operation failed part-way, so what it was doing may not have been saved. Check, then try again; if it happens again, report it.",
     )
 }
 
 /// Settings, the workspace list, and the workspace that was open last.
 #[tauri::command]
 pub async fn app_start<R: Runtime>(app: AppHandle<R>) -> Result<AppStart, CommandError> {
-    blocking(app, |state| Ok(state.start())).await
+    // The start rebuilds the state, and lists a last workspace it cannot read.
+    locked(app, true, |state| Ok(state.start())).await
 }
 
 /// Sets and saves the theme.
@@ -759,7 +774,7 @@ mod tests {
         assert_eq!(error.kind, ErrorKind::Internal);
         assert_eq!(
             error.message,
-            "An operation failed part-way. Nothing it was doing was saved. Try again; if it happens again, report it."
+            "An operation failed part-way, so what it was doing may not have been saved. Check, then try again; if it happens again, report it."
         );
         assert!(harness.app.state::<Mutex<AppState>>().is_poisoned());
 
@@ -822,6 +837,12 @@ mod tests {
             .unwrap_err();
         assert_eq!(error["kind"], "NotAWorkspace", "{error}");
         let message = error["message"].as_str().unwrap_or_default();
+        assert!(
+            message.starts_with(
+                "After an operation failed part-way, the workspace could not be reopened: "
+            ),
+            "{message}"
+        );
         assert!(message.contains(&format!("{id}.holdx-ws")), "{message}");
         // The lock is whole again, and nothing is open.
         assert_eq!(
@@ -834,6 +855,34 @@ mod tests {
             harness.outcome("overview", &args_in_view("overview", &view)),
             "NoWorkspace"
         );
+    }
+
+    #[test]
+    fn app_start_after_a_panic_starts_over_when_the_workspace_cannot_be_reopened() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let list = harness
+            .invoke("workspace_list", &serde_json::json!({}))
+            .unwrap();
+        let folder = std::path::PathBuf::from(list["folder"].as_str().unwrap());
+        let id = view["workspace_id"].as_str().unwrap();
+        // A newer schema: a file the listing still names, as one it cannot read.
+        rusqlite::Connection::open(folder.join(format!("{id}.holdx-ws")))
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        poison(&harness);
+
+        // The start rebuilds the state itself: the failed reopen is not its answer, and the
+        // workspace that cannot be read is listed as such.
+        let start = harness
+            .invoke("app_start", &serde_json::json!({}))
+            .expect("the page starts although the workspace cannot be reopened");
+        assert_eq!(start["open"], Value::Null, "{start}");
+        let unreadable = start["list"]["unreadable"].as_array().unwrap();
+        assert_eq!(unreadable.len(), 1, "{start}");
+        assert_eq!(unreadable[0]["kind"], "NewerSchema");
+        assert!(!harness.app.state::<Mutex<AppState>>().is_poisoned());
     }
 
     /// Opens the demo workspace and returns the view the interface then shows, as JSON.

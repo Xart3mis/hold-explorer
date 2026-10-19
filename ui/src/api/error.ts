@@ -74,7 +74,8 @@ function isKind(value: unknown): value is AppError["kind"] {
 
 /**
  * Whether a value has the shape of what a failed command carries, or of a failure the interface
- * made in that shape: a known kind and a message.
+ * made in that shape: a known kind and a message. It narrows to `AppError`, whose kind may be one
+ * of the interface's own (`InterfaceKind`) as well as a command's `ErrorKind`.
  */
 export function isCommandError(value: unknown): value is AppError {
   return (
@@ -87,10 +88,22 @@ export function isCommandError(value: unknown): value is AppError {
   );
 }
 
-/** What a rejected command carries, as an `AppError`. Anything else becomes kind `Internal`. */
+/**
+ * What a rejected command carries, as an `AppError`: a command's error, or a failure of the
+ * interface's own kinds (`InterfaceKind`), kept as they are. An object with a message but a kind
+ * that is no kind keeps its message as kind `Internal`; anything else becomes kind `Internal`.
+ */
 export function asCommandError(value: unknown): AppError {
   if (isCommandError(value)) return { kind: value.kind, message: value.message };
   if (value instanceof Error) return { kind: "Internal", message: value.message };
   if (typeof value === "string") return { kind: "Internal", message: value };
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "message" in value &&
+    typeof value.message === "string"
+  ) {
+    return { kind: "Internal", message: value.message };
+  }
   return { kind: "Internal", message: i18next.t("errors.unreported") };
 }

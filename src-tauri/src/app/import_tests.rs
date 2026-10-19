@@ -1176,3 +1176,43 @@ fn a_snapshot_of_the_same_day_can_be_replaced_in_a_workspace_that_is_not_open() 
     assert_eq!(done.open.snapshots, std::slice::from_ref(&done.snapshot));
     assert_eq!(state.open_id(), target);
 }
+
+#[test]
+fn recover_reopens_a_workspace_taken_out_for_an_import_that_panicked() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    let first = state
+        .import_commit(commit(existing(&id), "2026-10-01 08:00:00"), &no_progress)
+        .unwrap()
+        .snapshot
+        .id;
+    let before = state.current().unwrap().unwrap();
+    assert_eq!(before.selected, Some(first));
+
+    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        state.import_commit_with(
+            commit(existing(&id), "2026-10-08 08:00:00"),
+            &no_progress,
+            &nothing_to_remove,
+            &|| panic!("the import panics with the open workspace in hand"),
+        )
+    }));
+    assert!(panicked.is_err(), "the import panicked");
+
+    state.recover().unwrap();
+
+    assert_eq!(state.open_id(), id);
+    assert_eq!(state.selected_snapshot(), Some(first));
+    let after = state.current().unwrap().unwrap();
+    assert_eq!(
+        after.snapshots, before.snapshots,
+        "nothing of the import was stored"
+    );
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
+}
