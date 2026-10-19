@@ -38,8 +38,15 @@ export interface MenuButtonProps {
    */
   isInert?: boolean;
   /**
-   * Why the button is inert, for assistive technology: the button's accessible description. It is
-   * not shown, since nothing is told by hover alone.
+   * The menu has nothing to act on and will not have until something outside changes (the Export
+   * menu of a workspace without a snapshot): the button is greyed, keeps the focus so that its
+   * description can be reached, opens nothing, and is announced as unavailable (`aria-disabled`),
+   * not as busy, since nothing is running. `isPending` and `isInert` come first.
+   */
+  isUnavailable?: boolean;
+  /**
+   * Why the button is unavailable, for assistive technology: its accessible description, used only
+   * while `isUnavailable`. It is not shown, since nothing is told by hover alone.
    */
   description?: string;
   /** Which edge of the button the menu lines up with. */
@@ -56,8 +63,8 @@ export interface MenuButtonProps {
    * look and says that what it opened is expanded, as it does while its menu is open.
    */
   isExpanded?: boolean;
-  /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. */
-  children: ReactNode;
+  /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. None while the button is unavailable. */
+  children?: ReactNode;
   className?: string | undefined;
 }
 
@@ -72,6 +79,7 @@ export function MenuButton({
   icon,
   isPending = false,
   isInert = false,
+  isUnavailable = false,
   description,
   align = "start",
   isFlush = false,
@@ -83,16 +91,20 @@ export function MenuButton({
 }: MenuButtonProps) {
   const offset = lengthToken("--space-1");
   const inert = !isPending && isInert;
+  const unavailable = !isPending && !inert && isUnavailable;
+  // Busy means an action runs: not so for a button that is unavailable.
   const busy = isPending || inert;
+  // A hook cannot be called conditionally; an id that no description uses costs nothing.
   const descriptionId = useId();
-  const described = description !== undefined && inert;
+  const described = unavailable && description !== undefined;
   return (
     <MenuTrigger>
       <RacButton
         {...(triggerRef === undefined ? {} : { ref: triggerRef })}
         {...(props["aria-label"] === undefined ? {} : { "aria-label": props["aria-label"] })}
-        isPending={busy}
+        isPending={busy || unavailable}
         data-inert={inert ? "" : undefined}
+        data-unavailable={unavailable ? "" : undefined}
         data-flush={isFlush ? "" : undefined}
         className={cx(styles.trigger, className)}
         render={(domProps) => (

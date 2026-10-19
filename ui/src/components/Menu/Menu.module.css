@@ -50,6 +50,14 @@
   color: var(--color-text-primary);
 }
 
+/* Unavailable: greyed, with no fill of hover or press; the focus ring below is unchanged. */
+.trigger[data-unavailable],
+.trigger[data-unavailable][data-hovered],
+.trigger[data-unavailable][data-pressed] {
+  background-color: transparent;
+  color: var(--color-text-muted);
+}
+
 /* Pressed, and for as long as its menu is open. */
 .trigger[data-pressed],
 .trigger[aria-expanded="true"] {

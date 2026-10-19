@@ -707,7 +707,7 @@ describe("a workspace without snapshots", () => {
     ["/lines", en.lines.emptyTitle],
     ["/breakdown", en.breakdown.emptyTitle],
     ["/blockers", en.blockers.emptyTitle],
-  ])("shows the Export button inert on %s, and it opens nothing", async (path, empty) => {
+  ])("shows the Export button unavailable on %s, and it opens nothing", async (path, empty) => {
     const app = renderApp({
       path,
       start: openStart({
@@ -721,7 +721,8 @@ describe("a workspace without snapshots", () => {
     });
     await screen.findByText(empty);
     const button = screen.getByRole("button", { name: menu.label });
-    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).not.toHaveAttribute("aria-busy");
     expect(button).toHaveAccessibleDescription(menu.noSnapshot);
     await app.user.click(button);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();

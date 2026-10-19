@@ -10,14 +10,25 @@ function Sample({
   onSelect = () => undefined,
   isPending = false,
   isInert = false,
+  isUnavailable = false,
+  description,
 }: {
   onAction?: (id: string) => void;
   onSelect?: (id: string) => void;
   isPending?: boolean;
   isInert?: boolean;
+  isUnavailable?: boolean;
+  description?: string;
 }) {
   return (
-    <MenuButton label="Export" menuLabel="Export options" isPending={isPending} isInert={isInert}>
+    <MenuButton
+      label="Export"
+      menuLabel="Export options"
+      isPending={isPending}
+      isInert={isInert}
+      isUnavailable={isUnavailable}
+      {...(description === undefined ? {} : { description })}
+    >
       <MenuSection title="Format" selectedKey="xlsx" onSelectionChange={onSelect}>
         <MenuItem id="xlsx" detail="Excel workbook">
           xlsx
@@ -194,6 +205,33 @@ describe("MenuButton", () => {
     await user.keyboard("{Enter}");
     await user.keyboard("{ArrowDown}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("when unavailable, is disabled to assistive technology, not busy, focusable, and opens nothing", async () => {
+    const user = userEvent.setup();
+    render(<Sample isUnavailable description="Import a snapshot to export" />);
+    const trigger = screen.getByRole("button", { name: "Export" });
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).not.toHaveAttribute("aria-busy");
+    expect(trigger).toHaveAttribute("data-unavailable");
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveAccessibleDescription("Import a snapshot to export");
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.keyboard("{ArrowDown}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("describes the button only while it is unavailable and has a description", () => {
+    const { rerender } = render(<Sample isUnavailable />);
+    expect(screen.getByRole("button", { name: "Export" })).not.toHaveAttribute("aria-describedby");
+    rerender(<Sample description="Import a snapshot to export" />);
+    expect(screen.getByRole("button", { name: "Export" })).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByText("Import a snapshot to export")).not.toBeInTheDocument();
   });
 
   it("has no accessibility violation, closed and open", SLOW, async () => {

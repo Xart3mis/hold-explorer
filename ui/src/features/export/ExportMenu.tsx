@@ -100,7 +100,7 @@ export interface ExportMenuProps {
 
 /**
  * The Export button of a screen without a snapshot: in the header where the menu stands once there
- * is one, inert, and described to assistive technology by why. It opens nothing, and `Ctrl+E` does
+ * is one, unavailable, and described to assistive technology by why. It opens nothing, and `Ctrl+E` does
  * nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
  * shown" (DESIGN.md, Menu): the action is fixed, and the page always has it.
  */
@@ -110,11 +110,9 @@ export function ExportMenuInert() {
       label={t("export.menu.label")}
       menuLabel={t("export.menu.name")}
       align="end"
-      isInert
+      isUnavailable
       description={t("export.menu.noSnapshot")}
-    >
-      <MenuSeparator />
-    </MenuButton>
+    />
   );
 }
 
