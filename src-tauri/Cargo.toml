@@ -3,7 +3,8 @@ name = "hx-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-rust-version = "1.90"
+# What `hx-export` (through `krilla`) needs.
+rust-version = "1.92"
 
 [lib]
 name = "hx_desktop"

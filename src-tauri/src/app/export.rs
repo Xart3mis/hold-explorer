@@ -9,7 +9,7 @@ use hx_core::dataset::Dataset;
 use hx_core::filter::FilterSpec;
 use hx_core::mapping::Field;
 use hx_core::solve::SolvePlan;
-use hx_export::chart::{chart_svg, ChartChoice};
+use hx_export::chart::{chart_svg, chart_svg_file, ChartChoice};
 use hx_export::fonts::Fonts;
 use hx_export::raster::{png, rgba};
 use hx_export::{
@@ -296,25 +296,39 @@ fn chart_needs_plan(chart: &ChartChoice) -> bool {
 
 impl AppState {
     /// Checks the view and gathers what the file holds: sheets, or the inputs of a chart or a
-    /// report (a clone of the dataset and the plan it needs), under the lock.
+    /// report (a clone of the dataset and the plan it needs), under the lock. A view that is no
+    /// longer shown is refused with `ViewChanged`, told as an export's refusal.
     pub fn export_content(
         &mut self,
         request: &ExportRequest,
         format: &SaveFormat,
         view: &ViewRef,
     ) -> Result<Content, CommandError> {
-        self.check_view(view)?;
+        self.gather(request, format, view).map_err(|error| {
+            told_as(
+                error,
+                "The workspace or snapshot changed while the export was being prepared. Nothing was saved; export again.",
+            )
+        })
+    }
+
+    /// [`AppState::export_content`] with a refusal in a reading's words. The view is checked
+    /// once, by `read`; the origin is taken after it, so it is the origin of the view checked.
+    fn gather(
+        &mut self,
+        request: &ExportRequest,
+        format: &SaveFormat,
+        view: &ViewRef,
+    ) -> Result<Content, CommandError> {
         match format {
             SaveFormat::Excel | SaveFormat::Csv => {
-                let origin = self.origin()?;
                 let blockers = matches!(request.screen, Screen::Blockers);
                 let sheets = self.read(view, &request.spec, blockers, |v| {
                     screen_sheets(v.dataset, v.plan, v.absent, &v.applied(request))
                 })??;
-                Ok(sheets_content(sheets, request, origin))
+                Ok(sheets_content(sheets, request, self.origin()?))
             }
             SaveFormat::Workbook => {
-                let origin = self.origin()?;
                 let sheets = self.read(view, &request.spec, true, |v| {
                     workbook_sheets(
                         v.dataset,
@@ -326,11 +340,14 @@ impl AppState {
                         &request.text,
                     )
                 })??;
-                Ok(sheets_content(sheets, request, origin))
+                Ok(sheets_content(sheets, request, self.origin()?))
             }
             SaveFormat::Report => {
+                let (dataset, plan, spec) = self.read(view, &request.spec, true, |v| {
+                    (v.dataset.clone(), v.plan.cloned(), v.spec)
+                })?;
                 let origin = self.origin()?;
-                self.read(view, &request.spec, true, |v| Content::Report {
+                Ok(Content::Report {
                     head: ReportHead {
                         workspace: origin.workspace,
                         snapshot: origin.snapshot,
@@ -338,9 +355,9 @@ impl AppState {
                         app_version: env!("CARGO_PKG_VERSION").to_string(),
                         made_at: origin.made_at,
                     },
-                    dataset: v.dataset.clone(),
-                    plan: v.plan.cloned(),
-                    spec: v.spec,
+                    dataset,
+                    plan,
+                    spec,
                 })
             }
             SaveFormat::ChartPng { chart } | SaveFormat::ChartSvg { chart } => {
@@ -351,6 +368,21 @@ impl AppState {
 
     /// The same for a copy.
     pub fn copy_content(
+        &mut self,
+        request: &ExportRequest,
+        format: &CopyFormat,
+        view: &ViewRef,
+    ) -> Result<Content, CommandError> {
+        self.gather_copy(request, format, view).map_err(|error| {
+            told_as(
+                error,
+                "The workspace or snapshot changed while the copy was being prepared. Nothing was copied; copy again.",
+            )
+        })
+    }
+
+    /// [`AppState::copy_content`] with a refusal in a reading's words.
+    fn gather_copy(
         &mut self,
         request: &ExportRequest,
         format: &CopyFormat,
@@ -504,6 +536,16 @@ fn first(sheets: &[Sheet]) -> Result<&Sheet, CommandError> {
     })
 }
 
+/// `error` with `message` in place of its text when it is a `ViewChanged` refusal: the text of
+/// that kind was written for a reading the page makes again by itself, which an export is not.
+fn told_as(error: CommandError, message: &str) -> CommandError {
+    if error.kind == "ViewChanged" {
+        CommandError::new("ViewChanged", message)
+    } else {
+        error
+    }
+}
+
 /// A content that does not belong to the format asked for: a fault of the application.
 fn mismatch() -> CommandError {
     CommandError::internal(
@@ -562,9 +604,25 @@ pub fn render(
             text,
             fonts,
         )?),
-        (SaveFormat::ChartSvg { .. }, content @ Content::Chart { .. }) => {
-            Ok(draw(content, text, fonts)?.into_bytes())
-        }
+        (
+            SaveFormat::ChartSvg { .. },
+            Content::Chart {
+                dataset,
+                plan,
+                spec,
+                chart,
+                filters,
+            },
+        ) => Ok(chart_svg_file(
+            &dataset,
+            plan.as_ref(),
+            &spec,
+            &chart,
+            &filters,
+            text,
+            fonts,
+        )?
+        .into_bytes()),
         (SaveFormat::ChartPng { .. }, content @ Content::Chart { .. }) => {
             Ok(png(&draw(content, text, fonts)?, fonts)?)
         }

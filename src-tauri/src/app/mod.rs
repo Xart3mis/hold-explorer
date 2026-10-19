@@ -23,7 +23,7 @@ use hx_store::{list_workspaces, Workspace, WorkspaceList};
 pub use data::{FilterOptions, GroupDetail, HoldsView};
 pub use error::CommandError;
 pub use export::{
-    check_extension, fonts, save, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
+    check_extension, fonts, save, Content, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
     SessionClipboard,
 };
 pub use import::{

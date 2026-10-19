@@ -18,16 +18,16 @@ use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
 use hx_core::solve::SolveView;
-use hx_export::{write_file, ExportError, ExportRequest};
+use hx_export::{write_file, ExportError, ExportRequest, ExportText};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    check_extension, fonts, save, AppStart, AppState, CommandError, CopyFormat, ExportPhase,
-    ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft,
-    ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck,
-    TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat,
+    ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone,
+    ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings,
+    TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -419,20 +419,36 @@ pub async fn export_copy<R: Runtime>(
     format: CopyFormat,
     view: ViewRef,
 ) -> Result<(), CommandError> {
-    let text = request.text.clone();
-    let content = blocking(app.clone(), move |state| {
-        state.copy_content(&request, &format, &view)
-    })
-    .await?;
-    unlocked(move || {
-        let clipboard = app.try_state::<SessionClipboard>().ok_or_else(|| {
+    let session = app.clone();
+    copy_with(app, request, format, view, move |content, text| {
+        let clipboard = session.try_state::<SessionClipboard>().ok_or_else(|| {
             CommandError::internal(
                 "The clipboard of the application is not available. Restart Hold Explorer; if it keeps happening, report it.",
             )
         })?;
-        clipboard.copy(content, &text, fonts())
+        clipboard.copy(content, text, fonts())
     })
     .await
+}
+
+/// [`export_copy`] with the function that puts the content on the clipboard.
+async fn copy_with<R, P>(
+    app: AppHandle<R>,
+    request: ExportRequest,
+    format: CopyFormat,
+    view: ViewRef,
+    put: P,
+) -> Result<(), CommandError>
+where
+    R: Runtime,
+    P: FnOnce(Content, &ExportText) -> Result<(), CommandError> + Send + 'static,
+{
+    let text = request.text.clone();
+    let content = blocking(app, move |state| {
+        state.copy_content(&request, &format, &view)
+    })
+    .await?;
+    unlocked(move || put(content, &text)).await
 }
 
 /// Opens a file the app saved in this session with the system's program for it.
@@ -879,6 +895,59 @@ mod tests {
         let saved = saving.join().unwrap().unwrap();
         assert!(saved.rows > 0);
         assert!(path.is_file());
+    }
+
+    #[test]
+    fn the_state_is_free_while_a_slow_copy_runs() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let entered = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let release = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let (copy_entered, copy_release) = (entered.clone(), release.clone());
+        let copied = std::sync::Arc::new(Mutex::new(None));
+        let kept = copied.clone();
+        let slow = move |content: crate::app::Content, _: &hx_export::ExportText| {
+            copy_entered.wait();
+            copy_release.wait();
+            if let crate::app::Content::Text(words) = content {
+                *kept.lock().unwrap() = Some(words);
+            }
+            Ok(())
+        };
+        let handle = harness.app.handle().clone();
+        let copying = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(super::copy_with(
+                handle,
+                request,
+                crate::app::CopyFormat::Table,
+                view,
+                slow,
+            ))
+        });
+
+        entered.wait();
+        // The clipboard is being set: the state is not locked, and another command answers.
+        {
+            let state = harness.app.state::<Mutex<AppState>>();
+            assert!(state.try_lock().is_ok(), "the lock is held during the copy");
+        }
+        let current = harness
+            .invoke("workspace_current", &serde_json::json!({}))
+            .expect("a command answers while the clipboard is set");
+        assert!(current["workspace"]["id"].is_string());
+        assert!(
+            copied.lock().unwrap().is_none(),
+            "the copy has not happened yet"
+        );
+        release.wait();
+
+        copying.join().unwrap().unwrap();
+        assert!(copied
+            .lock()
+            .unwrap()
+            .as_deref()
+            .is_some_and(|text| !text.is_empty()));
     }
 
     /// The keys of `interface CommandMap { ... }`: the lines that start with two spaces, a name

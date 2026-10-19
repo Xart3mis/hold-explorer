@@ -136,6 +136,9 @@ fn opens(format: &SaveFormat, path: &Path, rows: usize) {
         SaveFormat::ChartSvg { .. } => {
             let svg = String::from_utf8(bytes).unwrap();
             assert!(svg.contains("<svg"), "{svg}");
+            // The saved drawing carries its text as outlines and its title for a reader.
+            assert!(!svg.contains("<text"), "{svg}");
+            assert!(svg.contains("<title>file.chart.curve</title>"), "{svg}");
             hx_export::raster::png(&svg, fonts()).expect("the SVG parses");
         }
     }
@@ -304,11 +307,44 @@ fn the_report_and_a_chart_are_gathered_whole_with_the_head_of_the_view() {
         chart: ChartChoice::TopBlockers,
     };
     let content = state.export_content(&asked, &chart, &view).unwrap();
-    assert!(matches!(content, Content::Chart { .. }));
-    let svg = String::from_utf8(render(content, &chart, &asked.text, fonts()).unwrap()).unwrap();
-    assert!(
-        svg.contains("Discipline: Piping"),
+    let Content::Chart { filters, .. } = &content else {
+        panic!("no chart");
+    };
+    assert_eq!(
+        filters,
+        &["Discipline: Piping"],
         "the chart names its filters"
+    );
+    // The saved SVG draws its text as outlines, so the filters are checked in the drawing that
+    // is outlined, and the file carries the title.
+    let drawn = match &content {
+        Content::Chart {
+            dataset,
+            plan,
+            spec,
+            chart,
+            filters,
+        } => hx_export::chart::chart_svg(
+            dataset,
+            plan.as_ref(),
+            spec,
+            chart,
+            filters,
+            &asked.text,
+            fonts(),
+        )
+        .unwrap(),
+        _ => unreachable!("matched above"),
+    };
+    assert!(
+        drawn.contains("Discipline: Piping"),
+        "the chart names its filters"
+    );
+    let svg = String::from_utf8(render(content, &chart, &asked.text, fonts()).unwrap()).unwrap();
+    assert!(!svg.contains("<text"), "{svg}");
+    assert!(
+        svg.contains("<title>file.chart.topBlockers</title>"),
+        "{svg}"
     );
 }
 
@@ -329,6 +365,10 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
 
     let mut state = small(&fx);
     let (workspace, snapshot) = (state.open_id(), state.selected_snapshot().unwrap());
+    // An export refused for a stale view says so in an export's words, not a reading's.
+    let saved = "The workspace or snapshot changed while the export was being prepared. Nothing was saved; export again.";
+    let copied = "The workspace or snapshot changed while the copy was being prepared. Nothing was copied; copy again.";
+    let message = |result: Result<Content, CommandError>| result.err().map(|error| error.message);
     for stale in [
         view_of("0123456789abcdef", Some(snapshot)),
         view_of(&workspace, Some(snapshot + 100)),
@@ -338,6 +378,11 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
             assert_eq!(
                 kind(state.export_content(&lines(), &format, &stale)),
                 Some("ViewChanged".into()),
+                "{format:?} {stale:?}"
+            );
+            assert_eq!(
+                message(state.export_content(&lines(), &format, &stale)).as_deref(),
+                Some(saved),
                 "{format:?} {stale:?}"
             );
         }
@@ -351,6 +396,11 @@ fn export_and_copy_refuse_without_a_workspace_and_for_a_view_not_shown() {
             assert_eq!(
                 kind(state.copy_content(&lines(), &format, &stale)),
                 Some("ViewChanged".into()),
+                "{format:?} {stale:?}"
+            );
+            assert_eq!(
+                message(state.copy_content(&lines(), &format, &stale)).as_deref(),
+                Some(copied),
                 "{format:?} {stale:?}"
             );
         }

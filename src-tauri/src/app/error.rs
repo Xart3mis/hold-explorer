@@ -10,9 +10,12 @@ use ts_rs::TS;
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[ts(export)]
 pub struct CommandError {
-    /// The error's variant name, for example `NewerSchema`, or one of `NoWorkspace`, `NoDraft`,
-    /// `WorkspaceNotFound`, `ReplaceNotOffered`, `ViewChanged`, `Settings`, `NotWritten`,
-    /// `Clipboard`, `Open`, `Extension`, `Internal`.
+    /// The error's kind: the variant name of a `StoreError` or an `ImportError` (for example
+    /// `NewerSchema`), the variant name of an `ExportError` (`FileInUse`, `Folder`, `Write`,
+    /// `TooManyRows`, `Workbook`, `Image`, `Report`, `Text`), or one of the commands' own:
+    /// `NoWorkspace`, `NoDraft`, `WorkspaceNotFound`, `ReplaceNotOffered`,
+    /// `SnapshotDateOutOfRange`, `ViewChanged`, `Settings`, `NotWritten`, `Clipboard`, `Open`,
+    /// `Extension`, `Internal`.
     pub kind: String,
     /// The text to show the user: what happened, why, and how to fix it.
     pub message: String,
