@@ -4,7 +4,12 @@ import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { SaveFormat } from "../../bindings/SaveFormat";
 import { MenuButton, MenuItem, MenuSeparator, MenuSubmenu } from "../../components";
 import { t } from "../../text/i18n";
-import { useExportShortcut } from "../shell/shortcuts";
+import {
+  ariaKeyShortcuts,
+  EXPORT_SHORTCUT,
+  formatShortcut,
+  useExportShortcut,
+} from "../shell/shortcuts";
 import { readChoice, type ExportChoice } from "./choices";
 import { ExportNotice } from "./ExportNotice";
 import { fileView } from "./fileName";
@@ -204,7 +209,12 @@ export function ExportMenu({
       isPending={isRunning}
       isInert={!isReady}
     >
-      <MenuItem id="excel" onAction={excel}>
+      <MenuItem
+        id="excel"
+        detail={formatShortcut(EXPORT_SHORTCUT)}
+        keyShortcuts={ariaKeyShortcuts(EXPORT_SHORTCUT)}
+        onAction={excel}
+      >
         {t("export.menu.excel")}
       </MenuItem>
       <MenuItem

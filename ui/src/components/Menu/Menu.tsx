@@ -7,6 +7,7 @@ import {
   MenuItem as RacMenuItem,
   MenuSection as RacMenuSection,
   MenuTrigger,
+  type MenuItemProps as RacMenuItemProps,
   Popover,
   Separator,
   SubmenuTrigger,
@@ -112,16 +113,47 @@ export interface MenuItemProps {
   children: string;
   /** A second, quieter text after the label: a count, a size. It describes the item. */
   detail?: string;
+  /**
+   * The keyboard shortcut that does what the item does, as `aria-keyshortcuts` takes it
+   * (`Control+E`). The item tells assistive technology of it; the detail shows it.
+   */
+  keyShortcuts?: string;
   /** Called when the item is chosen. */
   onAction?: () => void;
   isDisabled?: boolean;
 }
 
+/**
+ * The element of an item that has a keyboard shortcut. The component library passes no
+ * `aria-keyshortcuts` through, so the element is given it here; an item is a link only when it
+ * has an address, which no item of this menu has, and either is given it the same way.
+ */
+function withKeyShortcuts(keyShortcuts: string): Pick<RacMenuItemProps, "render"> {
+  return {
+    render: (domProps) =>
+      "href" in domProps ? (
+        <a {...domProps} aria-keyshortcuts={keyShortcuts}>
+          {domProps.children}
+        </a>
+      ) : (
+        <div {...domProps} aria-keyshortcuts={keyShortcuts} />
+      ),
+  };
+}
+
 /** One item of a menu. In a section that holds a choice, the chosen item carries a check mark. */
-export function MenuItem({ id, children, detail, onAction, isDisabled = false }: MenuItemProps) {
+export function MenuItem({
+  id,
+  children,
+  detail,
+  keyShortcuts,
+  onAction,
+  isDisabled = false,
+}: MenuItemProps) {
   return (
     <RacMenuItem
       id={id}
+      {...(keyShortcuts === undefined ? {} : withKeyShortcuts(keyShortcuts))}
       textValue={children}
       isDisabled={isDisabled}
       className={cx(styles.item)}

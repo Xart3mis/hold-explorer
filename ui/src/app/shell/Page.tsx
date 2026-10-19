@@ -46,9 +46,9 @@ function refocus(title: HTMLElement | null): void {
 
 /**
  * A page of the shell: its header, then the notice of what its header started when there is one,
- * then its view switch and its bar when it has them, then its content. When a navigation opens the page, the focus moves to its title, so a keyboard user and
- * a screen reader start at the top of what changed, and the title of the document names the page
- * and the app. A field of the page that asked for the focus, such as the name field of a form the
+ * then its view switch and its bar when it has them, then its content. When a navigation opens
+ * the page, the focus moves to its title, so a keyboard user and a screen reader start at the top
+ * of what changed, and the title of the document names the page and the app. A field of the page that asked for the focus, such as the name field of a form the
  * page was opened for, keeps it. The page the app opens on leaves the focus where a window
  * starts: nobody navigated yet.
  *

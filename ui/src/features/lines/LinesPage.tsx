@@ -241,8 +241,9 @@ export function LinesPage() {
       state={exportState}
       loaded={shown?.pages.rows.length ?? 0}
       selected={[...selected.keys]}
-      // Rows of the other mode stand in until the mode in view has its own: nothing to export yet.
-      isReady={shown !== null && shown.mode === mode}
+      // Only the rows of the address's own result are exported: while rows of the other mode, or
+      // of other filters or another sort, stand in, the loaded count and the selection are theirs.
+      isReady={isOwn && !active.pages.isPlaceholderData}
       exports={exports}
     />
   );

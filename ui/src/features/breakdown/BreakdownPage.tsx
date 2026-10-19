@@ -93,6 +93,7 @@ export function BreakdownPage() {
   const matrix = useMatrixReading(state, spec, hasSnapshot && !isList);
 
   // What a file of the page is made from: the groups in the order shown, or the matrix on screen.
+  // The menu waits while the result on screen is not the one the address and the filters ask for.
   const exports = usePageExports();
   const shownMatrix = matrix.shown;
   const exportState: ScreenState = isList
@@ -125,7 +126,7 @@ export function BreakdownPage() {
               label: t("breakdown.table", { dim: dimName(shownDim) }),
             },
       ]}
-      isReady={isList ? shown !== null : shownMatrix !== null}
+      isReady={isList ? own : matrix.own}
       exports={exports}
     />
   );

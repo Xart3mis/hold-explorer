@@ -262,7 +262,8 @@ export function BlockersPage() {
       charts={[
         { choice: { kind: "Curve", steps: showAll ? 0 : headTo }, label: t("blockers.curve") },
       ]}
-      isReady={shown !== null}
+      // The steps on screen are those of the filters, not the ones before while they are read.
+      isReady={own}
       exports={exports}
     />
   );

@@ -239,6 +239,25 @@ function WithSubmenu({ onAction = () => undefined }: { onAction?: (id: string) =
   );
 }
 
+describe("MenuItem with a shortcut", () => {
+  it("shows it as its detail and tells assistive technology of it", async () => {
+    const user = userEvent.setup();
+    render(
+      <MenuButton label="Export" menuLabel="Export">
+        <MenuItem id="excel" detail="Ctrl+E" keyShortcuts="Control+E">
+          Excel, this view…
+        </MenuItem>
+        <MenuItem id="csv">CSV…</MenuItem>
+      </MenuButton>,
+    );
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    const excel = screen.getByRole("menuitem", { name: "Excel, this view…" });
+    expect(excel).toHaveAttribute("aria-keyshortcuts", "Control+E");
+    expect(excel).toHaveAccessibleDescription("Ctrl+E");
+    expect(screen.getByRole("menuitem", { name: "CSV…" })).not.toHaveAttribute("aria-keyshortcuts");
+  });
+});
+
 describe("MenuSubmenu", () => {
   it("is an item that says it opens a menu, with a chevron", async () => {
     const user = userEvent.setup();

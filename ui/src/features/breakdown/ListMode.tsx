@@ -229,8 +229,9 @@ export function useGroupTable(
   // Another sort is another result: the table returns to its top.
   const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
   // The groups selected beside the open line, by group key (the blank group has the empty key),
-  // for the result on screen in its sort. The lines under a group are never selected this way.
-  const selected = useSelectedRows(tableKey);
+  // for the result on screen in its sort, while the list is shown. The lines under a group are
+  // never selected this way. The matrix in between drops them, as leaving the list always has.
+  const selected = useSelectedRows(`${state.mode}|${tableKey}`);
   return { isCurrent, columns, sort, sortedGroups, resultKey, tableKey, selected };
 }
 

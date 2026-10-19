@@ -12,7 +12,7 @@ import { breakdownGroups } from "../../test/breakdown";
 import { solveView } from "../../test/blockers";
 import { openStart, opened, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
-import { lineId } from "../../test/lines";
+import { lineId, linePage } from "../../test/lines";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
 import { DEFAULT_BREAKDOWN_STATE } from "../breakdown/address";
@@ -67,11 +67,11 @@ async function openMenu(user: UserEvent): Promise<HTMLElement> {
   return screen.findByRole("menu", { name: menu.name });
 }
 
-/** The names of the items of a menu, in order. */
+/** The names of the items of a menu, in order: their labels, without a detail. */
 function itemNames(open: HTMLElement): string[] {
   return within(open)
     .getAllByRole("menuitem")
-    .map((item) => item.textContent);
+    .map((item) => item.querySelector('[slot="label"]')?.textContent ?? "");
 }
 
 /** The request a screen sends for its state, with the default choice unless another is given. */
@@ -163,6 +163,22 @@ describe("the Export menu offers what each screen can export", () => {
     }
     expect(en.export.menu.label).toBe("Export");
   });
+});
+
+describe("the shortcut of the first item", () => {
+  it.each(["/overview", "/lines", "/breakdown", "/breakdown?mode=matrix", "/blockers"])(
+    "is shown beside Excel, this view, and told to assistive technology on %s",
+    async (path) => {
+      const { user } = renderAt(path);
+      const open = await openMenu(user);
+      const excel = within(open).getByRole("menuitem", { name: menu.excel });
+      expect(excel).toHaveAccessibleDescription(`${en.keys.ctrl}+E`);
+      expect(excel).toHaveTextContent(`${en.keys.ctrl}+E`);
+      expect(excel).toHaveAttribute("aria-keyshortcuts", "Control+E");
+      // No other item has a shortcut.
+      expect(open.querySelectorAll("[aria-keyshortcuts]")).toHaveLength(1);
+    },
+  );
 });
 
 type Expected =
@@ -383,6 +399,26 @@ describe("the selected rows", () => {
   });
 });
 
+describe("the groups selected on Breakdown", () => {
+  it("are let go when the page shows the matrix, and not back with the list", SLOW, async () => {
+    const app = renderAt("/breakdown");
+    await ctrlClick(app.user, await rowOf("Piping"), await rowOf("Civil"));
+    const label = menu.copySelected.replace("{{count, number}}", "2");
+    expect(itemNames(await openMenu(app.user))).toContain(label);
+    await app.user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+    await app.user.click(screen.getByRole("radio", { name: en.breakdown.modeMatrix }));
+    await app.user.click(await screen.findByRole("radio", { name: en.breakdown.modeList }));
+    await rowOf("Piping");
+    expect(screen.queryAllByRole("row", { selected: true })).toHaveLength(0);
+    expect(
+      itemNames(await openMenu(app.user)).some((name) => name.startsWith("Copy selected")),
+    ).toBe(false);
+  });
+});
+
 describe("Ctrl+E", () => {
   it.each([
     ["the Overview", "/overview", { screen: "overview" }, undefined],
@@ -475,6 +511,72 @@ describe("while an export runs", () => {
     await waitFor(() => {
       expect(button).not.toHaveAttribute("aria-busy");
     });
+  });
+
+  it("the notice of a failure waits too, and its buttons start nothing", SLOW, async () => {
+    let saves = 0;
+    let finish: () => void = () => undefined;
+    const app = renderAt("/lines", {
+      export_save: () => {
+        saves += 1;
+        throw commandFailure("FileInUse", IN_USE);
+      },
+      export_copy: () =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve(null);
+          };
+        }),
+    });
+    await rowOf(lineId(0));
+    await app.user.click(
+      within(await openMenu(app.user)).getByRole("menuitem", { name: menu.excel }),
+    );
+    const notice = await screen.findByRole("alert");
+    await app.user.click(
+      within(await openMenu(app.user)).getByRole("menuitem", { name: menu.copyTable }),
+    );
+    const retry = within(notice).getByRole("button", { name: en.common.retry });
+    const another = within(notice).getByRole("button", { name: en.export.chooseAnother });
+    await waitFor(() => {
+      expect(retry).toHaveAttribute("aria-busy", "true");
+    });
+    expect(another).toHaveAttribute("aria-busy", "true");
+    await app.user.click(retry);
+    await app.user.click(another);
+    expect(saves).toBe(1);
+    expect(windowApi.chooseSavePath).toHaveBeenCalledTimes(1);
+
+    finish();
+    await waitFor(() => {
+      expect(retry).not.toHaveAttribute("aria-busy");
+    });
+    await app.user.click(retry);
+    await waitFor(() => {
+      expect(saves).toBe(2);
+    });
+  });
+
+  it("the menu waits while the rows on screen are of another request", SLOW, async () => {
+    let calls = 0;
+    const app = renderAt("/lines", {
+      lines: () => {
+        calls += 1;
+        return calls === 1 ? linePage() : new Promise(() => undefined);
+      },
+    });
+    await rowOf(lineId(0));
+    const button = await exportButton();
+    // Another sort: the rows of before stay, dimmed, until the new ones are there.
+    await app.user.click(
+      within(screen.getByRole("grid")).getByRole("columnheader", { name: en.lines.column.line }),
+    );
+    await waitFor(() => {
+      expect(button).toHaveAttribute("data-inert");
+    });
+    expect(screen.getByRole("rowheader", { name: lineId(0) })).toBeInTheDocument();
+    await app.user.keyboard("{Control>}e{/Control}");
+    expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
   });
 
   it("the menu waits on a first load", async () => {

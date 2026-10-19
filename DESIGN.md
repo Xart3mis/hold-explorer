@@ -825,6 +825,7 @@ The menu of a data screen (Overview, Breakdown, Lines, Blockers) that saves or c
 - **Waiting:** while the screen has nothing to export yet (a first load) the button waits as for another control: its chevron, no hover, opens nothing, `aria-busy`.
 - **Running:** from the press until the file is saved or the copy is made, the save dialog included, the button shows the spinner in place of its chevron and opens nothing, and the controls of the export notice are inert, so a second export cannot start. The result is a toast ("Saved Lines.xlsx" with "Open file" and "Show in folder", or "Copied 3 rows").
 - **Failure:** a danger notice directly under the page header, above the view switch and the filter bar, `--space-4` above what follows ("Where an error goes": beside what failed). It says what failed and the command's message, offers "Choose another name" or "Try again" where they help, and stays until it is dismissed or the next export has a result.
+- **Shortcut hint:** "Excel, this view…" carries `Ctrl+E` as its detail, at the trailing side in `--text-caption` and `--color-text-muted`, and has `aria-keyshortcuts="Control+E"`. No other item has a shortcut.
 - **Keyboard:** `Ctrl+E` saves the view as Excel, as the first item does, also while the focus is in a table; never while a text field has the focus or an overlay is open (a menu, a list, a popover), and not while the button waits or an export runs.
 
 ### Checkbox
