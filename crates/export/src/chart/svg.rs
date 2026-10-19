@@ -7,21 +7,21 @@ use crate::fonts::Face;
 
 /// How a text is set: its face, its size in pixels, and the token of its color.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Ink {
-    pub(super) face: Face,
-    pub(super) size: f32,
-    pub(super) color: &'static str,
+pub(crate) struct Ink {
+    pub(crate) face: Face,
+    pub(crate) size: f32,
+    pub(crate) color: &'static str,
 }
 
 impl Ink {
-    pub(super) fn new(face: Face, size: f32, color: &'static str) -> Self {
+    pub(crate) fn new(face: Face, size: f32, color: &'static str) -> Self {
         Ink { face, size, color }
     }
 }
 
 /// Which end of a text its point is.
 #[derive(Debug, Clone, Copy)]
-pub(super) enum Anchor {
+pub(crate) enum Anchor {
     Start,
     Middle,
     End,
@@ -39,7 +39,7 @@ impl Anchor {
 
 /// A number of pixels as a drawing writes it: at most two decimals, no trailing zero, never
 /// `-0`. Written the same on every machine.
-pub(super) fn px(value: f32) -> String {
+pub(crate) fn px(value: f32) -> String {
     let rounded = (value * 100.0).round() / 100.0 + 0.0;
     format!("{rounded}")
 }
@@ -62,13 +62,13 @@ fn escape(text: &str) -> String {
 
 /// The elements of a drawing, in the order they are drawn.
 #[derive(Debug, Default)]
-pub(super) struct Svg {
+pub(crate) struct Svg {
     body: String,
 }
 
 impl Svg {
     /// A text with its baseline at `y`. Its white space is kept as it is.
-    pub(super) fn text(&mut self, x: f32, y: f32, text: &str, ink: Ink, anchor: Anchor) {
+    pub(crate) fn text(&mut self, x: f32, y: f32, text: &str, ink: Ink, anchor: Anchor) {
         self.text_at(
             &format!(r#"x="{}" y="{}""#, px(x), px(y)),
             text,
@@ -78,7 +78,7 @@ impl Svg {
     }
 
     /// A text that reads from bottom to top, its point at `x`, `y`.
-    pub(super) fn upright_text(&mut self, x: f32, y: f32, text: &str, ink: Ink, anchor: Anchor) {
+    pub(crate) fn upright_text(&mut self, x: f32, y: f32, text: &str, ink: Ink, anchor: Anchor) {
         let place = format!(r#"transform="translate({} {}) rotate(-90)""#, px(x), px(y));
         self.text_at(&place, text, ink, anchor);
     }
@@ -97,7 +97,7 @@ impl Svg {
     }
 
     /// A filled rectangle with corners of `radius`.
-    pub(super) fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, fill: &str, radius: f32) {
+    pub(crate) fn rect(&mut self, x: f32, y: f32, w: f32, h: f32, fill: &str, radius: f32) {
         let _ = write!(
             self.body,
             r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}"/>"#,
@@ -111,7 +111,7 @@ impl Svg {
     }
 
     /// A rectangle of the surface with a one-pixel hairline inside its edge.
-    pub(super) fn hollow(&mut self, x: f32, y: f32, w: f32, h: f32, fill: &str, edge: &str) {
+    pub(crate) fn hollow(&mut self, x: f32, y: f32, w: f32, h: f32, fill: &str, edge: &str) {
         let _ = write!(
             self.body,
             r#"<rect x="{}" y="{}" width="{}" height="{}" rx="1.5" fill="{}" stroke="{}" stroke-width="1"/>"#,
@@ -124,8 +124,31 @@ impl Svg {
         );
     }
 
+    /// A rectangle at `x`, `y` of `w` by `h`, of `fill`, with corners of `radius` and a one-pixel
+    /// hairline in `edge` inside its edge.
+    pub(crate) fn frame(
+        &mut self,
+        (x, y): (f32, f32),
+        (w, h): (f32, f32),
+        radius: f32,
+        fill: &str,
+        edge: &str,
+    ) {
+        let _ = write!(
+            self.body,
+            r#"<rect x="{}" y="{}" width="{}" height="{}" rx="{}" fill="{}" stroke="{}" stroke-width="1"/>"#,
+            px(x + 0.5),
+            px(y + 0.5),
+            px(w - 1.0),
+            px(h - 1.0),
+            px(radius),
+            hex(fill),
+            hex(edge),
+        );
+    }
+
     /// A one-pixel hairline from one point to another.
-    pub(super) fn line(&mut self, from: (f32, f32), to: (f32, f32), stroke: &str) {
+    pub(crate) fn line(&mut self, from: (f32, f32), to: (f32, f32), stroke: &str) {
         let _ = write!(
             self.body,
             r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="1"/>"#,
@@ -138,7 +161,7 @@ impl Svg {
     }
 
     /// A line through `points`, `width` pixels wide, with round joins and caps and no fill.
-    pub(super) fn polyline(&mut self, points: &[(f32, f32)], stroke: &str, width: f32) {
+    pub(crate) fn polyline(&mut self, points: &[(f32, f32)], stroke: &str, width: f32) {
         let mut d = String::new();
         for (at, (x, y)) in points.iter().enumerate() {
             let _ = write!(
@@ -158,7 +181,7 @@ impl Svg {
     }
 
     /// A disc of `radius` with a ring of `ring` pixels around it.
-    pub(super) fn marker(&mut self, at: (f32, f32), radius: f32, fill: &str, ring: (&str, f32)) {
+    pub(crate) fn marker(&mut self, at: (f32, f32), radius: f32, fill: &str, ring: (&str, f32)) {
         let _ = write!(
             self.body,
             r#"<circle cx="{}" cy="{}" r="{}" fill="{}" stroke="{}" stroke-width="{}"/>"#,
@@ -172,7 +195,7 @@ impl Svg {
     }
 
     /// The document: `width` by `height` pixels, the surface under the drawing.
-    pub(super) fn document(self, width: f32, height: f32, surface: &str) -> String {
+    pub(crate) fn document(self, width: f32, height: f32, surface: &str) -> String {
         format!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="{}"/>{}</svg>"#,
             hex(surface),

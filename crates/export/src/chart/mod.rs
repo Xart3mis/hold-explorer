@@ -8,10 +8,10 @@
 //! them. Nothing of the moment or the machine enters a drawing: the same input gives the same
 //! bytes.
 
-mod bars;
-mod curve;
+pub(crate) mod bars;
+pub(crate) mod curve;
 mod heatmap;
-mod svg;
+pub(crate) mod svg;
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::{Dim, FilterSpec};
@@ -43,34 +43,34 @@ pub(crate) const MARGIN: f32 = 24.0;
 const INNER: f32 = WIDTH - 2.0 * MARGIN;
 
 /// The size of body text, labels, values, and captions (`--font-size-sm`).
-const SMALL: f32 = 13.0;
+pub(crate) const SMALL: f32 = 13.0;
 /// The size of a title (`--font-size-md`).
-const TITLE: f32 = 17.0;
+pub(crate) const TITLE: f32 = 17.0;
 /// The height of a line of a title (`--line-height-md`).
-const TITLE_LINE: f32 = 24.0;
+pub(crate) const TITLE_LINE: f32 = 24.0;
 /// The height of a line of a caption or a label (`--line-height-tight`).
-const LINE: f32 = 16.0;
+pub(crate) const LINE: f32 = 16.0;
 /// The space between the header of a chart and the chart (`--space-6`).
-const SECTION_GAP: f32 = 24.0;
+pub(crate) const SECTION_GAP: f32 = 24.0;
 
 /// The surface every chart is drawn on.
-const SURFACE: &str = "--color-surface-app";
+pub(crate) const SURFACE: &str = "--color-surface-app";
 /// Titles, labels, and values.
-const TEXT: &str = "--color-text-primary";
+pub(crate) const TEXT: &str = "--color-text-primary";
 /// The labels of folded values and of the heatmap's columns.
-const TEXT_SECONDARY: &str = "--color-text-secondary";
+pub(crate) const TEXT_SECONDARY: &str = "--color-text-secondary";
 /// Axis names, ticks, the filters, and the legend.
-const TEXT_MUTED: &str = "--color-text-muted";
+pub(crate) const TEXT_MUTED: &str = "--color-text-muted";
 /// Gridlines.
-const GRID: &str = "--color-chart-grid";
+pub(crate) const GRID: &str = "--color-chart-grid";
 /// The baseline and the hairline at the marked step.
-const AXIS: &str = "--color-chart-axis";
+pub(crate) const AXIS: &str = "--color-chart-axis";
 /// The hairline inside the edge of an empty cell of the heatmap, and of its swatch.
-const EDGE: &str = "--color-border-default";
+pub(crate) const EDGE: &str = "--color-border-default";
 /// Bars and the line: one neutral for plain data.
-const NEUTRAL: &str = "--color-chart-neutral";
+pub(crate) const NEUTRAL: &str = "--color-chart-neutral";
 /// The marker of the 90 percent step.
-const NEUTRAL_SELECTED: &str = "--color-chart-neutral-selected";
+pub(crate) const NEUTRAL_SELECTED: &str = "--color-chart-neutral-selected";
 /// The value on a dark step of the heatmap's ramp.
 const TEXT_INVERSE: &str = "--color-chart-text-inverse";
 /// The sequential ramp of the heatmap, lightest first.
@@ -166,37 +166,24 @@ pub fn chart_svg(
                 text.get("file.chart.bars")?,
                 &[("dim", &dim_name(dim, text)?)],
             );
-            let other = text.get("file.matrix.other")?;
             let mut page = Page::new(&title, filters, text, fonts)?;
-            let groups = group_by(ds, spec, dim);
-            let rest = groups.get(BAR_LIMIT..).unwrap_or_default();
-            let mut bars: Vec<Bar> = groups
-                .iter()
-                .take(BAR_LIMIT)
-                .map(|group| Bar::new(&group.label, group.holds))
-                .collect();
-            if !rest.is_empty() {
-                bars.push(Bar::folded(other, rest.iter().map(|g| g.holds).sum()));
-            }
-            let face = if *dim == Dim::LineId {
-                Face::Mono
-            } else {
-                Face::Body
-            };
+            let bars = dim_bars(ds, spec, dim, BAR_LIMIT, text.get("file.matrix.other")?);
             if bars.is_empty() {
                 page.note(none);
             } else {
-                bars::draw(&mut page, &bars, &dim_name(dim, text)?, holds, face);
+                bars::draw(
+                    &mut page,
+                    &bars,
+                    &dim_name(dim, text)?,
+                    holds,
+                    dim_face(dim),
+                );
             }
             Ok(page.finish())
         }
         ChartChoice::TopBlockers => {
             let mut page = Page::new(text.get("file.chart.topBlockers")?, filters, text, fonts)?;
-            let bars: Vec<Bar> = group_by(ds, spec, &Dim::Blocker)
-                .iter()
-                .take(TOP_ITEMS)
-                .map(|group| Bar::new(&group.label, group.holds))
-                .collect();
+            let bars = top_blocker_bars(ds, spec);
             if bars.is_empty() {
                 page.note(none);
             } else {
@@ -245,9 +232,49 @@ pub fn chart_svg(
     }
 }
 
+/// The bars of the kept holds by `dim`, largest first: the `limit` largest values, and the
+/// others folded into one last bar named `other`.
+pub(crate) fn dim_bars(
+    ds: &Dataset,
+    spec: &FilterSpec,
+    dim: &Dim,
+    limit: usize,
+    other: &str,
+) -> Vec<Bar> {
+    let groups = group_by(ds, spec, dim);
+    let rest = groups.get(limit..).unwrap_or_default();
+    let mut bars: Vec<Bar> = groups
+        .iter()
+        .take(limit)
+        .map(|group| Bar::new(&group.label, group.holds))
+        .collect();
+    if !rest.is_empty() {
+        bars.push(Bar::folded(other, rest.iter().map(|g| g.holds).sum()));
+    }
+    bars
+}
+
+/// The bars of the ten blockers with the most kept holds.
+pub(crate) fn top_blocker_bars(ds: &Dataset, spec: &FilterSpec) -> Vec<Bar> {
+    group_by(ds, spec, &Dim::Blocker)
+        .iter()
+        .take(TOP_ITEMS)
+        .map(|group| Bar::new(&group.label, group.holds))
+        .collect()
+}
+
+/// The face the labels of `dim` are set in: line IDs in the monospace face.
+pub(crate) fn dim_face(dim: &Dim) -> Face {
+    if *dim == Dim::LineId {
+        Face::Mono
+    } else {
+        Face::Body
+    }
+}
+
 /// `template` with each `{name}` of `values` replaced by its value. The catalog writes the
 /// places of the values with single braces, which the interface leaves as they are.
-fn fill(template: &str, values: &[(&str, &str)]) -> String {
+pub(crate) fn fill(template: &str, values: &[(&str, &str)]) -> String {
     values
         .iter()
         .fold(template.to_string(), |text, (name, value)| {
@@ -270,18 +297,24 @@ pub(crate) fn count(n: usize) -> String {
 
 /// The baseline of a line of text of `size` set in a line box from `top`, `height` tall, so
 /// that its capitals sit in the middle of the box.
-fn baseline(top: f32, height: f32, size: f32) -> f32 {
+pub(crate) fn baseline(top: f32, height: f32, size: f32) -> f32 {
     top + height / 2.0 + size * 0.36
 }
 
-/// A chart being drawn: its drawing so far, where the next part goes, and the faces.
-struct Page<'a> {
-    svg: Svg,
+/// A chart being drawn: its drawing so far, the box its parts are drawn in, where the next part
+/// goes, and the faces. A chart image is one page whose box is inside its margins; a page of the
+/// report is another, and the report draws bars and the curve into its own box.
+pub(crate) struct Page<'a> {
+    pub(crate) svg: Svg,
     /// The width of the image: [`WIDTH`], or more where a heatmap needs it to print every value.
     width: f32,
+    /// The leading edge of the box the parts are drawn in.
+    pub(crate) left: f32,
+    /// The width of that box.
+    pub(crate) inner: f32,
     /// The top of the next part.
-    y: f32,
-    fonts: &'a Fonts,
+    pub(crate) y: f32,
+    pub(crate) fonts: &'a Fonts,
 }
 
 impl<'a> Page<'a> {
@@ -293,12 +326,7 @@ impl<'a> Page<'a> {
         text: &ExportText,
         fonts: &'a Fonts,
     ) -> Result<Self, ExportError> {
-        let mut page = Page {
-            svg: Svg::default(),
-            width: WIDTH,
-            y: MARGIN,
-            fonts,
-        };
+        let mut page = Page::boxed(fonts, WIDTH, MARGIN, INNER, MARGIN);
         let strong = Ink::new(Face::BodyStrong, TITLE, TEXT);
         for line in fonts.wrap(title, Face::BodyStrong, TITLE, INNER) {
             let y = baseline(page.y, TITLE_LINE, TITLE);
@@ -325,21 +353,34 @@ impl<'a> Page<'a> {
         Ok(page)
     }
 
+    /// An empty page `width` wide whose parts are drawn in the box from `left`, `inner` wide,
+    /// the first at `top`.
+    pub(crate) fn boxed(fonts: &'a Fonts, width: f32, left: f32, inner: f32, top: f32) -> Self {
+        Page {
+            svg: Svg::default(),
+            width,
+            left,
+            inner,
+            y: top,
+            fonts,
+        }
+    }
+
     /// The width of `text` in `ink`.
-    fn width(&self, text: &str, ink: Ink) -> f32 {
+    pub(crate) fn width(&self, text: &str, ink: Ink) -> f32 {
         self.fonts.width(text, ink.face, ink.size)
     }
 
     /// `text` cut to fit `width` in `ink`.
-    fn fit(&self, text: &str, ink: Ink, width: f32) -> String {
+    pub(crate) fn fit(&self, text: &str, ink: Ink, width: f32) -> String {
         self.fonts.fit(text, ink.face, ink.size, width)
     }
 
     /// One line of body text in the place of the chart: there is nothing to draw.
-    fn note(&mut self, text: &str) {
+    pub(crate) fn note(&mut self, text: &str) {
         let ink = Ink::new(Face::Body, SMALL, TEXT_MUTED);
         let y = baseline(self.y, LINE, SMALL);
-        self.svg.text(MARGIN, y, text, ink, Anchor::Start);
+        self.svg.text(self.left, y, text, ink, Anchor::Start);
         self.y += LINE;
     }
 
@@ -349,10 +390,15 @@ impl<'a> Page<'a> {
         let height = (self.y + MARGIN).ceil();
         self.svg.document(self.width.ceil(), height, SURFACE)
     }
+
+    /// The SVG document of the page at a size it was given: `width` by `height` pixels.
+    pub(crate) fn document(self, width: f32, height: f32) -> String {
+        self.svg.document(width, height, SURFACE)
+    }
 }
 
 /// The light-theme color of `token` as `#rrggbb`.
-fn hex(token: &str) -> String {
+pub(crate) fn hex(token: &str) -> String {
     format!("#{:06x}", color(token))
 }
 

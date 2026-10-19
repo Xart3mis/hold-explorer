@@ -9,6 +9,8 @@ rust-version = "1.92"
 [dependencies]
 chrono.workspace = true
 hx-core = { path = "../core" }
+krilla.workspace = true
+krilla-svg.workspace = true
 resvg.workspace = true
 rust_xlsxwriter.workspace = true
 serde.workspace = true

@@ -35,10 +35,10 @@ pub fn rgba(svg: &str, fonts: &Fonts) -> Result<(u32, u32, Vec<u8>), ExportError
     Ok((pixmap.width(), pixmap.height(), pixmap.take()))
 }
 
-/// The SVG read with the embedded faces and drawn at [`SCALE`] over the surface.
-fn draw(svg: &str, fonts: &Fonts) -> Result<Pixmap, ExportError> {
-    let fault = |reason: String| ExportError::Image { reason };
-    let options = Options {
+/// How a drawing of this crate is read: with the embedded faces only, and without reading an
+/// image it names by a path or a link.
+pub(crate) fn options(fonts: &Fonts) -> Options<'static> {
+    Options {
         fontdb: fonts.database().clone(),
         font_family: SANS_FAMILY.into(),
         image_href_resolver: ImageHrefResolver {
@@ -47,8 +47,13 @@ fn draw(svg: &str, fonts: &Fonts) -> Result<Pixmap, ExportError> {
             resolve_string: Box::new(|_, _| None),
         },
         ..Options::default()
-    };
-    let tree = Tree::from_str(svg, &options).map_err(|error| fault(error.to_string()))?;
+    }
+}
+
+/// The SVG read with the embedded faces and drawn at [`SCALE`] over the surface.
+fn draw(svg: &str, fonts: &Fonts) -> Result<Pixmap, ExportError> {
+    let fault = |reason: String| ExportError::Image { reason };
+    let tree = Tree::from_str(svg, &options(fonts)).map_err(|error| fault(error.to_string()))?;
     let size = tree
         .size()
         .to_int_size()

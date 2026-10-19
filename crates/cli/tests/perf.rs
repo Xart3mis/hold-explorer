@@ -14,9 +14,10 @@ use hx_core::query::{
 };
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_plan, solve_view};
+use hx_export::fonts::Fonts;
 use hx_export::{
-    scope_line_ids, screen_sheets, workbook, workbook_sheets, About, ExportRequest, ExportText,
-    RowScope, Screen, FILE_TEXT_KEYS,
+    scope_line_ids, screen_sheets, status_report, workbook, workbook_sheets, About, ExportRequest,
+    ExportText, ReportHead, RowScope, Screen, FILE_TEXT_KEYS,
 };
 use hx_store::{ImportOptions, Workspace};
 use hx_synth::{generate, write_workbook, SynthConfig};
@@ -289,5 +290,45 @@ fn an_excel_file_of_ten_thousand_holds_takes_under_two_seconds_and_the_full_work
         "perf: Excel of 10,000 holds {view:?} ({view_kb} KB), full workbook {full:?} ({} KB, {} sheets)",
         bytes.len() / 1024,
         sheets.len()
+    );
+}
+
+#[test]
+#[ignore = "run in a release build"]
+fn the_status_report_of_ten_thousand_holds_takes_under_two_seconds() {
+    let cfg = SynthConfig::new(4, 3600, 10_000);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    let loaded = load_file(&path).unwrap();
+    let ds = Dataset::build(
+        loaded.parsed.holds,
+        RuleSet::builtin(),
+        loaded.snapshot.unwrap().at,
+    );
+    let spec = FilterSpec::default();
+    let head = ReportHead {
+        workspace: "Perf".into(),
+        snapshot: ds.snapshot.date(),
+        filters: Vec::new(),
+        app_version: "0.1.0".into(),
+        made_at: ds.snapshot,
+    };
+    let text = file_text();
+    let fonts = Fonts::embedded();
+
+    // The solve plan the report needs is timed with it.
+    let started = Instant::now();
+    let plan = spec.open_only().map(|open| solve_plan(&ds, &open, None));
+    let pdf = status_report(&ds, plan.as_ref(), &spec, &head, &text, &fonts).unwrap();
+    let report = started.elapsed();
+    assert!(pdf.starts_with(b"%PDF-"));
+    assert!(
+        report < Duration::from_secs(2),
+        "the status report of 10,000 holds took {report:?}"
+    );
+    eprintln!(
+        "perf: status report of 10,000 holds {report:?} ({} KB)",
+        pdf.len() / 1024
     );
 }

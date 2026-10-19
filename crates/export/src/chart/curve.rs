@@ -6,8 +6,8 @@ use hx_core::solve::SolveView;
 
 use super::svg::{Anchor, Ink};
 use super::{
-    baseline, count, fill, Page, AXIS, GRID, INNER, LINE, MARGIN, NEUTRAL, NEUTRAL_SELECTED, SMALL,
-    SURFACE, TEXT_MUTED, TEXT_SECONDARY,
+    baseline, count, fill, Page, AXIS, GRID, LINE, NEUTRAL, NEUTRAL_SELECTED, SMALL, SURFACE,
+    TEXT_MUTED, TEXT_SECONDARY,
 };
 use crate::fonts::Face;
 
@@ -31,10 +31,10 @@ const X_TICKS: usize = 8;
 
 /// The words of the curve: the names of its axes, and the sentence of the marked step, with the
 /// places of its values (`{step}`, `{freed}`, `{total}`).
-pub(super) struct Words {
-    pub(super) step: String,
-    pub(super) freed: String,
-    pub(super) most: String,
+pub(crate) struct Words {
+    pub(crate) step: String,
+    pub(crate) freed: String,
+    pub(crate) most: String,
 }
 
 /// The smallest clean step (1, 2, or 5 times a power of ten, and at least 1, for counts) that
@@ -69,15 +69,16 @@ fn ticks(from: usize, to: usize, most: usize) -> Vec<usize> {
 /// over the axis, the plot with its ticks and gridlines, the line, the last value at the end of
 /// the line, the name of the step under the axis, and, when the step after which 90 percent of
 /// the lines are freed is drawn, its marker and a line that says it.
-pub(super) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Words) {
+pub(crate) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Words) {
     let caption = Ink::new(Face::Body, SMALL, TEXT_MUTED);
     let all = view.rows.len();
     let shown = &view.rows[..if steps == 0 { all } else { steps.min(all) }];
     let (first, last) = (shown[0].step, shown[shown.len() - 1].step);
     let top_value = view.lines_on_hold.max(1);
+    let (start, end_x) = (page.left, page.left + page.inner);
 
     page.svg.text(
-        MARGIN,
+        start,
         baseline(page.y, LINE, SMALL),
         &words.freed,
         caption,
@@ -85,8 +86,8 @@ pub(super) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Word
     );
     page.y += LINE + 12.0;
 
-    let left = MARGIN + AXIS_WIDTH;
-    let right = MARGIN + INNER - TRAILING;
+    let left = start + AXIS_WIDTH;
+    let right = end_x - TRAILING;
     let top = page.y;
     let bottom = top + HEIGHT - X_BAND;
     // Counts are far inside the range an `f32` holds closely enough for a place.
@@ -156,7 +157,7 @@ pub(super) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Word
         page.y += 8.0;
         let line_top = page.y;
         page.svg.marker(
-            (MARGIN + MARKER / 2.0 + RING, line_top + LINE / 2.0),
+            (start + MARKER / 2.0 + RING, line_top + LINE / 2.0),
             MARKER / 2.0,
             NEUTRAL_SELECTED,
             (SURFACE, RING),
@@ -169,11 +170,8 @@ pub(super) fn draw(page: &mut Page, view: &SolveView, steps: usize, words: &Word
                 ("total", &count(view.lines_on_hold)),
             ],
         );
-        let x = MARGIN + MARKER + 2.0 * RING + 8.0;
-        for line in page
-            .fonts
-            .wrap(&sentence, Face::Body, SMALL, MARGIN + INNER - x)
-        {
+        let x = start + MARKER + 2.0 * RING + 8.0;
+        for line in page.fonts.wrap(&sentence, Face::Body, SMALL, end_x - x) {
             page.svg.text(
                 x,
                 baseline(page.y, LINE, SMALL),
