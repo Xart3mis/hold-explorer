@@ -707,9 +707,12 @@ fn a_workspace_without_a_snapshot_says_it_has_none_rather_than_a_date() {
 fn a_name_that_does_not_end_in_the_extension_of_its_format_is_refused() {
     let fx = Fixture::new();
     let mut state = small(&fx);
-    let out = fx.dir.path().join("out");
-    fs::create_dir_all(&out).unwrap();
-    for (format, name) in formats() {
+    for (index, (format, name)) in formats().into_iter().enumerate() {
+        // A folder for each format: on Windows a name differs from another by case alone only in
+        // how it is written, so the upper-case file one format saves would be a wrong name of the
+        // next format already there.
+        let out = fx.dir.path().join(format!("out-{index}"));
+        fs::create_dir_all(&out).unwrap();
         let (stem, extension) = name.rsplit_once('.').unwrap();
         // Another format's extension, none, and a program's are refused, and nothing is written.
         for wrong in [
