@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::codec::{decode_ids, decode_time, encode_ids, encode_time};
 use crate::error::{database, StoreError};
-use crate::workspace::{insert_project_number, store_saved_mapping, Workspace};
+use crate::workspace::{insert_project_number, read_saved_mapping, store_saved_mapping, Workspace};
 
 /// What the workspace knows about one snapshot, apart from its holds.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,7 +71,8 @@ pub struct SnapshotDetail {
 pub struct ImportOptions {
     /// Delete this snapshot in the same transaction, replacing it with the new one.
     pub replace: Option<i64>,
-    /// Stored as the workspace's saved mapping in the import's transaction.
+    /// Merged into the workspace's saved mapping in the import's transaction
+    /// ([`SavedMapping::merged`], with the headers of the file imported).
     pub save_mapping: Option<SavedMapping>,
     /// Added to the workspace's project numbers in the import's transaction.
     pub add_project_number: Option<String>,
@@ -387,7 +388,11 @@ impl Workspace {
         }
 
         if let Some(mapping) = &options.save_mapping {
-            store_saved_mapping(&tx, mapping)?;
+            let merged = match read_saved_mapping(&tx)? {
+                Some(saved) => saved.merged(mapping, &loaded.headers),
+                None => mapping.clone(),
+            };
+            store_saved_mapping(&tx, &merged)?;
         }
         if let Some(project_no) = &options.add_project_number {
             insert_project_number(&tx, project_no)?;
@@ -1110,6 +1115,48 @@ mod tests {
         assert_eq!(ws.saved_mapping().unwrap(), Some(mapping_to_save()));
         assert_eq!(ws.info().unwrap().project_numbers, vec!["P-7"]);
         assert_eq!(ws.snapshots().unwrap(), vec![info]);
+    }
+
+    #[test]
+    fn an_import_merges_its_mapping_into_the_saved_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = small(dir.path());
+        assert!(first.headers.iter().any(|h| h == "hold_type"));
+        assert!(!first.headers.iter().any(|h| h == "nowhere"));
+        let mut ws = workspace(dir.path());
+        let column = |key: &str, field| SavedColumn {
+            key: key.into(),
+            occurrence: 0,
+            field: Some(field),
+        };
+        ws.set_saved_mapping(&SavedMapping {
+            columns: vec![
+                column("nowhere", Field::Discipline),
+                column("other_line", Field::LineId),
+                column("hold_type", Field::HoldType),
+            ],
+        })
+        .unwrap();
+        ws.import(
+            &first,
+            taken_of(&first),
+            &ImportOptions {
+                save_mapping: Some(mapping_to_save()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // The line is replaced, the discipline is kept, and the hold type, whose column this
+        // file has and the saved mapping of the import leaves out, is removed.
+        assert_eq!(
+            ws.saved_mapping().unwrap(),
+            Some(SavedMapping {
+                columns: vec![
+                    column("line_id", Field::LineId),
+                    column("nowhere", Field::Discipline),
+                ],
+            })
+        );
     }
 
     #[test]

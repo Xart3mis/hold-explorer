@@ -19,8 +19,8 @@ use super::export::{
     copy, fonts, render, save, Clipboard, Content, CopyFormat, ExportSaved, SaveFormat,
     SendClipboard, SessionClipboard,
 };
-use super::snapshot_tests::{import, view_of, Fixture};
-use super::{AppState, ViewRef};
+use super::test_support::{shown, small, view_of, Fixture};
+use super::AppState;
 
 /// Every label a file asks for, written as its own key.
 fn text() -> ExportText {
@@ -48,23 +48,6 @@ fn lines() -> ExportRequest {
     request(Screen::Lines {
         query: LineQuery::default(),
     })
-}
-
-/// The view the interface shows when it shows what the state holds.
-fn shown(state: &AppState) -> ViewRef {
-    view_of(&state.open_id(), state.selected_snapshot())
-}
-
-/// A state with one workspace holding the small synthetic file.
-fn small(fx: &Fixture) -> AppState {
-    let mut state = fx.state();
-    import(
-        &mut state,
-        &fx.synth("a.xlsx", 1),
-        "2026-09-29 00:00:00",
-        true,
-    );
-    state
 }
 
 /// A state with one workspace and no snapshot.

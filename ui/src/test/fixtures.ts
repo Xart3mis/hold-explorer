@@ -84,6 +84,7 @@ export function startState(overrides: Partial<AppStart> = {}): AppStart {
     },
     list_error: null,
     open: null,
+    settings_problem: null,
     ...overrides,
   };
 }

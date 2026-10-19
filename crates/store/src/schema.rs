@@ -83,7 +83,7 @@ fn database_error(path: &Path, error: rusqlite::Error) -> StoreError {
 }
 
 /// The first bytes of every SQLite database file.
-const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
+pub(crate) const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 
 /// Where the 100-byte database header keeps `user_version`, as a big-endian `u32`.
 const USER_VERSION_OFFSET: usize = 60;

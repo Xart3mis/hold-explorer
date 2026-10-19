@@ -68,6 +68,8 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The settings file could not be understood at start and was set aside.
+  "settings-problem",
   // The Rust side has moved on to the snapshot before the newest and the interface was not told:
   // the Overview is refused, asks what is open, and the shell says that it was brought in step.
   "view-resynced",
@@ -462,6 +464,7 @@ function world(state: DevState, theme: Theme): World {
     list: { workspaces: [], unreadable: [], folder: FOLDER },
     list_error: null,
     open: null,
+    settings_problem: null,
   };
   const opened = (selected: number, warning: CommandError | null): WorkspaceOpen => ({
     workspace: unit573,
@@ -569,6 +572,15 @@ function world(state: DevState, theme: Theme): World {
         message:
           "The workspace is open, but Hold Explorer could not remember it for the next start. The settings file /home/ada/.config/hold-explorer/settings.json could not be written (permission denied). Check that you may write to that folder.",
       });
+      break;
+    case "settings-problem":
+      start.list.workspaces = all;
+      start.open = opened(4, null);
+      start.settings_problem = {
+        kind: "SettingsSetAside",
+        message:
+          "Your settings file could not be read, so it was set aside as settings.json.unreadable and the defaults are in use. Choose your settings again in Settings; the old file is kept in /home/ada/.config/hold-explorer.",
+      };
       break;
     case "list-error":
       start.list.folder = "/mnt/projects/5359/hold-explorer";

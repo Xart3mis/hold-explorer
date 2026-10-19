@@ -11,35 +11,8 @@ use tempfile::TempDir;
 use super::error::{CommandError, ErrorKind};
 use super::settings::{load_settings, save_settings, Settings, Theme};
 use super::snapshots::ViewRef;
+use super::test_support::Fixture;
 use super::AppState;
-
-struct Fixture {
-    dir: TempDir,
-}
-
-impl Fixture {
-    fn new() -> Fixture {
-        Fixture {
-            dir: TempDir::new().unwrap(),
-        }
-    }
-
-    fn config(&self) -> PathBuf {
-        self.dir.path().join("config")
-    }
-
-    fn data(&self) -> PathBuf {
-        self.dir.path().join("data")
-    }
-
-    fn workspaces(&self) -> PathBuf {
-        self.data().join("workspaces")
-    }
-
-    fn state(&self) -> AppState {
-        AppState::new(self.config(), self.data())
-    }
-}
 
 /// Imports two synthetic files into the workspace file `<folder>/<id>.holdx-ws`.
 fn import_two(folder: &Path, id: &str) -> Vec<i64> {
@@ -124,6 +97,109 @@ fn a_settings_file_that_cannot_be_parsed_is_set_aside_and_defaults_are_used() {
         std::fs::read_to_string(fx.config().join("settings.json.unreadable")).unwrap(),
         "[1"
     );
+}
+
+#[test]
+fn a_missing_settings_file_reports_no_problem() {
+    let fx = Fixture::new();
+    assert_eq!(fx.state().start().settings_problem, None);
+}
+
+#[test]
+fn a_settings_file_that_cannot_be_parsed_is_reported_once_as_set_aside() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    std::fs::write(fx.config().join("settings.json"), "{ not json").unwrap();
+    let mut state = fx.state();
+    let problem = state
+        .start()
+        .settings_problem
+        .expect("the set-aside file is reported");
+    assert_eq!(problem.kind, ErrorKind::SettingsSetAside);
+    assert!(
+        problem.message.starts_with("Your settings file could not be read, so it was set aside as settings.json.unreadable and the defaults are in use. "),
+        "{}",
+        problem.message
+    );
+    assert_eq!(
+        std::fs::read_to_string(fx.config().join("settings.json.unreadable")).unwrap(),
+        "{ not json"
+    );
+    // Reported once: the page loading again does not say it again.
+    assert_eq!(state.start().settings_problem, None);
+    // Saving works again, and the set-aside file is kept.
+    state.set_theme(Theme::Light).unwrap();
+    assert_eq!(load_settings(&fx.config()).theme, Theme::Light);
+    assert_eq!(
+        std::fs::read_to_string(fx.config().join("settings.json.unreadable")).unwrap(),
+        "{ not json"
+    );
+}
+
+/// What a settings file that cannot be read for a reason other than its content must do: stay
+/// where it is, unchanged, with the defaults in use, every save refused, and the problem reported
+/// at every start.
+fn assert_left_in_place_and_saving_refused(fx: &Fixture) {
+    let path = fx.config().join("settings.json");
+    let mut state = fx.state();
+    assert_eq!(state.settings(), &Settings::default());
+    for _ in 0..2 {
+        let problem = state
+            .start()
+            .settings_problem
+            .expect("the unreadable file is reported");
+        assert_eq!(problem.kind, ErrorKind::Settings);
+        assert!(
+            problem.message.contains("settings.json"),
+            "{}",
+            problem.message
+        );
+    }
+    assert_eq!(
+        state.set_theme(Theme::Light).unwrap_err().kind,
+        ErrorKind::Settings
+    );
+    assert!(!fx.config().join("settings.json.unreadable").exists());
+    assert!(path.is_file());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_settings_file_that_cannot_be_read_is_left_in_place_and_saving_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    let path = fx.config().join("settings.json");
+    let content = r#"{"theme":"Light"}"#;
+    std::fs::write(&path, content).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read(&path).is_ok() {
+        // Running as a user whom permissions do not stop (root); nothing to test.
+        return;
+    }
+    assert_left_in_place_and_saving_refused(&fx);
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), content);
+}
+
+#[cfg(windows)]
+#[test]
+fn a_settings_file_held_without_sharing_is_left_in_place_and_saving_is_refused() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    let path = fx.config().join("settings.json");
+    let content = r#"{"theme":"Light"}"#;
+    std::fs::write(&path, content).unwrap();
+    // Another program holds the file and shares it with no one.
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0)
+        .open(&path)
+        .unwrap();
+    assert_left_in_place_and_saving_refused(&fx);
+    drop(held);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), content);
 }
 
 #[test]
@@ -347,39 +423,51 @@ fn a_second_start_after_the_workspace_file_was_deleted_answers_no_workspace() {
 }
 
 #[test]
-fn of_two_files_with_one_id_the_file_named_by_the_id_is_opened() {
+fn of_two_files_with_one_id_the_first_name_is_opened_and_the_copy_is_named() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("Plant").unwrap().workspace.id;
     let folder = fx.workspaces();
     let original = folder.join(format!("{id}.holdx-ws"));
-    // The user copied the file inside the folder, twice: both copies keep the id. Their names
-    // sort before and after the original in the listing.
-    for (file, name) in [("copy-1.holdx-ws", "A copy"), ("copy-2.holdx-ws", "Z copy")] {
+    // The user copied the file inside the folder, twice: both copies keep the id. '+' sorts
+    // before every hex digit of the id, '~' after.
+    for (file, name) in [
+        ("+copy.holdx-ws", "First copy"),
+        ("~copy.holdx-ws", "Last copy"),
+    ] {
         let copy = folder.join(file);
         std::fs::copy(&original, &copy).unwrap();
         Workspace::open(&copy).unwrap().rename(name).unwrap();
     }
-    let listed: Vec<String> = state
-        .list_workspaces()
-        .unwrap()
-        .workspaces
-        .into_iter()
-        .map(|w| w.name)
+    let list = state.list_workspaces().unwrap();
+    let listed: Vec<&str> = list.workspaces.iter().map(|w| w.name.as_str()).collect();
+    assert_eq!(listed, ["First copy"]);
+    let copies: Vec<(&str, ErrorKind)> = list
+        .unreadable
+        .iter()
+        .map(|u| (u.file_name.as_str(), u.kind))
         .collect();
-    assert_eq!(listed, ["A copy", "Plant", "Z copy"]);
-
-    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "Plant");
+    let own = format!("{id}.holdx-ws");
     assert_eq!(
-        state.start().open.map(|open| open.workspace.name),
-        Some("Plant".to_string())
+        copies,
+        [
+            (own.as_str(), ErrorKind::DuplicateWorkspace),
+            ("~copy.holdx-ws", ErrorKind::DuplicateWorkspace)
+        ]
+    );
+    assert_eq!(
+        list.unreadable[1].message,
+        "This file is a copy of the workspace in +copy.holdx-ws. Two files with one workspace cannot both be opened; move this one to another folder to keep it."
     );
 
-    // Without a file named by the id, one of the copies is opened as before.
-    drop(state);
-    std::fs::remove_file(&original).unwrap();
-    let mut state = fx.state();
-    assert_eq!(state.open_workspace(&id).unwrap().workspace.name, "A copy");
+    assert_eq!(
+        state.open_workspace(&id).unwrap().workspace.name,
+        "First copy"
+    );
+    assert_eq!(
+        state.start().open.map(|open| open.workspace.name),
+        Some("First copy".to_string())
+    );
 }
 
 #[test]
@@ -463,6 +551,10 @@ fn store_errors() -> Vec<(StoreError, ErrorKind)> {
         .unwrap();
     let examples = vec![
         StoreError::NotAWorkspace { path: "a".into() },
+        StoreError::NotADatabase { path: "a".into() },
+        StoreError::DuplicateWorkspace {
+            original: "a".into(),
+        },
         StoreError::NewerSchema {
             path: "a".into(),
             found: 99,
@@ -491,6 +583,8 @@ fn store_errors() -> Vec<(StoreError, ErrorKind)> {
         .map(|error| {
             let kind = match &error {
                 StoreError::NotAWorkspace { .. } => ErrorKind::NotAWorkspace,
+                StoreError::NotADatabase { .. } => ErrorKind::NotAWorkspace,
+                StoreError::DuplicateWorkspace { .. } => ErrorKind::DuplicateWorkspace,
                 StoreError::NewerSchema { .. } => ErrorKind::NewerSchema,
                 StoreError::AlreadyImported { .. } => ErrorKind::AlreadyImported,
                 StoreError::SnapshotNotFound { .. } => ErrorKind::SnapshotNotFound,
@@ -673,10 +767,6 @@ fn unsavable(fx: &Fixture) -> AppState {
     fx.state()
 }
 
-fn workspace_files(folder: &Path) -> usize {
-    std::fs::read_dir(folder).unwrap().count()
-}
-
 #[test]
 fn a_create_succeeds_and_warns_when_the_settings_cannot_be_saved() {
     let fx = Fixture::new();
@@ -690,7 +780,7 @@ fn a_create_succeeds_and_warns_when_the_settings_cannot_be_saved() {
         "{}",
         warning.message
     );
-    assert_eq!(workspace_files(&fx.workspaces()), 1);
+    assert_eq!(fx.workspace_files(), 1);
     assert_eq!(state.rename_workspace("B").unwrap().id, opened.workspace.id);
     assert_eq!(state.list_workspaces().unwrap().workspaces.len(), 1);
 }

@@ -367,6 +367,44 @@ describe("the top bar", () => {
   });
 });
 
+describe("a problem with the settings file", () => {
+  const setAside =
+    "Your settings file could not be read, so it was set aside as settings.json.unreadable and the defaults are in use. Choose your settings again in Settings; the old file is kept in /home/ada/.config/hold-explorer.";
+
+  it("is a warning under the top bar that stays on every page until it is dismissed", async () => {
+    const { user } = renderApp({
+      start: openStart({ settings_problem: { kind: "SettingsSetAside", message: setAside } }),
+      path: "/overview",
+    });
+    const notice = must(
+      (await screen.findByText(setAside)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(within(notice).getByText(en.shell.settingsProblem)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: names.overview })).toBeInTheDocument();
+
+    await user.click(within(await sidebar()).getByRole("link", { name: names.settings }));
+    expect(await screen.findByText(setAside)).toBeInTheDocument();
+
+    await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
+    expect(screen.queryByText(setAside)).not.toBeInTheDocument();
+  });
+
+  it("is shown when no workspace is open", async () => {
+    const message =
+      "The settings file /home/ada/.config/hold-explorer/settings.json could not be read (permission denied), so it was left where it is and the defaults are in use.";
+    renderApp({ start: startState({ settings_problem: { kind: "Settings", message } }) });
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  it("is not shown when there is none", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await screen.findByRole("heading", { level: 1, name: names.overview });
+    expect(screen.queryByText(en.shell.settingsProblem)).not.toBeInTheDocument();
+  });
+});
+
 describe("what a page reports to the shell", () => {
   const failed = {
     title: "The import of Holds_2026-10-14.xlsx did not complete",

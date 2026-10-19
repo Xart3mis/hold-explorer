@@ -138,6 +138,28 @@ pub struct SavedMapping {
     pub columns: Vec<SavedColumn>,
 }
 
+impl SavedMapping {
+    /// This saved mapping with `update`, the mapping an import of a file with `headers` saves,
+    /// merged into it. Every entry of `update` is taken. An entry of this mapping is kept only
+    /// when its column is not in the file and its field is one `update` does not map: a field
+    /// the import mapped is replaced, and a field whose column the file has but the import left
+    /// on "no column" is removed. The entries of `update` come first, then those kept, in their
+    /// order.
+    pub fn merged(&self, update: &SavedMapping, headers: &[String]) -> SavedMapping {
+        let in_file: std::collections::HashSet<(String, usize)> =
+            column_keys(headers).into_iter().flatten().collect();
+        let mapped: std::collections::HashSet<Field> =
+            update.columns.iter().filter_map(|c| c.field).collect();
+        let kept = self.columns.iter().filter(|c| {
+            !in_file.contains(&(c.key.clone(), c.occurrence))
+                && c.field.is_none_or(|field| !mapped.contains(&field))
+        });
+        SavedMapping {
+            columns: update.columns.iter().chain(kept).cloned().collect(),
+        }
+    }
+}
+
 /// The key and occurrence of every column, in column order; `None` for a blank header.
 fn column_keys(headers: &[String]) -> Vec<Option<(String, usize)>> {
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -476,6 +498,38 @@ mod tests {
             BTreeMap::from([(Field::LineId, 0), (Field::Remark, 2), (Field::HoldType, 3)])
         );
         assert_eq!(map.extras, vec![extra(1, "hold_remark")]);
+    }
+
+    #[test]
+    fn a_merged_mapping_keeps_what_the_import_did_not_map_and_replaces_what_it_did() {
+        let saved = SavedMapping {
+            columns: vec![
+                col("place", 0, Some(Field::LineId)),
+                col("why", 0, Some(Field::Remark)),
+                col("area", 0, Some(Field::Discipline)),
+                col("kind", 0, Some(Field::HoldType)),
+            ],
+        };
+        // This file has no Area column and no Why column; its Note column holds the remark, and
+        // its Kind column is left on "no column".
+        let h = headers(&["Place", "Note", "Kind"]);
+        let update =
+            ColumnMap::from_fields(&h, BTreeMap::from([(Field::LineId, 0), (Field::Remark, 1)]))
+                .to_saved(&h);
+        let merged = saved.merged(&update, &h);
+        assert_eq!(
+            merged.columns,
+            vec![
+                col("place", 0, Some(Field::LineId)),
+                // Replaced: the field this import mapped to another column.
+                col("note", 0, Some(Field::Remark)),
+                // Kept: a field this import did not map.
+                col("area", 0, Some(Field::Discipline)),
+                // Removed: the hold type, whose column this import has and left unmapped.
+            ]
+        );
+        // Merged into nothing, the update is saved as it is.
+        assert_eq!(SavedMapping::default().merged(&update, &h), update);
     }
 
     #[test]

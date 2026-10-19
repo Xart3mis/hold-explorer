@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{Duration, NaiveDateTime};
 use hx_core::dataset::Dataset;
@@ -10,89 +10,11 @@ use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
 use hx_core::warning::WarningKind;
 use hx_store::{delete_workspace, list_workspaces, StoreError, Workspace};
-use hx_synth::{generate, write_workbook, SynthConfig};
-use tempfile::TempDir;
 
 use super::error::{CommandError, ErrorKind};
-use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::snapshots::{OverviewView, ViewRef};
+use super::test_support::{at, import, open_holds, view_of, Fixture};
 use super::AppState;
-
-pub(super) struct Fixture {
-    pub(super) dir: TempDir,
-}
-
-impl Fixture {
-    pub(super) fn new() -> Fixture {
-        Fixture {
-            dir: TempDir::new().unwrap(),
-        }
-    }
-
-    fn workspaces(&self) -> PathBuf {
-        self.dir.path().join("data").join("workspaces")
-    }
-
-    pub(super) fn state(&self) -> AppState {
-        AppState::new(self.dir.path().join("config"), self.dir.path().join("data"))
-    }
-
-    pub(super) fn synth(&self, name: &str, seed: u64) -> PathBuf {
-        let cfg = SynthConfig::new(seed, 10, 60);
-        let dir = self.dir.path().join("input");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(name);
-        write_workbook(&generate(&cfg), &cfg, &path).unwrap();
-        path
-    }
-}
-
-pub(super) fn at(text: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").unwrap()
-}
-
-fn no_progress(_: ImportPhase) {}
-
-/// Imports the file as a snapshot dated `taken_at` into a new workspace, or into the open one.
-pub(super) fn import(
-    state: &mut AppState,
-    path: &Path,
-    taken_at: &str,
-    new_workspace: bool,
-) -> i64 {
-    let target = if new_workspace {
-        TargetChoice::New { name: "W".into() }
-    } else {
-        TargetChoice::Existing {
-            id: state.open_id(),
-        }
-    };
-    state.import_open(path).unwrap();
-    state
-        .import_commit(
-            ImportCommit {
-                target,
-                taken_at: at(taken_at),
-                date_edited: false,
-                replace: None,
-            },
-            &no_progress,
-        )
-        .unwrap()
-        .snapshot
-        .id
-}
-
-pub(super) fn open_holds() -> FilterSpec {
-    FilterSpec::default()
-}
-
-pub(super) fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
-    ViewRef {
-        workspace_id: workspace_id.to_string(),
-        snapshot_id,
-    }
-}
 
 /// The overview as the interface asks for it when what it shows is what the state holds.
 fn overview(state: &mut AppState, spec: &FilterSpec) -> Option<OverviewView> {

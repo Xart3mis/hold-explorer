@@ -129,6 +129,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
   // What the shell was asked to say with `notify`: nothing failed, and the user should know.
   const [notice, setNotice] = useState<ShellNotice | null>(null);
   const [dismissedWarning, setDismissedWarning] = useState<string | null>(null);
+  const [dismissedSettings, setDismissedSettings] = useState<string | null>(null);
   // Why files cannot be dropped on this window, when the window refused to say when one is.
   const [dropProblem, setDropProblem] = useState<string | null>(null);
   // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
@@ -288,6 +289,11 @@ function LoadedShell({ start, destinations }: ShellProps) {
       : null;
   const warning =
     open?.warning != null && open.warning.message !== dismissedWarning ? open.warning : null;
+  // What went wrong with the settings file at start, until it is dismissed.
+  const settingsProblem =
+    start.settings_problem !== null && start.settings_problem.message !== dismissedSettings
+      ? start.settings_problem
+      : null;
   const report = useCallback(({ title, error }: ShellReport) => {
     setProblem({ kind: "action", title, message: error.message });
   }, []);
@@ -322,6 +328,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
             <main className={styles.content}>
               {problem !== null ||
               notice !== null ||
+              settingsProblem !== null ||
               dropProblem !== null ||
               warning !== null ||
               older !== null ? (
@@ -348,6 +355,17 @@ function LoadedShell({ start, destinations }: ShellProps) {
                       }}
                     >
                       {notice.text}
+                    </Notice>
+                  )}
+                  {settingsProblem === null ? null : (
+                    <Notice
+                      tone="warning"
+                      title={t("shell.settingsProblem")}
+                      onDismiss={() => {
+                        setDismissedSettings(settingsProblem.message);
+                      }}
+                    >
+                      {settingsProblem.message}
                     </Notice>
                   )}
                   {dropProblem === null ? null : (

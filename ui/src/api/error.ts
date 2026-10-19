@@ -21,6 +21,7 @@ export interface AppError {
  */
 const COMMAND_KINDS: Record<ErrorKind, true> = {
   NotAWorkspace: true,
+  DuplicateWorkspace: true,
   NewerSchema: true,
   AlreadyImported: true,
   SnapshotNotFound: true,
@@ -50,6 +51,7 @@ const COMMAND_KINDS: Record<ErrorKind, true> = {
   ReplaceNotOffered: true,
   ViewChanged: true,
   Settings: true,
+  SettingsSetAside: true,
   NotWritten: true,
   Clipboard: true,
   Open: true,

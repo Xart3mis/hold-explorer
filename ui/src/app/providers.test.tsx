@@ -18,6 +18,7 @@ function start(theme: Theme): AppStart {
     list: { workspaces: [], unreadable: [], folder: "workspaces" },
     list_error: null,
     open: null,
+    settings_problem: null,
   };
 }
 

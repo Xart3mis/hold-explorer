@@ -62,6 +62,7 @@ describe("mockCommands", () => {
         list: { workspaces: [], unreadable: [], folder: "/w" },
         list_error: { kind: "Io", message: "Could not read /w." },
         open: null,
+        settings_problem: null,
       }),
     });
     await expect(workspaceApi.workspaceOpen("0123456789abcdef")).resolves.toEqual(opened);

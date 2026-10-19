@@ -1,71 +1,19 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use chrono::{NaiveDateTime, SubsecRound};
+use chrono::SubsecRound;
 use hx_core::error::ImportError;
 use hx_core::load::load_file;
 use hx_core::mapping::Field;
 use hx_core::snapshot_date::SnapshotSource;
 use hx_core::warning::WarningKind;
 use hx_store::{list_workspaces, Workspace};
-use hx_synth::{generate, write_workbook, SynthConfig};
 use rust_xlsxwriter::Workbook;
-use tempfile::TempDir;
 
 use super::error::ErrorKind;
 use super::import::{ImportCommit, ImportPhase, TargetChoice};
-use super::AppState;
-
-struct Fixture {
-    dir: TempDir,
-}
-
-impl Fixture {
-    fn new() -> Fixture {
-        Fixture {
-            dir: TempDir::new().unwrap(),
-        }
-    }
-
-    fn workspaces(&self) -> PathBuf {
-        self.dir.path().join("data").join("workspaces")
-    }
-
-    fn state(&self) -> AppState {
-        AppState::new(self.dir.path().join("config"), self.dir.path().join("data"))
-    }
-
-    fn input(&self, name: &str) -> PathBuf {
-        let dir = self.dir.path().join("input");
-        std::fs::create_dir_all(&dir).unwrap();
-        dir.join(name)
-    }
-
-    fn synth(&self, name: &str, seed: u64, project_no: &str) -> PathBuf {
-        let mut cfg = SynthConfig::new(seed, 10, 40);
-        cfg.project_no = project_no.to_string();
-        let path = self.input(name);
-        write_workbook(&generate(&cfg), &cfg, &path).unwrap();
-        path
-    }
-
-    fn text(&self, name: &str, content: &str) -> PathBuf {
-        let path = self.input(name);
-        std::fs::write(&path, content).unwrap();
-        path
-    }
-
-    fn workspace_files(&self) -> usize {
-        std::fs::read_dir(self.workspaces())
-            .map(|entries| entries.count())
-            .unwrap_or(0)
-    }
-}
-
-fn at(text: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").unwrap()
-}
+use super::test_support::{at, no_progress, Fixture};
 
 fn commit(target: TargetChoice, taken_at: &str) -> ImportCommit {
     ImportCommit {
@@ -84,8 +32,6 @@ fn existing(id: &str) -> TargetChoice {
     TargetChoice::Existing { id: id.into() }
 }
 
-fn no_progress(_: ImportPhase) {}
-
 /// The mapping of `Kind,Place,Why`: line, remark, type.
 fn kind_line_why() -> BTreeMap<Field, usize> {
     BTreeMap::from([(Field::HoldType, 0), (Field::LineId, 1), (Field::Remark, 2)])
@@ -96,7 +42,7 @@ const KIND_LINE_WHY: &str = "Kind,Place,Why\nMISC.,L-1,waiting for a drawing\n";
 #[test]
 fn opening_a_workbook_gives_headers_a_twenty_row_preview_and_no_missing_fields() {
     let fx = Fixture::new();
-    let path = fx.synth("holds.xlsx", 1, "P-1");
+    let path = fx.synth_project("holds.xlsx", 1, "P-1");
     let draft = fx.state().import_open(&path).unwrap();
     assert_eq!(draft.file.file_name, "holds.xlsx");
     assert_eq!(draft.file.headers.len(), 14);
@@ -113,7 +59,7 @@ fn every_draft_names_the_required_fields_as_the_engine_lists_them() {
     let mut state = fx.state();
     // A file that covers them all, and one that covers none: the list is the same for both.
     let complete = state
-        .import_open(&fx.synth("holds.xlsx", 1, "P-1"))
+        .import_open(&fx.synth_project("holds.xlsx", 1, "P-1"))
         .unwrap();
     assert_eq!(complete.required, Field::REQUIRED);
     assert!(complete.missing_required.is_empty());
@@ -233,7 +179,7 @@ fn choosing_a_sheet_switches_it_and_an_unknown_sheet_names_the_sheets() {
 #[test]
 fn review_counts_equal_those_of_the_engine() {
     let fx = Fixture::new();
-    let path = fx.synth("holds.xlsx", 3, "P-1");
+    let path = fx.synth_project("holds.xlsx", 3, "P-1");
     let loaded = load_file(&path).unwrap();
     let mut state = fx.state();
     state.import_open(&path).unwrap();
@@ -308,7 +254,9 @@ fn the_date_needs_confirmation_only_without_a_date_from_the_file_or_its_name() {
         Some(SnapshotSource::FileTime)
     );
 
-    state.import_open(&fx.synth("x.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("x.xlsx", 1, "P-1"))
+        .unwrap();
     let review = state.import_review(None).unwrap();
     assert!(!review.date_needs_confirmation);
     assert_eq!(
@@ -332,7 +280,7 @@ fn the_suggested_target_follows_the_four_rules() {
     let numbered = workspace_with_numbers(&folder, "Numbered", &["P-1"]);
     let other = workspace_with_numbers(&folder, "Other", &["P-2"]);
     let empty = workspace_with_numbers(&folder, "Empty", &[]);
-    let file = fx.synth("p1.xlsx", 1, "P-1");
+    let file = fx.synth_project("p1.xlsx", 1, "P-1");
     let mut state = fx.state();
 
     // The open workspace has the file's number.
@@ -356,7 +304,9 @@ fn the_suggested_target_follows_the_four_rules() {
     assert_eq!(target.suggested.as_deref(), Some(numbered.as_str()));
 
     // None matches and the open workspace has other numbers.
-    state.import_open(&fx.synth("p3.xlsx", 2, "P-3")).unwrap();
+    state
+        .import_open(&fx.synth_project("p3.xlsx", 2, "P-3"))
+        .unwrap();
     let target = state.import_review(None).unwrap().target;
     assert_eq!(target.suggested, None);
     assert!(target.matching.is_empty());
@@ -380,7 +330,7 @@ fn the_target_check_finds_the_same_file_and_other_files_of_the_same_day() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     state.import_review(None).unwrap();
     let done = state
@@ -396,7 +346,9 @@ fn the_target_check_finds_the_same_file_and_other_files_of_the_same_day() {
     assert!(check.same_day.is_empty());
 
     // A different file on the same day.
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let check = state
         .import_check_target(&existing(&id), at("2026-10-07 17:30:00"))
         .unwrap();
@@ -418,7 +370,9 @@ fn the_target_check_of_another_workspace_leaves_the_open_one_open() {
     let mut state = fx.state();
     let first = state.create_workspace("First").unwrap().workspace.id;
     let second = state.create_workspace("Second").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     state
         .import_check_target(&existing(&first), at("2026-10-07 00:00:00"))
         .unwrap();
@@ -433,7 +387,7 @@ fn the_target_check_of_another_workspace_leaves_the_open_one_open() {
 fn a_commit_into_a_new_workspace_creates_and_opens_it_with_everything_stored() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     let headers = state.import_open(&file).unwrap().file.headers;
     let review = state.import_review(None).unwrap();
     let done = state
@@ -479,7 +433,9 @@ fn a_commit_into_a_workspace_that_is_not_open_opens_it() {
     let mut state = fx.state();
     let first = state.create_workspace("First").unwrap().workspace.id;
     state.create_workspace("Second").unwrap();
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let done = state
         .import_commit(
             commit(existing(&first), "2026-10-07 08:00:00"),
@@ -496,7 +452,7 @@ fn an_unedited_date_keeps_the_detected_source_and_an_edited_one_is_the_users() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
 
     state.import_open(&file).unwrap();
     // The date the file gives, handed back unchanged.
@@ -513,7 +469,9 @@ fn an_unedited_date_keeps_the_detected_source_and_an_edited_one_is_the_users() {
     assert_eq!(kept.snapshot.date_source, SnapshotSource::InfoSheet);
     assert_eq!(kept.snapshot.taken_at, detected.at);
 
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let edited = state
         .import_commit(
             ImportCommit {
@@ -598,7 +556,9 @@ fn a_date_known_from_the_file_time_keeps_its_source_when_sent_back_without_its_f
 fn the_review_carries_the_range_of_years_the_engine_accepts() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let review = state.import_review(None).unwrap();
     assert_eq!(review.min_year, hx_core::snapshot_date::MIN_SNAPSHOT_YEAR);
     assert_eq!(review.max_year, hx_core::snapshot_date::MAX_SNAPSHOT_YEAR);
@@ -611,7 +571,9 @@ fn the_review_carries_the_range_of_years_the_engine_accepts() {
         ("1999-12-31 23:59:59", false),
         ("2101-01-01 00:00:00", false),
     ] {
-        state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+        state
+            .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+            .unwrap();
         let result = state.import_commit(
             ImportCommit {
                 date_edited: true,
@@ -635,7 +597,9 @@ fn years_outside_2000_to_2100_are_refused_before_anything_is_written() {
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
     let files = fx.workspace_files();
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     for taken in ["1999-12-31 00:00:00", "2101-01-01 00:00:00"] {
         for target in [new_target("B"), existing(&id)] {
             let error = state
@@ -670,7 +634,9 @@ fn a_failed_import_into_a_new_workspace_removes_it_again_and_keeps_the_open_one(
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let files = fx.workspace_files();
     let error = state
         .import_commit_with(
@@ -691,7 +657,7 @@ fn a_file_imported_before_is_refused_with_already_imported() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     state
         .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
@@ -710,7 +676,7 @@ fn a_failed_import_into_a_workspace_that_is_not_open_keeps_the_open_one() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let target = state.create_workspace("Target").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     state
         .import_commit(
@@ -738,11 +704,15 @@ fn a_replaced_snapshot_is_removed() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let first = state
         .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
         .unwrap();
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let second = state
         .import_commit(
             ImportCommit {
@@ -766,7 +736,9 @@ fn progress_arrives_in_order_and_reading_only_without_a_review() {
     let phases = RefCell::new(Vec::new());
     let record = |phase| phases.borrow_mut().push(phase);
 
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     state
         .import_commit(commit(new_target("A"), "2026-10-07 08:00:00"), &record)
         .unwrap();
@@ -781,7 +753,9 @@ fn progress_arrives_in_order_and_reading_only_without_a_review() {
     );
 
     phases.borrow_mut().clear();
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     state.import_review(None).unwrap();
     state
         .import_commit(commit(new_target("B"), "2026-10-08 08:00:00"), &record)
@@ -824,7 +798,7 @@ fn every_method_without_a_draft_gives_no_draft() {
 fn cancel_clears_the_draft_and_opening_a_workspace_does_too() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     state.import_cancel(None);
     assert_eq!(
@@ -852,7 +826,7 @@ fn a_cancel_for_the_file_that_is_open_drops_its_draft() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let hash = state
-        .import_open(&fx.synth("one.xlsx", 1, "P-1"))
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
         .unwrap()
         .file
         .content_hash;
@@ -868,12 +842,12 @@ fn a_cancel_for_another_file_leaves_the_draft_that_is_open() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let first = state
-        .import_open(&fx.synth("one.xlsx", 1, "P-1"))
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
         .unwrap()
         .file
         .content_hash;
     let second = state
-        .import_open(&fx.synth("two.xlsx", 2, "P-1"))
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
         .unwrap()
         .file
         .content_hash;
@@ -900,11 +874,15 @@ fn a_cancel_without_a_draft_changes_nothing() {
 fn a_second_open_replaces_the_draft_and_a_file_that_fails_to_open_keeps_it() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let error = state.import_open(&fx.input("missing.xlsx")).unwrap_err();
     assert_eq!(error.kind, ErrorKind::NotFound);
     assert_eq!(state.import_review(None).unwrap().file_name, "one.xlsx");
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     assert_eq!(state.import_review(None).unwrap().file_name, "two.xlsx");
 }
 
@@ -939,7 +917,7 @@ fn an_unedited_flag_with_a_changed_date_is_stored_as_the_users_date() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     let detected = load_file(&file).unwrap().snapshot.unwrap();
     state.import_open(&file).unwrap();
     let done = state
@@ -956,7 +934,9 @@ fn an_unedited_flag_with_a_changed_date_is_stored_as_the_users_date() {
 fn a_workspace_that_cannot_be_removed_is_named_in_the_import_error() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let remover = |_: &Path| -> Result<(), hx_store::StoreError> {
         Err(hx_store::StoreError::Io {
             path: "x".into(),
@@ -1010,13 +990,17 @@ fn a_replace_of_a_snapshot_the_review_did_not_offer_is_refused_and_nothing_is_de
     let mut state = fx.state();
     // Two workspaces whose only snapshot has the same small id; the days differ.
     let a = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("a.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("a.xlsx", 1, "P-1"))
+        .unwrap();
     let in_a = state
         .import_commit(commit(existing(&a), "2026-10-07 08:00:00"), &no_progress)
         .unwrap()
         .snapshot;
     let b = state.create_workspace("B").unwrap().workspace.id;
-    state.import_open(&fx.synth("b.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("b.xlsx", 2, "P-1"))
+        .unwrap();
     let in_b = state
         .import_commit(commit(existing(&b), "2026-10-01 08:00:00"), &no_progress)
         .unwrap()
@@ -1024,7 +1008,9 @@ fn a_replace_of_a_snapshot_the_review_did_not_offer_is_refused_and_nothing_is_de
     assert_eq!(in_a.id, in_b.id, "ids are small numbers of each workspace");
 
     // The review of a third file offered the snapshot of A, which is of the same day.
-    state.import_open(&fx.synth("c.xlsx", 3, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("c.xlsx", 3, "P-1"))
+        .unwrap();
     let offered = state
         .import_check_target(&existing(&a), at("2026-10-07 17:00:00"))
         .unwrap();
@@ -1033,7 +1019,9 @@ fn a_replace_of_a_snapshot_the_review_did_not_offer_is_refused_and_nothing_is_de
     // The commit names that id and the other workspace, open or not.
     for open in [&b, &a] {
         state.open_workspace(open).unwrap();
-        state.import_open(&fx.synth("c.xlsx", 3, "P-1")).unwrap();
+        state
+            .import_open(&fx.synth_project("c.xlsx", 3, "P-1"))
+            .unwrap();
         let phases = RefCell::new(Vec::new());
         let error = state
             .import_commit(
@@ -1072,7 +1060,9 @@ fn a_replace_of_an_id_that_does_not_exist_is_refused_before_any_write() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let phases = RefCell::new(Vec::new());
     let error = state
         .import_commit(
@@ -1095,14 +1085,18 @@ fn a_replace_with_a_new_workspace_is_refused_and_no_workspace_file_is_created() 
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let first = state
         .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
         .unwrap()
         .snapshot;
     let files = fx.workspace_files();
 
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let error = state
         .import_commit_with(
             replacing(first.id, new_target("B"), "2026-10-07 09:00:00"),
@@ -1123,7 +1117,7 @@ fn the_snapshot_of_the_same_file_can_be_replaced_whatever_its_day() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    let file = fx.synth("one.xlsx", 1, "P-1");
+    let file = fx.synth_project("one.xlsx", 1, "P-1");
     state.import_open(&file).unwrap();
     let first = state
         .import_commit(commit(existing(&id), "2026-10-07 08:00:00"), &no_progress)
@@ -1155,7 +1149,9 @@ fn a_snapshot_of_the_same_day_can_be_replaced_in_a_workspace_that_is_not_open() 
     let fx = Fixture::new();
     let mut state = fx.state();
     let target = state.create_workspace("Target").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let first = state
         .import_commit(
             commit(existing(&target), "2026-10-07 08:00:00"),
@@ -1165,7 +1161,9 @@ fn a_snapshot_of_the_same_day_can_be_replaced_in_a_workspace_that_is_not_open() 
         .snapshot;
     state.create_workspace("Open").unwrap();
 
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let done = state
         .import_commit(
             replacing(first.id, existing(&target), "2026-10-07 23:59:59"),
@@ -1182,7 +1180,9 @@ fn recover_reopens_a_workspace_taken_out_for_an_import_that_panicked() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let id = state.create_workspace("A").unwrap().workspace.id;
-    state.import_open(&fx.synth("one.xlsx", 1, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
     let first = state
         .import_commit(commit(existing(&id), "2026-10-01 08:00:00"), &no_progress)
         .unwrap()
@@ -1191,7 +1191,9 @@ fn recover_reopens_a_workspace_taken_out_for_an_import_that_panicked() {
     let before = state.current().unwrap().unwrap();
     assert_eq!(before.selected, Some(first));
 
-    state.import_open(&fx.synth("two.xlsx", 2, "P-1")).unwrap();
+    state
+        .import_open(&fx.synth_project("two.xlsx", 2, "P-1"))
+        .unwrap();
     let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         state.import_commit_with(
             commit(existing(&id), "2026-10-08 08:00:00"),

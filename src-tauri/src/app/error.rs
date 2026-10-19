@@ -10,8 +10,11 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[ts(export)]
 pub enum ErrorKind {
-    /// [`StoreError::NotAWorkspace`].
+    /// [`StoreError::NotAWorkspace`], and [`StoreError::NotADatabase`]: a file named like a
+    /// workspace that is damaged beyond repair.
     NotAWorkspace,
+    /// [`StoreError::DuplicateWorkspace`].
+    DuplicateWorkspace,
     /// [`StoreError::NewerSchema`].
     NewerSchema,
     /// [`StoreError::AlreadyImported`].
@@ -71,6 +74,9 @@ pub enum ErrorKind {
     ViewChanged,
     /// The settings could not be read or saved.
     Settings,
+    /// The settings file could not be understood, so it was set aside and the defaults are in
+    /// use.
+    SettingsSetAside,
     /// A file the app did not write this session was to be opened.
     NotWritten,
     /// The clipboard could not be read or set.
@@ -119,7 +125,10 @@ impl CommandError {
 impl From<StoreError> for CommandError {
     fn from(error: StoreError) -> CommandError {
         let kind = match &error {
-            StoreError::NotAWorkspace { .. } => ErrorKind::NotAWorkspace,
+            StoreError::NotAWorkspace { .. } | StoreError::NotADatabase { .. } => {
+                ErrorKind::NotAWorkspace
+            }
+            StoreError::DuplicateWorkspace { .. } => ErrorKind::DuplicateWorkspace,
             StoreError::NewerSchema { .. } => ErrorKind::NewerSchema,
             StoreError::AlreadyImported { .. } => ErrorKind::AlreadyImported,
             StoreError::SnapshotNotFound { .. } => ErrorKind::SnapshotNotFound,

@@ -1,11 +1,13 @@
 //! Finding, matching, and deleting the workspace files in a folder.
 
+use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{io_error, StoreError};
-use crate::schema::peek_version;
+use crate::schema::{peek_version, SQLITE_MAGIC};
 use crate::workspace::{Workspace, WorkspaceInfo, EXTENSION};
 
 /// The workspaces of a folder, and the workspace files that could not be read.
@@ -31,7 +33,11 @@ pub struct UnreadableWorkspace {
 /// Every file in `dir` named `*.holdx-ws`: the workspaces that could be read, and the ones that
 /// could not, each with the reason. One unreadable file never hides the others.
 ///
-/// A file that is not a workspace at all is left out of both lists and left untouched. A
+/// A file named like a workspace that is not a database at all is damaged and listed as
+/// unreadable (`NotADatabase`); a database that is not a workspace is left out of both lists.
+/// Neither is touched. Of several files that hold one workspace (the user copied a file inside
+/// the folder), the file whose name sorts first in byte order is listed as the workspace and
+/// each other as unreadable (`DuplicateWorkspace`), so opening by id never picks a copy. A
 /// workspace a newer version wrote is listed as unreadable and never written to. A folder that
 /// does not exist has no workspaces; an error is returned only when the folder itself cannot be
 /// read.
@@ -45,17 +51,50 @@ pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(list),
         Err(e) => return Err(io_error(dir, &e)),
     };
+    let mut paths = Vec::new();
     for entry in entries {
         let path = entry.map_err(|e| io_error(dir, &e))?.path();
         let named_like_a_workspace = path
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.ends_with(&format!(".{EXTENSION}")));
-        if !named_like_a_workspace || !path.is_file() {
-            continue;
+        if named_like_a_workspace && path.is_file() {
+            paths.push(path);
         }
+    }
+    // By name in byte order, so that of several files with one id the first is the workspace.
+    paths.sort_by(|a, b| {
+        let name = |path: &Path| path.file_name().map(|n| n.as_encoded_bytes().to_vec());
+        name(a).cmp(&name(b))
+    });
+    // The id of each workspace listed so far, with the name of its file.
+    let mut seen: HashMap<String, String> = HashMap::new();
+    for path in paths {
         match Workspace::open(&path).and_then(|workspace| workspace.info()) {
-            Ok(info) => list.workspaces.push(info),
+            Ok(info) => match seen.get(&info.id) {
+                Some(original) => list.unreadable.push(UnreadableWorkspace {
+                    path,
+                    error: StoreError::DuplicateWorkspace {
+                        original: original.clone(),
+                    },
+                }),
+                None => {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    seen.insert(info.id.clone(), name);
+                    list.workspaces.push(info);
+                }
+            },
+            Err(StoreError::NotAWorkspace { .. }) if is_not_a_database(&path) => {
+                list.unreadable.push(UnreadableWorkspace {
+                    error: StoreError::NotADatabase {
+                        path: path.display().to_string(),
+                    },
+                    path,
+                });
+            }
             Err(StoreError::NotAWorkspace { .. }) => {}
             Err(error) => list.unreadable.push(UnreadableWorkspace { path, error }),
         }
@@ -64,6 +103,16 @@ pub fn list_workspaces(dir: &Path) -> Result<WorkspaceList, StoreError> {
         .sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
     list.unreadable.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(list)
+}
+
+/// Whether the file at `path` has content that does not start as every SQLite database does.
+/// An empty file is a database to SQLite (and what `Workspace::create` reserves before it writes
+/// one), so it is not counted; neither is a file that cannot be read.
+fn is_not_a_database(path: &Path) -> bool {
+    let mut start = Vec::with_capacity(SQLITE_MAGIC.len());
+    let read = std::fs::File::open(path)
+        .and_then(|file| file.take(SQLITE_MAGIC.len() as u64).read_to_end(&mut start));
+    read.is_ok() && !start.is_empty() && start.as_slice() != SQLITE_MAGIC.as_slice()
 }
 
 /// Readable workspaces in `dir` whose project numbers include `project_no` (trimmed, compared
@@ -156,7 +205,16 @@ mod tests {
         assert_eq!(list[0].id, ids[0]);
         assert_eq!(list[1].id, ids[1]);
         assert_eq!(list[2], b);
-        assert_eq!(unreadable, vec![]);
+        // A file named like a workspace that is not a database at all is damaged.
+        assert_eq!(
+            unreadable,
+            vec![UnreadableWorkspace {
+                path: notes.clone(),
+                error: StoreError::NotADatabase {
+                    path: notes.display().to_string(),
+                },
+            }]
+        );
         assert_eq!(std::fs::read(&foreign).unwrap(), before);
         assert_eq!(std::fs::read(&notes).unwrap(), notes_before);
         let files = std::fs::read_dir(dir.path()).unwrap().count();
@@ -473,14 +531,22 @@ mod tests {
     }
 
     #[test]
-    fn a_short_stray_file_is_skipped_and_left_byte_for_byte() {
+    fn a_short_stray_file_is_listed_as_damaged_and_left_byte_for_byte() {
         let dir = tempfile::tempdir().unwrap();
         Workspace::create(dir.path(), "Ok").unwrap();
         let stray = dir.path().join("short.holdx-ws");
         std::fs::write(&stray, "tiny\n").unwrap();
         let list = list_workspaces(dir.path()).unwrap();
         assert_eq!(names(&list.workspaces), vec!["Ok"]);
-        assert_eq!(list.unreadable, vec![]);
+        assert_eq!(
+            list.unreadable,
+            vec![UnreadableWorkspace {
+                path: stray.clone(),
+                error: StoreError::NotADatabase {
+                    path: stray.display().to_string(),
+                },
+            }]
+        );
         assert_eq!(std::fs::read(&stray).unwrap(), b"tiny\n");
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
     }
@@ -505,7 +571,10 @@ mod tests {
     #[test]
     fn a_file_whose_whole_name_is_the_extension_is_listed() {
         let dir = tempfile::tempdir().unwrap();
-        let info = Workspace::create(dir.path(), "Hidden")
+        Workspace::create(dir.path(), "Visible").unwrap();
+        // Made in another folder, so that it is a workspace of its own and not a copy.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let info = Workspace::create(elsewhere.path(), "Hidden")
             .unwrap()
             .info()
             .unwrap();
@@ -530,5 +599,76 @@ mod tests {
         assert_eq!(list.unreadable, vec![]);
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+    #[test]
+    fn a_workspace_overwritten_with_text_is_listed_as_damaged_and_a_stray_text_file_is_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let ok = Workspace::create(dir.path(), "Ok").unwrap().info().unwrap();
+        let damaged = Workspace::create(dir.path(), "Damaged")
+            .unwrap()
+            .info()
+            .unwrap()
+            .path;
+        std::fs::write(&damaged, "this is not a database\n".repeat(20)).unwrap();
+        let before = std::fs::read(&damaged).unwrap();
+        let notes = dir.path().join("notes.txt");
+        std::fs::write(&notes, "hello").unwrap();
+
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(list.workspaces, vec![ok]);
+        assert_eq!(
+            list.unreadable,
+            vec![UnreadableWorkspace {
+                path: damaged.clone(),
+                error: StoreError::NotADatabase {
+                    path: damaged.display().to_string(),
+                },
+            }]
+        );
+        let message = list.unreadable[0].error.to_string();
+        assert!(message.contains("damaged"), "{message}");
+        assert!(message.contains("Restore a copy"), "{message}");
+        assert_eq!(std::fs::read(&damaged).unwrap(), before);
+        assert_eq!(std::fs::read(&notes).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn of_two_files_with_one_id_the_first_name_is_listed_and_the_others_are_copies() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = Workspace::create(dir.path(), "Plant")
+            .unwrap()
+            .info()
+            .unwrap();
+        // '+' sorts before every hex digit of the id, '~' after.
+        let first = dir.path().join("+copy.holdx-ws");
+        let last = dir.path().join("~copy.holdx-ws");
+        for copy in [&first, &last] {
+            std::fs::copy(&original.path, copy).unwrap();
+        }
+        let before: Vec<Vec<u8>> = [&original.path, &first, &last]
+            .iter()
+            .map(|f| std::fs::read(f).unwrap())
+            .collect();
+
+        let list = list_workspaces(dir.path()).unwrap();
+        assert_eq!(list.workspaces.len(), 1, "{:?}", list.workspaces);
+        assert_eq!(list.workspaces[0].path, first);
+        assert_eq!(list.workspaces[0].id, original.id);
+        let copy = |path: &PathBuf| UnreadableWorkspace {
+            path: path.clone(),
+            error: StoreError::DuplicateWorkspace {
+                original: "+copy.holdx-ws".into(),
+            },
+        };
+        assert_eq!(list.unreadable, vec![copy(&original.path), copy(&last)]);
+        assert_eq!(
+            list.unreadable[0].error.to_string(),
+            "This file is a copy of the workspace in +copy.holdx-ws. Two files with one workspace cannot both be opened; move this one to another folder to keep it."
+        );
+        let after: Vec<Vec<u8>> = [&original.path, &first, &last]
+            .iter()
+            .map(|f| std::fs::read(f).unwrap())
+            .collect();
+        assert_eq!(after, before);
     }
 }

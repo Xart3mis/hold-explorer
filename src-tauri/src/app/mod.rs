@@ -89,6 +89,8 @@ pub struct AppState {
     settings: Settings,
     /// Why saving the settings is refused, when the settings file could not be read or moved aside.
     settings_blocked: Option<CommandError>,
+    /// That the settings file was set aside at start, until the first start reports it.
+    settings_set_aside: Option<CommandError>,
     open: Option<Workspace>,
     /// The id of the workspace in `open`, kept beside it so a check of the view reads no file.
     open_id: Option<String>,
@@ -116,12 +118,17 @@ impl AppState {
     /// Reads the settings from `config_dir` at once. Workspaces are kept in `workspaces/` under
     /// `data_dir` unless the settings name another folder.
     pub fn new(config_dir: PathBuf, data_dir: PathBuf) -> AppState {
-        let LoadedSettings { settings, blocked } = load_settings_checked(&config_dir);
+        let LoadedSettings {
+            settings,
+            blocked,
+            set_aside,
+        } = load_settings_checked(&config_dir);
         AppState {
             config_dir,
             data_dir,
             settings,
             settings_blocked: blocked,
+            settings_set_aside: set_aside,
             open: None,
             open_id: None,
             selected: None,
@@ -187,7 +194,8 @@ impl AppState {
     /// Everything the interface needs at start; reopens the last workspace when it can. A last
     /// workspace that is gone or unreadable leaves `open` empty and raises no error. A folder
     /// that cannot be listed gives an empty list and `list_error`; one that does not exist yet
-    /// is not an error.
+    /// is not an error. A problem with the settings file is reported: that it was set aside, at
+    /// the first start only, or that saving is refused, at every start.
     ///
     /// The interface calls this each time its page loads, and a page that loads again holds
     /// nothing of before. So the state starts over too: the open workspace, its selection, its
@@ -223,6 +231,10 @@ impl AppState {
             list: workspaces::list_view(raw, &folder),
             list_error,
             open,
+            settings_problem: self
+                .settings_set_aside
+                .take()
+                .or_else(|| self.settings_blocked.clone()),
         }
     }
 
@@ -317,23 +329,19 @@ impl AppState {
         self.load_from(list, id)
     }
 
-    /// Opens the workspace of this id from a listing of the folder in use. A file the user
-    /// copied inside the folder keeps its id; of several files with one id, the file named by
-    /// the id is opened, which is the one the app created.
+    /// Opens the workspace of this id from a listing of the folder in use. Of several files with
+    /// one id, the listing has only the first as a workspace and the others as copies, so a copy
+    /// is never opened. When no readable workspace has the id, a file named by it that could not
+    /// be read gives its reason.
     fn load_from(
         &self,
         list: WorkspaceList,
         id: &str,
     ) -> Result<(Workspace, WorkspaceOpen), CommandError> {
-        let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
-        let (own, copies): (Vec<_>, Vec<_>) = list
-            .workspaces
-            .into_iter()
-            .filter(|w| w.id == id)
-            .partition(|w| named(&w.path));
-        let path = match own.into_iter().chain(copies).next() {
+        let path = match list.workspaces.into_iter().find(|w| w.id == id) {
             Some(info) => info.path,
             None => {
+                let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
                 return Err(match list.unreadable.into_iter().find(|u| named(&u.path)) {
                     Some(unreadable) => unreadable.error.into(),
                     None => CommandError::new(
@@ -403,5 +411,7 @@ mod export_tests;
 mod import_tests;
 #[cfg(test)]
 mod snapshot_tests;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;

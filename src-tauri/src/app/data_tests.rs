@@ -7,15 +7,10 @@ use hx_core::query::{self, ages_known, HoldQuery, HoldSort, LineQuery, LineSort}
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
-use super::snapshot_tests::{import, open_holds, view_of, Fixture};
+use super::test_support::{import, open_holds, shown, small, view_of, Fixture};
 use super::{
     AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
 };
-
-/// The view the interface shows when it shows what the state holds.
-fn shown(state: &AppState) -> ViewRef {
-    view_of(&state.open_id(), state.selected_snapshot())
-}
 
 /// A file with more open holds and lines than two pages hold.
 fn big_file(fx: &Fixture) -> PathBuf {
@@ -25,26 +20,6 @@ fn big_file(fx: &Fixture) -> PathBuf {
     let path = dir.join("big.xlsx");
     write_workbook(&generate(&cfg), &cfg, &path).unwrap();
     path
-}
-
-fn csv(fx: &Fixture, name: &str, content: &str) -> PathBuf {
-    let dir = fx.dir.path().join("input");
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join(name);
-    std::fs::write(&path, content).unwrap();
-    path
-}
-
-/// A state with one workspace holding the small synthetic file.
-fn small(fx: &Fixture) -> AppState {
-    let mut state = fx.state();
-    import(
-        &mut state,
-        &fx.synth("a.xlsx", 1),
-        "2026-09-29 00:00:00",
-        true,
-    );
-    state
 }
 
 /// A state with one workspace holding the big synthetic file.
@@ -188,8 +163,7 @@ fn filter_options_count_the_kept_holds_and_name_extra_columns_and_absent_fields(
 
     // Two extra columns.
     let mut state = fx.state();
-    let path = csv(
-        &fx,
+    let path = fx.text(
         "extra.csv",
         "id,line_id,hold_remark,hold_type,Zone,Area\n1,L-1,a,MISC.,Z1,A1\n2,L-2,b,MISC.,Z2,A2\n",
     );
@@ -200,8 +174,7 @@ fn filter_options_count_the_kept_holds_and_name_extra_columns_and_absent_fields(
 
     // No released and no size columns.
     let mut state = fx.state();
-    let path = csv(
-        &fx,
+    let path = fx.text(
         "limited.csv",
         "line_id,hold_remark,hold_type\nL-1,a,MISC.\nL-2,b,MISC.\n",
     );
@@ -279,9 +252,7 @@ fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
 
 /// A file with an extra column `Zone` and no discipline, role, name, dates, release, or sizes.
 fn zoned(fx: &Fixture) -> PathBuf {
-    csv(
-        fx,
-        "zoned.csv",
+    fx.text("zoned.csv",
         "line_id,hold_remark,hold_type,Zone\nL-1,Pending 538-PR-100,MISC.,Z1\nL-2,b,P&ID,Z2\nL-2,c,MISC.,Z1\n",
     )
 }

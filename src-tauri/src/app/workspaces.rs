@@ -82,6 +82,9 @@ pub struct AppStart {
     pub list_error: Option<CommandError>,
     /// The workspace that was reopened, when there was one to reopen.
     pub open: Option<WorkspaceOpen>,
+    /// What went wrong with the settings file at start, when anything did: set aside
+    /// (`SettingsSetAside`), or left in place and saving refused (`Settings`).
+    pub settings_problem: Option<CommandError>,
 }
 
 impl From<WorkspaceInfo> for WorkspaceView {
