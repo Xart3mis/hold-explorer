@@ -9,6 +9,8 @@ describe("core-words.json", () => {
   it("holds the words the catalog holds, under the mapped keys", () => {
     expect(Object.keys(words).sort()).toEqual(Object.keys(catalogKeys).sort());
     expect(en.common.blank).toBe(words.blank);
+    // The import review writes the same word for a blank value.
+    expect(en.import.review.blank).toBe(en.common.blank);
     expect(en.common.none).toBe(words.none);
   });
 });

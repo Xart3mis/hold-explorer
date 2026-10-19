@@ -54,12 +54,9 @@ describe("the columns of each screen's file", () => {
   });
 
   it("are the columns of the Blockers steps", () => {
-    // The file writes the blocker first, which names the rows; the table leads with the step.
-    expect(
-      stepColumns()
-        .map((column) => column.id)
-        .sort(),
-    ).toEqual([...fileColumns.blockers].sort());
+    // The file leads with the blocker, which names the rows; the table leads with the step.
+    const [step, blocker, ...rest] = stepColumns().map((column) => column.id);
+    expect([blocker, step, ...rest]).toEqual(fileColumns.blockers);
   });
 });
 

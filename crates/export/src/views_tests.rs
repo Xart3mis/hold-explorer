@@ -1637,3 +1637,24 @@ fn the_summary_names_the_age_of_a_stale_hold_from_the_threshold() {
         Some(format!("Holds open for {STALE_DAYS} days or more").as_str())
     );
 }
+
+#[test]
+fn a_blocker_of_a_blank_remark_is_written_blank_in_the_blockers_sheet() {
+    let hold = |line: &str, remark: &str| hx_core::model::Hold {
+        line_id: line.to_string(),
+        discipline: "Piping".to_string(),
+        remark: remark.to_string(),
+        created: Some(full().snapshot - chrono::Duration::days(5)),
+        ..Default::default()
+    };
+    let ds = Dataset::build(
+        vec![hold("A", ""), hold("B", "   ")],
+        RuleSet::builtin(),
+        full().snapshot,
+    );
+    let sheet = one(
+        &ds,
+        &request(Screen::Blockers, &[], RowScope::All, status(Status::Open)),
+    );
+    assert_eq!(sheet.rows[0][0], Cell::Text("Piping / (blank)".to_string()));
+}
