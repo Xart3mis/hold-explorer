@@ -191,6 +191,25 @@ describe("the mark of the open row among selected rows", () => {
     expect(openMarks()).toEqual([]);
   });
 
+  it(
+    "draws no mark on an open row that Ctrl+click took out of the selection, and keeps it open",
+    SLOW,
+    async () => {
+      const user = userEvent.setup();
+      render(
+        <Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={["LINE-B", "LINE-D"]} />,
+      );
+      expect(openMarks()).toEqual(["LINE-B"]);
+      await user.keyboard("{Control>}");
+      await user.click(row("LINE-B"));
+      await user.keyboard("{/Control}");
+      expect(marked()).toEqual(["LINE-D"]);
+      expect(row("LINE-B")).toHaveAttribute("aria-selected", "false");
+      expect(openMarked()).toEqual(["LINE-B"]);
+      expect(openMarks()).toEqual([]);
+    },
+  );
+
   it("is a dot drawn over the cell's padding: out of the flow, so no column and no text moves", () => {
     const css = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
     const rule = /\.openMark\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";

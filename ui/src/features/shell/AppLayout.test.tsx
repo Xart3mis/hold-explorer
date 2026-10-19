@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -501,8 +502,19 @@ describe("what the shell says when the view on screen was brought back in step",
 function ProbePage({ name }: { name: string }) {
   const selected = useSelectedRows("probe");
   const { filters, update } = useFilters();
+  // A sort a table holds in its own state, as the tables of the screens that do not keep it in the address.
+  const [sortedBy, setSortedBy] = useState("none");
   return (
     <Page title={name}>
+      <p data-testid="sorted">{sortedBy}</p>
+      <button
+        type="button"
+        onClick={() => {
+          setSortedBy("holds");
+        }}
+      >
+        sort table
+      </button>
       <p data-testid="selected">{[...selected.keys].join(",")}</p>
       <p data-testid="filter">{filters.text}</p>
       <button
@@ -573,6 +585,25 @@ describe("a second press on the current destination", () => {
       );
     },
   );
+
+  it("returns Breakdown to its bare address and drops a sort held in the page", SLOW, async () => {
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: "/breakdown?by=HoldType&open=a,b&sort=holds&dir=asc",
+      pages: { ...destinationPages, breakdown: <ProbePage name="Breakdown" /> },
+    });
+    const nav = await sidebar();
+    await user.click(await screen.findByRole("button", { name: "sort table" }));
+    expect(screen.getByTestId("sorted")).toHaveTextContent("holds");
+    await user.click(within(nav).getByRole("link", { name: names.breakdown }));
+    expect(router.state.location.pathname).toBe("/breakdown");
+    expect(router.state.location.search).toBe("");
+    const params = new URLSearchParams(router.state.location.search);
+    for (const key of ["by", "open", "sort", "dir"]) expect(params.has(key)).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId("sorted")).toHaveTextContent("none");
+    });
+  });
 
   it("is the same for Ctrl+3 on Lines", SLOW, async () => {
     const { user, router } = await onLines();
