@@ -727,14 +727,19 @@ fn blockers_have_the_steps_of_the_solve_order() {
         &request(Screen::Blockers, &[], RowScope::All, spec.clone()),
     );
     assert_eq!(ids(&sheet), BLOCKER_COLUMNS.to_vec());
+    // The blocker names the rows and comes first; the step is an ordinary column after it.
+    assert_eq!(sheet.columns[0].id, "blocker");
+    assert_eq!(sheet.columns[0].header, "file.column.blockers.blocker");
+    assert_eq!(sheet.columns[1].id, "step");
+    assert_eq!(sheet.columns[1].header, "file.column.blockers.step");
     let view = solve_view(&plan_of(ds, &spec).unwrap());
     let want: Vec<Vec<Cell>> = view
         .rows
         .iter()
         .map(|r| {
             vec![
-                Cell::Count(r.step),
                 Cell::Text(r.label.clone()),
+                Cell::Count(r.step),
                 Cell::Text(r.kind.clone()),
                 Cell::Text(r.discipline.clone()),
                 Cell::Count(r.holds),
@@ -748,7 +753,7 @@ fn blockers_have_the_steps_of_the_solve_order() {
     assert!(sheet
         .rows
         .iter()
-        .all(|r| !matches!(&r[1], Cell::Text(t) if t.ends_with(" / —"))));
+        .all(|r| !matches!(&r[0], Cell::Text(t) if t.ends_with(" / —"))));
     let picked = one(
         ds,
         &request(

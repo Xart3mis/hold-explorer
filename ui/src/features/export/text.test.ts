@@ -33,6 +33,11 @@ describe("exportText", () => {
     expect(catalog.sort()).toEqual(keys.filter((key) => key !== "file.listSeparator").sort());
   });
 
+  it("heads the column that names a blocker Blocker, and the rank Step", () => {
+    expect(text.labels["file.column.blockers.blocker"]).toBe("Blocker");
+    expect(text.labels["file.column.blockers.step"]).toBe("Step");
+  });
+
   it("leaves the single-brace places that Rust fills as they are", () => {
     expect(text.labels["file.chart.bars"]).toBe("Holds by {dim}");
     expect(text.labels["file.chart.heatmap"]).toBe("Holds by {rows} and {cols}");

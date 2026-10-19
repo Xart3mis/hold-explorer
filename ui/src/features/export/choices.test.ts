@@ -24,10 +24,10 @@ describe("the remembered choice of a screen", () => {
   });
 
   it("is kept for each screen apart", () => {
-    writeChoice("blockers", { columns: ["step", "blocker"], rows: "loaded", status: "All" });
+    writeChoice("blockers", { columns: ["blocker", "step"], rows: "loaded", status: "All" });
     expect(readChoice("breakdown")).toEqual(DEFAULT_CHOICE);
     expect(readChoice("blockers")).toEqual({
-      columns: ["step", "blocker"],
+      columns: ["blocker", "step"],
       rows: "loaded",
       status: "All",
     });
@@ -87,7 +87,12 @@ describe("the remembered choice of a screen", () => {
       "hx.export.blockers",
       JSON.stringify({ columns: ["gain"], rows: "all", status: "filters" }),
     );
-    expect(readChoice("blockers").columns).toEqual(["step", "gain"]);
+    expect(readChoice("blockers").columns).toEqual(["blocker", "gain"]);
+    window.localStorage.setItem(
+      "hx.export.blockers",
+      JSON.stringify({ columns: ["step"], rows: "all", status: "filters" }),
+    );
+    expect(readChoice("blockers").columns).toEqual(["blocker", "step"]);
     // No column chosen stays every column.
     window.localStorage.setItem(
       "hx.export.holds",

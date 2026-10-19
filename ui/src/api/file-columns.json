@@ -28,5 +28,5 @@
     "releaseRemark"
   ],
   "breakdown": ["label", "holds", "lines"],
-  "blockers": ["step", "blocker", "kind", "discipline", "holds", "gain", "cumulative"]
+  "blockers": ["blocker", "step", "kind", "discipline", "holds", "gain", "cumulative"]
 }
