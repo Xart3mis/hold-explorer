@@ -236,11 +236,11 @@ fn an_excel_file_of_ten_thousand_holds_takes_under_two_seconds_and_the_full_work
     let text = file_text();
     let about = About {
         workspace: "Perf".into(),
-        snapshot: ds.snapshot.date(),
+        snapshot: Some(ds.snapshot.date()),
         file_name: "holds.xlsx".into(),
         filters: vec!["Status: All".into()],
         app_version: "0.1.0".into(),
-        made_at: ds.snapshot,
+        made_at: ds.snapshot.and_utc().fixed_offset(),
         rows: ds.rows.len(),
     };
     let request = ExportRequest {
@@ -309,7 +309,7 @@ fn the_status_report_of_ten_thousand_holds_takes_under_two_seconds() {
     let spec = FilterSpec::default();
     let head = ReportHead {
         workspace: "Perf".into(),
-        snapshot: ds.snapshot.date(),
+        snapshot: Some(ds.snapshot.date()),
         filters: Vec::new(),
         app_version: "0.1.0".into(),
         made_at: ds.snapshot.and_utc().fixed_offset(),

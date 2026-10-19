@@ -2,7 +2,11 @@ use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::Path;
 
-use calamine::{open_workbook, Reader, Xlsx};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use calamine::{open_workbook, Data, Reader, Xlsx};
+use chrono::Local;
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::query::LineQuery;
 use hx_export::chart::ChartChoice;
@@ -13,6 +17,7 @@ use hx_export::{
 use super::error::CommandError;
 use super::export::{
     copy, fonts, render, save, Clipboard, Content, CopyFormat, ExportSaved, SaveFormat,
+    SendClipboard, SessionClipboard,
 };
 use super::snapshot_tests::{import, view_of, Fixture};
 use super::{AppState, ViewRef};
@@ -218,7 +223,11 @@ fn every_screen_is_saved_as_excel_and_its_rows_are_counted() {
         assert_eq!(about.rows, rows, "{screen:?}");
         assert_eq!(about.workspace, "W");
         assert_eq!(about.file_name, "a.xlsx");
-        assert_eq!(about.snapshot.to_string(), "2026-09-29");
+        assert_eq!(
+            about.snapshot.map(|day| day.to_string()).as_deref(),
+            Some("2026-09-29")
+        );
+        assert_eq!(about.made_at.offset(), Local::now().fixed_offset().offset());
         assert_eq!(about.app_version, env!("CARGO_PKG_VERSION"));
         let path = out.join(format!("{at}.xlsx"));
         let saved = save(
@@ -271,7 +280,11 @@ fn the_report_and_a_chart_are_gathered_whole_with_the_head_of_the_view() {
         panic!("no report");
     };
     assert_eq!(head.workspace, "W");
-    assert_eq!(head.snapshot.to_string(), "2026-09-29");
+    assert_eq!(
+        head.snapshot.map(|day| day.to_string()).as_deref(),
+        Some("2026-09-29")
+    );
+    assert_eq!(head.made_at.offset(), Local::now().fixed_offset().offset());
     assert_eq!(head.filters, ["Discipline: Piping"]);
     assert_eq!(head.app_version, env!("CARGO_PKG_VERSION"));
     assert!(plan.is_some(), "the default filter keeps open holds");
@@ -589,4 +602,156 @@ fn the_formats_read_what_the_interface_sends() {
         serde_json::to_value(super::export::ExportPhase::Writing).unwrap(),
         "Writing"
     );
+}
+
+#[test]
+fn a_workspace_without_a_snapshot_says_it_has_none_rather_than_a_date() {
+    let fx = Fixture::new();
+    let mut state = empty(&fx);
+    let view = shown(&state);
+    let Content::Sheets { about, .. } = state
+        .export_content(&lines(), &SaveFormat::Excel, &view)
+        .unwrap()
+    else {
+        panic!("no sheets");
+    };
+    assert_eq!(about.snapshot, None);
+    assert_eq!(about.file_name, "");
+    assert_eq!(about.workspace, "Empty");
+    let Content::Report { head, .. } = state
+        .export_content(&lines(), &SaveFormat::Report, &view)
+        .unwrap()
+    else {
+        panic!("no report");
+    };
+    assert_eq!(head.snapshot, None);
+
+    let path = fx.dir.path().join("empty.xlsx");
+    let request = lines();
+    let content = state
+        .export_content(&request, &SaveFormat::Excel, &view)
+        .unwrap();
+    save(
+        content,
+        &SaveFormat::Excel,
+        &path,
+        &request.text,
+        fonts(),
+        &write_file,
+    )
+    .unwrap();
+    let mut book: Xlsx<_> = open_workbook(&path).unwrap();
+    let first = book.sheet_names()[0].clone();
+    let about = book.worksheet_range(&first).unwrap();
+    // The labels are their own keys in these tests.
+    let snapshot: Vec<&Data> = about
+        .rows()
+        .find(|row| row[0] == Data::String("file.about.snapshot".into()))
+        .unwrap()
+        .iter()
+        .collect();
+    assert_eq!(*snapshot[1], Data::String("file.about.noSnapshot".into()));
+}
+
+#[test]
+fn a_name_that_does_not_end_in_the_extension_of_its_format_is_refused() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let out = fx.dir.path().join("out");
+    fs::create_dir_all(&out).unwrap();
+    for (format, name) in formats() {
+        let (stem, extension) = name.rsplit_once('.').unwrap();
+        // Another format's extension, none, and a program's are refused, and nothing is written.
+        for wrong in [
+            format!("{stem}.txt"),
+            format!("{stem}.desktop"),
+            stem.to_string(),
+            format!("{name}.sh"),
+            format!("{stem}.{}", if extension == "csv" { "xlsx" } else { "csv" }),
+        ] {
+            let path = out.join(&wrong);
+            let error = save_lines(&mut state, &format, &path).unwrap_err();
+            assert_eq!(error.kind, "Extension", "{wrong}");
+            assert!(
+                error.message.contains(&format!("ends in .{extension}")),
+                "{}",
+                error.message
+            );
+            assert!(!path.exists(), "{wrong}");
+        }
+        // The extension is compared without regard to case.
+        let upper = out.join(format!("{stem}.{}", extension.to_uppercase()));
+        save_lines(&mut state, &format, &upper).unwrap();
+        assert!(upper.is_file());
+    }
+}
+
+/// A clipboard of the session's tests: it counts how often one is made, and fails while told to.
+struct Counted {
+    fail: Arc<AtomicBool>,
+    texts: Arc<AtomicUsize>,
+}
+
+impl Clipboard for Counted {
+    fn text(&mut self, _: &str) -> Result<(), CommandError> {
+        if self.fail.load(Ordering::SeqCst) {
+            return Err(CommandError::new("Clipboard", "refused"));
+        }
+        self.texts.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn image(&mut self, _: u32, _: u32, _: &[u8]) -> Result<(), CommandError> {
+        self.text("")
+    }
+}
+
+#[test]
+fn the_session_keeps_one_clipboard_and_makes_it_again_after_a_failure() {
+    let session = SessionClipboard::default();
+    let made = Arc::new(AtomicUsize::new(0));
+    let fail = Arc::new(AtomicBool::new(false));
+    let texts = Arc::new(AtomicUsize::new(0));
+    let refuse_to_make = Arc::new(AtomicBool::new(false));
+    let make = || -> Result<Box<dyn SendClipboard>, CommandError> {
+        if refuse_to_make.load(Ordering::SeqCst) {
+            return Err(CommandError::new("Clipboard", "no clipboard"));
+        }
+        made.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(Counted {
+            fail: fail.clone(),
+            texts: texts.clone(),
+        }))
+    };
+    let copy_once = || session.copy_with(Content::Text("L-1".into()), &text(), fonts(), &make);
+
+    copy_once().unwrap();
+    copy_once().unwrap();
+    assert_eq!(
+        made.load(Ordering::SeqCst),
+        1,
+        "one clipboard for both copies"
+    );
+    assert_eq!(texts.load(Ordering::SeqCst), 2);
+
+    fail.store(true, Ordering::SeqCst);
+    assert_eq!(copy_once().unwrap_err().kind, "Clipboard");
+    fail.store(false, Ordering::SeqCst);
+    copy_once().unwrap();
+    assert_eq!(
+        made.load(Ordering::SeqCst),
+        2,
+        "made again after the failure"
+    );
+
+    // A clipboard the system will not give fails the copy, and the next copy asks again.
+    fail.store(true, Ordering::SeqCst);
+    copy_once().unwrap_err();
+    fail.store(false, Ordering::SeqCst);
+    refuse_to_make.store(true, Ordering::SeqCst);
+    assert_eq!(copy_once().unwrap_err().kind, "Clipboard");
+    refuse_to_make.store(false, Ordering::SeqCst);
+    copy_once().unwrap();
+    assert_eq!(made.load(Ordering::SeqCst), 3);
+    assert_eq!(texts.load(Ordering::SeqCst), 4);
 }

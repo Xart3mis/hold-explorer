@@ -19,10 +19,11 @@ use crate::xlsx::palette;
 
 /// The English of every key the report asks for, as the interface's catalog writes them (the
 /// `file.report.*` keys are new with the report). Every other key is written as itself.
-const WORDS: [(&str, &str); 53] = [
+const WORDS: [(&str, &str); 54] = [
     ("file.about.filters", "Filters"),
     ("file.about.madeAt", "Made at"),
     ("file.about.noFilters", "No filters"),
+    ("file.about.noSnapshot", "No snapshot"),
     ("file.about.snapshot", "Snapshot"),
     ("file.about.workspace", "Workspace"),
     ("file.chart.bars", "Holds by {dim}"),
@@ -150,7 +151,7 @@ fn plan_of(ds: &Dataset, spec: &FilterSpec) -> Option<SolvePlan> {
 fn head(ds: &Dataset, filters: &[&str]) -> ReportHead {
     ReportHead {
         workspace: "Unit 573 piping".into(),
-        snapshot: ds.snapshot.date(),
+        snapshot: Some(ds.snapshot.date()),
         filters: filters.iter().map(|f| f.to_string()).collect(),
         app_version: "0.1.0".into(),
         made_at: made_at(),
@@ -316,6 +317,27 @@ fn the_first_page_has_the_header_the_tiles_the_stale_line_and_the_disciplines() 
         .any(|t| t.starts_with("Holds open for 90 days or more: ")));
     let snapshot = text().date(full().snapshot.date());
     assert!(first.contains(&snapshot), "{snapshot} in {first:?}");
+}
+
+#[test]
+fn a_report_without_a_snapshot_says_so_in_the_place_of_its_date() {
+    let ds = empty();
+    let spec = FilterSpec::default();
+    let plan = plan_of(&ds, &spec);
+    let head = ReportHead {
+        snapshot: None,
+        ..head(&ds, &[])
+    };
+    let pages = report_pages(&ds, plan.as_ref(), &spec, &head, &text(), fonts()).unwrap();
+    let first = texts(&pages[0]);
+    assert!(first.iter().any(|t| t == "No snapshot"), "{first:?}");
+    assert!(
+        !first.contains(&text().date(ds.snapshot.date())),
+        "{first:?}"
+    );
+    // A report with a snapshot never says it has none.
+    let pages = pages_of(full(), &spec, &[]);
+    assert!(!texts(&pages[0]).iter().any(|t| t == "No snapshot"));
 }
 
 #[test]

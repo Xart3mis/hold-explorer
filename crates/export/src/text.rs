@@ -18,6 +18,7 @@ pub const FILE_TEXT_KEYS: &[&str] = &[
     "file.about.filters",
     "file.about.madeAt",
     "file.about.noFilters",
+    "file.about.noSnapshot",
     "file.about.rows",
     "file.about.snapshot",
     "file.about.workspace",

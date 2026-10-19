@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
-use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, Timelike};
 use hx_core::filter::default_age_bands;
 use rust_xlsxwriter::{
     utility, ConditionalFormat2ColorScale, ConditionalFormatCell, ConditionalFormatCellRule,
@@ -28,16 +28,18 @@ use crate::ExportError;
 pub struct About {
     /// The name of the workspace.
     pub workspace: String,
-    /// The day of the snapshot.
-    pub snapshot: NaiveDate,
+    /// The day of the snapshot; `None` for a workspace without a snapshot, which the sheet states
+    /// with the catalog's "No snapshot".
+    pub snapshot: Option<NaiveDate>,
     /// The name of the file the snapshot was imported from.
     pub file_name: String,
     /// The active filters as the filter bar writes them, one per entry; empty when none is set.
     pub filters: Vec<String>,
     /// The version of Hold Explorer.
     pub app_version: String,
-    /// When the file was made, in local time.
-    pub made_at: NaiveDateTime,
+    /// When the file was made, with the offset from UTC of the machine's time zone. The sheet
+    /// states its local date and time as a date cell, and the offset as text under it.
+    pub made_at: DateTime<FixedOffset>,
     /// How many rows the file holds.
     pub rows: usize,
 }
@@ -126,9 +128,12 @@ pub fn workbook(
         &words,
     )
     .map_err(fault)?;
-    // The moment is written as a date and time; the sheet gave its column the room of the text.
-    let made_at = moment(about.made_at).map_err(fault)?;
-    page.write_datetime_with_format(about_sheet.rows.len() as u32, 1, made_at, &formats.moment)
+    // The moment is written as a date and time in local time, on the row before the last, which
+    // states its offset; the sheet gave its column the room of the text. Under the header, the
+    // data row `i` is the sheet's row `i + 1`.
+    let made_at = moment(about.made_at.naive_local()).map_err(fault)?;
+    let made_row = (about_sheet.rows.len() - 1) as u32;
+    page.write_datetime_with_format(made_row, 1, made_at, &formats.moment)
         .map_err(fault)?;
     for (sheet, name) in sheets.iter().zip(names) {
         write_sheet(&mut book, sheet, name, &mut tables, &formats, &words).map_err(fault)?;
@@ -168,7 +173,13 @@ fn about_sheet(about: &About, text: &ExportText) -> Result<Sheet, ExportError> {
             label("file.about.workspace")?,
             Cell::Text(about.workspace.clone()),
         ],
-        vec![label("file.about.snapshot")?, Cell::Date(about.snapshot)],
+        vec![
+            label("file.about.snapshot")?,
+            match about.snapshot {
+                Some(day) => Cell::Date(day),
+                None => label("file.about.noSnapshot")?,
+            },
+        ],
         vec![
             label("file.about.file")?,
             Cell::Text(about.file_name.clone()),
@@ -193,13 +204,16 @@ fn about_sheet(about: &About, text: &ExportText) -> Result<Sheet, ExportError> {
         label("file.about.appVersion")?,
         Cell::Text(about.app_version.clone()),
     ]);
+    let local = about.made_at.naive_local();
     let made_at = format!(
         "{} {:02}:{:02}",
-        text.date(about.made_at.date()),
-        about.made_at.hour(),
-        about.made_at.minute()
+        text.date(local.date()),
+        local.hour(),
+        local.minute()
     );
     rows.push(vec![label("file.about.madeAt")?, Cell::Text(made_at)]);
+    // A date cell of Excel has no time zone: the offset of the local time is stated under it.
+    rows.push(vec![Cell::Empty, Cell::Text(utc_offset(about.made_at))]);
     let column = |id: &str, key: &str| -> Result<Column, ExportError> {
         Ok(Column {
             id: id.into(),
@@ -364,6 +378,11 @@ fn cut_cell(text: &str) -> &str {
 fn excel_date(day: NaiveDate) -> Option<ExcelDateTime> {
     let year = u16::try_from(day.year()).ok()?;
     ExcelDateTime::from_ymd(year, day.month() as u8, day.day() as u8).ok()
+}
+
+/// The offset of a moment from UTC as the About sheet states it: `UTC+03:00`.
+fn utc_offset(at: DateTime<FixedOffset>) -> String {
+    format!("UTC{}", at.offset())
 }
 
 /// The Excel date and time of `at`, to the second.

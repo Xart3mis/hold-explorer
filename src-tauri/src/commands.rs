@@ -24,10 +24,10 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    copy, fonts, save, AppStart, AppState, CommandError, CopyFormat, ExportPhase, ExportSaved,
-    FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
-    ImportReview, OverviewView, SaveFormat, Settings, SystemClipboard, TargetCheck, TargetChoice,
-    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    check_extension, fonts, save, AppStart, AppState, CommandError, CopyFormat, ExportPhase,
+    ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft,
+    ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck,
+    TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -385,6 +385,8 @@ where
     R: Runtime,
     W: Fn(&Path, &[u8]) -> Result<(), ExportError> + Send + 'static,
 {
+    // A name of another kind is refused before anything is read.
+    check_extension(&format, &path)?;
     // A phase that cannot be sent only costs the interface a progress step.
     let _ = on_progress.send(ExportPhase::Reading);
     let text = request.text.clone();
@@ -396,11 +398,15 @@ where
     let _ = on_progress.send(ExportPhase::Writing);
     let target = path.clone();
     let saved = unlocked(move || save(content, &format, &target, &text, fonts(), &write)).await?;
-    blocking(app, move |state| {
+    // The file is saved whatever happens now. Should the path fail to be recorded (only a state
+    // left untrustworthy by an earlier panic does that), the command still answers the saved
+    // file: only "Open file" refuses it then, with `NotWritten`, and the user opens it from its
+    // folder.
+    let _recorded = blocking(app, move |state| {
         state.wrote(path);
         Ok(())
     })
-    .await?;
+    .await;
     Ok(saved)
 }
 
@@ -414,11 +420,19 @@ pub async fn export_copy<R: Runtime>(
     view: ViewRef,
 ) -> Result<(), CommandError> {
     let text = request.text.clone();
-    let content = blocking(app, move |state| {
+    let content = blocking(app.clone(), move |state| {
         state.copy_content(&request, &format, &view)
     })
     .await?;
-    unlocked(move || copy(content, &mut SystemClipboard::new()?, &text, fonts())).await
+    unlocked(move || {
+        let clipboard = app.try_state::<SessionClipboard>().ok_or_else(|| {
+            CommandError::internal(
+                "The clipboard of the application is not available. Restart Hold Explorer; if it keeps happening, report it.",
+            )
+        })?;
+        clipboard.copy(content, &text, fonts())
+    })
+    .await
 }
 
 /// Opens a file the app saved in this session with the system's program for it.
@@ -484,6 +498,7 @@ mod tests {
             let state = AppState::new(dir.path().join("config"), dir.path().join("data"));
             let app = mock_builder()
                 .manage(Mutex::new(state))
+                .manage(crate::app::SessionClipboard::default())
                 .invoke_handler(crate::handler())
                 .build(mock_context(noop_assets()))
                 .expect("the application builds on the mock runtime");
@@ -770,6 +785,28 @@ mod tests {
         assert_eq!(*heard.lock().unwrap(), [r#""Reading""#, r#""Writing""#]);
         let state = harness.app.state::<Mutex<AppState>>();
         assert!(state.lock().unwrap().has_written(&path));
+    }
+
+    #[test]
+    fn a_save_with_the_wrong_extension_is_refused_before_anything_is_read() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("lines.desktop");
+        let (channel, heard) = phases();
+        let error = tauri::async_runtime::block_on(super::save_with(
+            harness.app.handle().clone(),
+            request,
+            crate::app::SaveFormat::Excel,
+            path.clone(),
+            view,
+            channel,
+            hx_export::write_file,
+        ))
+        .unwrap_err();
+        assert_eq!(error.kind, "Extension");
+        assert!(heard.lock().unwrap().is_empty());
+        assert!(!path.exists());
     }
 
     #[test]

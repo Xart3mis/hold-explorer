@@ -12,7 +12,7 @@ use ts_rs::TS;
 pub struct CommandError {
     /// The error's variant name, for example `NewerSchema`, or one of `NoWorkspace`, `NoDraft`,
     /// `WorkspaceNotFound`, `ReplaceNotOffered`, `ViewChanged`, `Settings`, `NotWritten`,
-    /// `Clipboard`, `Open`, `Internal`.
+    /// `Clipboard`, `Open`, `Extension`, `Internal`.
     pub kind: String,
     /// The text to show the user: what happened, why, and how to fix it.
     pub message: String,

@@ -41,8 +41,9 @@ use crate::ExportError;
 pub struct ReportHead {
     /// The name of the workspace.
     pub workspace: String,
-    /// The date of the snapshot in view.
-    pub snapshot: NaiveDate,
+    /// The date of the snapshot in view; `None` for a workspace without a snapshot, which the
+    /// header states with the catalog's "No snapshot".
+    pub snapshot: Option<NaiveDate>,
     /// The active filters as the filter bar writes them, one per entry; empty when none is set.
     pub filters: Vec<String>,
     /// The version of the app that made the report.
@@ -204,6 +205,7 @@ struct Words {
     title: String,
     workspace: String,
     snapshot: String,
+    no_snapshot: String,
     made_at: String,
     filters: String,
     no_filters: String,
@@ -253,6 +255,7 @@ impl Words {
             title: get("file.report.title")?,
             workspace: get("file.about.workspace")?,
             snapshot: get("file.about.snapshot")?,
+            no_snapshot: get("file.about.noSnapshot")?,
             made_at: get("file.about.madeAt")?,
             filters: get("file.about.filters")?,
             no_filters: get("file.about.noFilters")?,
@@ -446,7 +449,12 @@ fn header(flow: &mut Flow, head: &ReportHead, text: &ExportText, words: &Words) 
     // One row a value: the filters take a row each, the label beside the first.
     let mut facts: Vec<(&str, String, Ink)> = vec![
         (&words.workspace, head.workspace.clone(), value),
-        (&words.snapshot, text.date(head.snapshot), value),
+        (
+            &words.snapshot,
+            head.snapshot
+                .map_or_else(|| words.no_snapshot.clone(), |day| text.date(day)),
+            value,
+        ),
         (&words.made_at, made_at, value),
     ];
     if head.filters.is_empty() {

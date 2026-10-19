@@ -5,7 +5,7 @@ use std::io::{Cursor, Read};
 use std::sync::OnceLock;
 
 use calamine::{open_workbook_from_rs, Data, DataType, Reader, Xlsx};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
 use hx_core::dataset::Dataset;
 use hx_core::filter::{default_age_bands, Dim, FilterSpec, Status};
 use hx_core::load::load_file;
@@ -44,6 +44,7 @@ fn text() -> ExportText {
         ("file.about.file", "File"),
         ("file.about.filters", "Filters"),
         ("file.about.noFilters", "No filters"),
+        ("file.about.noSnapshot", "No snapshot"),
         ("file.about.rows", "Rows"),
         ("file.about.appVersion", "App version"),
         ("file.about.madeAt", "Made at"),
@@ -62,14 +63,23 @@ fn day(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
 }
 
+/// 19 Oct 2026 14:05:09 local time, `east` seconds east of UTC.
+fn made_at(east: i32) -> DateTime<FixedOffset> {
+    day(2026, 10, 19)
+        .and_hms_opt(14, 5, 9)
+        .unwrap()
+        .and_local_timezone(FixedOffset::east_opt(east).unwrap())
+        .unwrap()
+}
+
 fn about() -> About {
     About {
         workspace: "Unit 3 piping".into(),
-        snapshot: day(2026, 9, 30),
+        snapshot: Some(day(2026, 9, 30)),
         file_name: "holds-2026-09-30.xlsx".into(),
         filters: vec!["Discipline: Piping".into(), "Status: All".into()],
         app_version: "0.1.0".into(),
-        made_at: day(2026, 10, 19).and_hms_opt(14, 5, 9).unwrap(),
+        made_at: made_at(3 * 3600),
         rows: 642,
     }
 }
@@ -866,10 +876,14 @@ fn about_comes_first_and_states_where_the_file_comes_from() {
     assert_eq!(got[8][0], s("Made at"));
     assert!(matches!(got[8][1], Data::DateTime(_)), "{:?}", got[8][1]);
     // The moment, to the second (a serial day number rounds to a millisecond or so).
+    // The moment in local time, to the second (a serial day number rounds to a millisecond or
+    // so), and its offset from UTC under it.
     let made: NaiveDateTime = got[8][1].as_datetime().unwrap();
-    let off = (made - about().made_at).num_milliseconds().abs();
-    assert!(off < 5, "{made} is {}", about().made_at);
-    assert_eq!(got.len(), 9);
+    let local = about().made_at.naive_local();
+    let off = (made - local).num_milliseconds().abs();
+    assert!(off < 5, "{made} is {local}");
+    assert_eq!(got[9], [Data::Empty, s("UTC+03:00")]);
+    assert_eq!(got.len(), 10);
     let styles = part(&bytes, "xl/styles.xml");
     assert!(
         styles.contains("formatCode=\"d mmm yyyy hh:mm\""),
@@ -914,6 +928,48 @@ fn the_document_has_the_catalog_title_and_no_author_or_company() {
 }
 
 #[test]
+fn the_offset_of_the_moment_is_stated_west_of_utc_and_at_utc_too() {
+    for (east, offset) in [(-5 * 3600 - 1800, "UTC-05:30"), (0, "UTC+00:00")] {
+        let about = About {
+            made_at: made_at(east),
+            ..about()
+        };
+        let bytes = workbook(&[mixed()], &about, &text()).unwrap();
+        let got = cells(&mut reopen(&bytes), "About");
+        // The local time stays the same whatever the offset.
+        let made: NaiveDateTime = got[8][1].as_datetime().unwrap();
+        assert_eq!(made.format("%H:%M").to_string(), "14:05");
+        assert_eq!(got[9][1], Data::String(offset.into()));
+    }
+}
+
+#[test]
+fn a_workbook_without_a_snapshot_says_so_in_the_place_of_its_date() {
+    let about = About {
+        snapshot: None,
+        file_name: String::new(),
+        ..about()
+    };
+    let bytes = workbook(&[mixed()], &about, &text()).unwrap();
+    let got = cells(&mut reopen(&bytes), "About");
+    assert_eq!(
+        got[2],
+        [
+            Data::String("Snapshot".into()),
+            Data::String("No snapshot".into())
+        ]
+    );
+    let mut lacking = text();
+    lacking.labels.remove("file.about.noSnapshot");
+    assert_eq!(
+        workbook(&[mixed()], &about, &lacking),
+        Err(ExportError::Text {
+            key: "file.about.noSnapshot".into()
+        })
+    );
+}
+
+#[test]
 fn a_catalog_without_a_label_the_workbook_needs_is_refused_naming_the_key() {
     for key in [
         "file.title",
@@ -947,6 +1003,7 @@ fn every_label_the_workbook_asks_for_is_one_the_crate_lists() {
     };
     let mut bare = about();
     bare.filters.clear();
+    bare.snapshot = None;
     for about in [about(), bare] {
         assert!(workbook(&[mixed()], &about, &listed).is_ok());
     }

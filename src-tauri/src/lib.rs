@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use tauri::window::Color;
 use tauri::Manager;
 
-use app::{AppState, Theme};
+use app::{AppState, SessionClipboard, Theme};
 
 /// The first frame of the window in the dark theme: the design token `--color-surface-app` of
 /// the dark theme in `DESIGN.md`, as `node tools/design/check-tokens.mjs --hex dark
@@ -95,6 +95,8 @@ pub fn run() {
                     window.set_background_color(Some(window_background(state.settings().theme)));
             }
             app.manage(Mutex::new(state));
+            // Under a lock of its own: the clipboard is set while the state is free.
+            app.manage(SessionClipboard::default());
             Ok(())
         })
         .invoke_handler(handler())
