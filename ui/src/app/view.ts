@@ -149,6 +149,16 @@ function isSameView(one: ViewRef | null, other: ViewRef | null): boolean {
   return one?.workspace_id === other?.workspace_id && one?.snapshot_id === other?.snapshot_id;
 }
 
+/**
+ * The view on screen, for a command that is sent once, when the user asks, rather than read: an
+ * export. Such a command checks the view as a reading does and answers `ViewChanged` when the
+ * Rust side holds another; it is not sent again by itself, so its caller shows that answer as it
+ * shows any failure. `null` while no workspace is open.
+ */
+export function useShownView(): ViewRef | null {
+  return viewOf(useShell().start.open);
+}
+
 /** The view the interface shows, as the cached application start has it. */
 function shownView(client: QueryClient): ViewRef | null {
   return viewOf(client.getQueryData<AppStart>(keys.start)?.open);

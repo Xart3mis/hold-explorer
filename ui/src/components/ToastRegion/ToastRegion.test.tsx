@@ -106,6 +106,66 @@ describe("ToastRegion", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  it("offers a second action after the first, each reached by Tab and run by Enter, once", async () => {
+    const open = vi.fn();
+    const reveal = vi.fn();
+    const user = userEvent.setup();
+    setup();
+    const actions = {
+      action: { label: "Open file", onAction: open, isUndo: false },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    };
+    show({ message: "Saved Lines.xlsx", ...actions });
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Open file" })).toHaveFocus();
+    await user.tab();
+    const second = screen.getByRole("button", { name: "Show in folder" });
+    expect(second).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.queryByText("Saved Lines.xlsx")).not.toBeInTheDocument();
+
+    show({ message: "Saved Holds.csv", ...actions });
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Open file" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Saved Holds.csv")).not.toBeInTheDocument();
+  });
+
+  it("leaves Ctrl+Z to undo alone: never the second action, never an action that is no undo", async () => {
+    const undo = vi.fn();
+    const open = vi.fn();
+    const reveal = vi.fn();
+    const user = userEvent.setup();
+    setup();
+    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: undo } });
+    show({
+      message: "Saved Lines.xlsx",
+      action: { label: "Open file", onAction: open, isUndo: false },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    });
+
+    await user.keyboard("{Control>}z{/Control}");
+    expect(open).not.toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+    expect(undo).not.toHaveBeenCalled();
+    expect(screen.getByText("Saved Lines.xlsx")).toBeInTheDocument();
+
+    show({
+      message: "Workspace renamed.",
+      action: { label: "Undo", onAction: undo },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    });
+    await user.keyboard("{Control>}z{/Control}");
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
   it("is closed by its close button", async () => {
     const user = userEvent.setup();
     setup();

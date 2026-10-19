@@ -8,6 +8,7 @@ import {
   formatDays,
   formatList,
   formatSize,
+  monthNames,
   formatLongDate,
   formatPercent,
   formatTime,
@@ -236,5 +237,29 @@ describe("formatDateRange", () => {
   it("writes one day once, and nothing for a range without days", () => {
     expect(formatDateRange({ from: "2026-09-01", to: "2026-09-01" })).toBe("1 Sept 2026");
     expect(formatDateRange({ from: null, to: null })).toBe("");
+  });
+});
+
+describe("monthNames", () => {
+  it("are the twelve short month names, January first, as a date writes them", () => {
+    const names = monthNames();
+    expect(names).toEqual([
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sept",
+      "Oct",
+      "Nov",
+      "Dec",
+    ]);
+    names.forEach((name, month) => {
+      const day = `2026-${String(month + 1).padStart(2, "0")}-15`;
+      expect(formatDate(day)).toBe(`15 ${name} 2026`);
+    });
   });
 });

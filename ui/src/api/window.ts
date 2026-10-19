@@ -1,9 +1,11 @@
-// Everything that talks to Tauri other than commands: the file dialog, the file manager, and the
-// files dragged over the window. Screens import from here and never from `@tauri-apps/*`.
+// Everything that talks to Tauri other than commands: the file dialogs, the file manager, the
+// files dragged over the window, and the opening of a file the app saved. Screens import from
+// here and never from `@tauri-apps/*`.
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { t } from "../text/i18n";
+import { t, type MessageKey } from "../text/i18n";
+import { api } from "./commands";
 import { IMPORT_EXTENSIONS } from "./files";
 
 /**
@@ -16,6 +18,38 @@ export function chooseImportFile(): Promise<string | null> {
     directory: false,
     filters: [{ name: t("import.fileFilter"), extensions: [...IMPORT_EXTENSIONS] }],
   });
+}
+
+/** The kinds of file an export saves, each offered alone in the save dialog. */
+export type FileFormat = "xlsx" | "csv" | "pdf" | "png" | "svg";
+
+/** The name of each kind of file in the filter of the save dialog. */
+const FORMAT_NAMES: Record<FileFormat, MessageKey> = {
+  xlsx: "export.fileFilter.xlsx",
+  csv: "export.fileFilter.csv",
+  pdf: "export.fileFilter.pdf",
+  png: "export.fileFilter.png",
+  svg: "export.fileFilter.svg",
+};
+
+/**
+ * Asks where to save, offering one format, with `defaultName` as the name the dialog proposes.
+ * Resolves with the path, or `null` when cancelled. The path is the one chosen, as it is: the
+ * save command refuses a name that does not end in the extension of its format.
+ */
+export function chooseSavePath(defaultName: string, format: FileFormat): Promise<string | null> {
+  return save({
+    defaultPath: defaultName,
+    filters: [{ name: t(FORMAT_NAMES[format]), extensions: [format] }],
+  });
+}
+
+/**
+ * Opens a file the app saved in this session with the system's program. Rejects with the kind
+ * `NotWritten` for any other file, and `Open` when the system could not open it.
+ */
+export async function openSavedFile(path: string): Promise<void> {
+  await api.exportOpen(path);
 }
 
 /**

@@ -118,6 +118,55 @@ function ShareBar({ holds, largest }: { holds: number; largest: number }): React
   );
 }
 
+/**
+ * The columns of the groups: the value grouped by, which names the row; a bar of its holds against
+ * those of the largest group (`largest`); its holds; and its lines (at most `mostLines`). Each
+ * sorts the groups, which the page holds whole.
+ */
+export function groupColumns(
+  dim: Dim,
+  largest: number,
+  mostLines: number,
+): DataTableColumn<Group>[] {
+  return [
+    {
+      id: "label",
+      header: dimName(dim),
+      cell: (group) => group.label,
+      isRowHeader: true,
+      size: { flex: 2, minChars: 20 },
+      // The blank group has no value: it stays last both ways, as a row without one does.
+      sortValue: (group) => (group.key === "" ? null : group.label),
+    },
+    {
+      id: "share",
+      header: t("breakdown.column.share"),
+      cell: (group) => <ShareBar holds={group.holds} largest={largest} />,
+      size: { flex: 3, minChars: 16 },
+      sortValue: (group) => group.holds,
+      sortFirst: "descending",
+    },
+    {
+      id: "holds",
+      header: t("breakdown.column.holds"),
+      cell: (group) => formatCount(group.holds),
+      kind: "number",
+      size: { chars: textChars(formatCount(largest)) },
+      sortValue: (group) => group.holds,
+      sortFirst: "descending",
+    },
+    {
+      id: "lines",
+      header: t("breakdown.column.lines"),
+      cell: (group) => formatCount(group.lines),
+      kind: "number",
+      size: { chars: textChars(formatCount(mostLines)) },
+      sortValue: (group) => group.lines,
+      sortFirst: "descending",
+    },
+  ];
+}
+
 /** What a line shows in the track of the bars: its disciplines, and the age of its oldest hold. */
 function LineFacts({ line }: { line: LineRow }) {
   const disciplines = line.disciplines.filter((discipline) => !isBlank(discipline));
@@ -227,43 +276,7 @@ export function ListMode({
   }
 
   const columns = useMemo(
-    (): DataTableColumn<Group>[] => [
-      {
-        id: "label",
-        header: dimName(shownDim),
-        cell: (group) => group.label,
-        isRowHeader: true,
-        size: { flex: 2, minChars: 20 },
-        // The blank group has no value: it stays last both ways, as a row without one does.
-        sortValue: (group) => (group.key === "" ? null : group.label),
-      },
-      {
-        id: "share",
-        header: t("breakdown.column.share"),
-        cell: (group) => <ShareBar holds={group.holds} largest={largest} />,
-        size: { flex: 3, minChars: 16 },
-        sortValue: (group) => group.holds,
-        sortFirst: "descending",
-      },
-      {
-        id: "holds",
-        header: t("breakdown.column.holds"),
-        cell: (group) => formatCount(group.holds),
-        kind: "number",
-        size: { chars: textChars(formatCount(largest)) },
-        sortValue: (group) => group.holds,
-        sortFirst: "descending",
-      },
-      {
-        id: "lines",
-        header: t("breakdown.column.lines"),
-        cell: (group) => formatCount(group.lines),
-        kind: "number",
-        size: { chars: textChars(formatCount(mostLines)) },
-        sortValue: (group) => group.lines,
-        sortFirst: "descending",
-      },
-    ],
+    () => groupColumns(shownDim, largest, mostLines),
     [shownDim, largest, mostLines],
   );
   const childColumns = useMemo(

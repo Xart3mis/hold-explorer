@@ -53,7 +53,13 @@ describe("the text catalog", () => {
   it("keeps the tone of PRODUCT.md: no em dash, no exclamation mark, none of the banned words", () => {
     for (const [key, text] of texts) {
       expect(text, key).not.toMatch(/\u2014|--|!/);
-      expect(text, key).not.toMatch(/\b(OK|Yes|Submit|Oops|Welcome back)\b/);
+      // "Yes" is banned as the label of a button (PRODUCT.md). `file.yes` is no label: it is the
+      // value a file writes in a cell of a yes-or-no column, beside `file.no`.
+      const banned =
+        key === "file.yes"
+          ? /\b(OK|Submit|Oops|Welcome back)\b/
+          : /\b(OK|Yes|Submit|Oops|Welcome back)\b/;
+      expect(text, key).not.toMatch(banned);
       expect(text.trim(), key).toBe(text);
       expect(text, key).not.toBe("");
     }

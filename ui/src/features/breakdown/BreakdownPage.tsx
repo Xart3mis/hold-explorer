@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { OPTIONAL_FIELDS } from "../../api/export";
+import { OPTIONAL_FIELDS } from "../../api/plantim";
 import { dimId, dimName } from "../../app/filters/dims";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";

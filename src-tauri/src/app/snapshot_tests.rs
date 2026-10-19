@@ -391,7 +391,7 @@ fn the_complete_default_filter_the_interface_sends_means_open_holds() {
 
 #[test]
 fn the_export_column_names_the_interface_shows_are_the_labels_of_the_fields() {
-    let json = include_str!("../../../ui/src/api/export-columns.json");
+    let json = include_str!("../../../ui/src/api/plantim-columns.json");
     let names: BTreeMap<String, String> = serde_json::from_str(json).unwrap();
     for field in Field::ALL {
         let key = serde_json::to_value(field).unwrap();

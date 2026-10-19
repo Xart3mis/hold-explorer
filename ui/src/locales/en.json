@@ -842,5 +842,192 @@
     "blockerMissingTitle": "This blocker is not in this snapshot",
     "blockerMissingText": "No open hold of the snapshot in view waits for this blocker. Select another snapshot to see it, or close the panel.",
     "errorBlocker": "The blocker could not be loaded"
+  },
+  "export": {
+    "fileFilter": {
+      "xlsx": "Excel workbook",
+      "csv": "CSV file",
+      "pdf": "PDF document",
+      "png": "PNG image",
+      "svg": "SVG image"
+    },
+    "fileView": {
+      "overview": "Overview",
+      "breakdown": "Breakdown",
+      "matrix": "Matrix",
+      "lines": "Lines",
+      "holds": "Holds",
+      "blockers": "Blockers",
+      "workbook": "Workbook",
+      "report": "Report",
+      "bars": "Holds by {{dim}}",
+      "topBlockers": "Top blockers",
+      "heatmap": "Holds by {{rows}} and {{cols}}",
+      "curve": "Solve order curve"
+    },
+    "saved": "Saved {{name}}",
+    "openFile": "Open file",
+    "openFailed": "The saved file could not be opened",
+    "saveFailed": "The file was not saved",
+    "copyFailed": "Nothing was copied",
+    "chooseAnother": "Choose another name",
+    "copiedRows_one": "Copied {{count, number}} row",
+    "copiedRows_other": "Copied {{count, number}} rows",
+    "copiedTable": "Copied the table",
+    "copiedLineIds": "Copied the line IDs",
+    "copiedChart": "Copied the chart",
+    "noWorkspace": "No workspace is open, so there is nothing to export. Open a workspace and try again.",
+    "showFailed": "The folder of the saved file could not be shown"
+  },
+  "file": {
+    "title": "Hold Explorer export",
+    "yes": "Yes",
+    "no": "No",
+    "about": {
+      "appVersion": "App version",
+      "file": "Imported from",
+      "filters": "Filters",
+      "madeAt": "Made at",
+      "noFilters": "No filters",
+      "noSnapshot": "No snapshot",
+      "offset": "UTC{offset}",
+      "rows": "Rows",
+      "snapshot": "Snapshot",
+      "workspace": "Workspace"
+    },
+    "chart": {
+      "bars": "Holds by {dim}",
+      "curve": "Lines freed by the solve order",
+      "fewer": "Fewer",
+      "freed": "$t(blockers.column.cumulative)",
+      "heatmap": "Holds by {rows} and {cols}",
+      "holds": "$t(breakdown.column.holds)",
+      "more": "More, up to {max}",
+      "mostFreed": "Step {step}: {freed} of {total} lines freed, 90 percent or more",
+      "noHolds": "No holds",
+      "step": "$t(blockers.column.step)",
+      "topBlockers": "$t(overview.topBlockers)"
+    },
+    "column": {
+      "about": {
+        "item": "Item",
+        "value": "Value"
+      },
+      "blockers": {
+        "blocker": "$t(blockers.column.blocker)",
+        "cumulative": "$t(blockers.column.cumulative)",
+        "discipline": "$t(blockers.column.discipline)",
+        "gain": "$t(blockers.column.gain)",
+        "holds": "$t(blockers.column.holds)",
+        "kind": "$t(blockers.column.kind)",
+        "step": "$t(blockers.column.step)"
+      },
+      "breakdown": {
+        "holds": "$t(breakdown.column.holds)",
+        "lines": "$t(breakdown.column.lines)"
+      },
+      "holds": {
+        "age": "$t(lines.column.age)",
+        "blocker": "$t(lines.column.blocker)",
+        "blockerType": "$t(lines.column.blockerType)",
+        "created": "$t(lines.column.created)",
+        "days": "$t(lines.column.days)",
+        "discipline": "$t(lines.column.discipline)",
+        "duration": "$t(lines.column.duration)",
+        "holdType": "$t(lines.column.holdType)",
+        "line": "$t(lines.column.line)",
+        "name": "$t(lines.column.name)",
+        "releasedOn": "$t(lines.column.releasedOn)",
+        "remark": "$t(lines.column.remark)",
+        "role": "$t(lines.column.role)",
+        "status": "$t(lines.column.status)",
+        "releaseRemark": "$t(import.field.ReleaseRemark)",
+        "sourceId": "$t(import.field.SourceId)"
+      },
+      "lines": {
+        "blockers": "$t(lines.column.blockers)",
+        "disciplines": "$t(lines.column.disciplines)",
+        "holdTypes": "$t(lines.column.holdTypes)",
+        "holds": "$t(lines.column.holds)",
+        "ldtSize": "$t(lines.column.ldtSize)",
+        "line": "$t(lines.column.line)",
+        "modelSize": "$t(lines.column.modelSize)",
+        "oldest": "$t(lines.column.oldest)",
+        "sizes": "$t(lines.column.sizes)",
+        "stressCalc": "$t(lines.column.stressCalc)"
+      },
+      "summary": {
+        "figure": "Figure",
+        "value": "Value"
+      }
+    },
+    "dim": {
+      "blocker": "$t(filters.dim.Blocker)",
+      "blockerType": "$t(filters.dim.BlockerType)",
+      "discipline": "$t(import.field.Discipline)",
+      "holdType": "$t(import.field.HoldType)",
+      "lineId": "$t(import.field.LineId)",
+      "modelSize": "$t(import.field.ModelSize)",
+      "name": "$t(import.field.Name)",
+      "remark": "$t(import.field.Remark)",
+      "role": "$t(import.field.Role)",
+      "stressCalc": "$t(import.field.StressCalc)"
+    },
+    "matrix": {
+      "other": "$t(breakdown.other)",
+      "total": "Total"
+    },
+    "report": {
+      "days": "{days} d",
+      "holdsShown": "Holds shown: {shown} of {count} open holds",
+      "oldestHolds": "Oldest open holds",
+      "page": "Page {page} of {pages}",
+      "releasedOnly": "Not shown: the filters keep released holds only, and this part is about open holds.",
+      "solveOrder": "Solve order",
+      "stale": "Holds open for {days} days or more: {count}",
+      "staleUnknown": "$t(overview.staleUnknownMatch)",
+      "stepsShown": "Steps shown: {shown} of {count}",
+      "title": "Hold status report",
+      "unknown": "Not known",
+      "version": "Hold Explorer {version}"
+    },
+    "sheet": {
+      "about": "About this export",
+      "disciplines": "Disciplines",
+      "holdTypes": "Hold types",
+      "holds": "Holds",
+      "lines": "Lines",
+      "matrixHolds": "Matrix of holds",
+      "matrixLines": "Matrix of lines",
+      "roles": "Roles",
+      "solveOrder": "Solve order",
+      "summary": "Summary",
+      "topBlockers": "$t(overview.topBlockers)",
+      "topLines": "$t(overview.topLines)"
+    },
+    "status": {
+      "open": "$t(lines.statusOpen)",
+      "released": "$t(lines.statusReleased)"
+    },
+    "summary": {
+      "all": {
+        "holds": "$t(overview.allHolds)",
+        "lines": "$t(overview.allLines)",
+        "median": "$t(overview.allMedianAge)"
+      },
+      "linesWithOneHold": "$t(overview.linesWithOneHold)",
+      "open": {
+        "holds": "$t(overview.openHolds)",
+        "lines": "$t(overview.linesOnHold)",
+        "median": "$t(overview.medianAge)"
+      },
+      "released": {
+        "holds": "$t(overview.releasedHolds)",
+        "lines": "$t(overview.releasedLines)",
+        "median": "$t(overview.releasedMedianDuration)"
+      },
+      "singleHoldLines": "$t(overview.singleHoldLines)",
+      "stale": "Holds open for 90 days or more"
+    }
   }
 }

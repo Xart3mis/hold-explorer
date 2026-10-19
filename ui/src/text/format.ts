@@ -120,6 +120,17 @@ export function formatDate(value: string): string {
   return moment ? date.format(moment) : value;
 }
 
+/**
+ * The twelve short month names, January first, exactly as `formatDate` writes them: `Sept` for
+ * September. A file the export writes names its months with these.
+ */
+export function monthNames(): string[] {
+  return Array.from({ length: 12 }, (_, month) => {
+    const parts = date.formatToParts(new Date(Date.UTC(2026, month, 15)));
+    return parts.find((part) => part.type === "month")?.value ?? "";
+  });
+}
+
 /** A date and its time on a 24-hour clock: `30 Sept 2026, 14:05`. Other text is returned as it is. */
 export function formatDateTime(value: string): string {
   const moment = parse(value);

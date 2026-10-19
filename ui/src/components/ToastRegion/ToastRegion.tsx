@@ -28,8 +28,16 @@ const TOAST = '[data-part="toast"]';
 export interface ToastAction {
   /** The label of the action, for example "Undo". */
   label: string;
-  /** Called once, when the action is pressed or `Ctrl+Z` is typed while the toast is the newest. */
+  /**
+   * Called once, when the action is pressed, or, for the undo of a toast, when `Ctrl+Z` is typed
+   * while the toast is the newest.
+   */
   onAction: () => void;
+  /**
+   * Whether the action undoes what was done, so that `Ctrl+Z` runs it; it does unless this says
+   * false. An action that is no undo, such as "Open file", is run by its button only.
+   */
+  isUndo?: boolean;
 }
 
 export interface ToastOptions {
@@ -37,6 +45,11 @@ export interface ToastOptions {
   message: string;
   /** An action on what was done. This is how undo is offered. */
   action?: ToastAction;
+  /**
+   * A second action, after the first and quieter in order only: "Show in folder" beside "Open
+   * file". `Ctrl+Z` never runs it. Given only with `action`.
+   */
+  secondaryAction?: ToastAction;
   /** An icon that says how it went. A failure that needs reading is a notice, not a toast. */
   tone?: "info" | "success";
 }
@@ -83,6 +96,7 @@ export interface ToastProps extends ToastOptions {
   /** The toast is fading out. */
   isLeaving?: boolean;
   onAction?: () => void;
+  onSecondaryAction?: () => void;
   onDismiss: () => void;
   /** Called with true while the pointer is on the toast or the focus is inside it. */
   onHold?: (held: boolean) => void;
@@ -95,9 +109,11 @@ export function Toast({
   id,
   message,
   action,
+  secondaryAction,
   tone,
   isLeaving = false,
   onAction,
+  onSecondaryAction,
   onDismiss,
   onHold,
   onLeft,
@@ -174,6 +190,15 @@ export function Toast({
           {action.label}
         </Button>
       )}
+      {action === undefined || secondaryAction === undefined ? null : (
+        <Button
+          variant="quiet"
+          className={styles.action}
+          {...(onSecondaryAction === undefined ? {} : { onPress: onSecondaryAction })}
+        >
+          {secondaryAction.label}
+        </Button>
+      )}
       <IconButton icon={X} label={t("common.dismiss")} onPress={onDismiss} />
     </div>
   );
@@ -181,7 +206,7 @@ export function Toast({
 
 interface TimedToastProps {
   item: ToastItem;
-  onAction: (id: string) => void;
+  onAction: (id: string, which: "action" | "secondaryAction") => void;
   onDismiss: (id: string) => void;
   onLeft: (id: string) => void;
 }
@@ -218,10 +243,14 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
       id={id}
       message={item.message}
       {...(item.action === undefined ? {} : { action: item.action })}
+      {...(item.secondaryAction === undefined ? {} : { secondaryAction: item.secondaryAction })}
       {...(item.tone === undefined ? {} : { tone: item.tone })}
       isLeaving={item.leaving}
       onAction={() => {
-        onAction(id);
+        onAction(id, "action");
+      }}
+      onSecondaryAction={() => {
+        onAction(id, "secondaryAction");
       }}
       onDismiss={() => {
         onDismiss(id);
@@ -320,26 +349,29 @@ export function ToastRegion({ children }: { children: ReactNode }) {
     [change, moveFocusFrom],
   );
 
+  /** Runs one action of a toast, once for the toast whichever it is, and then removes the toast. */
   const act = useCallback(
-    (id: string) => {
+    (id: string, which: "action" | "secondaryAction") => {
       const item = latest.current.find((candidate) => candidate.id === id);
-      if (!item?.action || item.leaving || acted.current.has(id)) return;
+      const action = item?.[which];
+      if (!item || !action || item.leaving || acted.current.has(id)) return;
       acted.current.add(id);
-      item.action.onAction();
+      action.onAction();
       dismiss(id);
     },
     [dismiss],
   );
 
-  // Ctrl+Z triggers the action of the newest toast. A text field keeps its own undo.
+  // Ctrl+Z triggers the undo of the newest toast: its first action, unless that is no undo. A
+  // text field keeps its own undo.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "z" || !(event.ctrlKey || event.metaKey)) return;
       if (event.shiftKey || event.altKey || isTextEntry(event.target)) return;
       const newest = latest.current.filter((item) => !item.leaving).at(-1);
-      if (!newest?.action) return;
+      if (!newest?.action || newest.action.isUndo === false) return;
       event.preventDefault();
-      act(newest.id);
+      act(newest.id, "action");
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {

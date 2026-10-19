@@ -4,7 +4,7 @@ import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { OPTIONAL_FIELDS } from "../../api/export";
+import { OPTIONAL_FIELDS } from "../../api/plantim";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import { useSelectedRows } from "../../app/selectedRows";
