@@ -1257,7 +1257,7 @@ A destination that is not built yet opens a screen made of the page header and t
 - **Spacing:** the header starts at the content padding (`--layout-page-padding-x`, `--layout-page-padding-y`) and is followed by a `--space-4` gap. A `--space-2` gap separates the breadcrumb from the title. The header has no border and no background of its own.
 - **Rules:** one page title per page, and it names the destination or the step ("Lines", "Review import"). No icon beside it. A destination has no breadcrumb above its title; a page below a destination has one.
 - **Loading:** the title and the breadcrumb are known before the data is and never show a skeleton.
-- **Notice of an action:** what an action of the header started and failed (an export) is a danger notice directly under the header, before the view switch and the bar, followed by a `--space-4` gap.
+- **Notice of an action:** what an action of the page started and failed (an export) is a danger notice directly under the header, before the view switch and the bar, followed by a `--space-4` gap.
 
 ### Breadcrumb
 

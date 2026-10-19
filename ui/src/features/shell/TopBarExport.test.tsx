@@ -75,7 +75,7 @@ describe("the Export menu sits in the top bar", () => {
 });
 
 describe("where there is nothing to export", () => {
-  it.each(["/settings"])(
+  it.each(["/settings", "/history", "/people", "/import"])(
     "%s shows the button unavailable, saying where export is",
     async (path) => {
       const { user } = renderApp({ path, start: openStart() });

@@ -28,6 +28,7 @@ const NO_SLOT: TopBarSlotValue = {
   claim: () => () => undefined,
 };
 
+/** Outside the shell's provider there is no slot, and `TopBarExport` renders nothing, by design. */
 const TopBarSlotContext = createContext<TopBarSlotValue>(NO_SLOT);
 
 /** Holds what the page and the top bar share: the element of the slot and who fills it. */

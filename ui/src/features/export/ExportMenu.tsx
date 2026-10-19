@@ -102,8 +102,9 @@ export interface ExportMenuProps {
  * The Export button where there is nothing to export: in the top bar where the menu stands once
  * there is something, unavailable, and described to assistive technology by why. A screen without
  * a snapshot says to import one (`TopBarExport` carries it there); every other page says where
- * export is found. It opens nothing, and `Ctrl+E` does nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
- * shown" (DESIGN.md, Menu): the action is fixed, and the page always has it.
+ * export is found. It opens nothing, and `Ctrl+E` does nothing, as no shortcut is registered. The
+ * one exception to "a menu with nothing to offer is not shown" (DESIGN.md, Menu): the action is
+ * fixed, and the page always has it.
  */
 export function ExportMenuInert({
   description = t("export.menu.noSnapshot"),
@@ -200,12 +201,11 @@ function hasPagedRows(state: ScreenState): boolean {
 
 /**
  * The Export menu of a data screen, which the page puts in the top bar beside Import
- * (`TopBarExport`). Each item exports at once
- * with the columns and rows remembered for the screen; an item that saves ends in an ellipsis,
- * since the save dialog follows. What does not apply to the screen is left out: CSV and the copies
- * of the table on the Overview, whose view is several tables; the selected rows while none is
- * selected; the line IDs on the matrix. The Overview's four charts are in a submenu of each
- * action. `Ctrl+E` saves the view as Excel, as the first item does.
+ * (`TopBarExport`). Each item exports at once with the columns and rows remembered for the screen;
+ * an item that saves ends in an ellipsis, since the save dialog follows. What does not apply to
+ * the screen is left out: CSV and the copies of the table on the Overview, whose view is several
+ * tables; the selected rows while none is selected; the line IDs on the matrix. The Overview's four
+ * charts are in a submenu of each action. `Ctrl+E` saves the view as Excel, as the first item does.
  *
  * While an export runs the button shows it (and the phase of a save in its name) and opens
  * nothing, so no second export starts; while the screen has nothing to export yet, or a workspace

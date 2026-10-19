@@ -25,8 +25,9 @@ export interface TopBarProps {
 /**
  * The top bar, left to right: the name of the app, the workspace switcher, the snapshot selector,
  * Export, and Import. The Export menu is the one the page in view puts in the slot
- * (`TopBarExport`); a page with nothing to export leaves the unavailable button there. While no workspace is open there is nothing to switch and no sidebar, so the two
- * pages that exist then, Workspaces and Settings, are listed where the switcher would be.
+ * (`TopBarExport`); a page with nothing to export leaves the unavailable button there. While no
+ * workspace is open there is nothing to switch and no sidebar, so the two pages that exist then,
+ * Workspaces and Settings, are listed where the switcher would be.
  */
 export function TopBar({ start, destinations, renameErrorId, onProblem }: TopBarProps) {
   const { pathname } = useLocation();
