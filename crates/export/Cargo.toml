@@ -1,0 +1,33 @@
+[package]
+name = "hx-export"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# What `krilla` (the PDF report) needs.
+rust-version = "1.92"
+
+[dependencies]
+chrono.workspace = true
+hx-core = { path = "../core" }
+krilla.workspace = true
+krilla-svg.workspace = true
+resvg.workspace = true
+rust_xlsxwriter.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+ttf-parser.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+calamine.workspace = true
+csv.workspace = true
+hx-synth = { path = "../synth" }
+sha2.workspace = true
+# Already in the lock through calamine and rust_xlsxwriter, with the same features: the tests
+# read the package XML of a workbook.
+zip.workspace = true
+
+[features]
+ts = ["dep:ts-rs", "hx-core/ts"]

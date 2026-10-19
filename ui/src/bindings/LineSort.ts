@@ -4,4 +4,4 @@
  * How `lines` orders its result; ties end in line id order. A line without the sorted value
  * (no size, blank stress calc, no age) comes last.
  */
-export type LineSort = "HoldsDesc" | "Easiest" | "OldestFirst" | "LineId" | "Blockers" | "Disciplines" | "ModelSize" | "LdtSize" | "StressCalc";
+export type LineSort = "HoldsDesc" | "Easiest" | "OldestFirst" | "LineId" | "Blockers" | "Disciplines" | "ModelSize" | "LdtSize" | "StressCalc" | "HoldTypes" | "SizeMismatch";

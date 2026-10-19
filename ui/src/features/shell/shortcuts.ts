@@ -1,6 +1,6 @@
 // Keyboard shortcuts are registered here and nowhere else. The shortcuts of the destinations
-// come from the destination list; the one shortcut that is not a destination's is named below.
-import { useEffect } from "react";
+// come from the destination list; the two shortcuts that are not a destination's are named below.
+import { useEffect, useMemo, useRef } from "react";
 import { needsWorkspace, type Destination } from "../../app/destinations";
 import { IN_PAGE_ATTRIBUTE } from "../../components";
 import { t } from "../../text/i18n";
@@ -8,10 +8,19 @@ import { t } from "../../text/i18n";
 /** Starts an import. */
 export const IMPORT_SHORTCUT = "Ctrl+I";
 
+/** Saves the view of a data screen as an Excel file: the first item of its Export menu. */
+export const EXPORT_SHORTCUT = "Ctrl+E";
+
 export interface ShortcutBinding {
   /** Modifiers, then the key, joined by `+`: `Ctrl+1`, `Ctrl+,`, `/`. */
   shortcut: string;
   run: () => void;
+  /**
+   * The shortcut acts on what the page shows, so it fires only while the page has the keys: never
+   * while a text field has focus, with Ctrl or without, and never while an overlay is open, a
+   * popover included.
+   */
+  isPageOnly?: boolean;
 }
 
 interface Parsed {
@@ -74,12 +83,18 @@ function isListOpen(): boolean {
   );
 }
 
+/** Whether an overlay of the page is open: a menu, a list, or a popover. */
+function isOverlayOpen(): boolean {
+  return isListOpen() || document.querySelector('[role="dialog"]') !== null;
+}
+
 /**
  * Runs the binding a key press matches and keeps the key from the page. A shortcut does not fire
  * while a text field has focus, unless it has Ctrl: a plain key there is text. Nor does any
  * shortcut fire while a menu or a list is open: the page behind it does not change under it. A
- * key that is held down, or that something else has handled, is left alone. Returns whether a
- * binding ran.
+ * shortcut of the page (`isPageOnly`) holds back in a text field whatever its modifiers, and
+ * while a popover is open as well. A key that is held down, or that something else has handled,
+ * is left alone. Returns whether a binding ran.
  */
 export function handleShortcut(
   event: KeyboardEvent,
@@ -90,7 +105,8 @@ export function handleShortcut(
   const typing = isTextEntry(event.target);
   for (const binding of bindings) {
     if (!matchesShortcut(event, binding.shortcut)) continue;
-    if (typing && !parse(binding.shortcut).ctrl) continue;
+    if (typing && (binding.isPageOnly === true || !parse(binding.shortcut).ctrl)) continue;
+    if (binding.isPageOnly === true && isOverlayOpen()) continue;
     event.preventDefault();
     binding.run();
     return true;
@@ -133,6 +149,35 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [bindings]);
+}
+
+/**
+ * Listens for `EXPORT_SHORTCUT` while the component that calls it is shown, and runs `run` for it;
+ * `null` while there is nothing to export, or while an export runs. It belongs to the page: it
+ * fires also while the focus is in a table, and never in a text field or under an overlay.
+ */
+export function useExportShortcut(run: (() => void) | null): void {
+  const latest = useRef(run);
+  useEffect(() => {
+    latest.current = run;
+  });
+  const isOn = run !== null;
+  const bindings = useMemo(
+    (): ShortcutBinding[] =>
+      isOn
+        ? [
+            {
+              shortcut: EXPORT_SHORTCUT,
+              isPageOnly: true,
+              run: () => {
+                latest.current?.();
+              },
+            },
+          ]
+        : [],
+    [isOn],
+  );
+  useShortcuts(bindings);
 }
 
 /** A shortcut as a tooltip shows it, with the names of the keys taken from the text catalog. */

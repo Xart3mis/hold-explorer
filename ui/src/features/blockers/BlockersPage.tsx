@@ -1,9 +1,10 @@
 import { Upload } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { useFilters } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotQuery } from "../../app/view";
@@ -18,7 +19,9 @@ import {
   EmptyState,
   ErrorState,
   LineChart,
+  nextSort,
   SectionTitle,
+  useTableSort,
   type ChartView,
   type LinePoint,
 } from "../../components";
@@ -26,9 +29,10 @@ import { formatCount, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useSelection } from "../detail/selection";
 import { useTableDetailFocus } from "../detail/tableFocus";
+import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
-import { selectedBlocker } from "./address";
+import { BLOCKERS_PATH, searchWithStepSort, selectedBlocker, stepSort } from "./address";
 import styles from "./BlockersPage.module.css";
 import { stepColumns } from "./columns";
 
@@ -139,9 +143,11 @@ function NoSteps() {
  * blocker. The keys of the table are those of Lines: Enter on a step opens its blocker with the
  * focus on the heading of the panel, and Escape closes it and gives the focus back to the step.
  * The steps come in one answer, and the table is handed them 200 at a time as it is scrolled, up
- * to 5,000, as Lines loads its rows. The curve draws by default the steps that free most lines
- * (`steps_to_most`, at least ten), and every step on request; its table view and the steps table
- * hold every step either way.
+ * to 5,000, as Lines loads its rows. A header sorts the steps, which asks for nothing: the table
+ * is handed them in the sorted order, and the address keeps the sort (`sort=<column>&dir=`); the
+ * curve keeps the order of the steps whatever the sort. The curve draws by default the steps
+ * that free most lines (`steps_to_most`, at least ten), and every step on request; its table
+ * view and the steps table hold every step either way.
  *
  * Another filter is read anew; the steps of before stay on screen, dimmed, until the new ones are
  * there, and the table then returns to its top. A workspace without snapshots gets an empty state
@@ -151,6 +157,7 @@ export function BlockersPage() {
   const { start } = useShell();
   const hasSnapshot = start.open !== null && start.open.selected !== null;
   const location = useLocation();
+  const navigate = useNavigate();
   const { spec } = useFilters();
   const { select } = useSelection();
   const titleId = useId();
@@ -178,27 +185,41 @@ export function BlockersPage() {
 
   const rows = shown?.solve.rows ?? NO_ROWS;
   const selectedKey = selectedBlocker(location.search);
+  // The step of the selection, in the order of the steps: the curve's.
   const selectedIndex = useMemo(() => {
     const index = rows.findIndex((row) => row.key === selectedKey);
     return index === -1 ? null : index;
   }, [rows, selectedKey]);
 
-  // How many steps the table is handed, for the result on screen: 200 more each time its end
-  // comes near, up to the limit, and always as many as cover the selected step. Those stay
-  // handed once the selection ends, so the row the user was on does not leave the table.
+  // The steps in the order of the table: the solve order, or the sort its address names.
+  const sort = stepSort(location.search);
+  const sortedRows = useTableSort(rows, columns, sort);
+  const tableIndex = useMemo(() => {
+    const index = sortedRows.findIndex((row) => row.key === selectedKey);
+    return index === -1 ? null : index;
+  }, [sortedRows, selectedKey]);
+
+  // How many steps the table is handed, for the result on screen in its sort: 200 more each time
+  // its end comes near, up to the limit, and always as many as cover the selected step in the
+  // table's order. Those stay handed once the selection ends, so the row the user was on does not
+  // leave the table. Another sort is another result: the table returns to its top, or to the
+  // selected step, and is handed 200 again.
   const resultKey = shown?.key ?? "";
-  const [handed, setHanded] = useState({ key: resultKey, count: STEP_ROWS });
-  const handedCount = handed.key === resultKey ? handed.count : STEP_ROWS;
-  const covering = selectedIndex === null ? 0 : Math.min(rows.length, rowsFor(selectedIndex));
-  if (covering > handedCount) setHanded({ key: resultKey, count: covering });
+  const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
+  // The steps selected beside the open one, by step key, for the result on screen in its sort.
+  const selected = useSelectedRows(tableKey);
+  const [handed, setHanded] = useState({ key: tableKey, count: STEP_ROWS });
+  const handedCount = handed.key === tableKey ? handed.count : STEP_ROWS;
+  const covering = tableIndex === null ? 0 : Math.min(rows.length, rowsFor(tableIndex));
+  if (covering > handedCount) setHanded({ key: tableKey, count: covering });
   const tableCount = Math.min(rows.length, Math.max(handedCount, covering));
   const tableRows = useMemo(
-    () => (tableCount >= rows.length ? rows : rows.slice(0, tableCount)),
-    [rows, tableCount],
+    () => (tableCount >= sortedRows.length ? sortedRows : sortedRows.slice(0, tableCount)),
+    [sortedRows, tableCount],
   );
   const canHandMore = tableCount < rows.length && tableCount < MAX_STEP_ROWS;
   const handMore = () => {
-    setHanded({ key: resultKey, count: Math.min(MAX_STEP_ROWS, tableCount + STEP_ROWS) });
+    setHanded({ key: tableKey, count: Math.min(MAX_STEP_ROWS, tableCount + STEP_ROWS) });
   };
 
   // The steps the curve draws: those that free most lines, at least ten, up to the selected
@@ -228,9 +249,30 @@ export function BlockersPage() {
   // curve opens it as well, and is given the focus back when it did.
   const { listenTo, listenBeside, chosen } = useTableDetailFocus({ selectedKey });
 
+  // What a file of the page is made from: the steps in the order of the table, and the curve as
+  // it is drawn, its head or every step (0).
+  const exports = usePageExports();
+  const shownKeys = useMemo(() => sortedRows.map(stepKey), [sortedRows]);
+  const exportMenu = (
+    <ExportMenu
+      screen="blockers"
+      state={{ screen: "blockers", shownKeys }}
+      loaded={tableRows.length}
+      // Every step of the result is in the file, also those the table has not been handed yet.
+      total={sortedRows.length}
+      selected={[...selected.keys]}
+      charts={[
+        { choice: { kind: "Curve", steps: showAll ? 0 : headTo }, label: t("blockers.curve") },
+      ]}
+      // The steps on screen are those of the filters, not the ones before while they are read.
+      isReady={own}
+      exports={exports}
+    />
+  );
+
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.blockers")}>
+      <Page title={t("destinations.name.blockers")} actions={<ExportMenuInert />}>
         <EmptyState
           title={t("blockers.emptyTitle")}
           action={
@@ -271,7 +313,13 @@ export function BlockersPage() {
   };
 
   return (
-    <Page title={t("destinations.name.blockers")} fill bar={<FilterBar />}>
+    <Page
+      title={t("destinations.name.blockers")}
+      fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
+      bar={<FilterBar />}
+    >
       <div data-part="blockers" className={styles.content}>
         {query.isError ? (
           <ErrorState
@@ -345,16 +393,26 @@ export function BlockersPage() {
               leftOutText={(headers) => t("blockers.leftOut", { columns: formatList(headers) })}
               rows={tableRows}
               rowKey={stepKey}
+              {...(sort === undefined ? {} : { sort })}
+              onSortChange={(pressed) => {
+                const next = nextSort(columns, sort, pressed.column);
+                void navigate(`${BLOCKERS_PATH}${searchWithStepSort(location.search, next)}`, {
+                  replace: true,
+                });
+              }}
               height="fill"
               isLoading={isLoading}
               isStale={isStale}
-              resultKey={resultKey}
+              resultKey={tableKey}
               // How many steps there are is said once it is known: not on a first load.
               {...(shown === null ? {} : { totalRows: rows.length, countText: stepCount })}
               {...(canHandMore ? { onLoadMore: handMore } : {})}
               {...(isEmpty ? { emptyState: <NoSteps /> } : {})}
               onSelectionChange={selectStep}
               selectedKey={selectedKey}
+              selectedKeys={selected.keys}
+              onSelectedKeysChange={selected.set}
+              selectedText={(count) => t("blockers.selected", { count })}
               revealSelected
             />
           </div>

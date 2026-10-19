@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportColumn, OPTIONAL_FIELDS } from "./export";
+import { exportColumn, OPTIONAL_FIELDS } from "./plantim";
 
 describe("the fields of an export", () => {
   it("names the fields an import may be without: all but the three it cannot be made without", () => {

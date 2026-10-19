@@ -200,6 +200,20 @@
   --row-fill: var(--color-accent-subtle-hover);
 }
 
+/*
+ * The open row among other selected rows, or taken out of a selection of others: a deeper tint.
+ * The focus ring is the only line around a row, so the open row and the focused one never look
+ * alike.
+ */
+.table[data-selectable] .row[data-open] {
+  --row-fill: var(--color-accent-open);
+}
+
+.table[data-selectable] .row[data-open][data-hovered],
+.table[data-selectable] .row[data-open][data-pressed] {
+  --row-fill: var(--color-accent-open-hover);
+}
+
 .cell {
   display: flex;
   align-items: center;

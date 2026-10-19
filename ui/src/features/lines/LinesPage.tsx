@@ -4,9 +4,10 @@ import { RadioButton, RadioField, RadioGroup } from "react-aria-components";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { OPTIONAL_FIELDS } from "../../api/export";
+import { OPTIONAL_FIELDS } from "../../api/plantim";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { useSnapshotPages, type SnapshotPages } from "../../app/view";
@@ -33,6 +34,8 @@ import { cx } from "../../components/cx";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useTableDetailFocus } from "../detail/tableFocus";
+import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
+import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import {
@@ -222,6 +225,29 @@ export function LinesPage() {
   const active: Shown = mode === "lines" ? { mode, pages: lines } : { mode, pages: holds };
   const { shown, isOwn } = useShown(active);
   const shownMode: LinesMode = shown?.mode ?? mode;
+  // The rows selected beside the open one, by line ID or hold position, for the result on screen:
+  // another filter, sort, mode, or snapshot is another result, and clears them. The export menu
+  // reads them from here.
+  const selected = useSelectedRows(`${shown?.mode ?? ""}|${shown?.pages.resultKey ?? ""}`);
+  const exports = usePageExports();
+  // What a file of the page is made from: the rows of the mode in view, in their order.
+  const exportState: ScreenState =
+    state.rows === "lines"
+      ? { screen: "lines", query: state.query }
+      : { screen: "holds", sort: state.sort, reverse: state.reverse };
+  const exportMenu = (
+    <ExportMenu
+      screen={exportState.screen === "lines" ? "lines" : "holds"}
+      state={exportState}
+      loaded={shown?.pages.rows.length ?? 0}
+      total={shown?.pages.total}
+      selected={[...selected.keys]}
+      // Only the rows of the address's own result are exported: while rows of the other mode, or
+      // of other filters or another sort, stand in, the loaded count and the selection are theirs.
+      isReady={isOwn && !active.pages.isPlaceholderData}
+      exports={exports}
+    />
+  );
 
   const lineWidest = shown?.mode === "lines" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
   const holdWidest = shown?.mode === "holds" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
@@ -247,7 +273,7 @@ export function LinesPage() {
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.lines")}>
+      <Page title={t("destinations.name.lines")} actions={<ExportMenuInert />}>
         <EmptyState
           title={t("lines.emptyTitle")}
           action={
@@ -322,12 +348,18 @@ export function LinesPage() {
       }),
     onSelectionChange: select,
     selectedKey: selectionOf(location.search, shownMode),
+    selectedKeys: selected.keys,
+    onSelectedKeysChange: selected.set,
+    selectedText: (count: number) =>
+      t(shownMode === "holds" ? "lines.selectedHolds" : "lines.selectedLines", { count }),
   } as const;
 
   return (
     <Page
       title={t("destinations.name.lines")}
       fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
           aria-label={t("lines.modes")}

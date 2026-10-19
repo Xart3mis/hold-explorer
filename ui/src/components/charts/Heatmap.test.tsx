@@ -292,6 +292,34 @@ describe("Heatmap", () => {
     ]);
   });
 
+  it("sorts its table view by any column, the folded row last in both directions", async () => {
+    const user = userEvent.setup();
+    render(heatmap({ view: "table" }));
+    const table = screen.getByRole("grid", { name: "Holds by discipline and hold type, table" });
+    const headers = within(table).getAllByRole("columnheader");
+    for (const header of headers) expect(header).toHaveAttribute("aria-sort", "none");
+    const names = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getByRole("rowheader").textContent);
+    const design = within(table).getByRole("columnheader", { name: "Design" });
+    await user.click(design);
+    expect(design).toHaveAttribute("aria-sort", "descending");
+    expect(names()).toEqual(["Piping", "Civil", "Other"]);
+    await user.click(design);
+    expect(design).toHaveAttribute("aria-sort", "ascending");
+    expect(names()).toEqual(["Civil", "Piping", "Other"]);
+    const discipline = within(table).getByRole("columnheader", { name: "Discipline" });
+    await user.click(discipline);
+    await user.click(discipline);
+    expect(discipline).toHaveAttribute("aria-sort", "descending");
+    expect(names()).toEqual(["Piping", "Civil", "Other"]);
+    // The folded column sorts as any other; its row stays last.
+    await user.click(within(table).getByRole("columnheader", { name: "Other" }));
+    expect(names()).toEqual(["Civil", "Piping", "Other"]);
+  });
+
   it("builds its table view once for the same numbers, not at every render", () => {
     // A row that counts how often its label is read: the table view reads it when it builds its
     // rows, and a heatmap that builds them at every render would read it again.

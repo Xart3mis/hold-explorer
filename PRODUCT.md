@@ -39,7 +39,7 @@ It speaks like a careful colleague who has read the whole export: states what it
 - **Plain.** Short sentences. Common words. "12 rows were skipped" and not "Some records could not be processed".
 - **Specific.** Give the number, the name, the row, the file. "Row 418: release date `31/02/2026` cannot be read" beats "Invalid date".
 - **No marketing voice.** No exclamation marks, no "Welcome back", no "Oops", no "powerful", no praise for the user, no emoji.
-- **Labels are names; actions are verbs.** A destination is "Lines". A button is "Import", "Export", "Go to Overview". A button never says "OK", "Yes", or "Submit".
+- **Labels are names; actions are verbs.** A destination is "Lines". A button is "Import", "Export", "Go to Overview". A button never says "OK", "Yes", or "Submit". "Yes" and "No" are allowed as values written into the cells of a file (a yes-or-no column of an export), never as a label.
 - **Sentence case everywhere.** "Open history bundle", not "Open History Bundle".
 - **An error says what happened, why, and how to fix it**, in that order, and never blames the user.
 - **A destructive action is undone, not confirmed.** The text after the action says what was done and offers "Undo".

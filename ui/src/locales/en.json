@@ -36,6 +36,8 @@
     "loading": "Loading rows",
     "loadingMore": "Loading more rows",
     "countLoadingMore": "{{line}}. Loading more rows",
+    "countSelected": "{{line}}, {{selected}}",
+    "selectedCount": "{{count, number}} selected",
     "actions": "Actions",
     "childLoading": "Loading the rows of this group"
   },
@@ -663,7 +665,11 @@
     "errorLines": "The lines could not be loaded",
     "errorHolds": "The holds could not be loaded",
     "leftOutLines": "Not shown at this width: {{columns}}. Open a line to read them.",
-    "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them."
+    "leftOutHolds": "Not shown at this width: {{columns}}. Open a hold to read them.",
+    "selectedLines_one": "{{count, number}} line selected",
+    "selectedLines_other": "{{count, number}} lines selected",
+    "selectedHolds_one": "{{count, number}} hold selected",
+    "selectedHolds_other": "{{count, number}} holds selected"
   },
   "breakdown": {
     "modes": "Show the holds as",
@@ -689,6 +695,8 @@
     },
     "count_one": "{{count, number}} group",
     "count_other": "{{count, number}} groups",
+    "selected_one": "{{count, number}} group selected",
+    "selected_other": "{{count, number}} groups selected",
     "oldest": "Oldest {{age}}",
     "openAll_one": "Open the {{count, number}} line in Lines",
     "openAll_other": "Open all {{count, number}} lines in Lines",
@@ -732,6 +740,8 @@
     "countLimited_one": "{{shown, number}} of {{count, number}} step is shown. Narrow the filters to reach the others.",
     "countLimited_other": "{{shown, number}} of {{count, number}} steps are shown. Narrow the filters to reach the others.",
     "leftOut": "Not shown at this width: {{columns}}. Open a blocker to read them.",
+    "selected_one": "{{count, number}} step selected",
+    "selected_other": "{{count, number}} steps selected",
     "error": "The solve order could not be loaded",
     "emptyTitle": "This workspace has no snapshots",
     "emptyText": "Import a holds export to add the first snapshot. Blockers then ranks what its holds wait for by the lines each one frees.",
@@ -832,5 +842,264 @@
     "blockerMissingTitle": "This blocker is not in this snapshot",
     "blockerMissingText": "No open hold of the snapshot in view waits for this blocker. Select another snapshot to see it, or close the panel.",
     "errorBlocker": "The blocker could not be loaded"
+  },
+  "export": {
+    "fileFilter": {
+      "xlsx": "Excel workbook",
+      "csv": "CSV file",
+      "pdf": "PDF document",
+      "png": "PNG image",
+      "svg": "SVG image"
+    },
+    "fileView": {
+      "overview": "Overview",
+      "breakdown": "Breakdown",
+      "matrix": "Matrix",
+      "lines": "Lines",
+      "holds": "Holds",
+      "blockers": "Blockers",
+      "workbook": "Workbook",
+      "report": "Report",
+      "bars": "Holds by {{dim}}",
+      "topBlockers": "Top blockers",
+      "heatmap": "Holds by {{rows}} and {{cols}}",
+      "curve": "Solve order curve"
+    },
+    "saved": "Saved {{name}}",
+    "openFile": "Open file",
+    "openFailed": "The saved file could not be opened",
+    "saveFailed": "The file was not saved",
+    "dialogFailed": "The save dialog could not be opened, so nothing was saved",
+    "copyFailed": "Nothing was copied",
+    "chooseAnother": "Choose another name",
+    "copiedRows_one": "Copied {{count, number}} row",
+    "copiedRows_other": "Copied {{count, number}} rows",
+    "copiedTable": "Copied the table",
+    "copiedLineIds": "Copied the line IDs",
+    "copiedChart": "Copied the chart",
+    "noWorkspace": "No workspace is open, so there is nothing to export. Open a workspace and try again.",
+    "showFailed": "The folder of the saved file could not be shown",
+    "menu": {
+      "label": "Export",
+      "name": "Export",
+      "noSnapshot": "Import a snapshot to export",
+      "excel": "Excel, this view…",
+      "workbook": "Full workbook…",
+      "csv": "CSV…",
+      "csvHolds": "CSV (holds)…",
+      "report": "Status report (PDF)…",
+      "copyTable": "Copy table",
+      "copyHolds": "Copy table (holds)",
+      "copySelected": "Copy selected rows ({{count, number}})",
+      "copyLineIds": "Copy line IDs",
+      "chartPng": "Chart as PNG…",
+      "chartSvg": "Chart as SVG…",
+      "copyChart": "Copy chart",
+      "chartsPng": "Chart as PNG",
+      "chartsSvg": "Chart as SVG",
+      "copyCharts": "Copy chart",
+      "saveChart": "{{chart}}…",
+      "excelAll": "Excel, this view (all rows)…",
+      "csvAll": "CSV (all rows)…",
+      "copyTableAll": "Copy table (all rows)",
+      "copyLineIdsAll": "Copy line IDs (all rows)",
+      "choice": "Columns and rows…",
+      "noted": {
+        "excel": "Excel, this view ({{note}})…",
+        "workbook": "Full workbook ({{note}})…",
+        "csv": "CSV ({{note}})…",
+        "report": "Status report (PDF, {{note}})…",
+        "copyTable": "Copy table ({{note}})",
+        "copyLineIds": "Copy line IDs ({{note}})",
+        "chartPng": "Chart as PNG ({{note}})…",
+        "chartSvg": "Chart as SVG ({{note}})…",
+        "copyChart": "Copy chart ({{note}})",
+        "chartsPng": "Chart as PNG ({{note}})",
+        "chartsSvg": "Chart as SVG ({{note}})",
+        "copyCharts": "Copy chart ({{note}})"
+      },
+      "note": {
+        "Open": "open holds",
+        "Released": "released holds",
+        "All": "all holds",
+        "allRows": "all rows",
+        "both": "{{status}}, all rows"
+      },
+      "phase": {
+        "Reading": "Export, reading the view…",
+        "Writing": "Export, writing the file…"
+      }
+    },
+    "panel": {
+      "title": "Columns and rows of {{screen}}",
+      "rows": "Rows",
+      "rowsAll": "All {{count, number}}",
+      "rowsAllUncounted": "All",
+      "rowsLoaded": "Loaded {{count, number}}",
+      "rowsSelected": "Selected {{count, number}}",
+      "rowsByStatus": "The rows on screen are those of the filters' status, so every row of this status is written.",
+      "status": "Status",
+      "statusFilters": "As the filters",
+      "statusOpen": "Open",
+      "statusReleased": "Released",
+      "statusAll": "All",
+      "columns": "Columns",
+      "allColumns": "All",
+      "allColumnsName": "All columns",
+      "rowName": "Only the row's name",
+      "always": "Always written",
+      "save": "Save as default for {{screen}}"
+    }
+  },
+  "file": {
+    "title": "Hold Explorer export",
+    "yes": "Yes",
+    "no": "No",
+    "about": {
+      "appVersion": "App version",
+      "file": "Imported from",
+      "filters": "Filters",
+      "madeAt": "Made at",
+      "noFilters": "No filters",
+      "noSnapshot": "No snapshot",
+      "offset": "UTC{offset}",
+      "rows": "Rows",
+      "snapshot": "Snapshot",
+      "workspace": "Workspace"
+    },
+    "chart": {
+      "bars": "Holds by {dim}",
+      "curve": "Lines freed by the solve order",
+      "fewer": "Fewer",
+      "freed": "$t(blockers.column.cumulative)",
+      "heatmap": "Holds by {rows} and {cols}",
+      "holds": "$t(breakdown.column.holds)",
+      "more": "More, up to {max}",
+      "mostFreed": "Step {step}: {freed} of {total} lines freed, 90 percent or more",
+      "noHolds": "No holds",
+      "step": "$t(blockers.column.step)",
+      "topBlockers": "$t(overview.topBlockers)"
+    },
+    "column": {
+      "about": {
+        "item": "Item",
+        "value": "Value"
+      },
+      "blockers": {
+        "blocker": "$t(blockers.column.blocker)",
+        "cumulative": "$t(blockers.column.cumulative)",
+        "discipline": "$t(blockers.column.discipline)",
+        "gain": "$t(blockers.column.gain)",
+        "holds": "$t(blockers.column.holds)",
+        "kind": "$t(blockers.column.kind)",
+        "step": "$t(blockers.column.step)"
+      },
+      "breakdown": {
+        "holds": "$t(breakdown.column.holds)",
+        "lines": "$t(breakdown.column.lines)"
+      },
+      "holds": {
+        "age": "$t(lines.column.age)",
+        "blocker": "$t(lines.column.blocker)",
+        "blockerType": "$t(lines.column.blockerType)",
+        "created": "$t(lines.column.created)",
+        "days": "$t(lines.column.days)",
+        "discipline": "$t(lines.column.discipline)",
+        "duration": "$t(lines.column.duration)",
+        "holdType": "$t(lines.column.holdType)",
+        "line": "$t(lines.column.line)",
+        "name": "$t(lines.column.name)",
+        "releasedOn": "$t(lines.column.releasedOn)",
+        "remark": "$t(lines.column.remark)",
+        "role": "$t(lines.column.role)",
+        "status": "$t(lines.column.status)",
+        "releaseRemark": "$t(import.field.ReleaseRemark)",
+        "sourceId": "$t(import.field.SourceId)"
+      },
+      "lines": {
+        "blockers": "$t(lines.column.blockers)",
+        "disciplines": "$t(lines.column.disciplines)",
+        "holdTypes": "$t(lines.column.holdTypes)",
+        "holds": "$t(lines.column.holds)",
+        "ldtSize": "$t(lines.column.ldtSize)",
+        "line": "$t(lines.column.line)",
+        "modelSize": "$t(lines.column.modelSize)",
+        "oldest": "$t(lines.column.oldest)",
+        "sizes": "$t(lines.column.sizes)",
+        "stressCalc": "$t(lines.column.stressCalc)"
+      },
+      "summary": {
+        "figure": "Figure",
+        "value": "Value"
+      }
+    },
+    "dim": {
+      "blocker": "$t(filters.dim.Blocker)",
+      "blockerType": "$t(filters.dim.BlockerType)",
+      "discipline": "$t(import.field.Discipline)",
+      "holdType": "$t(import.field.HoldType)",
+      "lineId": "$t(import.field.LineId)",
+      "modelSize": "$t(import.field.ModelSize)",
+      "name": "$t(import.field.Name)",
+      "remark": "$t(import.field.Remark)",
+      "role": "$t(import.field.Role)",
+      "stressCalc": "$t(import.field.StressCalc)"
+    },
+    "matrix": {
+      "other": "$t(breakdown.other)",
+      "total": "Total"
+    },
+    "report": {
+      "days": "{days} d",
+      "holdsShown": "Holds shown: {shown} of {count} open holds",
+      "oldestHolds": "Oldest open holds",
+      "page": "Page {page} of {pages}",
+      "releasedOnly": "Not shown: the filters keep released holds only, and this part is about open holds.",
+      "solveOrder": "Solve order",
+      "stale": "Holds open for {days} days or more: {count}",
+      "staleUnknown": "$t(overview.staleUnknownMatch)",
+      "stepsShown": "Steps shown: {shown} of {count}",
+      "title": "Hold status report",
+      "unknown": "Not known",
+      "version": "Hold Explorer {version}"
+    },
+    "sheet": {
+      "about": "About this export",
+      "disciplines": "Disciplines",
+      "holdTypes": "Hold types",
+      "holds": "Holds",
+      "lines": "Lines",
+      "matrixHolds": "Matrix of holds",
+      "matrixLines": "Matrix of lines",
+      "roles": "Roles",
+      "solveOrder": "Solve order",
+      "summary": "Summary",
+      "topBlockers": "$t(overview.topBlockers)",
+      "topLines": "$t(overview.topLines)"
+    },
+    "status": {
+      "open": "$t(lines.statusOpen)",
+      "released": "$t(lines.statusReleased)"
+    },
+    "summary": {
+      "all": {
+        "holds": "$t(overview.allHolds)",
+        "lines": "$t(overview.allLines)",
+        "median": "$t(overview.allMedianAge)"
+      },
+      "linesWithOneHold": "$t(overview.linesWithOneHold)",
+      "open": {
+        "holds": "$t(overview.openHolds)",
+        "lines": "$t(overview.linesOnHold)",
+        "median": "$t(overview.medianAge)"
+      },
+      "released": {
+        "holds": "$t(overview.releasedHolds)",
+        "lines": "$t(overview.releasedLines)",
+        "median": "$t(overview.releasedMedianDuration)"
+      },
+      "singleHoldLines": "$t(overview.singleHoldLines)",
+      "stale": "Holds open for {days} days or more"
+    }
   }
 }

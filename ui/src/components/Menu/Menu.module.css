@@ -50,6 +50,14 @@
   color: var(--color-text-primary);
 }
 
+/* Unavailable: greyed, with no fill of hover or press; the focus ring below is unchanged. */
+.trigger[data-unavailable],
+.trigger[data-unavailable][data-hovered],
+.trigger[data-unavailable][data-pressed] {
+  background-color: transparent;
+  color: var(--color-text-muted);
+}
+
 /* Pressed, and for as long as its menu is open. */
 .trigger[data-pressed],
 .trigger[aria-expanded="true"] {
@@ -198,6 +206,25 @@
   color: var(--color-text-disabled);
 }
 
+/* The item that opens a submenu ends in a chevron, and keeps its fill while its submenu is open. */
+.submenuChevron {
+  flex: none;
+  color: var(--color-text-muted);
+}
+
+.item[data-has-submenu][data-open] {
+  background-color: var(--color-surface-overlay-hover);
+}
+
+/* A submenu opens beside its item: it moves toward its place from the side it opens on. */
+.popover[data-placement="right"][data-entering] {
+  transform: translateX(calc(-1 * var(--space-1)));
+}
+
+.popover[data-placement="left"][data-entering] {
+  transform: translateX(var(--space-1));
+}
+
 /* On the overlay surface the subtle hairline has the lightness of the surface itself in dark. */
 .separator {
   block-size: var(--border-width-thin);
@@ -213,7 +240,9 @@
   }
 
   .popover[data-entering],
-  .popover[data-placement="top"][data-entering] {
+  .popover[data-placement="top"][data-entering],
+  .popover[data-placement="right"][data-entering],
+  .popover[data-placement="left"][data-entering] {
     transform: none;
   }
 }

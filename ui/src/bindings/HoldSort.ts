@@ -3,4 +3,4 @@
 /**
  * How `holds` orders its result; ties stay in file order. Text compares without regard to case.
  */
-export type HoldSort = "FileOrder" | "OldestFirst" | "LineId" | "Discipline" | "HoldType" | "Blocker" | "Name";
+export type HoldSort = "FileOrder" | "OldestFirst" | "LineId" | "Discipline" | "HoldType" | "Blocker" | "Name" | "Remark" | "BlockerType" | "Role" | "Created" | "ReleaseDate" | "Status";

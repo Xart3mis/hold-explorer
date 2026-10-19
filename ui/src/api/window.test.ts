@@ -97,6 +97,54 @@ describe("showInFolder", () => {
   });
 });
 
+describe("chooseSavePath", () => {
+  it("opens the save dialog on the name given, offering the one format of the export", async () => {
+    const calls = plugins({
+      "plugin:dialog|save": () => "/home/ada/HoldExplorer_Unit 573_Lines_2026-10-07.xlsx",
+    });
+    await expect(
+      real.chooseSavePath("HoldExplorer_Unit 573_Lines_2026-10-07.xlsx", "xlsx"),
+    ).resolves.toBe("/home/ada/HoldExplorer_Unit 573_Lines_2026-10-07.xlsx");
+    expect(calls).toEqual([
+      {
+        command: "plugin:dialog|save",
+        payload: {
+          options: {
+            defaultPath: "HoldExplorer_Unit 573_Lines_2026-10-07.xlsx",
+            filters: [{ name: en.export.fileFilter.xlsx, extensions: ["xlsx"] }],
+          },
+        },
+      },
+    ]);
+  });
+
+  it("names each format in the filter of the dialog", async () => {
+    for (const format of ["xlsx", "csv", "pdf", "png", "svg"] as const) {
+      const calls = plugins({ "plugin:dialog|save": () => null });
+      await real.chooseSavePath(`a.${format}`, format);
+      expect(calls[0]?.payload).toEqual({
+        options: {
+          defaultPath: `a.${format}`,
+          filters: [{ name: en.export.fileFilter[format], extensions: [format] }],
+        },
+      });
+    }
+  });
+
+  it("gives null when the dialog is cancelled", async () => {
+    plugins({ "plugin:dialog|save": () => null });
+    await expect(real.chooseSavePath("a.csv", "csv")).resolves.toBeNull();
+  });
+});
+
+describe("openSavedFile", () => {
+  it("asks the app to open the file it saved", async () => {
+    const calls = plugins({ export_open: () => null });
+    await real.openSavedFile("/home/ada/Lines.xlsx");
+    expect(calls).toEqual([{ command: "export_open", payload: { path: "/home/ada/Lines.xlsx" } }]);
+  });
+});
+
 describe("onFileDrag", () => {
   it("reduces the window's drag events to enter, leave, and drop with paths", async () => {
     plugins({});

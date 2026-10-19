@@ -386,6 +386,24 @@ export function devHolds(
           );
         case "Name":
           return orderBy(rows, ({ row }) => text(row.hold.name, "—"), ascending, reverse, file);
+        case "Remark":
+          return orderBy(rows, ({ row }) => text(row.hold.remark, ""), ascending, reverse, file);
+        case "BlockerType":
+          return orderBy(
+            rows,
+            ({ row }) => row.blocker.kind.toLowerCase(),
+            ascending,
+            reverse,
+            file,
+          );
+        case "Role":
+          return orderBy(rows, ({ row }) => text(row.hold.role, "—"), ascending, reverse, file);
+        case "Created":
+          return orderBy(rows, ({ row }) => row.hold.created, ascending, reverse, file);
+        case "ReleaseDate":
+          return orderBy(rows, ({ row }) => row.hold.release_date, ascending, reverse, file);
+        case "Status":
+          return orderBy(rows, ({ row }) => (row.hold.released ? 1 : 0), ascending, reverse, file);
       }
     },
   );
@@ -485,6 +503,20 @@ export function devLines(
             reverse,
             byId,
           );
+        case "HoldTypes":
+          // The blank type is no type, as the cell leaves it out; a line with none stays last.
+          return orderBy(
+            rows,
+            (line) => {
+              const given = line.hold_types.filter((kind) => kind.trim() !== "" && kind !== "—");
+              return given.length > 0 ? given.length : null;
+            },
+            descending,
+            reverse,
+            byId,
+          );
+        case "SizeMismatch":
+          return orderBy(rows, (line) => (line.size_mismatch ? 1 : 0), descending, reverse, byId);
       }
     },
   );

@@ -35,6 +35,14 @@ describe("holdColumns", () => {
     }
   });
 
+  it("lets every column be sorted, in all three statuses", () => {
+    for (const status of ["Open", "Released", "All"] as const) {
+      for (const column of holdColumns(20, [], status)) {
+        expect([status, column.id, column.allowsSorting]).toEqual([status, column.id, true]);
+      }
+    }
+  });
+
   it("writes the blocker in the face of the body, and the line ID in the monospace", () => {
     const columns = holdColumns(20, [], "Open");
     expect(columns.find((column) => column.id === "blocker")?.kind).toBeUndefined();

@@ -38,7 +38,13 @@ describe("lineColumns", () => {
     expect(columns.find((column) => column.id === "line")?.kind).toBe("identifier");
     expect(columns.filter((column) => column.kind === "identifier")).toHaveLength(1);
     expect(columns.find((column) => column.id === "holds")?.allowsSorting).toBe(true);
-    expect(columns.find((column) => column.id === "holdTypes")?.allowsSorting).toBe(false);
+  });
+
+  it("lets every column be sorted", () => {
+    const columns = lineColumns(20, []);
+    expect(columns.map((column) => column.id)).toHaveLength(10);
+    for (const column of columns)
+      expect([column.id, column.allowsSorting]).toEqual([column.id, true]);
   });
 
   it("leaves a blank hold type out of the list of a line, and writes none as no value", () => {

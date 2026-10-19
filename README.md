@@ -16,6 +16,7 @@ Status: early development. The design is in `docs/superpowers/specs/`.
 - A detail panel for a line (its sizes, the blockers to clear in solve order, its open and released holds), for a hold (every fact of it), and for a blocker (the lines it frees on its own, the lines others also hold, its linked blockers, its oldest hold, and its step), opened from a table, the curve, or another panel, and kept in the address.
 - The layout adapts to windows from 1024 px wide: the panel sits beside the content from 1280 px, the sidebar can be collapsed to a rail, and a narrow table leaves out its least needed columns, which the panel shows.
 - An older snapshot can be put in view; every screen then shows the data as it stood then.
+- Export: an Export menu on Overview, Breakdown, Lines, and Blockers (`Ctrl+E` for Excel). Excel workbooks with real tables, a frozen header, formats, and colors, for the view or as a full workbook of every screen; CSV with a byte-order mark and accents intact; the table, the selected rows, or the line IDs copied as text; charts as PNG or SVG, to a file or the clipboard; and a PDF status report on A4. Several rows can be selected as in Excel, and every table sorts by every column. Files are written whole or not at all, and the notice that follows offers to open the file or show it in its folder.
 
 History, People, Follow-up, and Rules are listed in the sidebar and say "Soon". Settings has the theme.
 
@@ -60,3 +61,12 @@ Real project files never enter this repository. Tests generate synthetic workboo
 ## License
 
 MIT
+
+## Third-party fonts
+
+The interface and the files Hold Explorer writes use two typefaces under the SIL Open Font License 1.1:
+
+- Public Sans, copyright 2015 The Public Sans Project Authors.
+- Reddit Mono, copyright 2020-23 Reddit, Inc.
+
+The interface bundles them from npm (`@fontsource-variable/public-sans` and `@fontsource-variable/reddit-mono`). The export crate embeds static instances of them in `crates/export/fonts/`, with their license texts (`OFL-PublicSans.txt`, `OFL-RedditMono.txt`) and a `README.md` that says where they come from and how they were made. The fonts are under their own license, not under the MIT license of this project.

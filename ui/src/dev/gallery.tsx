@@ -49,6 +49,7 @@ import {
   MenuItem,
   MenuSection,
   MenuSeparator,
+  MenuSubmenu,
   Notice,
   OptionList,
   PageHeader,
@@ -80,6 +81,7 @@ import selectStyles from "../components/Select/Select.module.css";
 import { Toast } from "../components/ToastRegion/ToastRegion";
 import tooltipStyles from "../components/Tooltip/Tooltip.module.css";
 import { applyTheme } from "../design/theme";
+import { ChoicePanel } from "../features/export/ChoicePanel";
 import { formatCount } from "../text/format";
 import { locale } from "../text/i18n";
 import styles from "./gallery.module.css";
@@ -419,7 +421,7 @@ function Menus() {
   return (
     <Section
       title="Menu"
-      note="A quiet button with a chevron that opens a list of actions or of choices. The first three are real; the open menu is a still copy made from the same styles: a section that holds a choice, a highlighted item, a separator, an action, and a disabled item."
+      note="A quiet button with a chevron that opens a list of actions or of choices. The first two open, the second as the Export menu of the Overview with a submenu for each chart action; the open menu is a still copy made from the same styles: a section that holds a choice, a highlighted item, a separator, an action, and a disabled item."
     >
       <Row>
         <Specimen name="Real: open it">
@@ -437,6 +439,34 @@ function Menus() {
             <MenuItem id="folder" isDisabled>
               Show in folder
             </MenuItem>
+          </MenuButton>
+        </Specimen>
+        <Specimen name="Real: the Export menu of the Overview, with its submenus">
+          <MenuButton label="Export" menuLabel="Export" align="end">
+            <MenuItem id="excel">Excel, this view…</MenuItem>
+            <MenuItem id="workbook">Full workbook…</MenuItem>
+            <MenuItem id="report">Status report (PDF)…</MenuItem>
+            <MenuSeparator />
+            {(
+              [
+                ["png", "Chart as PNG", "…"],
+                ["svg", "Chart as SVG", "…"],
+                ["copy", "Copy chart", ""],
+              ] as const
+            ).map(([id, label, ellipsis]) => (
+              <MenuSubmenu key={id} id={id} label={label}>
+                {[
+                  "Open holds by discipline",
+                  "Open holds by hold type",
+                  "Open holds by role",
+                  "Top blockers",
+                ].map((chart) => (
+                  <MenuItem key={chart} id={`${id}-${chart}`}>
+                    {`${chart}${ellipsis}`}
+                  </MenuItem>
+                ))}
+              </MenuSubmenu>
+            ))}
           </MenuButton>
         </Specimen>
         <Specimen name="Hover">
@@ -1000,6 +1030,51 @@ function StillPopover({ children }: { children: ReactNode }) {
   );
 }
 
+function ChoicePanels() {
+  const still = () => undefined;
+  return (
+    <Section
+      title="Columns and rows panel"
+      note="What Columns and rows of the Export menu opens, under the Export button: the rows, the status, and the columns the exports of a screen write. Drawn here on the surface of a popover, and working: the choices change, and nothing is kept. The column that names the row is checked and disabled. The holds of Lines with fewer rows loaded than the filters keep and two selected, a remembered choice of columns, and the snapshot without stress calc; Blockers with every column, and no Loaded, since it holds its rows whole."
+    >
+      <Row>
+        <Specimen name="The holds of Lines">
+          <StillPopover>
+            <ChoicePanel
+              screen="holds"
+              state={{ screen: "holds", sort: "FileOrder", reverse: false }}
+              absent={["StressCalc", "SourceId"]}
+              filterStatus="Open"
+              counts={{ all: 9241, loaded: 200, selected: 2 }}
+              choice={{
+                columns: ["line", "discipline", "remark", "blocker", "days"],
+                rows: "loaded",
+                status: "filters",
+              }}
+              onSave={still}
+              onCancel={still}
+            />
+          </StillPopover>
+        </Specimen>
+        <Specimen name="Blockers">
+          <StillPopover>
+            <ChoicePanel
+              screen="blockers"
+              state={{ screen: "blockers", shownKeys: [] }}
+              absent={[]}
+              filterStatus="Open"
+              counts={{ all: 42, loaded: 42, selected: 0 }}
+              choice={{ columns: [], rows: "all", status: "Released" }}
+              onSave={still}
+              onCancel={still}
+            />
+          </StillPopover>
+        </Specimen>
+      </Row>
+    </Section>
+  );
+}
+
 function Pickers() {
   const [one, setOne] = useState<readonly string[]>(["yes"]);
   const [size, setSize] = useState<readonly string[]>(["match"]);
@@ -1438,6 +1513,11 @@ function Tables() {
         </Forced>
       </Forced>
       <h3 className={styles.subTitle}>
+        Several rows selected: the open row has a deeper tint among them, and the count line says
+        how many
+      </h3>
+      <SelectedRowsTable />
+      <h3 className={styles.subTitle}>
         Compact, by the table&apos;s own density, with row actions
       </h3>
       <DataTable
@@ -1504,6 +1584,35 @@ function Tables() {
         }
       />
     </Section>
+  );
+}
+
+/**
+ * A table with several rows selected beside the open one. It is real: a press opens a row and
+ * selects it alone, Ctrl and a press or Ctrl+Space adds or takes out a row, Shift and a press,
+ * Shift+Space, or Shift+Up and Shift+Down select a range, Ctrl+A selects every row, and Esc
+ * clears the selection.
+ */
+function SelectedRowsTable() {
+  const [open, setOpen] = useState<string | null>(lines[1]?.id ?? null);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set([lines[0], lines[1], lines[3]].flatMap((line) => (line ? [line.id] : []))),
+  );
+  return (
+    <DataTable
+      aria-label="Lines on hold, several selected"
+      columns={lineColumns}
+      rows={lines}
+      rowKey={(line) => line.id}
+      selectedKey={open}
+      onSelectionChange={setOpen}
+      selectedKeys={selected}
+      onSelectedKeysChange={setSelected}
+      totalRows={9312}
+      countText={(shown, total) => `${formatCount(shown)} of ${formatCount(total)} lines`}
+      selectedText={(count) => `${formatCount(count)} selected`}
+      height={{ maxRows: 6 }}
+    />
   );
 }
 
@@ -2008,7 +2117,7 @@ function ShowToast() {
         onPress={() => {
           toast.show({
             message: "Snapshot of 30 Sep 2026 deleted.",
-            action: { label: "Undo", onAction: () => undefined },
+            action: { label: "Undo", onAction: () => undefined, isUndo: true },
           });
         }}
       >
@@ -2302,6 +2411,7 @@ function Page({ theme }: { theme: ThemeName }) {
           <Tags />
           <Chips />
           <Pickers />
+          <ChoicePanels />
           <Facts />
           <Disclosures />
           <Toasts />

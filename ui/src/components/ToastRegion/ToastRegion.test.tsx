@@ -53,7 +53,10 @@ describe("ToastRegion", () => {
     const user = userEvent.setup();
     setup();
     await user.click(screen.getByRole("textbox", { name: "Workspace name" }));
-    show({ message: "Workspace renamed.", action: { label: "Undo", onAction: () => undefined } });
+    show({
+      message: "Workspace renamed.",
+      action: { label: "Undo", onAction: () => undefined, isUndo: true },
+    });
     expect(screen.getByRole("textbox", { name: "Workspace name" })).toHaveFocus();
   });
 
@@ -61,7 +64,7 @@ describe("ToastRegion", () => {
     const onAction = vi.fn();
     const user = userEvent.setup();
     setup();
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction } });
+    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction, isUndo: true } });
 
     await user.tab();
     await user.tab();
@@ -80,8 +83,14 @@ describe("ToastRegion", () => {
     const newest = vi.fn();
     const user = userEvent.setup();
     setup();
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: older } });
-    show({ message: "Workspace renamed.", action: { label: "Undo", onAction: newest } });
+    show({
+      message: "Snapshot deleted.",
+      action: { label: "Undo", onAction: older, isUndo: true },
+    });
+    show({
+      message: "Workspace renamed.",
+      action: { label: "Undo", onAction: newest, isUndo: true },
+    });
 
     await user.keyboard("{Control>}z{/Control}");
     expect(newest).toHaveBeenCalledTimes(1);
@@ -94,7 +103,7 @@ describe("ToastRegion", () => {
     const onAction = vi.fn();
     const user = userEvent.setup();
     setup();
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction } });
+    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction, isUndo: true } });
 
     await user.click(screen.getByRole("textbox", { name: "Workspace name" }));
     await user.keyboard("{Control>}z{/Control}");
@@ -104,6 +113,66 @@ describe("ToastRegion", () => {
     await user.tab();
     await user.keyboard("{Control>}z{/Control}");
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("offers a second action after the first, each reached by Tab and run by Enter, once", async () => {
+    const open = vi.fn();
+    const reveal = vi.fn();
+    const user = userEvent.setup();
+    setup();
+    const actions = {
+      action: { label: "Open file", onAction: open },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    };
+    show({ message: "Saved Lines.xlsx", ...actions });
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Open file" })).toHaveFocus();
+    await user.tab();
+    const second = screen.getByRole("button", { name: "Show in folder" });
+    expect(second).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.queryByText("Saved Lines.xlsx")).not.toBeInTheDocument();
+
+    show({ message: "Saved Holds.csv", ...actions });
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Open file" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Saved Holds.csv")).not.toBeInTheDocument();
+  });
+
+  it("leaves Ctrl+Z to undo alone: never the second action, never an action that is no undo", async () => {
+    const undo = vi.fn();
+    const open = vi.fn();
+    const reveal = vi.fn();
+    const user = userEvent.setup();
+    setup();
+    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: undo, isUndo: true } });
+    show({
+      message: "Saved Lines.xlsx",
+      action: { label: "Open file", onAction: open },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    });
+
+    await user.keyboard("{Control>}z{/Control}");
+    expect(open).not.toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+    expect(undo).not.toHaveBeenCalled();
+    expect(screen.getByText("Saved Lines.xlsx")).toBeInTheDocument();
+
+    show({
+      message: "Workspace renamed.",
+      action: { label: "Undo", onAction: undo, isUndo: true },
+      secondaryAction: { label: "Show in folder", onAction: reveal },
+    });
+    await user.keyboard("{Control>}z{/Control}");
+    expect(undo).toHaveBeenCalledTimes(1);
+    expect(reveal).not.toHaveBeenCalled();
   });
 
   it("is closed by its close button", async () => {
@@ -134,7 +203,7 @@ describe("ToastRegion", () => {
 
   it("never drops a toast that carries an undo for a fourth toast", () => {
     setup();
-    const undo = { label: "Undo", onAction: () => undefined };
+    const undo = { label: "Undo", onAction: () => undefined, isUndo: true };
     show({ message: "Snapshot deleted.", action: undo });
     show({ message: "Snapshot imported." });
     show({ message: "Workspace renamed.", action: undo });
@@ -160,6 +229,27 @@ describe("ToastRegion", () => {
       expect.stringContaining("Density changed."),
     ]);
     expect(screen.getAllByRole("button", { name: "Undo" })).toHaveLength(4);
+  });
+
+  it("pushes out a toast whose actions are no undo, as it does one without an action", () => {
+    setup();
+    const undo = { label: "Undo", onAction: () => undefined, isUndo: true };
+    const saved = {
+      action: { label: "Open file", onAction: () => undefined },
+      secondaryAction: { label: "Show in folder", onAction: () => undefined },
+    };
+    show({ message: "Saved Lines.xlsx", ...saved });
+    show({ message: "Snapshot deleted.", action: undo });
+    show({ message: "Saved Holds.csv", ...saved });
+    show({ message: "Mapping saved." });
+    const live = screen.getByRole("status");
+    expect(
+      [...live.querySelectorAll('[data-part="toast"]')].map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining("Snapshot deleted."),
+      expect.stringContaining("Saved Holds.csv"),
+      expect.stringContaining("Mapping saved."),
+    ]);
   });
 
   it("moves the focus to the next toast when the focused one goes, and to the one before it at the end", async () => {
@@ -207,7 +297,10 @@ describe("ToastRegion", () => {
     setup();
     const field = screen.getByRole("textbox", { name: "Workspace name" });
     await user.click(field);
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: () => undefined } });
+    show({
+      message: "Snapshot deleted.",
+      action: { label: "Undo", onAction: () => undefined, isUndo: true },
+    });
     await user.tab();
     expect(screen.getByRole("button", { name: "Undo" })).toHaveFocus();
     await user.keyboard("{Enter}");
@@ -275,7 +368,10 @@ describe("ToastRegion", () => {
   it("pauses its timer while it is hovered or holds focus", () => {
     vi.useFakeTimers();
     setup();
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: () => undefined } });
+    show({
+      message: "Snapshot deleted.",
+      action: { label: "Undo", onAction: () => undefined, isUndo: true },
+    });
     const item = screen.getByText("Snapshot deleted.").closest('[data-part="toast"]');
     if (!(item instanceof HTMLElement)) throw new Error("The toast was not rendered.");
 
@@ -324,7 +420,10 @@ describe("ToastRegion", () => {
   it("has no accessibility violation, empty and with toasts", async () => {
     setup();
     await expectAccessible();
-    show({ message: "Snapshot deleted.", action: { label: "Undo", onAction: () => undefined } });
+    show({
+      message: "Snapshot deleted.",
+      action: { label: "Undo", onAction: () => undefined, isUndo: true },
+    });
     show({ message: "Snapshot imported.", tone: "success" });
     await expectAccessible();
   });

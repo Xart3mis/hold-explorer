@@ -25,6 +25,13 @@ import {
 import { formatCount, formatDateTime, formatDays } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 import { blockersAddress } from "../blockers/address";
+import {
+  ExportMenu,
+  ExportMenuInert,
+  ExportNotices,
+  usePageExports,
+  type ExportChart,
+} from "../export/ExportMenu";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { DEFAULT_LINES_STATE, linesAddress, withSelection } from "../lines/address";
@@ -45,6 +52,11 @@ const DIMENSIONS = [
 ] as const satisfies readonly { id: string; column: MessageKey; dim: Dim }[];
 
 type DimensionId = (typeof DIMENSIONS)[number]["id"];
+
+/**
+ * What a file of the Overview is made from: the page has no state of its own beyond the filters.
+ */
+const OVERVIEW_STATE = { screen: "overview" } as const;
 
 /**
  * How many skeleton rows stand for each group on a first load. A bar row group has six shapes of
@@ -215,6 +227,15 @@ export function OverviewPage() {
     void navigate(address);
   };
   const words = WORDS[filters.status];
+  const exports = usePageExports();
+  // The four charts of the page, named as their sections are.
+  const charts: ExportChart[] = [
+    ...DIMENSIONS.map(({ id, dim }) => ({
+      choice: { kind: "Bars", dim } as const,
+      label: t(words.title[id]),
+    })),
+    { choice: { kind: "TopBlockers" }, label: t("overview.topBlockers") },
+  ];
   const query = useSnapshotQuery({
     name: "overview",
     params: [spec],
@@ -277,6 +298,22 @@ export function OverviewPage() {
       title={t("destinations.name.overview")}
       width="content"
       {...(description === undefined ? {} : { description })}
+      // A workspace without snapshots has nothing to export: the button is shown inert.
+      {...(open?.selected == null
+        ? { actions: <ExportMenuInert /> }
+        : {
+            actions: (
+              <ExportMenu
+                screen="overview"
+                state={OVERVIEW_STATE}
+                charts={charts}
+                // The numbers of the request on screen, not those of before standing in.
+                isReady={view !== undefined && view !== null && !query.isPlaceholderData}
+                exports={exports}
+              />
+            ),
+            notice: <ExportNotices exports={exports} />,
+          })}
       // A workspace without snapshots has nothing to filter; its empty state says what to do.
       {...(open?.selected == null ? {} : { bar: <FilterBar /> })}
     >

@@ -1,9 +1,13 @@
 // Command names and argument keys are written here once. This module and workspace-commands.ts,
 // which holds the commands that change the view, are the only ones that import `invoke`.
-import { invoke, type Channel } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
 import type { BlockerDetail } from "../bindings/BlockerDetail";
+import type { CopyFormat } from "../bindings/CopyFormat";
 import type { Dim } from "../bindings/Dim";
+import type { ExportPhase } from "../bindings/ExportPhase";
+import type { ExportRequest } from "../bindings/ExportRequest";
+import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
@@ -22,6 +26,7 @@ import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
+import type { SaveFormat } from "../bindings/SaveFormat";
 import type { Settings } from "../bindings/Settings";
 import type { SolveView } from "../bindings/SolveView";
 import type { TargetCheck } from "../bindings/TargetCheck";
@@ -38,6 +43,9 @@ type Fields = Partial<Record<Field, number>>;
 
 /** The channel that carries the progress of `import_commit`. */
 type Progress = Channel<ImportPhase>;
+
+/** The channel that carries the progress of `export_save`. */
+type ExportProgress = Channel<ExportPhase>;
 
 /** Every command: its argument object (keys as the command names them) and what it returns. */
 interface CommandMap {
@@ -83,6 +91,21 @@ interface CommandMap {
     args: { spec: FilterSpec; dim: Dim; key: string; view: ViewRef };
     result: GroupDetail | null;
   };
+  export_save: {
+    args: {
+      request: ExportRequest;
+      format: SaveFormat;
+      path: string;
+      view: ViewRef;
+      onProgress: ExportProgress;
+    };
+    result: ExportSaved;
+  };
+  export_copy: {
+    args: { request: ExportRequest; format: CopyFormat; view: ViewRef };
+    result: null;
+  };
+  export_open: { args: { path: string }; result: null };
 }
 
 export type CommandName = keyof CommandMap;
@@ -167,4 +190,24 @@ export const api = {
     call("group_detail", { spec, dim, key, view }),
   /** The open workspace with the snapshot that is selected; `null` without one. Changes nothing. */
   workspaceCurrent: () => call("workspace_current", {}),
+  /**
+   * Saves an export of the view to `path`; `onProgress` hears each phase as it starts. Rejects
+   * with the kind `ViewChanged` when `view` is not what the state holds.
+   */
+  exportSave: (
+    request: ExportRequest,
+    format: SaveFormat,
+    path: string,
+    view: ViewRef,
+    onProgress: (phase: ExportPhase) => void,
+  ) => {
+    const channel = new Channel<ExportPhase>();
+    channel.onmessage = onProgress;
+    return call("export_save", { request, format, path, view, onProgress: channel });
+  },
+  /** Copies an export of the view to the clipboard. */
+  exportCopy: (request: ExportRequest, format: CopyFormat, view: ViewRef) =>
+    call("export_copy", { request, format, view }),
+  /** Opens a file the app saved in this session; rejects with `NotWritten` for any other. */
+  exportOpen: (path: string) => call("export_open", { path }),
 };

@@ -1,19 +1,21 @@
 // The state of the Breakdown destination as its address holds it, so that it can be opened again
 // as it was, and a saved view can keep it later:
 //
-//   /breakdown?mode=list&by=<dimId>&open=<key>,<key>
+//   /breakdown?mode=list&by=<dimId>&open=<key>,<key>&sort=<column>&dir=<asc|desc>
 //   /breakdown?mode=matrix&rows=<dimId>&cols=<dimId>
 //
 // In the list, `by` is the dimension the holds are grouped by (`dimId`), and `open` the groups
 // that are expanded, each key written with its own escapes so that a key may hold a comma, and
-// none written when no group is open. In the matrix, `rows` and `cols` are its two dimensions,
-// never the same one. The parts of the mode that does not show are kept too, after the parts of
-// the one that shows, when they are not the default, so that switching back finds them as they
-// were. A part that is missing or cannot be read is the default, and no error. The line selected
-// for the detail panel is in the address too, as `line=<id>`, and every other part is kept as it
-// is.
+// none written when no group is open; `sort` and `dir` the column the groups are sorted by and
+// its direction, none written while they are in the command's order (most holds first). In the
+// matrix, `rows` and `cols` are its two dimensions, never the same one. The parts of the mode
+// that does not show are kept too, after the parts of the one that shows, when they are not the
+// default, so that switching back finds them as they were. A part that is missing or cannot be
+// read is the default, and no error. The line selected for the detail panel is in the address
+// too, as `line=<id>`, and every other part is kept as it is.
 import { dimId, isSameDim } from "../../app/filters/dims";
 import type { Dim } from "../../bindings/Dim";
+import { SORT_PARTS, sortAddress, sortOfAddress, type DataTableSort } from "../../components";
 import { DEFAULT_COLS, DEFAULT_DIM, DEFAULT_ROWS, dimOfId } from "./dims";
 
 /** How the groups are shown: a list of the groups of one dimension, or a matrix of two. */
@@ -25,6 +27,11 @@ export interface BreakdownState {
   by: Dim;
   /** The keys of the groups of the list that are expanded, in the order they were opened. */
   open: readonly string[];
+  /**
+   * The column the groups of the list are sorted by, and its direction; none for the order of
+   * the command, most holds first. Another dimension drops it.
+   */
+  sort?: DataTableSort | undefined;
   /** The dimension of the rows of the matrix. */
   rows: Dim;
   /** The dimension of the columns of the matrix; never the one of the rows. */
@@ -42,8 +49,11 @@ export const DEFAULT_BREAKDOWN_STATE: BreakdownState = {
   cols: DEFAULT_COLS,
 };
 
+/** The columns of the list a sort may name. */
+export const GROUP_SORT_COLUMNS = ["label", "share", "holds", "lines"] as const;
+
 /** The parts of the address this page writes. Every other part is kept. */
-const OWN = ["mode", "by", "open", "rows", "cols"] as const;
+const OWN = ["mode", "by", "open", "rows", "cols", ...SORT_PARTS] as const;
 
 /** The parts of a search text, or of an address that has one. */
 function partsOf(search: string): URLSearchParams {
@@ -88,13 +98,23 @@ export function parseBreakdownAddress(search: string): BreakdownState {
   const by = byId === null ? DEFAULT_DIM : dimOfId(byId);
   const list =
     by === null ? { by: DEFAULT_DIM, open: [] } : { by, open: openOf(parts.get("open")) };
-  return { mode, ...list, ...matrixOf(parts.get("rows"), parts.get("cols")) };
+  const sort = by === null ? undefined : sortOfAddress(parts, GROUP_SORT_COLUMNS);
+  return {
+    mode,
+    ...list,
+    ...(sort === undefined ? {} : { sort }),
+    ...matrixOf(parts.get("rows"), parts.get("cols")),
+  };
 }
 
-/** The parts of the list, `by` and `open`; `all` writes `by` also when it is the default. */
+/**
+ * The parts of the list, `by`, `open`, and the sort; `all` writes `by` also when it is the
+ * default.
+ */
 function listParts(state: BreakdownState, parts: URLSearchParams, all: boolean): void {
   if (all || !isSameDim(state.by, DEFAULT_DIM)) parts.set("by", dimId(state.by));
   if (state.open.length > 0) parts.set("open", state.open.map(encodeURIComponent).join(","));
+  sortAddress(parts, state.sort);
 }
 
 /** The parts of the matrix, `rows` and `cols`; `all` writes them also when they are the default. */

@@ -15,19 +15,21 @@ export interface SortEntry<Sort> {
 }
 
 /**
- * The sortable columns of the lines, in the order of the table. A count, an age, or a size comes
- * largest first, as the command sorts it; a name comes from A. `Easiest` is no column's: it
- * belongs to its preset.
+ * The sortable columns of the lines, in the order of the table. A count, an age, a size, or the
+ * lines whose sizes differ come first, as the command sorts them; a name comes first from A.
+ * `Easiest` sorts no column: it belongs to its preset.
  */
 export const LINE_SORTS: readonly SortEntry<LineSort>[] = [
   { column: "line", sort: "LineId", natural: "ascending" },
   { column: "holds", sort: "HoldsDesc", natural: "descending" },
   { column: "disciplines", sort: "Disciplines", natural: "descending" },
+  { column: "holdTypes", sort: "HoldTypes", natural: "descending" },
   { column: "blockers", sort: "Blockers", natural: "descending" },
   { column: "oldest", sort: "OldestFirst", natural: "descending" },
   { column: "modelSize", sort: "ModelSize", natural: "descending" },
   { column: "ldtSize", sort: "LdtSize", natural: "descending" },
   { column: "stressCalc", sort: "StressCalc", natural: "ascending" },
+  { column: "sizes", sort: "SizeMismatch", natural: "descending" },
 ];
 
 /**
@@ -39,8 +41,14 @@ export const HOLD_SORTS: readonly SortEntry<HoldSort>[] = [
   { column: "line", sort: "LineId", natural: "ascending" },
   { column: "discipline", sort: "Discipline", natural: "ascending" },
   { column: "holdType", sort: "HoldType", natural: "ascending" },
+  { column: "remark", sort: "Remark", natural: "ascending" },
   { column: "blocker", sort: "Blocker", natural: "ascending" },
+  { column: "blockerType", sort: "BlockerType", natural: "ascending" },
   { column: "name", sort: "Name", natural: "ascending" },
+  { column: "role", sort: "Role", natural: "ascending" },
+  { column: "created", sort: "Created", natural: "ascending" },
+  { column: "status", sort: "Status", natural: "ascending" },
+  { column: "releasedOn", sort: "ReleaseDate", natural: "ascending" },
   { column: "days", sort: "OldestFirst", natural: "descending" },
 ];
 

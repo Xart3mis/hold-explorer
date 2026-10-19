@@ -4,6 +4,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimId, dimName } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
@@ -14,10 +15,13 @@ import type { ViewRef } from "../../bindings/ViewRef";
 import {
   childKeyOfRow,
   DataTable,
+  nextSort,
   textChars,
+  useTableSort,
   type DataTableChildColumn,
   type DataTableChildren,
   type DataTableColumn,
+  type DataTableSort,
 } from "../../components";
 import { formatCount, formatDays, formatList, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -115,6 +119,55 @@ function ShareBar({ holds, largest }: { holds: number; largest: number }): React
   );
 }
 
+/**
+ * The columns of the groups: the value grouped by, which names the row; a bar of its holds against
+ * those of the largest group (`largest`); its holds; and its lines (at most `mostLines`). Each
+ * sorts the groups, which the page holds whole.
+ */
+export function groupColumns(
+  dim: Dim,
+  largest: number,
+  mostLines: number,
+): DataTableColumn<Group>[] {
+  return [
+    {
+      id: "label",
+      header: dimName(dim),
+      cell: (group) => group.label,
+      isRowHeader: true,
+      size: { flex: 2, minChars: 20 },
+      // The blank group has no value: it stays last both ways, as a row without one does.
+      sortValue: (group) => (group.key === "" ? null : group.label),
+    },
+    {
+      id: "share",
+      header: t("breakdown.column.share"),
+      cell: (group) => <ShareBar holds={group.holds} largest={largest} />,
+      size: { flex: 3, minChars: 16 },
+      sortValue: (group) => group.holds,
+      sortFirst: "descending",
+    },
+    {
+      id: "holds",
+      header: t("breakdown.column.holds"),
+      cell: (group) => formatCount(group.holds),
+      kind: "number",
+      size: { chars: textChars(formatCount(largest)) },
+      sortValue: (group) => group.holds,
+      sortFirst: "descending",
+    },
+    {
+      id: "lines",
+      header: t("breakdown.column.lines"),
+      cell: (group) => formatCount(group.lines),
+      kind: "number",
+      size: { chars: textChars(formatCount(mostLines)) },
+      sortValue: (group) => group.lines,
+      sortFirst: "descending",
+    },
+  ];
+}
+
 /** What a line shows in the track of the bars: its disciplines, and the age of its oldest hold. */
 function LineFacts({ line }: { line: LineRow }) {
   const disciplines = line.disciplines.filter((discipline) => !isBlank(discipline));
@@ -132,6 +185,56 @@ function LineFacts({ line }: { line: LineRow }) {
   );
 }
 
+/** The table of the groups as the page holds it: its columns, its order, and its selection. */
+export interface GroupTable {
+  /** The groups on screen are of the dimension asked for, not the one before while it is read. */
+  isCurrent: boolean;
+  columns: DataTableColumn<Group>[];
+  /** The sort of the groups, of the dimension it was asked under. */
+  sort: DataTableSort | undefined;
+  /** The groups in the order of the table. */
+  sortedGroups: readonly Group[];
+  /** The result of the groups: the request they were read for. */
+  resultKey: string;
+  /** The result the table shows: the groups of a request, in a sort. */
+  tableKey: string;
+  /** The groups selected beside the open line, by group key, for that result. */
+  selected: ReturnType<typeof useSelectedRows>;
+}
+
+/**
+ * The table of the groups, held by the page so that its Export menu sends the groups in the order
+ * shown and the ones selected: `groups` of `shownDim`, as read for `resultKey`, under the sort of
+ * the address.
+ */
+export function useGroupTable(
+  state: BreakdownState,
+  groups: readonly Group[],
+  shownDim: Dim,
+  resultKey: string,
+): GroupTable {
+  // While another dimension is read, the groups of before stay on screen, dimmed; they are of the
+  // dimension before, so none of them expands or is read under the new one.
+  const isCurrent = dimId(shownDim) === dimId(state.by);
+  const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
+  const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
+  const columns = useMemo(
+    () => groupColumns(shownDim, largest, mostLines),
+    [shownDim, largest, mostLines],
+  );
+  // The groups of before, while another dimension is read, are in the command's order: the sort
+  // belongs to the dimension it was asked under, and another one drops it.
+  const sort = isCurrent ? state.sort : undefined;
+  const sortedGroups = useTableSort(groups, columns, sort);
+  // Another sort is another result: the table returns to its top.
+  const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
+  // The groups selected beside the open line, by group key (the blank group has the empty key),
+  // for the result on screen in its sort, while the list is shown. The lines under a group are
+  // never selected this way. The matrix in between drops them, as leaving the list always has.
+  const selected = useSelectedRows(`${state.mode}|${tableKey}`);
+  return { isCurrent, columns, sort, sortedGroups, resultKey, tableKey, selected };
+}
+
 export interface ListModeProps {
   state: BreakdownState;
   spec: FilterSpec;
@@ -139,9 +242,10 @@ export interface ListModeProps {
   groups: readonly Group[];
   /** The dimension those groups are of: the one asked for, or the one before while it is read. */
   shownDim: Dim;
+  /** The table of those groups, as `useGroupTable` gives it. */
+  table: GroupTable;
   isLoading: boolean;
   isStale: boolean;
-  resultKey: string;
   emptyState?: ReactNode;
 }
 
@@ -150,18 +254,21 @@ export interface ListModeProps {
  * holds, and its lines. A group expands in place to its lines (the owner's choice of 2026-10-17):
  * they are read when it expands, the first two hundred of them, and a last row leads to all of
  * them in Lines. A line opens in the detail panel. The groups that are expanded are kept in the
- * address.
+ * address, and so is the sort of the groups: a header orders the groups the command returned
+ * (the share by the holds), and asks for nothing; the lines under a group keep the order they
+ * were read in.
  */
 export function ListMode({
   state,
   spec,
   groups,
   shownDim,
+  table,
   isLoading,
   isStale,
-  resultKey,
   emptyState,
 }: ListModeProps) {
+  const { isCurrent, columns, sort, sortedGroups, resultKey, tableKey, selected } = table;
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
@@ -196,9 +303,6 @@ export function ListMode({
   // the groups it names are the same.
   const openKeys = JSON.stringify(state.open);
   const open = useMemo(() => new Set(JSON.parse(openKeys) as string[]), [openKeys]);
-  // While another dimension is read, the groups of before stay on screen, dimmed; they are of the
-  // dimension before, so none of them expands or is read under the new one.
-  const isCurrent = dimId(shownDim) === dimId(state.by);
   const [visited, setVisited] = useState<{ result: string; keys: readonly string[] }>({
     result: resultKey,
     keys: state.open,
@@ -211,8 +315,6 @@ export function ListMode({
   if (isNewResult || unread.length > 0) setVisited({ result: resultKey, keys: now });
   const reading = isCurrent ? now.filter((key) => shownKeys.has(key)) : [];
 
-  const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
-  const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
   // The widest line ID of the groups that are read: the line IDs under a group are never cut.
   // Lines that stand in for a group being read again are not shown, and do not count.
   let widestLine = 0;
@@ -221,38 +323,6 @@ export function ListMode({
     widestLine = Math.max(widestLine, held.detail?.lines.widest_line_id ?? 0);
   }
 
-  const columns = useMemo(
-    (): DataTableColumn<Group>[] => [
-      {
-        id: "label",
-        header: dimName(shownDim),
-        cell: (group) => group.label,
-        isRowHeader: true,
-        size: { flex: 2, minChars: 20 },
-      },
-      {
-        id: "share",
-        header: t("breakdown.column.share"),
-        cell: (group) => <ShareBar holds={group.holds} largest={largest} />,
-        size: { flex: 3, minChars: 16 },
-      },
-      {
-        id: "holds",
-        header: t("breakdown.column.holds"),
-        cell: (group) => formatCount(group.holds),
-        kind: "number",
-        size: { chars: textChars(formatCount(largest)) },
-      },
-      {
-        id: "lines",
-        header: t("breakdown.column.lines"),
-        cell: (group) => formatCount(group.lines),
-        kind: "number",
-        size: { chars: textChars(formatCount(mostLines)) },
-      },
-    ],
-    [shownDim, largest, mostLines],
-  );
   const childColumns = useMemo(
     (): DataTableChildColumn<LineRow>[] => [
       { column: "label", cell: (line) => line.line_id, kind: "identifier", chars: widestLine },
@@ -336,8 +406,19 @@ export function ListMode({
       <DataTable
         aria-label={t("breakdown.table", { dim: dimName(shownDim) })}
         columns={columns}
-        rows={groups}
+        rows={sortedGroups}
         rowKey={groupKeyOf}
+        {...(sort === undefined ? {} : { sort })}
+        onSortChange={(pressed) => {
+          if (!isCurrent) return;
+          void navigate(
+            breakdownAddress(
+              { ...state, sort: nextSort(columns, sort, pressed.column) },
+              location.search,
+            ),
+            { replace: true },
+          );
+        }}
         childRows={childRows}
         childKey={lineKeyOf}
         childColumns={childColumns}
@@ -345,6 +426,9 @@ export function ListMode({
         onExpandedChange={(keys) => {
           if (isCurrent) setOpen(keys);
         }}
+        selectedKeys={selected.keys}
+        onSelectedKeysChange={selected.set}
+        selectedText={(count) => t("breakdown.selected", { count })}
         selectedChildKey={openLine}
         onChildSelectionChange={(line) => {
           chosen(line.line_id);
@@ -353,7 +437,7 @@ export function ListMode({
         height="fill"
         isLoading={isLoading}
         isStale={isStale}
-        resultKey={resultKey}
+        resultKey={tableKey}
         {...(isLoading
           ? {}
           : {

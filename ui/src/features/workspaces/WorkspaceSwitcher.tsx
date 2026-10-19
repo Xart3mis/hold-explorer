@@ -198,6 +198,7 @@ export function WorkspaceSwitcher({
             message: t("workspaces.renamed", { name: renamed.name }),
             action: {
               label: t("common.undo"),
+              isUndo: true,
               // Undo renames back through the same command, and only the workspace it renamed.
               onAction: () => {
                 undo.current = null;

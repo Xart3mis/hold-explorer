@@ -5,6 +5,7 @@ import {
   ariaKeyShortcuts,
   formatShortcut,
   handleShortcut,
+  EXPORT_SHORTCUT,
   IMPORT_SHORTCUT,
   matchesShortcut,
   shortcutBindings,
@@ -174,6 +175,60 @@ describe("handleShortcut", () => {
     handled.preventDefault();
     expect(handleShortcut(handled, [{ shortcut: "Ctrl+3", run }])).toBe(false);
     expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("a shortcut that belongs to the page", () => {
+  it("is Ctrl+E for the export of the view", () => {
+    expect(EXPORT_SHORTCUT).toBe("Ctrl+E");
+  });
+
+  it("fires on the page and in a table", () => {
+    const run = vi.fn();
+    const binding = { shortcut: EXPORT_SHORTCUT, run, isPageOnly: true };
+    expect(handleShortcut(key({ key: "e", ctrlKey: true }), [binding])).toBe(true);
+    const cell = document.createElement("div");
+    cell.setAttribute("role", "gridcell");
+    expect(handleShortcut(key({ key: "e", ctrlKey: true }, cell), [binding])).toBe(true);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not fire while a text field has focus, Ctrl or not", () => {
+    const run = vi.fn();
+    const binding = { shortcut: EXPORT_SHORTCUT, run, isPageOnly: true };
+    const field = document.createElement("input");
+    const event = key({ key: "e", ctrlKey: true }, field);
+    expect(handleShortcut(event, [binding])).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it.each(["menu", "listbox", "dialog"])("does not fire while a %s is open", (role) => {
+    const run = vi.fn();
+    const binding = { shortcut: EXPORT_SHORTCUT, run, isPageOnly: true };
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", role);
+    document.body.append(overlay);
+    try {
+      expect(handleShortcut(key({ key: "e", ctrlKey: true }), [binding])).toBe(false);
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      overlay.remove();
+    }
+  });
+
+  it("leaves the shortcuts of the app as they were while a popover is open", () => {
+    const run = vi.fn();
+    const popover = document.createElement("div");
+    popover.setAttribute("role", "dialog");
+    document.body.append(popover);
+    try {
+      expect(handleShortcut(key({ key: "i", ctrlKey: true }), [{ shortcut: "Ctrl+I", run }])).toBe(
+        true,
+      );
+    } finally {
+      popover.remove();
+    }
   });
 });
 

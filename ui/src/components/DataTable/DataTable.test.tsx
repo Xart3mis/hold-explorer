@@ -1416,6 +1416,33 @@ describe("DataTable's sortable headers", () => {
     expect(mark(screen.getByRole("columnheader", { name: "First blocker" }))).toBeNull();
   });
 
+  it("makes a header sortable when its column says what it sorts by", SLOW, async () => {
+    const user = userEvent.setup();
+    const onSortChange = vi.fn();
+    const byValue: DataTableColumn<Line>[] = columns.map((column) =>
+      column.id === "blocker" ? { ...column, sortValue: (line: Line) => line.blocker } : column,
+    );
+    render(
+      <DataTable
+        aria-label="Lines"
+        columns={byValue}
+        rows={lines}
+        rowKey={(line) => line.id}
+        onSortChange={onSortChange}
+      />,
+    );
+    const blocker = screen.getByRole("columnheader", { name: "First blocker" });
+    expect(mark(blocker)).toHaveAttribute("data-mark", "rest");
+    expect(blocker).toHaveAttribute("aria-sort", "none");
+    // The column that sorts by `allowsSorting` alone still does.
+    expect(mark(screen.getByRole("columnheader", { name: "Holds" }))).toHaveAttribute(
+      "data-mark",
+      "rest",
+    );
+    await user.click(blocker);
+    expect(onSortChange).toHaveBeenCalledWith({ column: "blocker", direction: "ascending" });
+  });
+
   it("shows no mark while the rows are loading", () => {
     render(table({ isLoading: true }));
     expect(document.querySelector("[data-mark]")).toBeNull();

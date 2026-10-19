@@ -8,9 +8,9 @@ mod commands;
 use std::sync::Mutex;
 
 use tauri::window::Color;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
-use app::{AppState, Theme};
+use app::{AppState, SessionClipboard, Theme};
 
 /// The first frame of the window in the dark theme: the design token `--color-surface-app` of
 /// the dark theme in `DESIGN.md`, as `node tools/design/check-tokens.mjs --hex dark
@@ -64,6 +64,9 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::group_detail,
         commands::workspace_current,
         commands::demo_create,
+        commands::export_save,
+        commands::export_copy,
+        commands::export_open,
     ]
 }
 
@@ -92,14 +95,29 @@ pub fn run() {
                     window.set_background_color(Some(window_background(state.settings().theme)));
             }
             app.manage(Mutex::new(state));
+            // Under a lock of its own: the clipboard is set while the state is free.
+            app.manage(SessionClipboard::default());
             Ok(())
         })
         .invoke_handler(handler())
-        .run(tauri::generate_context!());
-    if let Err(error) = result {
-        eprintln!("Hold Explorer could not start: {error}");
-        std::process::exit(1);
-    }
+        .build(tauri::generate_context!());
+    let app = match result {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("Hold Explorer could not start: {error}");
+            std::process::exit(1);
+        }
+    };
+    app.run(|app, event| {
+        // The event loop ends the process without dropping what the app manages, and the system's
+        // clipboard hands what the app copied to the clipboard manager only when it is dropped:
+        // it is let go here, so a copy made just before quitting survives the app on X11.
+        if let RunEvent::Exit = event {
+            if let Some(clipboard) = app.try_state::<SessionClipboard>() {
+                clipboard.release();
+            }
+        }
+    });
 }
 
 #[cfg(test)]
@@ -211,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_file_grants_exactly_the_three_permissions_the_interface_uses_to_main() {
+    fn capability_file_grants_exactly_the_four_permissions_the_interface_uses_to_main() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/default.json");
         let text = std::fs::read_to_string(path).expect("capability file is readable");
         let capability: serde_json::Value =
@@ -231,16 +249,19 @@ mod tests {
             .iter()
             .filter_map(serde_json::Value::as_str)
             .collect();
-        // Opening a file dialog and revealing a file in its folder are all the page asks of a
-        // plugin. No permission opens an address, and window state is kept from Rust.
+        // Choosing a file to open, choosing where to save a file, and revealing a file in its
+        // folder are all the page asks of a plugin. No permission opens an address or a file:
+        // a saved file is opened from Rust, and only when the app wrote it. Window state is kept
+        // from Rust.
         let expected: BTreeSet<&str> = [
             "core:default",
             "dialog:allow-open",
+            "dialog:allow-save",
             "opener:allow-reveal-item-in-dir",
         ]
         .into();
         assert_eq!(permissions, expected);
-        assert_eq!(capability["permissions"].as_array().map(Vec::len), Some(3));
+        assert_eq!(capability["permissions"].as_array().map(Vec::len), Some(4));
 
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities");
         let files: Vec<String> = std::fs::read_dir(dir)

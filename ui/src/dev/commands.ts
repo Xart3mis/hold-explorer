@@ -7,6 +7,9 @@ import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
 import type { Dim } from "../bindings/Dim";
+import type { ExportPhase } from "../bindings/ExportPhase";
+import type { ExportRequest } from "../bindings/ExportRequest";
+import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
 import type { FilterPart } from "../bindings/FilterPart";
 import type { Inactive } from "../bindings/Inactive";
@@ -579,6 +582,15 @@ function world(state: DevState, theme: Theme): World {
 }
 
 /**
+ * How many rows a saved export holds, as the development page tells it: those the request names.
+ */
+function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined): number {
+  if (request.rows.kind === "Keys") return request.rows.keys.length;
+  if (request.rows.kind === "First") return request.rows.count;
+  return selected?.open_count ?? 0;
+}
+
+/**
  * Makes the commands, the file dialog, and the file manager answer from fixtures, in the given
  * state. Returns the marker of the development page. A dragged file is played from the console:
  * `hxDev.enter(["/exports/Holds.xlsx"])`, `hxDev.leave()`, `hxDev.drop([...])`.
@@ -1010,7 +1022,31 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       const isPicker = state === "filters-picker";
       return later(isPicker ? 1200 : 150, () => devValues(selected, spec, dim, search, isPicker));
     },
+    // An export is saved where the dialog says, after a moment of reading and one of writing; it
+    // says how many rows the request names, or the snapshot's open holds for every row.
+    export_save: (payload): Promise<ExportSaved> => {
+      const { request, path, onProgress } = payload as {
+        request: ExportRequest;
+        path: string;
+        onProgress: { onmessage: (phase: ExportPhase) => void };
+      };
+      const { selected } = inView(payload);
+      onProgress.onmessage("Reading");
+      return later(300, () => {
+        onProgress.onmessage("Writing");
+      }).then(() => later(500, () => ({ path, rows: exportedRows(request, selected) })));
+    },
+    export_copy: (payload) => {
+      inView(payload);
+      return later(150, () => null);
+    },
+    export_open: () => null,
     "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
+    // The save dialog takes the name it offers, in the folder of the exports.
+    "plugin:dialog|save": (payload) => {
+      const { options } = payload as { options: { defaultPath?: string } };
+      return `/home/ada/exports/${options.defaultPath ?? "HoldExplorer.xlsx"}`;
+    },
     "plugin:opener|reveal_item_in_dir": () => null,
   };
 

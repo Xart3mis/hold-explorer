@@ -62,7 +62,7 @@ pub struct GroupDetail {
 }
 
 /// A snapshot without a hold, which is what a workspace without snapshots answers for.
-fn empty_dataset() -> Dataset {
+pub(super) fn empty_dataset() -> Dataset {
     Dataset::build(
         Vec::new(),
         RuleSet::builtin(),

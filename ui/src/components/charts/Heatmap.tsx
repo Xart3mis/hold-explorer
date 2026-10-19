@@ -479,6 +479,7 @@ export function heatmapTable(
     rows: rows.map((row, r) => ({
       key: `${String(r)}:${row.key}`,
       cells: [row.label, ...cols.map((_, c) => formatCell(cells[r]?.[c] ?? 0))],
+      values: [row.label, ...cols.map((_, c) => cells[r]?.[c] ?? 0)],
       ...(r === otherRow ? { isFolded: true } : {}),
     })),
   };

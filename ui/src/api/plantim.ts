@@ -1,5 +1,5 @@
 import type { Field } from "../bindings/Field";
-import names from "./export-columns.json";
+import names from "./plantim-columns.json";
 import required from "./required-fields.json";
 
 /**

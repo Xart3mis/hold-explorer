@@ -64,6 +64,13 @@
  *    the first is the edit of a snapshot's date) invalidates `keys.snapshots` once it has
  *    answered, so every reading of every screen is read again. It must: apart from the
  *    exception of rule 2, nothing else makes a paged reading read its pages again.
+ * 5. The one exception to rule 1: a command sent once, when the user asks, rather than read (an
+ *    export) takes its view from `useShownView`, which builds it from the application start.
+ *    That view is `null` while an action on the workspace runs, and the control that sends the
+ *    command waits meanwhile, as for a first load. Such a command is never sent again by itself:
+ *    an answer of `ViewChanged` is shown as a failure, in the command's own words, and a failure
+ *    is put away once another view is on screen, so it is never sent again for a view that is
+ *    gone.
  *
  * What the three functions do with that:
  *
@@ -147,6 +154,19 @@ function viewOf(open: WorkspaceOpen | null | undefined): ViewRef | null {
 
 function isSameView(one: ViewRef | null, other: ViewRef | null): boolean {
   return one?.workspace_id === other?.workspace_id && one?.snapshot_id === other?.snapshot_id;
+}
+
+/**
+ * The view on screen, for a command that is sent once, when the user asks, rather than read: an
+ * export (rule 5). Such a command checks the view as a reading does and answers `ViewChanged`
+ * when the Rust side holds another; it is not sent again by itself, so its caller shows that
+ * answer as it shows any failure. `null` while no workspace is open, and while an action on the
+ * workspace runs or waits its turn: the two sides may differ then, so nothing is sent.
+ */
+export function useShownView(): ViewRef | null {
+  const view = viewOf(useShell().start.open);
+  const isActing = useIsMutating({ mutationKey: keys.workspaceAction }) > 0;
+  return isActing ? null : view;
 }
 
 /** The view the interface shows, as the cached application start has it. */

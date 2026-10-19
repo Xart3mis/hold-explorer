@@ -20,6 +20,7 @@ import type { LineDetail } from "../bindings/LineDetail";
 import type { LinePage } from "../bindings/LinePage";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { TargetCheck } from "../bindings/TargetCheck";
+import type { ExportSaved } from "../bindings/ExportSaved";
 import type { ValuePage } from "../bindings/ValuePage";
 import type { api } from "./commands";
 import type { workspaceApi } from "./workspace-commands";
@@ -55,6 +56,9 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.solveOrder>, Promise<SolveView>>>,
   Check<Equal<ReturnType<typeof api.blockerDetail>, Promise<BlockerDetail | null>>>,
   Check<Equal<ReturnType<typeof api.groupDetail>, Promise<GroupDetail | null>>>,
+  Check<Equal<ReturnType<typeof api.exportSave>, Promise<ExportSaved>>>,
+  Check<Equal<ReturnType<typeof api.exportCopy>, Promise<null>>>,
+  Check<Equal<ReturnType<typeof api.exportOpen>, Promise<null>>>,
   Check<Equal<AppStart["list_error"], CommandError | null>>,
   Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];

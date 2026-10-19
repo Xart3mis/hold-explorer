@@ -3,7 +3,8 @@ name = "hx-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-rust-version = "1.90"
+# What `hx-export` (through `krilla`) needs.
+rust-version = "1.92"
 
 [lib]
 name = "hx_desktop"
@@ -12,8 +13,10 @@ name = "hx_desktop"
 tauri-build.workspace = true
 
 [dependencies]
+arboard.workspace = true
 hx-core = { path = "../crates/core", features = ["ts"] }
 hx-store = { path = "../crates/store", features = ["ts"] }
+hx-export = { path = "../crates/export", features = ["ts"] }
 hx-synth = { path = "../crates/synth" }
 chrono.workspace = true
 serde.workspace = true
@@ -27,6 +30,9 @@ tempfile.workspace = true
 ts-rs.workspace = true
 
 [dev-dependencies]
+# Already in the lock through hx-core and hx-export: the tests read back the files an export saves.
+calamine.workspace = true
+csv.workspace = true
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
 # The mock runtime: the tests invoke the commands with the arguments the interface sends.

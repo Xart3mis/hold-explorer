@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
-import { OPTIONAL_FIELDS } from "../../api/export";
+import { OPTIONAL_FIELDS } from "../../api/plantim";
 import { dimId, dimName } from "../../app/filters/dims";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
@@ -17,13 +17,15 @@ import type { Group } from "../../bindings/Group";
 import type { ViewRef } from "../../bindings/ViewRef";
 import { Button, EmptyState, ErrorState, Select, ViewSwitch } from "../../components";
 import { t } from "../../text/i18n";
+import { ExportMenu, ExportMenuInert, ExportNotices, usePageExports } from "../export/ExportMenu";
+import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { breakdownAddress, parseBreakdownAddress, type BreakdownMode } from "./address";
 import styles from "./BreakdownPage.module.css";
 import { breakdownDims } from "./dims";
-import { ListMode } from "./ListMode";
-import { MatrixMode } from "./MatrixMode";
+import { ListMode, useGroupTable } from "./ListMode";
+import { MatrixMode, useMatrixReading } from "./MatrixMode";
 import { NoHolds } from "./NoHolds";
 
 const NO_GROUPS: readonly Group[] = [];
@@ -47,7 +49,7 @@ interface Shown {
  * matrix, so that each mode is as it was when the page switches back to it. Another dimension or
  * another filter is read anew; the groups of before stay on screen, dimmed, until the new ones
  * are there, and the table then returns to its top. Another dimension closes the groups that were
- * open.
+ * open, and drops the sort of the groups.
  *
  * A workspace without snapshots gets an empty state that starts an import. A result without
  * groups says why: the filters, or a snapshot without open holds, and offers the way back.
@@ -86,10 +88,54 @@ export function BreakdownPage() {
     setKept({ groups: query.data, dim: state.by, key: asked });
   }
   const shown: Shown | null = own ? { groups: query.data, dim: state.by, key: asked } : kept;
+  const shownDim = shown?.dim ?? state.by;
+  const table = useGroupTable(state, shown?.groups ?? NO_GROUPS, shownDim, shown?.key ?? "");
+  const matrix = useMatrixReading(state, spec, hasSnapshot && !isList);
+
+  // What a file of the page is made from: the groups in the order shown, or the matrix on screen.
+  // The menu waits while the result on screen is not the one the address and the filters ask for.
+  const exports = usePageExports();
+  const shownMatrix = matrix.shown;
+  const exportState: ScreenState = isList
+    ? {
+        screen: "breakdown",
+        dim: shownDim,
+        shownKeys: table.sortedGroups.map((group) => group.key),
+      }
+    : {
+        screen: "matrix",
+        rows: shownMatrix?.rows ?? state.rows,
+        cols: shownMatrix?.cols ?? state.cols,
+      };
+  const exportMenu = (
+    <ExportMenu
+      screen={exportState.screen === "breakdown" ? "breakdown" : "matrix"}
+      state={exportState}
+      {...(isList
+        ? { loaded: table.sortedGroups.length, selected: [...table.selected.keys] }
+        : { isEmpty: shownMatrix !== null && shownMatrix.matrix.rows.length === 0 })}
+      charts={[
+        exportState.screen === "matrix"
+          ? {
+              choice: { kind: "Heatmap", rows: exportState.rows, cols: exportState.cols },
+              label: t("breakdown.matrix", {
+                rows: dimName(exportState.rows),
+                cols: dimName(exportState.cols),
+              }),
+            }
+          : {
+              choice: { kind: "Bars", dim: shownDim },
+              label: t("breakdown.table", { dim: dimName(shownDim) }),
+            },
+      ]}
+      isReady={isList ? own : matrix.own}
+      exports={exports}
+    />
+  );
 
   if (!hasSnapshot) {
     return (
-      <Page title={t("destinations.name.breakdown")}>
+      <Page title={t("destinations.name.breakdown")} actions={<ExportMenuInert />}>
         <EmptyState
           title={t("breakdown.emptyTitle")}
           action={
@@ -129,6 +175,8 @@ export function BreakdownPage() {
     <Page
       title={t("destinations.name.breakdown")}
       fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
           aria-label={t("breakdown.modes")}
@@ -153,10 +201,12 @@ export function BreakdownPage() {
                 onSelectionChange={(id) => {
                   const by = choices.find((dim) => dimId(dim) === id);
                   if (by === undefined || id === dimId(state.by)) return;
-                  // The groups of another dimension are other groups: none of them is open.
-                  void navigate(breakdownAddress({ ...state, by, open: [] }, location.search), {
-                    replace: true,
-                  });
+                  // The groups of another dimension are other groups: none of them is open, and
+                  // they are in the command's order.
+                  void navigate(
+                    breakdownAddress({ ...state, by, open: [], sort: undefined }, location.search),
+                    { replace: true },
+                  );
                 }}
                 className={styles.groupBy}
               />
@@ -175,16 +225,16 @@ export function BreakdownPage() {
                 state={state}
                 spec={spec}
                 groups={shown?.groups ?? NO_GROUPS}
-                shownDim={shown?.dim ?? state.by}
+                shownDim={shownDim}
+                table={table}
                 isLoading={isLoading}
                 isStale={isStale}
-                resultKey={shown?.key ?? ""}
                 {...(emptyState === undefined ? {} : { emptyState })}
               />
             ) : null}
           </>
         ) : (
-          <MatrixMode state={state} spec={spec} dims={dims} />
+          <MatrixMode state={state} dims={dims} reading={matrix} />
         )}
       </div>
     </Page>
