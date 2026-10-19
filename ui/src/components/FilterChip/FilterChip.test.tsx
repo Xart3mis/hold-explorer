@@ -64,7 +64,7 @@ describe("FilterChip", () => {
   it("draws a chip that is not in this snapshot with full-contrast text and a dashed outline", () => {
     const rule = declarationsOf(CHIP_CSS, ".chip[data-inactive]");
     expect(rule).toMatch(/border-style:\s*dashed/);
-    expect(rule).toMatch(/border-color:\s*var\(--color-border-default\)/);
+    expect(rule).toMatch(/border-color:\s*var\(--color-border-strong\)/);
     expect(rule).toMatch(/color:\s*var\(--color-text-primary\)/);
     // No ink of the chip is muted: not the field name, and not the icon.
     const inks = [".chip[data-inactive] .field", ".chip[data-inactive] .remove", ".inactive"].map(

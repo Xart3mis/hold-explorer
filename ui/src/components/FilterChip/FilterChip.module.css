@@ -113,12 +113,12 @@
 /*
  * A filter that is kept but not applied, for the snapshot in view lacks its column: the look of a
  * disabled chip in its fill, but with the full ink of an active one so it reads, and a dashed
- * outline in the border of a control that says it is not applied. Still pressable and
+ * outline in the strong border of a control that says it is not applied. Still pressable and
  * removable, with a small icon before the field.
  */
 .chip[data-inactive] {
   border-style: dashed;
-  border-color: var(--color-border-default);
+  border-color: var(--color-border-strong);
   background-color: var(--color-surface-disabled);
   color: var(--color-text-primary);
 }
