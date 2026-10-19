@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
+import { useFilters } from "../../app/filters/state";
 import { destinationPages } from "../../app/router";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { VIEW_CHANGED } from "../../app/view";
@@ -493,6 +495,126 @@ describe("what the shell says when the view on screen was brought back in step",
     expect(current).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(en.shell.viewResyncedTitle)).not.toBeInTheDocument();
   });
+});
+
+/** A page that holds what a reset must clear (selected rows) and what it must keep (filters). */
+function ProbePage({ name }: { name: string }) {
+  const selected = useSelectedRows("probe");
+  const { filters, update } = useFilters();
+  return (
+    <Page title={name}>
+      <p data-testid="selected">{[...selected.keys].join(",")}</p>
+      <p data-testid="filter">{filters.text}</p>
+      <button
+        type="button"
+        onClick={() => {
+          selected.set(new Set(["a", "b"]));
+        }}
+      >
+        select rows
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          update((current) => ({ ...current, text: "valve" }));
+        }}
+      >
+        filter text
+      </button>
+    </Page>
+  );
+}
+
+function scrollArea(): HTMLElement {
+  return must(
+    screen.getByRole("main").querySelector<HTMLElement>("[class*='scroll']"),
+    "the area the page scrolls in",
+  );
+}
+
+describe("a second press on the current destination", () => {
+  const pages = {
+    ...destinationPages,
+    lines: <ProbePage name="Lines" />,
+    blockers: <ProbePage name="Blockers" />,
+  };
+
+  async function onLines(path = "/lines?mode=list&sort=holds&dir=desc&line=L-1") {
+    const app = renderApp({ start: openStart(), path, pages });
+    const nav = await sidebar();
+    await app.user.click(await screen.findByRole("button", { name: "select rows" }));
+    await app.user.click(screen.getByRole("button", { name: "filter text" }));
+    scrollArea().scrollTop = 240;
+    expect(screen.getByTestId("selected")).toHaveTextContent("a,b");
+    return { ...app, nav };
+  }
+
+  it(
+    "returns the destination to its bare address, clears its rows and its scroll, and keeps the filters",
+    SLOW,
+    async () => {
+      const { user, router, nav } = await onLines();
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      expect(router.state.location.search).toBe("");
+      await waitFor(() => {
+        expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+      });
+      expect(scrollArea().scrollTop).toBe(0);
+      expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+      // The address it will be opened at from now on is the bare one.
+      await user.click(within(nav).getByRole("link", { name: names.blockers }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      expect(within(nav).getByRole("link", { name: names.lines })).toHaveAttribute(
+        "href",
+        "/lines",
+      );
+    },
+  );
+
+  it("is the same for Ctrl+3 on Lines", SLOW, async () => {
+    const { user, router } = await onLines();
+    await user.keyboard("{Control>}3{/Control}");
+    expect(router.state.location.pathname).toBe("/lines");
+    expect(router.state.location.search).toBe("");
+    await waitFor(() => {
+      expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+    });
+    expect(scrollArea().scrollTop).toBe(0);
+    expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+  });
+
+  it(
+    "resets a destination whose address is already bare: its rows and its scroll",
+    SLOW,
+    async () => {
+      const { user, nav } = await onLines("/lines");
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      await waitFor(() => {
+        expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+      });
+      expect(scrollArea().scrollTop).toBe(0);
+    },
+  );
+
+  it(
+    "opens another destination at the address it was left at, and resets nothing there",
+    SLOW,
+    async () => {
+      const { user, router, nav } = await onLines();
+      await user.click(within(nav).getByRole("link", { name: names.blockers }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      // The address it was left at, with no row opened; nothing was reset by leaving.
+      expect(router.state.location.search).toBe("?mode=list&sort=holds&dir=desc");
+      expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+    },
+  );
 });
 
 describe("shortcuts", () => {

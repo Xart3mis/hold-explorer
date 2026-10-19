@@ -35,6 +35,11 @@ function reading(field: string, value: string, isNegated: boolean): ReactNode[] 
   });
 }
 
+/** What a chip reads, as one text: the name of its first button, and its tooltip when it needs one. */
+function sentenceOf(field: string, value: string, isNegated: boolean): string {
+  return t(isNegated ? "filterChip.isNot" : "filterChip.is", { field, value });
+}
+
 /** What a chip says of the dialog the screen opens for it: that it opens one, and whether it is open. */
 function opens(isExpanded: boolean | undefined) {
   return isExpanded === undefined
@@ -72,8 +77,8 @@ export interface FilterChipProps {
   isDisabled?: boolean;
   /**
    * The filter is kept but not applied: the snapshot in view lacks the column it needs. The chip
-   * is muted and shows a small icon before its field; its name says it is not in this snapshot.
-   * It opens and is removed as any chip.
+   * has a dashed outline and shows a small icon before its field; its name and its tooltip end
+   * with ", not in this snapshot". It opens and is removed as any chip.
    */
   isInactive?: boolean;
   /**
@@ -103,6 +108,29 @@ export function FilterChip({
   className,
 }: FilterChipProps) {
   const remove = t("filterChip.remove", { field });
+  const body = (
+    <RacButton
+      isDisabled={isDisabled}
+      onPress={onPress}
+      {...opens(isExpanded)}
+      onKeyDown={(event) => {
+        if (event.key === "Backspace" || event.key === "Delete") onRemove();
+        else event.continuePropagation();
+      }}
+      className={cx(styles.body)}
+    >
+      {isInactive ? (
+        <span aria-hidden="true" data-part="filter-chip-inactive" className={styles.inactive}>
+          <Icon icon={CircleSlash} />
+        </span>
+      ) : null}
+      <span className={styles.text}>{reading(field, value, isNegated)}</span>
+      {isInactive ? (
+        // The end of its name, after the value: ", not in this snapshot". It takes no room.
+        <VisuallyHidden>{t("filterChip.notInSnapshot")}</VisuallyHidden>
+      ) : null}
+    </RacButton>
+  );
   return (
     <span
       data-part="filter-chip"
@@ -111,30 +139,18 @@ export function FilterChip({
       data-stale={isStale ? "" : undefined}
       className={cx(styles.chip, className)}
     >
-      <RacButton
-        isDisabled={isDisabled}
-        onPress={onPress}
-        {...opens(isExpanded)}
-        onKeyDown={(event) => {
-          if (event.key === "Backspace" || event.key === "Delete") onRemove();
-          else event.continuePropagation();
-        }}
-        className={cx(styles.body)}
-      >
-        {isInactive ? (
-          <span aria-hidden="true" data-part="filter-chip-inactive" className={styles.inactive}>
-            <Icon icon={CircleSlash} />
-          </span>
-        ) : null}
-        <span className={styles.text}>{reading(field, value, isNegated)}</span>
-        {isInactive ? (
-          // Its own word of the name, after the value; the space takes no room in the pill.
-          <>
-            {" "}
-            <VisuallyHidden>{t("filterChip.notInSnapshot")}</VisuallyHidden>
-          </>
-        ) : null}
-      </RacButton>
+      {isInactive ? (
+        // Says in words what the dashed outline shows: the filter is kept and not applied. The
+        // text is the name of the button, so nothing depends on the tooltip.
+        <Tooltip
+          text={`${sentenceOf(field, value, isNegated)}${t("filterChip.notInSnapshot")}`}
+          isDisabled={isUnderPopover}
+        >
+          {body}
+        </Tooltip>
+      ) : (
+        body
+      )}
       {isDisabled ? (
         // The X without its button: the same circle in the same place, and nothing to press.
         <span aria-hidden="true" data-part="filter-chip-x" className={styles.remove}>

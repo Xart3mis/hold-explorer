@@ -60,7 +60,7 @@
     "isNot": "{{field}} is not {{value}}",
     "add": "Add filter",
     "remove": "Remove the filter {{field}}",
-    "notInSnapshot": "(not in this snapshot)"
+    "notInSnapshot": ", not in this snapshot"
   },
   "ageBand": {
     "between_one": "{{min}} to {{count, number}} day",

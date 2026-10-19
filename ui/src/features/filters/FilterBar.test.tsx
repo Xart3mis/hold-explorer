@@ -260,7 +260,7 @@ describe("FilterBar", () => {
         view: { workspace_id: workspace().id, snapshot_id: 2 },
       });
     });
-    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const marked = `Discipline Civil${en.filterChip.notInSnapshot}`;
     // The chip stays, and says that its filter is not in this snapshot; the other one does not.
     await waitFor(() => {
       expect(chips(region)).toEqual([marked, "Role Lead"]);
@@ -799,7 +799,7 @@ describe("FilterBar", () => {
     );
     const region = await bar();
     set({ fields: [{ dim: "Discipline", values: [value("Civil")], negate: false }] });
-    const marked = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const marked = `Discipline Civil${en.filterChip.notInSnapshot}`;
     const pill = () =>
       must(chip(region, marked).closest("[data-part='filter-chip']"), "the marked chip");
     // Once the answer for these filters is there, the mark is its own, and not dimmed.

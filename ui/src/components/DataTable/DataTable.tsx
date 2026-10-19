@@ -759,6 +759,8 @@ class MarkStore {
 }
 
 const MarkContext = createContext<MarkStore>(new MarkStore());
+/** Whether the row being drawn is the open row among selected rows: the first cell marks it. */
+const OpenMarkContext = createContext(false);
 const noMark = (): Mark => null;
 
 /**
@@ -780,14 +782,27 @@ function MarkedRow({
   const isSelected = mark === "selected" || mark === "selected open";
   const isOpen = mark === "open" || mark === "selected open";
   return (
-    <div
-      {...domProps}
-      aria-selected={isSelected}
-      data-selected={isSelected ? "true" : undefined}
-      data-open={isOpen ? "" : undefined}
-      aria-current={isOpen ? "true" : undefined}
-    />
+    <OpenMarkContext value={mark === "selected open"}>
+      <div
+        {...domProps}
+        aria-selected={isSelected}
+        data-selected={isSelected ? "true" : undefined}
+        data-open={isOpen ? "" : undefined}
+        aria-current={isOpen ? "true" : undefined}
+      />
+    </OpenMarkContext>
   );
+}
+
+/**
+ * The small mark at the start of the first cell of the open row among two or more selected rows.
+ * It stands in the padding of the cell and out of the flow, so no text and no column moves, and it
+ * is decoration: the row already says it is current.
+ */
+function OpenMark() {
+  return useContext(OpenMarkContext) ? (
+    <span aria-hidden="true" data-part="open-mark" className={styles.openMark} />
+  ) : null;
 }
 
 /**
@@ -1122,6 +1137,7 @@ export function DataTable<Item, Child = never>({
           {expandable && cell.isPinned
             ? ({ hasChildItems }) => (
                 <>
+                  {index === 0 ? <OpenMark /> : null}
                   {hasChildItems ? (
                     <Chevron />
                   ) : (
@@ -1130,7 +1146,12 @@ export function DataTable<Item, Child = never>({
                   <CellValue column={index} />
                 </>
               )
-            : () => <CellValue column={index} />}
+            : () => (
+                <>
+                  {index === 0 ? <OpenMark /> : null}
+                  <CellValue column={index} />
+                </>
+              )}
         </Cell>
       )),
       ...(hasActions

@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { RouterProvider } from "react-aria-components";
 import { Outlet, useHref, useLocation, useNavigate, type NavigateOptions } from "react-router";
 import { useIsMutating } from "@tanstack/react-query";
@@ -165,6 +174,19 @@ function LoadedShell({ start, destinations }: ShellProps) {
   }
   const addressOf = useCallback((path: string) => `${path}${searches.get(path) ?? ""}`, [searches]);
 
+  // A second press on the destination that is shown returns it to its default address: the page
+  // is drawn anew, so its selected rows and its scroll are gone, and the address it is opened at
+  // from now on is its own (the filters belong to the workspace, and stay). The count is what
+  // the page is keyed by besides its path.
+  const [restarts, setRestarts] = useState(0);
+  const scrolled = useRef<HTMLDivElement>(null);
+  const restart = useCallback(() => {
+    setRestarts((count) => count + 1);
+  }, []);
+  useLayoutEffect(() => {
+    if (restarts > 0 && scrolled.current !== null) scrolled.current.scrollTop = 0;
+  }, [restarts]);
+
   // The toast region is rendered beside the layout. It learns from the root element where the
   // content area starts: after the sidebar, or after its rail; see app.css.
   const hasSidebar = open !== null;
@@ -233,11 +255,18 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const bindings = useMemo(
     () =>
       shortcutBindings(destinations, {
-        open: (path) => void navigate(addressOf(path)),
+        open: (path) => {
+          if (path !== pathname) {
+            void navigate(addressOf(path));
+            return;
+          }
+          restart();
+          void navigate(path);
+        },
         startImport: () => void startImport(),
         hasWorkspace: hasSidebar,
       }),
-    [destinations, navigate, addressOf, hasSidebar],
+    [destinations, navigate, addressOf, hasSidebar, pathname, restart],
   );
   useShortcuts(bindings);
 
@@ -285,6 +314,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
               <Sidebar
                 destinations={destinations}
                 addressOf={addressOf}
+                onRestart={restart}
                 form={sidebarForm}
                 onFormChange={setSidebarForm}
               />
@@ -376,9 +406,13 @@ function LoadedShell({ start, destinations }: ShellProps) {
                   )}
                 </div>
               ) : null}
-              <div data-stale={isSwitching ? "" : undefined} className={styles.scroll}>
+              <div
+                ref={scrolled}
+                data-stale={isSwitching ? "" : undefined}
+                className={styles.scroll}
+              >
                 {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
-                <Outlet key={pathname} />
+                <Outlet key={`${pathname}#${String(restarts)}`} />
               </div>
               {dragged === null ? null : <DropFrame paths={dragged} />}
             </main>
