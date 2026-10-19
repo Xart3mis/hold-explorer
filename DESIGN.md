@@ -810,8 +810,22 @@ A button that opens a short list of actions, or of choices, under itself: the wo
 - **Disabled item:** label and detail in `--color-text-disabled`; the arrow keys pass it by.
 - **Section:** a group of items under its name. The name is a line of `--text-caption` in `--color-text-muted`, as tall as an item and lined up with the labels.
 - **Separator:** a `--border-width-thin` line in `--color-border-default` from edge to edge of the menu, with `--space-1` above and below. It is the default border and not the subtle one, which has the lightness of the overlay surface itself in the dark theme.
+- **Submenu:** an item that opens a menu of its own, for one action that applies to one of several things ("Chart as PNG" to one of four charts). It is an item with a chevron pointing right at its trailing edge, at `--size-icon` in `--color-text-muted`, and `aria-haspopup="menu"`. Its menu is the same overlay, named after the item, and opens beside it on the trailing side (on the leading side where there is no room), its first item level with the item it opens from; it moves `--space-1` toward its place as it opens. While it is open the item keeps the highlighted fill. A press, Enter, Space, or the arrow toward it opens it with the focus on its first item; the arrow back or Esc closes it and gives the focus back to the item; choosing in it closes every menu. It also opens after a pause under the pointer, which is never the only way. One level only: a submenu holds items, not submenus.
 - **Behavior:** Enter, Space, or the down arrow opens the menu. The arrow keys move, Home and End jump to the ends, typing jumps to a match, Enter or Space chooses and closes. Esc, or a press outside, closes without choosing. Closing gives the focus back to the button.
 - **Error:** a menu has no error state of its own. What an item started and failed is shown where the error rule of "Where an error goes" puts it.
+
+### Export menu
+
+The menu of a data screen (Overview, Breakdown, Lines, Blockers) that saves or copies what the screen shows. It is a "Menu" with nothing of its own but its items and where it stands.
+
+- **Place:** in the page header, at the trailing edge, level with the title; its menu lines up with the trailing edge of the button. The button reads "Export", without an icon.
+- **Items,** in three groups divided by separators: what is saved ("Excel, this view…", "Full workbook…", "CSV…", "Status report (PDF)…"); what is copied ("Copy table", "Copy selected rows (3)", "Copy line IDs"); the charts ("Chart as PNG…", "Chart as SVG…", "Copy chart"). An item names the result, not the mechanism. An item that saves ends in an ellipsis, since the save dialog follows; a copy does not. Each runs at once with the columns and rows remembered for the screen.
+- **What a screen offers:** an item that does not apply is left out, never disabled. The Overview has no CSV and no copy of a table (its view is several tables), and its four charts (by discipline, by hold type, by role, top blockers) are in a submenu of each chart action ("Chart as PNG" › "Open holds by discipline…"). The matrix of Breakdown writes its holds cross-tab only, and its items say so ("CSV (holds)…", "Copy table (holds)"); it has no rows to copy by line. "Copy selected rows" is there while at least one row is selected, with their count. Lines has no chart.
+- **Not shown** on a screen without a snapshot: a menu with nothing to offer is not shown.
+- **Waiting:** while the screen has nothing to export yet (a first load) the button waits as for another control: its chevron, no hover, opens nothing, `aria-busy`.
+- **Running:** from the press until the file is saved or the copy is made, the save dialog included, the button shows the spinner in place of its chevron and opens nothing, and the controls of the export notice are inert, so a second export cannot start. The result is a toast ("Saved Lines.xlsx" with "Open file" and "Show in folder", or "Copied 3 rows").
+- **Failure:** a danger notice directly under the page header, above the view switch and the filter bar, `--space-4` above what follows ("Where an error goes": beside what failed). It says what failed and the command's message, offers "Choose another name" or "Try again" where they help, and stays until it is dismissed or the next export has a result.
+- **Keyboard:** `Ctrl+E` saves the view as Excel, as the first item does, also while the focus is in a table; never while a text field has the focus or an overlay is open (a menu, a list, a popover), and not while the button waits or an export runs.
 
 ### Checkbox
 
@@ -1223,6 +1237,7 @@ A destination that is not built yet opens a screen made of the page header and t
 - **Spacing:** the header starts at the content padding (`--layout-page-padding-x`, `--layout-page-padding-y`) and is followed by a `--space-4` gap. A `--space-2` gap separates the breadcrumb from the title. The header has no border and no background of its own.
 - **Rules:** one page title per page, and it names the destination or the step ("Lines", "Review import"). No icon beside it. A destination has no breadcrumb above its title; a page below a destination has one.
 - **Loading:** the title and the breadcrumb are known before the data is and never show a skeleton.
+- **Notice of an action:** what an action of the header started and failed (an export) is a danger notice directly under the header, before the view switch and the bar, followed by a `--space-4` gap.
 
 ### Breadcrumb
 

@@ -877,7 +877,27 @@
     "copiedLineIds": "Copied the line IDs",
     "copiedChart": "Copied the chart",
     "noWorkspace": "No workspace is open, so there is nothing to export. Open a workspace and try again.",
-    "showFailed": "The folder of the saved file could not be shown"
+    "showFailed": "The folder of the saved file could not be shown",
+    "menu": {
+      "label": "Export",
+      "name": "Export",
+      "excel": "Excel, this view…",
+      "workbook": "Full workbook…",
+      "csv": "CSV…",
+      "csvHolds": "CSV (holds)…",
+      "report": "Status report (PDF)…",
+      "copyTable": "Copy table",
+      "copyHolds": "Copy table (holds)",
+      "copySelected": "Copy selected rows ({{count, number}})",
+      "copyLineIds": "Copy line IDs",
+      "chartPng": "Chart as PNG…",
+      "chartSvg": "Chart as SVG…",
+      "copyChart": "Copy chart",
+      "chartsPng": "Chart as PNG",
+      "chartsSvg": "Chart as SVG",
+      "copyCharts": "Copy chart",
+      "saveChart": "{{chart}}…"
+    }
   },
   "file": {
     "title": "Hold Explorer export",

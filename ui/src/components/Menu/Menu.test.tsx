@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
 import { SLOW } from "../../test/slow";
-import { MenuButton, MenuItem, MenuSection, MenuSeparator } from "./Menu";
+import { MenuButton, MenuItem, MenuSection, MenuSeparator, MenuSubmenu } from "./Menu";
 
 function Sample({
   onAction = () => undefined,
@@ -201,6 +201,116 @@ describe("MenuButton", () => {
     render(<Sample />);
     await expectAccessible();
     await user.click(screen.getByRole("button", { name: "Export" }));
+    await expectAccessible();
+  });
+});
+
+/** A menu with an action and a submenu of two actions, as the Export menu of the Overview has. */
+function WithSubmenu({ onAction = () => undefined }: { onAction?: (id: string) => void }) {
+  return (
+    <MenuButton label="Export" menuLabel="Export" align="end">
+      <MenuItem
+        id="excel"
+        onAction={() => {
+          onAction("excel");
+        }}
+      >
+        Excel, this view…
+      </MenuItem>
+      <MenuSubmenu id="png" label="Chart as PNG">
+        <MenuItem
+          id="png-discipline"
+          onAction={() => {
+            onAction("discipline");
+          }}
+        >
+          Holds by discipline…
+        </MenuItem>
+        <MenuItem
+          id="png-blockers"
+          onAction={() => {
+            onAction("blockers");
+          }}
+        >
+          Top blockers…
+        </MenuItem>
+      </MenuSubmenu>
+    </MenuButton>
+  );
+}
+
+describe("MenuSubmenu", () => {
+  it("is an item that says it opens a menu, with a chevron", async () => {
+    const user = userEvent.setup();
+    render(<WithSubmenu />);
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    const item = screen.getByRole("menuitem", { name: "Chart as PNG" });
+    expect(item).toHaveAttribute("aria-haspopup", "menu");
+    expect(item).toHaveAttribute("aria-expanded", "false");
+    expect(item.querySelectorAll("svg")).toHaveLength(1);
+  });
+
+  it("opens by a press and runs the action of its item, then closes every menu", async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    render(<WithSubmenu onAction={onAction} />);
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "Chart as PNG" }));
+    const submenu = await screen.findByRole("menu", { name: "Chart as PNG" });
+    await user.click(within(submenu).getByRole("menuitem", { name: "Top blockers…" }));
+    expect(onAction).toHaveBeenCalledWith("blockers");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens, closes, and chooses by the keyboard, and gives focus back", SLOW, async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    render(<WithSubmenu onAction={onAction} />);
+    const trigger = screen.getByRole("button", { name: "Export" });
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard("{ArrowDown}");
+    const item = screen.getByRole("menuitem", { name: "Chart as PNG" });
+    await waitFor(() => {
+      expect(item).toHaveFocus();
+    });
+    await user.keyboard("{ArrowRight}");
+    const submenu = await screen.findByRole("menu", { name: "Chart as PNG" });
+    expect(item).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => {
+      expect(within(submenu).getByRole("menuitem", { name: "Holds by discipline…" })).toHaveFocus();
+    });
+    await user.keyboard("{ArrowLeft}");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu", { name: "Chart as PNG" })).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(item).toHaveFocus();
+    });
+    await user.keyboard("{Enter}");
+    const again = await screen.findByRole("menu", { name: "Chart as PNG" });
+    await waitFor(() => {
+      expect(within(again).getByRole("menuitem", { name: "Holds by discipline…" })).toHaveFocus();
+    });
+    await user.keyboard("{Enter}");
+    expect(onAction).toHaveBeenCalledWith("discipline");
+    await waitFor(() => {
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(trigger).toHaveFocus();
+    });
+  });
+
+  it("has no accessibility violation with the submenu open", SLOW, async () => {
+    const user = userEvent.setup();
+    render(<WithSubmenu />);
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    await user.click(screen.getByRole("menuitem", { name: "Chart as PNG" }));
+    await screen.findByRole("menu", { name: "Chart as PNG" });
     await expectAccessible();
   });
 });

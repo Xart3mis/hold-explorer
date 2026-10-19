@@ -13,6 +13,11 @@ export interface PageProps extends Omit<PageHeaderProps, "titleRef" | "className
    */
   width?: "form" | "content" | "full";
   /**
+   * What the page has to say about an action of its header, directly under the header: the
+   * notice of an export that failed. It is nothing while there is nothing to say.
+   */
+  notice?: ReactNode;
+  /**
    * The switch between the views of the content (`ViewSwitch`), directly under the header and
    * above the bar. A page with one view leaves it out.
    */
@@ -40,8 +45,8 @@ function refocus(title: HTMLElement | null): void {
 }
 
 /**
- * A page of the shell: its header, then its view switch and its bar when it has them, then its
- * content. When a navigation opens the page, the focus moves to its title, so a keyboard user and
+ * A page of the shell: its header, then the notice of what its header started when there is one,
+ * then its view switch and its bar when it has them, then its content. When a navigation opens the page, the focus moves to its title, so a keyboard user and
  * a screen reader start at the top of what changed, and the title of the document names the page
  * and the app. A field of the page that asked for the focus, such as the name field of a form the
  * page was opened for, keeps it. The page the app opens on leaves the focus where a window
@@ -53,7 +58,7 @@ function refocus(title: HTMLElement | null): void {
  * more when a menu has had the time to close, and takes the focus back to its title if it is on
  * the body. After that it watches no longer: a focus that is lost later is left where it is.
  */
-export function Page({ width = "full", views, bar, fill, children, ...header }: PageProps) {
+export function Page({ width = "full", notice, views, bar, fill, children, ...header }: PageProps) {
   const page = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const { pathname } = useLocation();
@@ -96,6 +101,7 @@ export function Page({ width = "full", views, bar, fill, children, ...header }: 
       className={styles.page}
     >
       <PageHeader {...header} titleRef={title} />
+      {notice}
       {views === undefined ? null : (
         <div data-part="page-views" className={styles.views}>
           {views}

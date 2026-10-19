@@ -1,0 +1,5 @@
+/* The notice of a failed export stands under the header of its page, a header's gap above what follows. */
+.notice {
+  flex: none;
+  margin-block-end: var(--space-4);
+}

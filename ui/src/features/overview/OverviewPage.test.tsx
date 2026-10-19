@@ -184,10 +184,14 @@ describe("the Overview with a snapshot", () => {
       "The snapshot of 7 Oct 2026, 08:00 has 9,300 holds, 5,042 of them open.",
     );
     expect(tile(text.openHolds)).toHaveTextContent("5,042");
-    // A destination has no breadcrumb, and this page has no action yet.
+    // A destination has no breadcrumb, and the one action of this page is its Export menu.
     expect(screen.queryByRole("navigation", { name: en.breadcrumb.label })).not.toBeInTheDocument();
     const header = must(main.querySelector("header"), "the page header");
-    expect(within(header).queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      within(header)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual([en.export.menu.label]);
     expect(document.title).toBe(
       en.app.documentTitle.replace("{{page}}", en.destinations.name.overview),
     );

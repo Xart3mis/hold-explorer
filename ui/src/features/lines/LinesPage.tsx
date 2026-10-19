@@ -34,6 +34,8 @@ import { cx } from "../../components/cx";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useTableDetailFocus } from "../detail/tableFocus";
+import { ExportMenu, ExportNotices, usePageExports } from "../export/ExportMenu";
+import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import {
@@ -227,6 +229,23 @@ export function LinesPage() {
   // another filter, sort, mode, or snapshot is another result, and clears them. The export menu
   // reads them from here.
   const selected = useSelectedRows(`${shown?.mode ?? ""}|${shown?.pages.resultKey ?? ""}`);
+  const exports = usePageExports();
+  // What a file of the page is made from: the rows of the mode in view, in their order.
+  const exportState: ScreenState =
+    state.rows === "lines"
+      ? { screen: "lines", query: state.query }
+      : { screen: "holds", sort: state.sort, reverse: state.reverse };
+  const exportMenu = (
+    <ExportMenu
+      screen={exportState.screen === "lines" ? "lines" : "holds"}
+      state={exportState}
+      loaded={shown?.pages.rows.length ?? 0}
+      selected={[...selected.keys]}
+      // Rows of the other mode stand in until the mode in view has its own: nothing to export yet.
+      isReady={shown !== null && shown.mode === mode}
+      exports={exports}
+    />
+  );
 
   const lineWidest = shown?.mode === "lines" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
   const holdWidest = shown?.mode === "holds" ? (shown.pages.first?.widest_line_id ?? 0) : 0;
@@ -337,6 +356,8 @@ export function LinesPage() {
     <Page
       title={t("destinations.name.lines")}
       fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
           aria-label={t("lines.modes")}

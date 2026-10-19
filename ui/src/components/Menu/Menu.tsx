@@ -1,4 +1,4 @@
-import { Check, ChevronDown, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import {
   Button as RacButton,
@@ -9,6 +9,7 @@ import {
   MenuTrigger,
   Popover,
   Separator,
+  SubmenuTrigger,
   Text,
 } from "react-aria-components";
 import { lengthToken } from "../../design/token-values";
@@ -182,4 +183,45 @@ export function MenuSection({ title, selectedKey, onSelectionChange, children }:
 /** A hairline between two groups of items. */
 export function MenuSeparator() {
   return <Separator className={cx(styles.separator)} />;
+}
+
+export interface MenuSubmenuProps {
+  /** The key of the item that opens the submenu. */
+  id: string;
+  /** The label of that item, which names the submenu as well: what its items have in common. */
+  label: string;
+  /** The items of the submenu: `MenuItem`. */
+  children: ReactNode;
+}
+
+/**
+ * An item that opens a menu of its own beside the menu it stands in, for one action that applies
+ * to one of several things ("Chart as PNG" to one of four charts). A press, Enter, Space, or the
+ * arrow toward the submenu opens it with the focus on its first item; the arrow back, or Escape,
+ * closes it and gives the focus back to the item. Choosing in it closes every menu. It opens
+ * after a pause under the pointer as well, never by that alone.
+ */
+export function MenuSubmenu({ id, label, children }: MenuSubmenuProps) {
+  const offset = lengthToken("--space-1");
+  return (
+    <SubmenuTrigger>
+      <RacMenuItem id={id} textValue={label} className={cx(styles.item)}>
+        <Text slot="label" className={styles.itemLabel}>
+          {label}
+        </Text>
+        <Icon icon={ChevronRight} className={styles.submenuChevron} />
+      </RacMenuItem>
+      <Popover
+        placement="end top"
+        className={cx(styles.popover)}
+        style={{ zIndex: "var(--z-dropdown)" }}
+        // The submenu lines up with its item: its first item stands level with the one it opens from.
+        {...(offset === null ? {} : { offset, crossOffset: -offset })}
+      >
+        <RacMenu aria-label={label} className={cx(styles.menu)}>
+          {children}
+        </RacMenu>
+      </Popover>
+    </SubmenuTrigger>
+  );
 }

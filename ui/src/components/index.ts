@@ -60,9 +60,11 @@ export {
   MenuItem,
   MenuSection,
   MenuSeparator,
+  MenuSubmenu,
   type MenuButtonProps,
   type MenuItemProps,
   type MenuSectionProps,
+  type MenuSubmenuProps,
 } from "./Menu/Menu";
 export { Notice, type NoticeProps, type NoticeTone } from "./Notice/Notice";
 export { OptionList, type Option, type OptionListProps } from "./OptionList/OptionList";

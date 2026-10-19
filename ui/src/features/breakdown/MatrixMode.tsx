@@ -5,7 +5,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { dimId, dimName, isSameDim } from "../../app/filters/dims";
 import { useFilters, withValues } from "../../app/filters/state";
-import { useSnapshotQuery } from "../../app/view";
+import { useSnapshotQuery, type SnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { FoldedMatrix } from "../../bindings/FoldedMatrix";
@@ -44,11 +44,55 @@ const NO_CELLS: readonly (readonly number[])[] = [];
 
 const itemOf = (group: Group): HeatmapItem => ({ key: group.key, label: group.label });
 
+/** The matrix as the page reads it: the reading, and the matrix on screen. */
+export interface MatrixReading {
+  query: SnapshotQuery<FoldedMatrix>;
+  /** The matrix on screen: the one asked for, or the one before while it is read; `null` at first. */
+  shown: Shown | null;
+  /** The matrix on screen is the one asked for. */
+  own: boolean;
+}
+
+/**
+ * Reads the matrix of the dimensions of the address, while `enabled`. The page holds the reading,
+ * so that its Export menu knows when there is a matrix to export. The matrix on screen is kept
+ * while the next one is read, and let go while the matrix is not shown, so that coming back to it
+ * waits as a first load does.
+ */
+export function useMatrixReading(
+  state: BreakdownState,
+  spec: FilterSpec,
+  enabled: boolean,
+): MatrixReading {
+  const query = useSnapshotQuery({
+    name: "matrix",
+    params: [spec, state.rows, state.cols],
+    read: readMatrix,
+    enabled,
+  });
+  // What was read for the request on screen, kept while the next request is read, under the
+  // result it is.
+  const asked = query.resultKey;
+  const [kept, setKept] = useState<Shown | null>(null);
+  const own = enabled && query.data !== undefined && !query.isPlaceholderData;
+  if (own && (kept?.key !== asked || kept.matrix !== query.data)) {
+    setKept({ matrix: query.data, rows: state.rows, cols: state.cols, key: asked });
+  }
+  if (!enabled && kept !== null) setKept(null);
+  const shown: Shown | null = own
+    ? { matrix: query.data, rows: state.rows, cols: state.cols, key: asked }
+    : enabled
+      ? kept
+      : null;
+  return { query, shown, own };
+}
+
 export interface MatrixModeProps {
   state: BreakdownState;
-  spec: FilterSpec;
   /** The dimensions the selects offer, in their order. */
   dims: readonly Dim[];
+  /** The matrix, as `useMatrixReading` reads it. */
+  reading: MatrixReading;
 }
 
 /**
@@ -59,28 +103,13 @@ export interface MatrixModeProps {
  * place of what those fields were filtered by, and opens the holds of Lines; Other is many values
  * and does not open. The two dimensions are in the address, and are never the same one.
  */
-export function MatrixMode({ state, spec, dims }: MatrixModeProps) {
+export function MatrixMode({ state, dims, reading }: MatrixModeProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
   const [view, setView] = useState<ChartView>("chart");
 
-  const query = useSnapshotQuery({
-    name: "matrix",
-    params: [spec, state.rows, state.cols],
-    read: readMatrix,
-  });
-  // What was read for the request on screen, kept while the next request is read, under the
-  // result it is.
-  const asked = query.resultKey;
-  const [kept, setKept] = useState<Shown | null>(null);
-  const own = query.data !== undefined && !query.isPlaceholderData;
-  if (own && (kept?.key !== asked || kept.matrix !== query.data)) {
-    setKept({ matrix: query.data, rows: state.rows, cols: state.cols, key: asked });
-  }
-  const shown: Shown | null = own
-    ? { matrix: query.data, rows: state.rows, cols: state.cols, key: asked }
-    : kept;
+  const { query, shown, own } = reading;
 
   const go = (next: BreakdownState) => {
     void navigate(breakdownAddress(next, location.search), { replace: true });

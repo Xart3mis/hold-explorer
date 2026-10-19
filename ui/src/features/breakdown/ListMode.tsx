@@ -21,6 +21,7 @@ import {
   type DataTableChildColumn,
   type DataTableChildren,
   type DataTableColumn,
+  type DataTableSort,
 } from "../../components";
 import { formatCount, formatDays, formatList, isBlank } from "../../text/format";
 import { t } from "../../text/i18n";
@@ -184,6 +185,55 @@ function LineFacts({ line }: { line: LineRow }) {
   );
 }
 
+/** The table of the groups as the page holds it: its columns, its order, and its selection. */
+export interface GroupTable {
+  /** The groups on screen are of the dimension asked for, not the one before while it is read. */
+  isCurrent: boolean;
+  columns: DataTableColumn<Group>[];
+  /** The sort of the groups, of the dimension it was asked under. */
+  sort: DataTableSort | undefined;
+  /** The groups in the order of the table. */
+  sortedGroups: readonly Group[];
+  /** The result of the groups: the request they were read for. */
+  resultKey: string;
+  /** The result the table shows: the groups of a request, in a sort. */
+  tableKey: string;
+  /** The groups selected beside the open line, by group key, for that result. */
+  selected: ReturnType<typeof useSelectedRows>;
+}
+
+/**
+ * The table of the groups, held by the page so that its Export menu sends the groups in the order
+ * shown and the ones selected: `groups` of `shownDim`, as read for `resultKey`, under the sort of
+ * the address.
+ */
+export function useGroupTable(
+  state: BreakdownState,
+  groups: readonly Group[],
+  shownDim: Dim,
+  resultKey: string,
+): GroupTable {
+  // While another dimension is read, the groups of before stay on screen, dimmed; they are of the
+  // dimension before, so none of them expands or is read under the new one.
+  const isCurrent = dimId(shownDim) === dimId(state.by);
+  const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
+  const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
+  const columns = useMemo(
+    () => groupColumns(shownDim, largest, mostLines),
+    [shownDim, largest, mostLines],
+  );
+  // The groups of before, while another dimension is read, are in the command's order: the sort
+  // belongs to the dimension it was asked under, and another one drops it.
+  const sort = isCurrent ? state.sort : undefined;
+  const sortedGroups = useTableSort(groups, columns, sort);
+  // Another sort is another result: the table returns to its top.
+  const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
+  // The groups selected beside the open line, by group key (the blank group has the empty key),
+  // for the result on screen in its sort. The lines under a group are never selected this way.
+  const selected = useSelectedRows(tableKey);
+  return { isCurrent, columns, sort, sortedGroups, resultKey, tableKey, selected };
+}
+
 export interface ListModeProps {
   state: BreakdownState;
   spec: FilterSpec;
@@ -191,9 +241,10 @@ export interface ListModeProps {
   groups: readonly Group[];
   /** The dimension those groups are of: the one asked for, or the one before while it is read. */
   shownDim: Dim;
+  /** The table of those groups, as `useGroupTable` gives it. */
+  table: GroupTable;
   isLoading: boolean;
   isStale: boolean;
-  resultKey: string;
   emptyState?: ReactNode;
 }
 
@@ -211,11 +262,12 @@ export function ListMode({
   spec,
   groups,
   shownDim,
+  table,
   isLoading,
   isStale,
-  resultKey,
   emptyState,
 }: ListModeProps) {
+  const { isCurrent, columns, sort, sortedGroups, resultKey, tableKey, selected } = table;
   const location = useLocation();
   const navigate = useNavigate();
   const { update } = useFilters();
@@ -250,9 +302,6 @@ export function ListMode({
   // the groups it names are the same.
   const openKeys = JSON.stringify(state.open);
   const open = useMemo(() => new Set(JSON.parse(openKeys) as string[]), [openKeys]);
-  // While another dimension is read, the groups of before stay on screen, dimmed; they are of the
-  // dimension before, so none of them expands or is read under the new one.
-  const isCurrent = dimId(shownDim) === dimId(state.by);
   const [visited, setVisited] = useState<{ result: string; keys: readonly string[] }>({
     result: resultKey,
     keys: state.open,
@@ -265,8 +314,6 @@ export function ListMode({
   if (isNewResult || unread.length > 0) setVisited({ result: resultKey, keys: now });
   const reading = isCurrent ? now.filter((key) => shownKeys.has(key)) : [];
 
-  const largest = groups.reduce((most, group) => Math.max(most, group.holds), 0);
-  const mostLines = groups.reduce((most, group) => Math.max(most, group.lines), 0);
   // The widest line ID of the groups that are read: the line IDs under a group are never cut.
   // Lines that stand in for a group being read again are not shown, and do not count.
   let widestLine = 0;
@@ -275,10 +322,6 @@ export function ListMode({
     widestLine = Math.max(widestLine, held.detail?.lines.widest_line_id ?? 0);
   }
 
-  const columns = useMemo(
-    () => groupColumns(shownDim, largest, mostLines),
-    [shownDim, largest, mostLines],
-  );
   const childColumns = useMemo(
     (): DataTableChildColumn<LineRow>[] => [
       { column: "label", cell: (line) => line.line_id, kind: "identifier", chars: widestLine },
@@ -287,17 +330,6 @@ export function ListMode({
     ],
     [widestLine],
   );
-
-  // The groups of before, while another dimension is read, are in the command's order: the sort
-  // belongs to the dimension it was asked under, and another one drops it.
-  const sort = isCurrent ? state.sort : undefined;
-  const sortedGroups = useTableSort(groups, columns, sort);
-  // Another sort is another result: the table returns to its top.
-  const tableKey = sort === undefined ? resultKey : `${resultKey}|${sort.column}:${sort.direction}`;
-
-  // The groups selected beside the open line, by group key (the blank group has the empty key),
-  // for the result on screen in its sort. The lines under a group are never selected this way.
-  const selected = useSelectedRows(tableKey);
 
   /** Writes the groups that are open into the address, keeping the rest of it. */
   const setOpen = (keys: ReadonlySet<string>) => {

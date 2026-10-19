@@ -29,6 +29,7 @@ import { formatCount, formatList } from "../../text/format";
 import { t } from "../../text/i18n";
 import { useSelection } from "../detail/selection";
 import { useTableDetailFocus } from "../detail/tableFocus";
+import { ExportMenu, ExportNotices, usePageExports } from "../export/ExportMenu";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { BLOCKERS_PATH, searchWithStepSort, selectedBlocker, stepSort } from "./address";
@@ -248,6 +249,24 @@ export function BlockersPage() {
   // curve opens it as well, and is given the focus back when it did.
   const { listenTo, listenBeside, chosen } = useTableDetailFocus({ selectedKey });
 
+  // What a file of the page is made from: the steps in the order of the table, and the curve as
+  // it is drawn, its head or every step (0).
+  const exports = usePageExports();
+  const shownKeys = useMemo(() => sortedRows.map(stepKey), [sortedRows]);
+  const exportMenu = (
+    <ExportMenu
+      screen="blockers"
+      state={{ screen: "blockers", shownKeys }}
+      loaded={tableRows.length}
+      selected={[...selected.keys]}
+      charts={[
+        { choice: { kind: "Curve", steps: showAll ? 0 : headTo }, label: t("blockers.curve") },
+      ]}
+      isReady={shown !== null}
+      exports={exports}
+    />
+  );
+
   if (!hasSnapshot) {
     return (
       <Page title={t("destinations.name.blockers")}>
@@ -291,7 +310,13 @@ export function BlockersPage() {
   };
 
   return (
-    <Page title={t("destinations.name.blockers")} fill bar={<FilterBar />}>
+    <Page
+      title={t("destinations.name.blockers")}
+      fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
+      bar={<FilterBar />}
+    >
       <div data-part="blockers" className={styles.content}>
         {query.isError ? (
           <ErrorState

@@ -49,6 +49,7 @@ import {
   MenuItem,
   MenuSection,
   MenuSeparator,
+  MenuSubmenu,
   Notice,
   OptionList,
   PageHeader,
@@ -419,7 +420,7 @@ function Menus() {
   return (
     <Section
       title="Menu"
-      note="A quiet button with a chevron that opens a list of actions or of choices. The first three are real; the open menu is a still copy made from the same styles: a section that holds a choice, a highlighted item, a separator, an action, and a disabled item."
+      note="A quiet button with a chevron that opens a list of actions or of choices. The first two open, the second as the Export menu of the Overview with a submenu for each chart action; the open menu is a still copy made from the same styles: a section that holds a choice, a highlighted item, a separator, an action, and a disabled item."
     >
       <Row>
         <Specimen name="Real: open it">
@@ -437,6 +438,34 @@ function Menus() {
             <MenuItem id="folder" isDisabled>
               Show in folder
             </MenuItem>
+          </MenuButton>
+        </Specimen>
+        <Specimen name="Real: the Export menu of the Overview, with its submenus">
+          <MenuButton label="Export" menuLabel="Export" align="end">
+            <MenuItem id="excel">Excel, this view…</MenuItem>
+            <MenuItem id="workbook">Full workbook…</MenuItem>
+            <MenuItem id="report">Status report (PDF)…</MenuItem>
+            <MenuSeparator />
+            {(
+              [
+                ["png", "Chart as PNG", "…"],
+                ["svg", "Chart as SVG", "…"],
+                ["copy", "Copy chart", ""],
+              ] as const
+            ).map(([id, label, ellipsis]) => (
+              <MenuSubmenu key={id} id={id} label={label}>
+                {[
+                  "Open holds by discipline",
+                  "Open holds by hold type",
+                  "Open holds by role",
+                  "Top blockers",
+                ].map((chart) => (
+                  <MenuItem key={chart} id={`${id}-${chart}`}>
+                    {`${chart}${ellipsis}`}
+                  </MenuItem>
+                ))}
+              </MenuSubmenu>
+            ))}
           </MenuButton>
         </Specimen>
         <Specimen name="Hover">

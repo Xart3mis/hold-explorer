@@ -17,13 +17,15 @@ import type { Group } from "../../bindings/Group";
 import type { ViewRef } from "../../bindings/ViewRef";
 import { Button, EmptyState, ErrorState, Select, ViewSwitch } from "../../components";
 import { t } from "../../text/i18n";
+import { ExportMenu, ExportNotices, usePageExports } from "../export/ExportMenu";
+import type { ScreenState } from "../export/requests";
 import { FilterBar } from "../filters/FilterBar";
 import { startImport } from "../import/start";
 import { breakdownAddress, parseBreakdownAddress, type BreakdownMode } from "./address";
 import styles from "./BreakdownPage.module.css";
 import { breakdownDims } from "./dims";
-import { ListMode } from "./ListMode";
-import { MatrixMode } from "./MatrixMode";
+import { ListMode, useGroupTable } from "./ListMode";
+import { MatrixMode, useMatrixReading } from "./MatrixMode";
 import { NoHolds } from "./NoHolds";
 
 const NO_GROUPS: readonly Group[] = [];
@@ -86,6 +88,47 @@ export function BreakdownPage() {
     setKept({ groups: query.data, dim: state.by, key: asked });
   }
   const shown: Shown | null = own ? { groups: query.data, dim: state.by, key: asked } : kept;
+  const shownDim = shown?.dim ?? state.by;
+  const table = useGroupTable(state, shown?.groups ?? NO_GROUPS, shownDim, shown?.key ?? "");
+  const matrix = useMatrixReading(state, spec, hasSnapshot && !isList);
+
+  // What a file of the page is made from: the groups in the order shown, or the matrix on screen.
+  const exports = usePageExports();
+  const shownMatrix = matrix.shown;
+  const exportState: ScreenState = isList
+    ? {
+        screen: "breakdown",
+        dim: shownDim,
+        shownKeys: table.sortedGroups.map((group) => group.key),
+      }
+    : {
+        screen: "matrix",
+        rows: shownMatrix?.rows ?? state.rows,
+        cols: shownMatrix?.cols ?? state.cols,
+      };
+  const exportMenu = (
+    <ExportMenu
+      screen={exportState.screen === "breakdown" ? "breakdown" : "matrix"}
+      state={exportState}
+      {...(isList ? { loaded: table.sortedGroups.length, selected: [...table.selected.keys] } : {})}
+      charts={[
+        exportState.screen === "matrix"
+          ? {
+              choice: { kind: "Heatmap", rows: exportState.rows, cols: exportState.cols },
+              label: t("breakdown.matrix", {
+                rows: dimName(exportState.rows),
+                cols: dimName(exportState.cols),
+              }),
+            }
+          : {
+              choice: { kind: "Bars", dim: shownDim },
+              label: t("breakdown.table", { dim: dimName(shownDim) }),
+            },
+      ]}
+      isReady={isList ? shown !== null : shownMatrix !== null}
+      exports={exports}
+    />
+  );
 
   if (!hasSnapshot) {
     return (
@@ -129,6 +172,8 @@ export function BreakdownPage() {
     <Page
       title={t("destinations.name.breakdown")}
       fill
+      actions={exportMenu}
+      notice={<ExportNotices exports={exports} />}
       views={
         <ViewSwitch
           aria-label={t("breakdown.modes")}
@@ -177,16 +222,16 @@ export function BreakdownPage() {
                 state={state}
                 spec={spec}
                 groups={shown?.groups ?? NO_GROUPS}
-                shownDim={shown?.dim ?? state.by}
+                shownDim={shownDim}
+                table={table}
                 isLoading={isLoading}
                 isStale={isStale}
-                resultKey={shown?.key ?? ""}
                 {...(emptyState === undefined ? {} : { emptyState })}
               />
             ) : null}
           </>
         ) : (
-          <MatrixMode state={state} spec={spec} dims={dims} />
+          <MatrixMode state={state} dims={dims} reading={matrix} />
         )}
       </div>
     </Page>
