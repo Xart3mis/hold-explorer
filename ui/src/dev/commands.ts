@@ -581,11 +581,6 @@ function world(state: DevState, theme: Theme): World {
   return { start, snapshots, folderReadable: state !== "list-error" };
 }
 
-/**
- * Makes the commands, the file dialog, and the file manager answer from fixtures, in the given
- * state. Returns the marker of the development page. A dragged file is played from the console:
- * `hxDev.enter(["/exports/Holds.xlsx"])`, `hxDev.leave()`, `hxDev.drop([...])`.
- */
 /** How many rows a saved export holds, as the development page tells it: those the request names. */
 function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined): number {
   if (request.rows.kind === "Keys") return request.rows.keys.length;
@@ -593,6 +588,11 @@ function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined
   return selected?.open_count ?? 0;
 }
 
+/**
+ * Makes the commands, the file dialog, and the file manager answer from fixtures, in the given
+ * state. Returns the marker of the development page. A dragged file is played from the console:
+ * `hxDev.enter(["/exports/Holds.xlsx"])`, `hxDev.leave()`, `hxDev.drop([...])`.
+ */
 export function installDevCommands(state: DevState, theme: Theme): string {
   const { start, snapshots, folderReadable } = world(state, theme);
   let nextId = 1;

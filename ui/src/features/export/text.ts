@@ -10,8 +10,8 @@ import { t, type MessageKey } from "../../text/i18n";
 const LIST_SEPARATOR = "file.listSeparator";
 
 /** Two stand-ins for list items, which no text of the app holds: what is between them is the separator. */
-const FIRST = "";
-const SECOND = "";
+const FIRST = "\uE000";
+const SECOND = "\uE001";
 
 /** What `formatList` puts between two items: `, `. */
 function listSeparator(): string {

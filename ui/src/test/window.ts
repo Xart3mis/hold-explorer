@@ -7,8 +7,9 @@ const handlers = new Set<DragHandler>();
 
 /**
  * What stands in for `ui/src/api/window.ts` in every test: the file dialogs, the file manager,
- * the opening of a saved file, and the drag of a file over the window. The setup file puts it in place, so no test reaches a
- * Tauri plugin. A test says what the dialog returns and reads what was asked for:
+ * the opening of a saved file, and the drag of a file over the window. The setup file puts it in
+ * place, so no test reaches a Tauri plugin. A test says what the dialog returns and reads what
+ * was asked for:
  *
  *     windowApi.chooseImportFile.mockResolvedValue("/exports/Holds.xlsx");
  *     expect(windowApi.showInFolder).toHaveBeenCalledWith(path);

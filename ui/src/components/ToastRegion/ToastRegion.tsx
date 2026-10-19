@@ -17,8 +17,8 @@ import { Icon } from "../Icon/Icon";
 import styles from "./ToastRegion.module.css";
 
 /**
- * The most toasts shown at once. A newer toast pushes out the oldest one that offers no action.
- * One that carries an action, an undo, is never pushed out, so for a moment there can be more.
+ * The most toasts shown at once. A newer toast pushes out the oldest one that offers no undo. One
+ * that carries an undo is never pushed out, so for a moment there can be more.
  */
 const MAX_TOASTS = 3;
 
@@ -34,8 +34,9 @@ export interface ToastAction {
    */
   onAction: () => void;
   /**
-   * Whether the action undoes what was done, so that `Ctrl+Z` runs it; it does unless this says
-   * false. An action that is no undo, such as "Open file", is run by its button only.
+   * Whether the action undoes what was done. Only an undo is run by `Ctrl+Z`, and only a toast
+   * whose action is an undo is never pushed out by a newer one. Any other action, such as "Open
+   * file", is run by its button only.
    */
   isUndo?: boolean;
 }
@@ -330,11 +331,11 @@ export function ToastRegion({ children }: { children: ReactNode }) {
       nextId.current += 1;
       const id = `toast-${String(nextId.current)}`;
       const staying = latest.current.filter((item) => !item.leaving);
-      // The new toast needs a place: the oldest toasts without an action give theirs up.
+      // The new toast needs a place: the oldest toasts without an undo give theirs up.
       const going: string[] = [];
       for (const item of staying) {
         if (staying.length - going.length < MAX_TOASTS) break;
-        if (item.action === undefined) going.push(item.id);
+        if (item.action?.isUndo !== true) going.push(item.id);
       }
       // A toast that was already leaving goes now as well.
       const gone = latest.current.filter((item) => item.leaving || going.includes(item.id));
@@ -362,14 +363,14 @@ export function ToastRegion({ children }: { children: ReactNode }) {
     [dismiss],
   );
 
-  // Ctrl+Z triggers the undo of the newest toast: its first action, unless that is no undo. A
-  // text field keeps its own undo.
+  // Ctrl+Z triggers the undo of the newest toast: its first action, when that is an undo. A text
+  // field keeps its own undo.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "z" || !(event.ctrlKey || event.metaKey)) return;
       if (event.shiftKey || event.altKey || isTextEntry(event.target)) return;
       const newest = latest.current.filter((item) => !item.leaving).at(-1);
-      if (!newest?.action || newest.action.isUndo === false) return;
+      if (newest?.action?.isUndo !== true) return;
       event.preventDefault();
       act(newest.id, "action");
     };

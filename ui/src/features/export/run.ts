@@ -107,7 +107,6 @@ export function useSaveExport(): SaveExport {
         tone: "success",
         action: {
           label: t("export.openFile"),
-          isUndo: false,
           onAction: () => {
             openSavedFile(path).catch(fail(t("export.openFailed")));
           },
@@ -168,6 +167,7 @@ export function useSaveExport(): SaveExport {
     (format: SaveFormat, request: ExportRequest, viewName: string) =>
       exclusive(null, async () => {
         if (view === null) {
+          failed.current = null;
           setProblem(noWorkspace());
           return;
         }

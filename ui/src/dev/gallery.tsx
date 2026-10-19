@@ -2042,7 +2042,7 @@ function ShowToast() {
         onPress={() => {
           toast.show({
             message: "Snapshot of 30 Sep 2026 deleted.",
-            action: { label: "Undo", onAction: () => undefined },
+            action: { label: "Undo", onAction: () => undefined, isUndo: true },
           });
         }}
       >
