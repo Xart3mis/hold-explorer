@@ -1,6 +1,7 @@
 //! The error a failed command returns to the interface.
 
 use hx_core::error::ImportError;
+use hx_export::ExportError;
 use hx_store::StoreError;
 use serde::Serialize;
 use ts_rs::TS;
@@ -10,7 +11,8 @@ use ts_rs::TS;
 #[ts(export)]
 pub struct CommandError {
     /// The error's variant name, for example `NewerSchema`, or one of `NoWorkspace`, `NoDraft`,
-    /// `WorkspaceNotFound`, `ReplaceNotOffered`, `ViewChanged`, `Settings`, `Internal`.
+    /// `WorkspaceNotFound`, `ReplaceNotOffered`, `ViewChanged`, `Settings`, `NotWritten`,
+    /// `Clipboard`, `Open`, `Internal`.
     pub kind: String,
     /// The text to show the user: what happened, why, and how to fix it.
     pub message: String,
@@ -59,6 +61,12 @@ impl From<StoreError> for CommandError {
 
 impl From<ImportError> for CommandError {
     fn from(error: ImportError) -> CommandError {
+        CommandError::new(&serde_kind(&error), error.to_string())
+    }
+}
+
+impl From<ExportError> for CommandError {
+    fn from(error: ExportError) -> CommandError {
         CommandError::new(&serde_kind(&error), error.to_string())
     }
 }

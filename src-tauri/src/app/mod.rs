@@ -4,11 +4,13 @@
 mod data;
 mod demo;
 mod error;
+mod export;
 mod import;
 mod settings;
 mod snapshots;
 mod workspaces;
 
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -20,6 +22,9 @@ use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use data::{FilterOptions, GroupDetail, HoldsView};
 pub use error::CommandError;
+pub use export::{
+    copy, fonts, save, CopyFormat, ExportPhase, ExportSaved, SaveFormat, SystemClipboard,
+};
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
 };
@@ -90,6 +95,8 @@ pub struct AppState {
     /// The file being imported, when there is one.
     draft: Option<import::Draft>,
     cache: Option<Cache>,
+    /// The files an export wrote since the application started, which `export_open` may open.
+    written: HashSet<PathBuf>,
     /// How many datasets were built since the application started.
     #[cfg(test)]
     dataset_builds: usize,
@@ -119,6 +126,7 @@ impl AppState {
             selected: None,
             draft: None,
             cache: None,
+            written: HashSet::new(),
             #[cfg(test)]
             dataset_builds: 0,
             #[cfg(test)]
@@ -344,6 +352,8 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
 
 #[cfg(test)]
 mod data_tests;
+#[cfg(test)]
+mod export_tests;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]

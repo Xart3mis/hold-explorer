@@ -9,6 +9,8 @@ license = "MIT"
 rust-version = "1.88"
 
 [workspace.dependencies]
+# The clipboard of the desktop app: text and images, on Wayland through its data-control protocol.
+arboard = { version = "3", features = ["wayland-data-control"] }
 calamine = { version = "0.36", features = ["chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }

@@ -170,5 +170,64 @@
     "dim": "Discipline",
     "key": "Piping",
     "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
-  }
+  },
+  "export_save": {
+    "request": {
+      "screen": {
+        "kind": "Lines",
+        "query": {
+          "sort": "LineId",
+          "single_hold_only": false,
+          "size_mismatch_only": false,
+          "reverse": false
+        }
+      },
+      "columns": ["line", "holds", "blockers"],
+      "rows": { "kind": "First", "count": 200 },
+      "spec": {
+        "status": "Open",
+        "fields": [],
+        "text": "",
+        "age_bands": [],
+        "created": { "from": null, "to": null },
+        "released": { "from": null, "to": null },
+        "size_mismatch": null
+      },
+      "text": { "labels": { "file.title": "Hold Explorer export" }, "months": ["Jan", "Feb"] },
+      "filters": ["Discipline: Piping"]
+    },
+    "format": { "kind": "Excel" },
+    "path": "exports/Unit 573 piping Lines 7 Oct 2026.xlsx",
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 },
+    "onProgress": "__CHANNEL__:1"
+  },
+  "export_copy": {
+    "request": {
+      "screen": {
+        "kind": "Lines",
+        "query": {
+          "sort": "LineId",
+          "single_hold_only": false,
+          "size_mismatch_only": false,
+          "reverse": false
+        }
+      },
+      "columns": ["line", "holds", "blockers"],
+      "rows": { "kind": "First", "count": 200 },
+      "spec": {
+        "status": "Open",
+        "fields": [],
+        "text": "",
+        "age_bands": [],
+        "created": { "from": null, "to": null },
+        "released": { "from": null, "to": null },
+        "size_mismatch": null
+      },
+      "text": { "labels": { "file.title": "Hold Explorer export" }, "months": ["Jan", "Feb"] },
+      "filters": ["Discipline: Piping"]
+    },
+    "format": { "kind": "Chart", "chart": { "kind": "Bars", "dim": "Discipline" } },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
+  "export_open": { "path": "exports/Unit 573 piping Lines 7 Oct 2026.xlsx" }
 }

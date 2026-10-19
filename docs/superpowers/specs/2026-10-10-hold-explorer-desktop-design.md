@@ -437,7 +437,7 @@ Milestone 1 begins by writing `PRODUCT.md` and `DESIGN.md` from this document, s
 - An export to a file that is open elsewhere says to close the file or choose another name.
 - A second launch focuses the running window; two instances never write the same data.
 - A settings file that cannot be read is set aside, never overwritten; when it cannot even be set aside, the app works with defaults and refuses to save settings until the file is dealt with. A failure to save settings never stops a workspace from opening.
-- The window may ask the system for two things only: to choose a file to open, and to show a file in its folder. It cannot open web addresses, and its pages can load nothing from another host.
+- The window may ask the system for three things only: to choose a file to open, to choose where to save a file, and to show a file in its folder. The app itself opens a file it has just written, with the system's program for that file, and no other file. It cannot open web addresses, and its pages can load nothing from another host.
 - A crash writes a log to the data folder. About offers "Copy diagnostics". The app sends no telemetry.
 - When WebView2 is missing on Windows, a native message with a download link appears before any window opens. The per-user WebView2 installer needs no admin rights.
 

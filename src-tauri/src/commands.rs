@@ -9,7 +9,7 @@
 //! with the arguments the interface sends.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use chrono::NaiveDateTime;
@@ -18,13 +18,16 @@ use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
 use hx_core::solve::SolveView;
+use hx_export::{write_file, ExportError, ExportRequest};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    AppStart, AppState, CommandError, FilterOptions, GroupDetail, HoldsView, ImportCommit,
-    ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView, Settings, TargetCheck,
-    TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    copy, fonts, save, AppStart, AppState, CommandError, CopyFormat, ExportPhase, ExportSaved,
+    FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
+    ImportReview, OverviewView, SaveFormat, Settings, SystemClipboard, TargetCheck, TargetChoice,
+    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -45,11 +48,25 @@ where
         work(&mut guard)
     })
     .await
-    .map_err(|error| {
-        CommandError::internal(format!(
-            "A background task failed: {error}. Restart Hold Explorer; if it keeps happening, report it."
-        ))
-    })?
+    .map_err(task_failed)?
+}
+
+/// Runs `work` on a thread of the blocking pool without the state lock: the writing of a file
+/// or of the clipboard, so that every other command answers meanwhile.
+async fn unlocked<T, F>(work: F) -> Result<T, CommandError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, CommandError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(task_failed)?
+}
+
+fn task_failed(error: tauri::Error) -> CommandError {
+    CommandError::internal(format!(
+        "A background task failed: {error}. Restart Hold Explorer; if it keeps happening, report it."
+    ))
 }
 
 fn poisoned() -> CommandError {
@@ -340,6 +357,94 @@ pub async fn demo_create<R: Runtime>(app: AppHandle<R>) -> Result<WorkspaceOpen,
     blocking(app, |state| state.create_demo()).await
 }
 
+/// Saves an export of the view to `path`, telling the channel how far it has come: what the file
+/// holds is gathered with the state locked, and the file is written with the state free.
+#[tauri::command]
+pub async fn export_save<R: Runtime>(
+    app: AppHandle<R>,
+    request: ExportRequest,
+    format: SaveFormat,
+    path: PathBuf,
+    view: ViewRef,
+    on_progress: Channel<ExportPhase>,
+) -> Result<ExportSaved, CommandError> {
+    save_with(app, request, format, path, view, on_progress, write_file).await
+}
+
+/// [`export_save`] with the function that writes the file.
+async fn save_with<R, W>(
+    app: AppHandle<R>,
+    request: ExportRequest,
+    format: SaveFormat,
+    path: PathBuf,
+    view: ViewRef,
+    on_progress: Channel<ExportPhase>,
+    write: W,
+) -> Result<ExportSaved, CommandError>
+where
+    R: Runtime,
+    W: Fn(&Path, &[u8]) -> Result<(), ExportError> + Send + 'static,
+{
+    // A phase that cannot be sent only costs the interface a progress step.
+    let _ = on_progress.send(ExportPhase::Reading);
+    let text = request.text.clone();
+    let asked = format.clone();
+    let content = blocking(app.clone(), move |state| {
+        state.export_content(&request, &asked, &view)
+    })
+    .await?;
+    let _ = on_progress.send(ExportPhase::Writing);
+    let target = path.clone();
+    let saved = unlocked(move || save(content, &format, &target, &text, fonts(), &write)).await?;
+    blocking(app, move |state| {
+        state.wrote(path);
+        Ok(())
+    })
+    .await?;
+    Ok(saved)
+}
+
+/// Copies an export of the view to the system's clipboard: what it holds is gathered with the
+/// state locked, and the clipboard is set with the state free.
+#[tauri::command]
+pub async fn export_copy<R: Runtime>(
+    app: AppHandle<R>,
+    request: ExportRequest,
+    format: CopyFormat,
+    view: ViewRef,
+) -> Result<(), CommandError> {
+    let text = request.text.clone();
+    let content = blocking(app, move |state| {
+        state.copy_content(&request, &format, &view)
+    })
+    .await?;
+    unlocked(move || copy(content, &mut SystemClipboard::new()?, &text, fonts())).await
+}
+
+/// Opens a file the app saved in this session with the system's program for it.
+#[tauri::command]
+pub async fn export_open<R: Runtime>(app: AppHandle<R>, path: PathBuf) -> Result<(), CommandError> {
+    let asked = path.clone();
+    blocking(app.clone(), move |state| state.openable(&asked)).await?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|error| cannot_open(&path, &error))
+}
+
+/// What a file the system could not open means to the user.
+fn cannot_open(path: &Path, error: &tauri_plugin_opener::Error) -> CommandError {
+    let file = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    CommandError::new(
+        "Open",
+        format!(
+            "Hold Explorer could not open {file}: {error}. The system may have no program for this kind of file; open it from its folder."
+        ),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
@@ -352,7 +457,7 @@ mod tests {
     use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
     use tempfile::TempDir;
 
-    use crate::app::AppState;
+    use crate::app::{AppState, ExportPhase};
 
     const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
     const LIB: &str = include_str!("lib.rs");
@@ -461,6 +566,10 @@ mod tests {
                 ("breakdown", "NoWorkspace"),
                 ("demo_create", "Ok"),
                 // The view of the fixture is not the demo workspace.
+                ("export_copy", "ViewChanged"),
+                // The app wrote no file yet.
+                ("export_open", "NotWritten"),
+                ("export_save", "ViewChanged"),
                 ("filter_options", "ViewChanged"),
                 ("filter_values", "ViewChanged"),
                 ("group_detail", "ViewChanged"),
@@ -590,6 +699,149 @@ mod tests {
                 "{command}: {message}"
             );
         }
+    }
+
+    /// Opens the demo workspace and returns the view the interface then shows, as JSON.
+    fn demo_view(harness: &Harness) -> Value {
+        let open = harness
+            .invoke("demo_create", &serde_json::json!({}))
+            .expect("the demo workspace opens");
+        serde_json::json!({
+            "workspace_id": open["workspace"]["id"],
+            "snapshot_id": open["selected"],
+        })
+    }
+
+    /// The request of the fixture's `export_save`, for the view `view`, as the command reads it.
+    fn export_args(view: &Value) -> (hx_export::ExportRequest, crate::app::ViewRef) {
+        let mut args = command_args()["export_save"].clone();
+        args["view"] = view.clone();
+        let mut request: hx_export::ExportRequest =
+            serde_json::from_value(args["request"].clone()).unwrap();
+        request.text = hx_export::ExportText {
+            labels: hx_export::FILE_TEXT_KEYS
+                .iter()
+                .map(|key| (key.to_string(), key.to_string()))
+                .collect(),
+            months: Vec::new(),
+        };
+        (
+            request,
+            serde_json::from_value(args["view"].clone()).unwrap(),
+        )
+    }
+
+    /// A channel that keeps the phases it is sent.
+    fn phases() -> (
+        tauri::ipc::Channel<ExportPhase>,
+        std::sync::Arc<Mutex<Vec<String>>>,
+    ) {
+        let heard = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let kept = heard.clone();
+        let channel = tauri::ipc::Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(text) = body {
+                kept.lock().unwrap().push(text);
+            }
+            Ok(())
+        });
+        (channel, heard)
+    }
+
+    #[test]
+    fn a_save_reads_then_writes_and_records_the_path_it_wrote() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("lines.xlsx");
+        let (channel, heard) = phases();
+        let saved = tauri::async_runtime::block_on(super::save_with(
+            harness.app.handle().clone(),
+            request,
+            crate::app::SaveFormat::Excel,
+            path.clone(),
+            view,
+            channel,
+            hx_export::write_file,
+        ))
+        .unwrap();
+        assert_eq!(saved.path, path.to_string_lossy());
+        assert!(saved.rows > 0);
+        assert!(path.is_file());
+        assert_eq!(*heard.lock().unwrap(), [r#""Reading""#, r#""Writing""#]);
+        let state = harness.app.state::<Mutex<AppState>>();
+        assert!(state.lock().unwrap().has_written(&path));
+    }
+
+    #[test]
+    fn a_save_that_fails_records_no_path() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("missing").join("lines.xlsx");
+        let (channel, _) = phases();
+        let error = tauri::async_runtime::block_on(super::save_with(
+            harness.app.handle().clone(),
+            request,
+            crate::app::SaveFormat::Excel,
+            path.clone(),
+            view,
+            channel,
+            hx_export::write_file,
+        ))
+        .unwrap_err();
+        assert_eq!(error.kind, "Folder");
+        let state = harness.app.state::<Mutex<AppState>>();
+        assert!(!state.lock().unwrap().has_written(&path));
+    }
+
+    #[test]
+    fn the_state_is_free_while_a_slow_write_runs() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("lines.csv");
+        let entered = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let release = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let (writer_entered, writer_release) = (entered.clone(), release.clone());
+        let slow = move |path: &std::path::Path, bytes: &[u8]| {
+            writer_entered.wait();
+            writer_release.wait();
+            hx_export::write_file(path, bytes)
+        };
+        let handle = harness.app.handle().clone();
+        let target = path.clone();
+        let saving = std::thread::spawn(move || {
+            let (channel, _) = phases();
+            tauri::async_runtime::block_on(super::save_with(
+                handle,
+                request,
+                crate::app::SaveFormat::Csv,
+                target,
+                view,
+                channel,
+                slow,
+            ))
+        });
+
+        entered.wait();
+        // The file is being written: the state is not locked, and another command answers.
+        {
+            let state = harness.app.state::<Mutex<AppState>>();
+            assert!(
+                state.try_lock().is_ok(),
+                "the lock is held during the write"
+            );
+        }
+        let current = harness
+            .invoke("workspace_current", &serde_json::json!({}))
+            .expect("a command answers while the file is written");
+        assert!(current["workspace"]["id"].is_string());
+        assert!(!path.exists(), "the write has not happened yet");
+        release.wait();
+
+        let saved = saving.join().unwrap().unwrap();
+        assert!(saved.rows > 0);
+        assert!(path.is_file());
     }
 
     /// The keys of `interface CommandMap { ... }`: the lines that start with two spaces, a name

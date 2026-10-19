@@ -85,6 +85,21 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
       fixture.group_detail.key,
       fixture.group_detail.view,
     ),
+  export_save: () =>
+    api.exportSave(
+      fixture.export_save.request,
+      fixture.export_save.format,
+      fixture.export_save.path,
+      fixture.export_save.view,
+      () => undefined,
+    ),
+  export_copy: () =>
+    api.exportCopy(
+      fixture.export_copy.request,
+      fixture.export_copy.format,
+      fixture.export_copy.view,
+    ),
+  export_open: () => api.exportOpen(fixture.export_open.path),
 };
 
 const names = Object.keys(calls).sort() as CommandName[];

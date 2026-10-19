@@ -64,6 +64,9 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::group_detail,
         commands::workspace_current,
         commands::demo_create,
+        commands::export_save,
+        commands::export_copy,
+        commands::export_open,
     ]
 }
 
@@ -211,7 +214,7 @@ mod tests {
     }
 
     #[test]
-    fn capability_file_grants_exactly_the_three_permissions_the_interface_uses_to_main() {
+    fn capability_file_grants_exactly_the_four_permissions_the_interface_uses_to_main() {
         let path = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/default.json");
         let text = std::fs::read_to_string(path).expect("capability file is readable");
         let capability: serde_json::Value =
@@ -231,16 +234,19 @@ mod tests {
             .iter()
             .filter_map(serde_json::Value::as_str)
             .collect();
-        // Opening a file dialog and revealing a file in its folder are all the page asks of a
-        // plugin. No permission opens an address, and window state is kept from Rust.
+        // Choosing a file to open, choosing where to save a file, and revealing a file in its
+        // folder are all the page asks of a plugin. No permission opens an address or a file:
+        // a saved file is opened from Rust, and only when the app wrote it. Window state is kept
+        // from Rust.
         let expected: BTreeSet<&str> = [
             "core:default",
             "dialog:allow-open",
+            "dialog:allow-save",
             "opener:allow-reveal-item-in-dir",
         ]
         .into();
         assert_eq!(permissions, expected);
-        assert_eq!(capability["permissions"].as_array().map(Vec::len), Some(3));
+        assert_eq!(capability["permissions"].as_array().map(Vec::len), Some(4));
 
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities");
         let files: Vec<String> = std::fs::read_dir(dir)
