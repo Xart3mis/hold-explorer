@@ -53,7 +53,9 @@ fn a_relative_folder_is_refused_and_nothing_changes() {
     let mut state = fx.state();
     let files = create(&mut state, &["A"]);
 
-    let error = state.check_workspace_folder("moved/here").unwrap_err();
+    let error = state
+        .check_workspace_folder(Some("moved/here"))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::FolderNotAbsolute);
     assert!(error.message.contains("moved/here"), "{}", error.message);
     let error = state
@@ -73,7 +75,7 @@ fn the_folder_in_use_is_refused() {
     create(&mut state, &["A"]);
 
     let error = state
-        .check_workspace_folder(&text(&fx.workspaces()))
+        .check_workspace_folder(Some(&text(&fx.workspaces())))
         .unwrap_err();
     assert_eq!(error.kind, ErrorKind::SameFolder);
     // The default folder is the one in use.
@@ -86,7 +88,7 @@ fn the_folder_in_use_is_refused() {
         .unwrap();
     // The same folder, written another way.
     let error = state
-        .check_workspace_folder(&text(&other.join(".")))
+        .check_workspace_folder(Some(&text(&other.join("."))))
         .unwrap_err();
     assert_eq!(error.kind, ErrorKind::SameFolder);
     assert!(error.message.contains(&text(&other)), "{}", error.message);
@@ -100,7 +102,7 @@ fn a_folder_that_cannot_be_created_is_refused_and_nothing_changes() {
     let blocker = fx.text("not-a-folder", "text");
 
     let inside = text(&blocker.join("workspaces"));
-    let error = state.check_workspace_folder(&inside).unwrap_err();
+    let error = state.check_workspace_folder(Some(&inside)).unwrap_err();
     assert_eq!(error.kind, ErrorKind::FolderUnusable);
     let error = state.set_workspace_folder(Some(&inside), true).unwrap_err();
     assert_eq!(error.kind, ErrorKind::FolderUnusable);
@@ -130,13 +132,18 @@ fn a_folder_that_cannot_be_written_is_refused() {
         .set_workspace_folder(Some(&text(&locked)), true)
         .unwrap_err();
     assert_eq!(error.kind, ErrorKind::FolderUnusable);
+    // A missing folder inside it is refused by a check as well, which probes the folder above.
+    let error = state
+        .check_workspace_folder(Some(&text(&locked.join("missing"))))
+        .unwrap_err();
+    assert_eq!(error.kind, ErrorKind::FolderUnusable);
     assert!(names(&locked).is_empty());
     assert_eq!(load_settings(&fx.config()).workspace_dir, None);
     fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
 #[test]
-fn a_check_makes_the_folder_and_names_every_listed_workspace_file() {
+fn a_check_names_every_listed_workspace_file_and_writes_nothing() {
     let fx = Fixture::new();
     let mut state = fx.state();
     let files = create(&mut state, &["A", "B"]);
@@ -144,9 +151,12 @@ fn a_check_makes_the_folder_and_names_every_listed_workspace_file() {
     let damaged = fx.workspaces().join("damaged.holdx-ws");
     fs::write(&damaged, "not a database\n".repeat(20)).unwrap();
     fs::write(fx.workspaces().join("notes.txt"), "notes").unwrap();
-    let new = elsewhere(&fx, "new");
+    // A missing folder, two levels below the nearest one that exists.
+    let parent = elsewhere(&fx, "new");
+    let new = parent.join("deeper");
+    let before = names(fx.dir.path());
 
-    let check = state.check_workspace_folder(&text(&new)).unwrap();
+    let check = state.check_workspace_folder(Some(&text(&new))).unwrap();
 
     assert_eq!(check.path, text(&new));
     let mut expected = vec![
@@ -156,9 +166,9 @@ fn a_check_makes_the_folder_and_names_every_listed_workspace_file() {
     ];
     expected.sort();
     assert_eq!(check.movable, expected);
-    // The folder was made, and the file that proved it writable is gone.
-    assert!(new.is_dir());
-    assert!(names(&new).is_empty());
+    // No folder was made, and the file that proved the folder above writable is gone.
+    assert!(!parent.exists());
+    assert_eq!(names(fx.dir.path()), before);
     // A check changes nothing else.
     assert_eq!(load_settings(&fx.config()).workspace_dir, None);
     assert_eq!(open_path(&state), Some(files[1].clone()));
@@ -433,4 +443,83 @@ fn a_settings_file_that_cannot_be_saved_reverts_nothing_and_is_reported() {
     assert_eq!(state.settings().workspace_dir, Some(text(&new)));
     assert_eq!(result.start.list.workspaces.len(), 1);
     assert_eq!(open_path(&state), Some(new.join(name_of(&files[0]))));
+}
+
+#[test]
+fn a_check_of_the_default_folder_names_the_files_a_move_back_would_take() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let new = elsewhere(&fx, "new");
+    state
+        .set_workspace_folder(Some(&text(&new)), false)
+        .unwrap();
+    let files = create(&mut state, &["A"]);
+
+    let check = state.check_workspace_folder(None).unwrap();
+
+    assert_eq!(check.path, text(&fx.workspaces()));
+    assert_eq!(check.movable, vec![name_of(&files[0])]);
+    // The default folder is in use by default, so a check of it then is refused.
+    let fresh = Fixture::new();
+    let error = fresh.state().check_workspace_folder(None).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::SameFolder);
+}
+
+#[test]
+fn damaged_and_newer_files_move_whole() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    // The newer one is created first, so the readable one is open when the folder changes.
+    let files = create(&mut state, &["Newer", "Readable"]);
+    rusqlite::Connection::open(&files[0])
+        .unwrap()
+        .execute_batch("PRAGMA user_version = 99")
+        .unwrap();
+    let damaged = fx.workspaces().join("damaged.holdx-ws");
+    fs::write(&damaged, "not a database\n".repeat(20)).unwrap();
+    let originals = [files[0].clone(), files[1].clone(), damaged];
+    let before: Vec<Vec<u8>> = originals
+        .iter()
+        .map(|file| fs::read(file).unwrap())
+        .collect();
+    let new = elsewhere(&fx, "new");
+
+    let check = state.check_workspace_folder(Some(&text(&new))).unwrap();
+    assert_eq!(check.movable.len(), 3);
+    let result = state.set_workspace_folder(Some(&text(&new)), true).unwrap();
+
+    assert!(result.left.is_empty(), "{:?}", result.left);
+    let mut moved = result.moved.clone();
+    moved.sort();
+    assert_eq!(moved, check.movable);
+    assert!(names(&fx.workspaces()).is_empty());
+    for (original, bytes) in originals.iter().zip(&before) {
+        assert_eq!(&fs::read(new.join(name_of(original))).unwrap(), bytes);
+    }
+    // The newer and the damaged one are listed in the new folder as they were in the old.
+    assert_eq!(result.start.list.unreadable.len(), 2);
+    assert_eq!(open_path(&state), Some(new.join(name_of(&files[1]))));
+}
+
+#[test]
+fn a_copy_of_an_unreadable_file_is_compared_byte_for_byte_and_not_opened() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let damaged = fx.workspaces().join("damaged.holdx-ws");
+    fs::create_dir_all(fx.workspaces()).unwrap();
+    fs::write(&damaged, "not a database\n".repeat(20)).unwrap();
+    let new = elsewhere(&fx, "new");
+    let checked = RefCell::new(0);
+    let check = |_: &Path| {
+        *checked.borrow_mut() += 1;
+        Err(CommandError::new(ErrorKind::NotAWorkspace, "opened"))
+    };
+
+    let result = state
+        .set_workspace_folder_with(Some(&text(&new)), true, &check)
+        .unwrap();
+
+    assert_eq!(checked.into_inner(), 0);
+    assert_eq!(result.moved, vec!["damaged.holdx-ws".to_string()]);
+    assert!(!damaged.exists());
 }

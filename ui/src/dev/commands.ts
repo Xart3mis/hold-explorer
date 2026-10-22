@@ -754,7 +754,7 @@ export function installDevCommands(
     // A folder is checked at once; the folder in use is refused. A move takes a second and a half,
     // moves every readable workspace, and leaves every unreadable file with the reason.
     check_workspace_folder: (payload) => {
-      const path = text(payload, "path");
+      const path = text(payload, "path") || FOLDER;
       if (path === start.list.folder) {
         throw failure(
           "SameFolder",

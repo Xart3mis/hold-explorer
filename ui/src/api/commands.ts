@@ -56,7 +56,7 @@ interface CommandMap {
   settings_set_theme: { args: { theme: Theme }; result: Settings };
   settings_set_density: { args: { density: Density }; result: Settings };
   settings_set_author_name: { args: { name: string }; result: Settings };
-  check_workspace_folder: { args: { path: string }; result: FolderCheck };
+  check_workspace_folder: { args: { path: string | null }; result: FolderCheck };
   set_workspace_folder: { args: { path: string | null; moveFiles: boolean }; result: FolderMoved };
   workspace_list: { args: Record<string, never>; result: WorkspaceListView };
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
@@ -149,10 +149,11 @@ export const api = {
   setDensity: (density: Density) => call("settings_set_density", { density }),
   setAuthorName: (name: string) => call("settings_set_author_name", { name }),
   /**
-   * Checks a folder to keep the workspaces in (absolute, writable, not the one in use; made when
-   * missing) and names the workspace files a move to it would take.
+   * Checks a folder to keep the workspaces in (`null`: the default one): absolute, not the one in
+   * use, and writable, or creatable when missing; nothing is created. Names the workspace files a
+   * move to it would take.
    */
-  checkWorkspaceFolder: (path: string) => call("check_workspace_folder", { path }),
+  checkWorkspaceFolder: (path: string | null) => call("check_workspace_folder", { path }),
   workspaceList: () => call("workspace_list", {}),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),

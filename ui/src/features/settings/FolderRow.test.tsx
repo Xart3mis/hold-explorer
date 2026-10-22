@@ -207,7 +207,7 @@ describe("The workspaces folder in Settings", () => {
     expect(alert).toHaveTextContent(refused);
   });
 
-  it("offers the default folder and sends no folder for it", async () => {
+  it("checks the default folder, offers the move with its count, and sends no folder for it", async () => {
     const start = openStart();
     const custom: AppStart = {
       ...start,
@@ -219,14 +219,17 @@ describe("The workspaces folder in Settings", () => {
       moved: ["a1b2c3d4e5f60718.holdx-ws"],
       left: [],
     }));
+    const check = vi.fn(() => ({ path: OLD, movable: ["a1b2c3d4e5f60718.holdx-ws"] }));
     const { user } = renderApp({
       start: custom,
       path: "/settings",
-      handlers: { set_workspace_folder: setFolder },
+      handlers: { check_workspace_folder: check, set_workspace_folder: setFolder },
     });
     await page();
     await user.click(screen.getByRole("button", { name: en.settings.folderDefault }));
-    expect(await screen.findByText(en.settings.folderMoveDefaultTitle)).toBeInTheDocument();
+    expect(await screen.findByText("Move 1 workspace to the default folder?")).toBeInTheDocument();
+    expect(check).toHaveBeenCalledWith({ path: null });
+    expect(screen.getByRole("button", { name: en.settings.folderMoveThem })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: en.settings.folderMoveThem }));
     expect(setFolder).toHaveBeenCalledWith({ path: null, moveFiles: true });
     expect(await screen.findByText(`Moved 1 workspace file to ${OLD}`)).toBeInTheDocument();

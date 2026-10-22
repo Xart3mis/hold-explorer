@@ -18,21 +18,20 @@ export interface FolderChoice {
 }
 
 /**
- * Where the change of the workspaces folder is: a chosen folder being checked; a folder offered,
- * with the check that names the files a move would take (`null` for the default folder, which is
- * checked when the change is sent); the change running; its answer; or a failure of the dialog,
- * of the check, or of the change.
+ * Where the change of the workspaces folder is: a folder being checked (`path` is `null` for the
+ * default one); a checked folder offered, with the files a move would take; the change running;
+ * its answer; or a failure of the dialog, of the check, or of the change.
  */
 export type FolderChange =
-  | { step: "checking"; path: string }
-  | { step: "offer"; check: FolderCheck | null }
+  | { step: "checking"; path: string | null }
+  | { step: "offer"; path: string | null; check: FolderCheck }
   | { step: "moving"; choice: FolderChoice }
   | { step: "done"; choice: FolderChoice; moved: FolderMoved }
   | { step: "failed"; error: AppError };
 
 /**
- * The actions that change the workspaces folder: `check` a folder that was chosen, then `change`
- * to it (or to the default one), moving the workspace files or leaving them. The change is an
+ * The actions that change the workspaces folder: `check` a folder that was chosen, or the default
+ * one (`null`), then `move` to it, moving the workspace files or leaving them. The change is an
  * action on the open workspace (it closes it and reopens it from where its file is then): it runs
  * after the others, and while it runs every control that starts one waits. Its answer is the new
  * start, which takes the place of the cached one. See ui/src/app/actions/start.ts.
@@ -51,12 +50,12 @@ export function useWorkspaceFolder() {
   };
 
   const check = useMutation({
-    mutationFn: (path: string) => api.checkWorkspaceFolder(path),
+    mutationFn: (path: string | null) => api.checkWorkspaceFolder(path),
     onMutate: (path) => {
       put({ step: "checking", path });
     },
-    onSuccess: (checked) => {
-      put({ step: "offer", check: checked });
+    onSuccess: (checked, path) => {
+      put({ step: "offer", path, check: checked });
     },
     onError: (error) => {
       put({ step: "failed", error: asCommandError(error) });
@@ -82,11 +81,6 @@ export function useWorkspaceFolder() {
     },
   });
 
-  /** Offers the default folder, for a change that moves the files or leaves them. */
-  const offerDefault = () => {
-    put({ step: "offer", check: null });
-  };
-
   /** Records a failure that came before any command, such as the dialog's. */
   const fail = (error: AppError) => {
     put({ step: "failed", error });
@@ -96,5 +90,5 @@ export function useWorkspaceFolder() {
     client.removeQueries({ queryKey: keys.folderChange, exact: true });
   };
 
-  return { change, check, move, offerDefault, fail, dismiss };
+  return { change, check, move, fail, dismiss };
 }

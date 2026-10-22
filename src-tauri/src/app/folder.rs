@@ -43,14 +43,15 @@ fn supported_workspace(path: &Path) -> Result<(), CommandError> {
 }
 
 impl AppState {
-    /// Checks the folder `path` for the workspaces, and names the workspace files of the folder in
-    /// use that a move to it would take. The folder must be absolute, other than the folder in
-    /// use, and writable; it is made when missing. Nothing else changes.
-    pub fn check_workspace_folder(&self, path: &str) -> Result<FolderCheck, CommandError> {
-        let folder = self.usable_folder(Some(path))?;
+    /// Checks the folder `path` (the default folder for `None`) for the workspaces, and names the
+    /// workspace files of the folder in use that a move to it would take. The folder must be
+    /// absolute, other than the folder in use, and writable; a missing folder passes when the
+    /// nearest folder above it that exists is writable. Nothing is created and nothing changes.
+    pub fn check_workspace_folder(&self, path: Option<&str>) -> Result<FolderCheck, CommandError> {
+        let folder = self.usable_folder(path, false)?;
         let movable = workspace_files(&self.folder())?
             .iter()
-            .map(|file| file_name(file))
+            .map(|(file, _)| file_name(file))
             .collect();
         Ok(FolderCheck {
             path: folder.to_string_lossy().into_owned(),
@@ -61,7 +62,9 @@ impl AppState {
     /// Keeps the workspaces in the folder `path` from now on, or in the default folder for
     /// `None`, once the folder passed the checks of [`AppState::check_workspace_folder`]. With
     /// `move_files`, every workspace file of the folder in use (the files the store lists,
-    /// readable or not, and no other) is moved there one by one; a file that cannot be moved
+    /// readable or not, and no other) is moved there one by one, whole: the copy of a readable
+    /// workspace must open as a workspace this version reads, the copy of any other file must
+    /// equal it byte for byte. A file that cannot be moved
     /// stays whole where it is, and the answer says why. The open workspace is closed first, and
     /// reopened afterwards from where its file is then. The settings are saved with the new
     /// folder whether or not every file moved; when they cannot be saved, nothing on disk is put
@@ -75,14 +78,15 @@ impl AppState {
         self.set_workspace_folder_with(path, move_files, &supported_workspace)
     }
 
-    /// [`AppState::set_workspace_folder`], with the check each copy must pass.
+    /// [`AppState::set_workspace_folder`], with the check the copy of a readable workspace must
+    /// pass.
     pub(super) fn set_workspace_folder_with(
         &mut self,
         path: Option<&str>,
         move_files: bool,
         check: CopyCheck,
     ) -> Result<FolderMoved, CommandError> {
-        let to = self.usable_folder(path)?;
+        let to = self.usable_folder(path, true)?;
         let from = self.folder();
         let files = if move_files {
             workspace_files(&from)?
@@ -99,9 +103,21 @@ impl AppState {
 
         let mut moved = Vec::new();
         let mut left = Vec::new();
-        for file in files {
+        for (file, readable) in files {
             let name = file_name(&file);
-            match move_file(&file, &to, check) {
+            let verified = if readable {
+                move_file(&file, &to, &|copy| {
+                    check(copy).map_err(|error| {
+                        format!(
+                            "is not a workspace this version can open ({})",
+                            error.message
+                        )
+                    })
+                })
+            } else {
+                move_file(&file, &to, &|copy| same_bytes(&file, copy))
+            };
+            match verified {
                 Ok(()) => moved.push(name),
                 Err(error) => left.push(UnreadableView {
                     file_name: name,
@@ -160,9 +176,10 @@ impl AppState {
     }
 
     /// The folder `path`, or the default folder for `None`, once it is absolute, other than the
-    /// folder in use, made when missing, and shown to be writable by a file made in it and
-    /// removed again.
-    fn usable_folder(&self, path: Option<&str>) -> Result<PathBuf, CommandError> {
+    /// folder in use, and shown to be writable by a file made in it and removed again. With
+    /// `create` a missing folder is made first; without, nothing is created, and a missing folder
+    /// is shown writable by the nearest folder above it that exists.
+    fn usable_folder(&self, path: Option<&str>, create: bool) -> Result<PathBuf, CommandError> {
         let folder = match path {
             Some(path) => PathBuf::from(path),
             None => self.default_folder(),
@@ -192,10 +209,21 @@ impl AppState {
                 ),
             )
         };
-        std::fs::create_dir_all(&folder).map_err(|e| unusable("could not be created", &e))?;
+        let probed = if create {
+            std::fs::create_dir_all(&folder).map_err(|e| unusable("could not be created", &e))?;
+            folder.clone()
+        } else {
+            nearest_existing(&folder)
+        };
+        if !probed.is_dir() {
+            return Err(unusable(
+                "could not be created",
+                &format!("{} is not a folder", probed.display()),
+            ));
+        }
         let probe = tempfile::Builder::new()
             .prefix(".hold-explorer-")
-            .tempfile_in(&folder)
+            .tempfile_in(&probed)
             .map_err(|e| unusable("cannot be written to", &e))?;
         probe
             .close()
@@ -210,21 +238,61 @@ fn same_folder(a: &Path, b: &Path) -> bool {
     resolved(a) == resolved(b)
 }
 
-/// The workspace files of a folder, readable or not, as the store lists them, by name.
-fn workspace_files(folder: &Path) -> Result<Vec<PathBuf>, CommandError> {
+/// The path itself when it exists, else the nearest folder above it that does.
+fn nearest_existing(path: &Path) -> PathBuf {
+    path.ancestors()
+        .find(|ancestor| ancestor.symlink_metadata().is_ok())
+        .unwrap_or(path)
+        .to_path_buf()
+}
+
+/// The workspace files of a folder as the store lists them, by name, each with whether the store
+/// could read it as a workspace.
+fn workspace_files(folder: &Path) -> Result<Vec<(PathBuf, bool)>, CommandError> {
     let list = list_workspaces(folder)?;
-    let mut files: Vec<PathBuf> = list
+    let mut files: Vec<(PathBuf, bool)> = list
         .workspaces
         .into_iter()
-        .map(|info| info.path)
+        .map(|info| (info.path, true))
         .chain(
             list.unreadable
                 .into_iter()
-                .map(|unreadable| unreadable.path),
+                .map(|unreadable| (unreadable.path, false)),
         )
         .collect();
-    files.sort_by_key(|file| file_name(file));
+    files.sort_by_key(|(file, _)| file_name(file));
     Ok(files)
+}
+
+/// Whether the copy holds exactly the bytes of the original: the same length, then the same
+/// content, read side by side. The problem, in words, when it does not.
+fn same_bytes(original: &Path, copy: &Path) -> Result<(), String> {
+    use std::io::Read;
+    let unreadable = |error: std::io::Error| format!("could not be read back ({error})");
+    let mut a = std::io::BufReader::new(File::open(original).map_err(unreadable)?);
+    let mut b = std::io::BufReader::new(File::open(copy).map_err(unreadable)?);
+    let lengths = (
+        a.get_ref().metadata().map_err(unreadable)?.len(),
+        b.get_ref().metadata().map_err(unreadable)?.len(),
+    );
+    if lengths.0 != lengths.1 {
+        return Err(format!(
+            "has {} bytes where the file has {}",
+            lengths.1, lengths.0
+        ));
+    }
+    let mut left = [0u8; 64 * 1024];
+    let mut right = [0u8; 64 * 1024];
+    loop {
+        let read = a.read(&mut left).map_err(unreadable)?;
+        if read == 0 {
+            return Ok(());
+        }
+        b.read_exact(&mut right[..read]).map_err(unreadable)?;
+        if left[..read] != right[..read] {
+            return Err("differs from the file".to_string());
+        }
+    }
 }
 
 /// The name of a file, as text.
@@ -235,10 +303,14 @@ fn file_name(path: &Path) -> String {
 }
 
 /// Moves the workspace file `file` into the folder `to` under its name: copied to a temporary
-/// name there, flushed, checked with `check`, given its name (never over another file), and only
-/// then removed from where it was. A failure at any step removes the copy and leaves the file
-/// whole where it was; the error's kind names the step.
-fn move_file(file: &Path, to: &Path, check: CopyCheck) -> Result<(), CommandError> {
+/// name there, flushed, verified with `verify` (which says what is wrong with the copy), given its
+/// name (never over another file), and only then removed from where it was. A failure at any step
+/// removes the copy and leaves the file whole where it was; the error's kind names the step.
+fn move_file(
+    file: &Path,
+    to: &Path,
+    verify: &dyn Fn(&Path) -> Result<(), String>,
+) -> Result<(), CommandError> {
     let name = file_name(file);
     let from = file
         .parent()
@@ -279,12 +351,11 @@ fn move_file(file: &Path, to: &Path, check: CopyCheck) -> Result<(), CommandErro
     copy.as_file().sync_all().map_err(|e| not_copied(&e))?;
     drop(source);
 
-    check(copy.path()).map_err(|error| {
+    verify(copy.path()).map_err(|problem| {
         CommandError::new(
             ErrorKind::MoveCheck,
             format!(
-                "The copy of {name} in {place} is not a workspace this version can open ({}), so the copy was removed and the file was left whole in {from}.",
-                error.message
+                "The copy of {name} in {place} {problem}, so the copy was removed and the file was left whole in {from}."
             ),
         )
     })?;

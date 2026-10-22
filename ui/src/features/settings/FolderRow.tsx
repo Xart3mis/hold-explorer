@@ -23,7 +23,7 @@ export interface FolderRowProps {
  * runs the row shows its progress; then a notice lists what moved and what was left, and why.
  */
 export function FolderRow({ start, folder }: FolderRowProps) {
-  const { change, check, move, offerDefault, fail, dismiss } = folder;
+  const { change, check, move, fail, dismiss } = folder;
   const { isBusy } = useStart();
   const [showError, setShowError] = useState<AppError | null>(null);
   const labelId = useId();
@@ -66,7 +66,14 @@ export function FolderRow({ start, folder }: FolderRowProps) {
           {t("settings.folderChange")}
         </Button>
         {isDefault ? null : (
-          <Button aria-describedby={labelId} isInert={isBusy || deciding} onPress={offerDefault}>
+          <Button
+            aria-describedby={labelId}
+            isInert={isBusy || deciding}
+            onPress={() => {
+              dismiss();
+              check.mutate(null);
+            }}
+          >
             {t("settings.folderDefault")}
           </Button>
         )}
@@ -97,10 +104,11 @@ export function FolderRow({ start, folder }: FolderRowProps) {
       {change?.step === "offer" ? (
         <Offer
           from={path}
-          to={change.check?.path ?? null}
-          count={change.check?.movable.length ?? null}
+          to={change.check.path}
+          isDefault={change.path === null}
+          count={change.check.movable.length}
           onMove={(moveFiles) => {
-            move.mutate({ path: change.check?.path ?? null, moveFiles });
+            move.mutate({ path: change.path, moveFiles });
           }}
           onCancel={dismiss}
         />
@@ -139,16 +147,18 @@ export function FolderRow({ start, folder }: FolderRowProps) {
 
 interface OfferProps {
   from: string;
-  /** The folder offered; `null` for the default one. */
-  to: string | null;
-  /** How many workspace files a move would take; `null` when that is not known (the default). */
-  count: number | null;
+  /** The folder offered, as it was checked. */
+  to: string;
+  /** Whether that is the default folder. */
+  isDefault: boolean;
+  /** How many workspace files a move would take. */
+  count: number;
   onMove: (moveFiles: boolean) => void;
   onCancel: () => void;
 }
 
 /** The choice of what happens to the workspace files: moved, left, or nothing changes. */
-function Offer({ from, to, count, onMove, onCancel }: OfferProps) {
+function Offer({ from, to, isDefault, count, onMove, onCancel }: OfferProps) {
   const choices = useRef<HTMLSpanElement>(null);
   // The choice is asked for here, so the keyboard is taken to it.
   useEffect(() => {
@@ -157,14 +167,12 @@ function Offer({ from, to, count, onMove, onCancel }: OfferProps) {
   const nothingToMove = count === 0;
   const title = nothingToMove
     ? t("settings.folderEmptyTitle")
-    : count === null
-      ? t("settings.folderMoveDefaultTitle")
+    : isDefault
+      ? t("settings.folderMoveDefaultTitle", { count })
       : t("settings.folderMoveTitle", { count });
   const body = nothingToMove
-    ? t("settings.folderEmptyBody", { from, to: to ?? "" })
-    : to === null
-      ? t("settings.folderMoveDefaultBody", { from })
-      : t("settings.folderMoveBody", { from, to });
+    ? t("settings.folderEmptyBody", { from, to })
+    : t("settings.folderMoveBody", { from, to });
   return (
     <Notice tone="info" title={title}>
       <span className={styles.offer}>

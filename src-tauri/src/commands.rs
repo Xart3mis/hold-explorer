@@ -134,9 +134,12 @@ pub async fn settings_set_author_name<R: Runtime>(
 #[tauri::command]
 pub async fn check_workspace_folder<R: Runtime>(
     app: AppHandle<R>,
-    path: String,
+    path: Option<String>,
 ) -> Result<FolderCheck, CommandError> {
-    blocking(app, move |state| state.check_workspace_folder(&path)).await
+    blocking(app, move |state| {
+        state.check_workspace_folder(path.as_deref())
+    })
+    .await
 }
 
 /// Keeps the workspaces in another folder (`None`: the default one), moving the workspace files
