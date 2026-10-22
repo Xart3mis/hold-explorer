@@ -18,7 +18,8 @@ pub use error::StoreError;
 pub use schema::SCHEMA_VERSION;
 
 pub use directory::{
-    delete_workspace, find_by_project, list_workspaces, UnreadableWorkspace, WorkspaceList,
+    check_workspace, delete_workspace, find_by_project, list_workspaces, UnreadableWorkspace,
+    WorkspaceList,
 };
 pub use dump::logical_dump;
 pub use snapshot::{ImportOptions, SnapshotDetail, SnapshotInfo};

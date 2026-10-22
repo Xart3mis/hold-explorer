@@ -74,3 +74,51 @@
   font-variant-numeric: var(--font-numeric-tabular);
   letter-spacing: var(--letter-spacing-normal);
 }
+
+/* The buttons of the folder row, side by side, wrapping on a narrow window. */
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The change of the folder while it runs: the bar, and the line that says the rest waits. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+/* The text of a notice of the folder row, then its choices or its lists, a line apart. */
+.offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* A file left where it was: its name, then the reason. */
+.left {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A file name is written as the system gives it. */
+.file {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  overflow-wrap: anywhere;
+}

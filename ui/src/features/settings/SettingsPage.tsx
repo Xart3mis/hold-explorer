@@ -1,15 +1,16 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { asCommandError, type AppError } from "../../api/error";
-import { showInFolder } from "../../api/window";
+import { useEffect, useRef, useState } from "react";
+import { asCommandError } from "../../api/error";
 import { useAuthorNameSetting } from "../../app/actions/authorName";
 import { useDensitySetting } from "../../app/actions/density";
+import { useWorkspaceFolder } from "../../app/actions/folder";
 import { useThemeSetting } from "../../app/actions/theme";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import type { Density } from "../../bindings/Density";
 import type { Theme } from "../../bindings/Theme";
-import { Button, Notice, Select, TextField, type SelectOption } from "../../components";
+import { Notice, Select, TextField, type SelectOption } from "../../components";
 import { t } from "../../text/i18n";
+import { FolderRow } from "./FolderRow";
 import styles from "./SettingsPage.module.css";
 
 const THEMES: readonly Theme[] = ["Dark", "Light", "System"];
@@ -27,15 +28,17 @@ function isDensity(value: string): value is Density {
 /**
  * Settings: the theme and the density, applied at once and saved; the name notes are signed
  * with, saved when the field is left or Enter is pressed; the folder the workspaces are kept in,
- * with a way to show it; and the version of the app.
+ * with a way to show it and to change it; and the version of the app. While the folder changes,
+ * the other settings are inert, and the folder row says so.
  */
 export function SettingsPage() {
   const { start } = useShell();
   const { setTheme } = useThemeSetting();
   const { setDensity } = useDensitySetting();
   const { setAuthorName } = useAuthorNameSetting();
-  const [folderError, setFolderError] = useState<AppError | null>(null);
-  const folderLabelId = useId();
+  const folder = useWorkspaceFolder();
+  // The other settings wait while the workspaces folder changes.
+  const waiting = folder.change?.step === "moving";
 
   // What is typed in the name field, and the name last sent to be saved (null: none that holds).
   // The field is saved on blur and on Enter, so pressing the sidebar, which remounts this page,
@@ -74,12 +77,11 @@ export function SettingsPage() {
     { id: "Comfortable", label: t("settings.densityComfortable") },
     { id: "Compact", label: t("settings.densityCompact") },
   ];
-  const folder = start.list.folder;
 
   return (
     <Page title={t("destinations.name.settings")} width="form">
       <div className={styles.form}>
-        <div className={styles.row}>
+        <div className={styles.row} inert={waiting}>
           <Select
             label={t("settings.theme")}
             description={t("settings.themeHelp")}
@@ -98,7 +100,7 @@ export function SettingsPage() {
           ) : null}
         </div>
 
-        <div className={styles.row}>
+        <div className={styles.row} inert={waiting}>
           <Select
             label={t("settings.density")}
             description={t("settings.densityHelp")}
@@ -117,7 +119,7 @@ export function SettingsPage() {
           ) : null}
         </div>
 
-        <div className={styles.row}>
+        <div className={styles.row} inert={waiting}>
           <TextField
             label={t("settings.authorName")}
             description={t("settings.authorNameHelp")}
@@ -142,39 +144,7 @@ export function SettingsPage() {
           />
         </div>
 
-        <div className={styles.row}>
-          <div className={styles.value}>
-            <span id={folderLabelId} className={styles.label}>
-              {t("settings.folder")}
-            </span>
-            <span className={styles.path}>{folder}</span>
-            <span className={styles.help}>{t("settings.folderHelp")}</span>
-          </div>
-          <div>
-            <Button
-              aria-describedby={folderLabelId}
-              onPress={() => {
-                setFolderError(null);
-                showInFolder(folder).catch((error: unknown) => {
-                  setFolderError(asCommandError(error));
-                });
-              }}
-            >
-              {t("common.showInFolder")}
-            </Button>
-          </div>
-          {folderError === null ? null : (
-            <Notice
-              tone="danger"
-              title={t("shell.folderError")}
-              onDismiss={() => {
-                setFolderError(null);
-              }}
-            >
-              {folderError.message}
-            </Notice>
-          )}
-        </div>
+        <FolderRow start={start} folder={folder} />
 
         <div className={styles.row}>
           <div className={styles.value}>

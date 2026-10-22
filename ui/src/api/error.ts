@@ -56,6 +56,14 @@ const COMMAND_KINDS: Record<ErrorKind, true> = {
   Clipboard: true,
   Open: true,
   Extension: true,
+  FolderNotAbsolute: true,
+  FolderUnusable: true,
+  SameFolder: true,
+  NameTaken: true,
+  MoveCopy: true,
+  MoveCheck: true,
+  MoveRename: true,
+  MoveRemove: true,
   Internal: true,
 };
 

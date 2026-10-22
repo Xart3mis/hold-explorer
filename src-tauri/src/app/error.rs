@@ -85,6 +85,22 @@ pub enum ErrorKind {
     Open,
     /// A file name has an extension other than the format's.
     Extension,
+    /// A workspace folder was given as a path that is not absolute.
+    FolderNotAbsolute,
+    /// A workspace folder could not be created, or cannot be written to.
+    FolderUnusable,
+    /// The workspace folder chosen is the one in use.
+    SameFolder,
+    /// A workspace file was not moved because a file of its name is in the new folder.
+    NameTaken,
+    /// A workspace file was not moved because it could not be copied to the new folder.
+    MoveCopy,
+    /// A workspace file was not moved because its copy is not a workspace this version opens.
+    MoveCheck,
+    /// A workspace file was not moved because its copy could not be given its name.
+    MoveRename,
+    /// A workspace file was not moved because it could not be removed from the old folder.
+    MoveRemove,
     /// A fault of the application itself rather than of the user's input.
     Internal,
 }

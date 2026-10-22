@@ -41,6 +41,8 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::settings_set_theme,
         commands::settings_set_density,
         commands::settings_set_author_name,
+        commands::check_workspace_folder,
+        commands::set_workspace_folder,
         commands::workspace_list,
         commands::workspace_create,
         commands::workspace_open,

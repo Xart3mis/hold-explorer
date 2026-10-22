@@ -20,6 +20,14 @@ export function chooseImportFile(): Promise<string | null> {
   });
 }
 
+/**
+ * Asks for a folder to keep the workspaces in. Resolves with its path, or with `null` when the
+ * dialog was cancelled.
+ */
+export function chooseFolder(): Promise<string | null> {
+  return open({ multiple: false, directory: true });
+}
+
 /** The kinds of file an export saves, each offered alone in the save dialog. */
 export type FileFormat = "xlsx" | "csv" | "pdf" | "png" | "svg";
 

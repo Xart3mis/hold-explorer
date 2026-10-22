@@ -17,6 +17,7 @@ import type { FilterPart } from "../bindings/FilterPart";
 import type { Inactive } from "../bindings/Inactive";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { FolderMoved } from "../bindings/FolderMoved";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
@@ -750,6 +751,45 @@ export function installDevCommands(
       start.settings = { ...start.settings, author_name: name };
       return start.settings;
     },
+    // A folder is checked at once; the folder in use is refused. A move takes a second and a half,
+    // moves every readable workspace, and leaves every unreadable file with the reason.
+    check_workspace_folder: (payload) => {
+      const path = text(payload, "path");
+      if (path === start.list.folder) {
+        throw failure(
+          "SameFolder",
+          `The workspaces are already kept in ${path}. Choose another folder to keep them in.`,
+        );
+      }
+      const movable = [
+        ...start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`),
+        ...start.list.unreadable.map((file) => file.file_name),
+      ].sort();
+      return later(300, () => ({ path, movable }));
+    },
+    set_workspace_folder: (payload): Promise<FolderMoved> => {
+      const { path, moveFiles } = payload as { path: string | null; moveFiles: boolean };
+      const to = path ?? FOLDER;
+      return later(1500, () => {
+        const moved = moveFiles
+          ? start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`).sort()
+          : [];
+        const left = moveFiles
+          ? start.list.unreadable.map((file) => ({
+              ...file,
+              kind: "MoveCheck" as const,
+              message: `The copy of ${file.file_name} in ${to} is not a workspace this version can open (${file.message}), so the copy was removed and the file was left whole in ${start.list.folder}.`,
+            }))
+          : [];
+        start.settings = { ...start.settings, workspace_dir: path };
+        start.list = {
+          workspaces: moveFiles ? start.list.workspaces : [],
+          unreadable: [],
+          folder: to,
+        };
+        return { start: structuredClone(start), moved, left };
+      });
+    },
     workspace_list: () => {
       if (!folderReadable) throw failure("Io", start.list_error?.message ?? "");
       return start.list;
@@ -1083,7 +1123,13 @@ export function installDevCommands(
       return later(150, () => null);
     },
     export_open: () => null,
-    "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
+    // The folder dialog picks a folder on the project drive; the file dialog an export.
+    "plugin:dialog|open": (payload) => {
+      const { options } = payload as { options: { directory?: boolean } };
+      return options.directory === true
+        ? "/mnt/projects/5359/hold-explorer"
+        : "/home/ada/exports/Holds_2026-10-14.xlsx";
+    },
     // The save dialog takes the name it offers, in the folder of the exports.
     "plugin:dialog|save": (payload) => {
       const { options } = payload as { options: { defaultPath?: string } };

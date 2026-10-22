@@ -25,10 +25,10 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
     check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, Density,
-    ErrorKind, ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit,
-    ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard,
-    Settings, TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen,
-    WorkspaceView,
+    ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck, FolderMoved, GroupDetail,
+    HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView,
+    SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice, Theme, ViewRef,
+    WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -128,6 +128,30 @@ pub async fn settings_set_author_name<R: Runtime>(
     name: String,
 ) -> Result<Settings, CommandError> {
     blocking(app, move |state| state.set_author_name(&name)).await
+}
+
+/// Checks a folder to keep the workspaces in, and names the workspace files a move would take.
+#[tauri::command]
+pub async fn check_workspace_folder<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+) -> Result<FolderCheck, CommandError> {
+    blocking(app, move |state| state.check_workspace_folder(&path)).await
+}
+
+/// Keeps the workspaces in another folder (`None`: the default one), moving the workspace files
+/// there when asked to.
+#[tauri::command]
+pub async fn set_workspace_folder<R: Runtime>(
+    app: AppHandle<R>,
+    path: Option<String>,
+    move_files: bool,
+) -> Result<FolderMoved, CommandError> {
+    // The change closes the workspace and reopens it, so it rebuilds the state itself.
+    locked(app, true, move |state| {
+        state.set_workspace_folder(path.as_deref(), move_files)
+    })
+    .await
 }
 
 /// The workspaces in the workspace folder.
@@ -635,6 +659,8 @@ mod tests {
                 // Nothing is open yet.
                 ("blocker_detail", "NoWorkspace"),
                 ("breakdown", "NoWorkspace"),
+                // The folder of the fixture is not a full path.
+                ("check_workspace_folder", "FolderNotAbsolute"),
                 ("demo_create", "Ok"),
                 // The view of the fixture is not the demo workspace.
                 ("export_copy", "ViewChanged"),
@@ -659,6 +685,8 @@ mod tests {
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
                 ("overview", "ViewChanged"),
+                // The folder of the fixture is not a full path.
+                ("set_workspace_folder", "FolderNotAbsolute"),
                 ("settings_set_author_name", "Ok"),
                 ("settings_set_density", "Ok"),
                 ("settings_set_theme", "Ok"),

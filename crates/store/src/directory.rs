@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{io_error, StoreError};
-use crate::schema::{peek_version, SQLITE_MAGIC};
+use crate::schema::{peek_id, peek_version, SCHEMA_VERSION, SQLITE_MAGIC};
 use crate::workspace::{Workspace, WorkspaceInfo, EXTENSION};
 
 /// The workspaces of a folder, and the workspace files that could not be read.
@@ -141,6 +141,27 @@ pub fn find_by_project(dir: &Path, project_no: &str) -> Result<Vec<WorkspaceInfo
         .into_iter()
         .filter(|info| info.project_numbers.iter().any(|p| p == project_no))
         .collect())
+}
+
+/// Checks that the existing file at `path` is a workspace this version can open, through a
+/// read-only connection, so nothing is migrated, backed up, or created: a file that is not a
+/// workspace gives `NotAWorkspace`, and one a newer version wrote gives `NewerSchema`. The only
+/// write this can cause is the roll-back of an interrupted write to a workspace.
+pub fn check_workspace(path: &Path) -> Result<(), StoreError> {
+    let found = peek_version(path)?;
+    if found > SCHEMA_VERSION {
+        return Err(StoreError::NewerSchema {
+            path: path.display().to_string(),
+            found,
+            supported: SCHEMA_VERSION,
+        });
+    }
+    match peek_id(path)? {
+        Some(_) => Ok(()),
+        None => Err(StoreError::NotAWorkspace {
+            path: path.display().to_string(),
+        }),
+    }
 }
 
 /// Deletes the workspace file at `path`, and with it the rollback journal `<path>-journal` when
@@ -716,5 +737,50 @@ mod tests {
             copies,
             vec![copy("b-copy.holdx-ws"), copy("c-copy.holdx-ws")]
         );
+    }
+
+    #[test]
+    fn check_accepts_a_workspace_and_refuses_every_other_file_without_changing_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = Workspace::create(dir.path(), "A").unwrap().info().unwrap();
+        let newer = Workspace::create(dir.path(), "Newer")
+            .unwrap()
+            .info()
+            .unwrap();
+        Connection::open(&newer.path)
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        let notes = dir.path().join("notes.holdx-ws");
+        std::fs::write(&notes, "just text\n".repeat(50)).unwrap();
+        let foreign = dir.path().join("other.holdx-ws");
+        Connection::open(&foreign)
+            .unwrap()
+            .execute_batch("CREATE TABLE foo (a INTEGER)")
+            .unwrap();
+        let before: Vec<Vec<u8>> = [&workspace.path, &newer.path, &notes, &foreign]
+            .iter()
+            .map(|path| std::fs::read(path).unwrap())
+            .collect();
+
+        check_workspace(&workspace.path).unwrap();
+        assert!(matches!(
+            check_workspace(&newer.path),
+            Err(StoreError::NewerSchema { found: 99, .. })
+        ));
+        for path in [&notes, &foreign] {
+            assert_eq!(
+                check_workspace(path),
+                Err(StoreError::NotAWorkspace {
+                    path: path.display().to_string(),
+                })
+            );
+        }
+        let after: Vec<Vec<u8>> = [&workspace.path, &newer.path, &notes, &foreign]
+            .iter()
+            .map(|path| std::fs::read(path).unwrap())
+            .collect();
+        assert_eq!(after, before);
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 4);
     }
 }

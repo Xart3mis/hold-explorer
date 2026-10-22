@@ -46,8 +46,8 @@ export interface RenderAppOptions {
  * dimensions, `solve_order` with a solve order of four steps, and `blocker_detail` with the
  * detail of the blocker asked for, unless the test gives its own. Those answers are for the view
  * the mocked Rust side holds, which is the one `start` opens and then the one the test's own
- * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`, or
- * `import_commit` answered with: for any other view they fail with the kind `ViewChanged`, as
+ * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`,
+ * `import_commit`, or `set_workspace_folder` answered with: for any other view they fail with the kind `ViewChanged`, as
  * the Rust side does.
  */
 export function renderApp(options: RenderAppOptions = {}) {
@@ -90,6 +90,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     snapshot_select: select,
     demo_create: demo,
     import_commit: commit,
+    set_workspace_folder: setFolder,
   } = given;
   const tracked: Handlers = {
     ...(open && { workspace_open: follow(open, opens) }),
@@ -98,6 +99,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     ...(select && { snapshot_select: follow(select, opens) }),
     ...(demo && { demo_create: follow(demo, opens) }),
     ...(commit && { import_commit: follow(commit, (done) => done.open) }),
+    ...(setFolder && { set_workspace_folder: follow(setFolder, (moved) => moved.start.open) }),
   };
   mockCommands({
     app_start: () => start,

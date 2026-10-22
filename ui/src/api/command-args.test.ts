@@ -36,6 +36,12 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   settings_set_theme: () => api.setTheme(fixture.settings_set_theme.theme),
   settings_set_density: () => api.setDensity(fixture.settings_set_density.density),
   settings_set_author_name: () => api.setAuthorName(fixture.settings_set_author_name.name),
+  check_workspace_folder: () => api.checkWorkspaceFolder(fixture.check_workspace_folder.path),
+  set_workspace_folder: () =>
+    workspaceApi.setWorkspaceFolder(
+      fixture.set_workspace_folder.path,
+      fixture.set_workspace_folder.moveFiles,
+    ),
   workspace_list: () => api.workspaceList(),
   workspace_create: () => workspaceApi.workspaceCreate(fixture.workspace_create.name),
   workspace_open: () => workspaceApi.workspaceOpen(fixture.workspace_open.id),

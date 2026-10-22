@@ -13,6 +13,8 @@ import type { Field } from "../bindings/Field";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FoldedMatrix } from "../bindings/FoldedMatrix";
+import type { FolderCheck } from "../bindings/FolderCheck";
+import type { FolderMoved } from "../bindings/FolderMoved";
 import type { Group } from "../bindings/Group";
 import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
@@ -54,6 +56,8 @@ interface CommandMap {
   settings_set_theme: { args: { theme: Theme }; result: Settings };
   settings_set_density: { args: { density: Density }; result: Settings };
   settings_set_author_name: { args: { name: string }; result: Settings };
+  check_workspace_folder: { args: { path: string }; result: FolderCheck };
+  set_workspace_folder: { args: { path: string | null; moveFiles: boolean }; result: FolderMoved };
   workspace_list: { args: Record<string, never>; result: WorkspaceListView };
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
   workspace_open: { args: { id: string }; result: WorkspaceOpen };
@@ -126,7 +130,8 @@ export type WorkspaceCommandName =
   | "workspace_rename"
   | "snapshot_select"
   | "demo_create"
-  | "import_commit";
+  | "import_commit"
+  | "set_workspace_folder";
 
 function call<K extends Exclude<CommandName, WorkspaceCommandName>>(
   name: K,
@@ -143,6 +148,11 @@ export const api = {
   setTheme: (theme: Theme) => call("settings_set_theme", { theme }),
   setDensity: (density: Density) => call("settings_set_density", { density }),
   setAuthorName: (name: string) => call("settings_set_author_name", { name }),
+  /**
+   * Checks a folder to keep the workspaces in (absolute, writable, not the one in use; made when
+   * missing) and names the workspace files a move to it would take.
+   */
+  checkWorkspaceFolder: (path: string) => call("check_workspace_folder", { path }),
   workspaceList: () => call("workspace_list", {}),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),

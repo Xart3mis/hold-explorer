@@ -5,6 +5,7 @@ mod data;
 mod demo;
 mod error;
 mod export;
+mod folder;
 mod import;
 mod settings;
 mod snapshots;
@@ -26,6 +27,7 @@ pub use export::{
     check_extension, fonts, save, Content, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
     SessionClipboard,
 };
+pub use folder::{FolderCheck, FolderMoved};
 pub use import::{
     ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, TargetCheck, TargetChoice,
 };
@@ -187,8 +189,13 @@ impl AppState {
     fn folder(&self) -> PathBuf {
         match &self.settings.workspace_dir {
             Some(dir) => PathBuf::from(dir),
-            None => self.data_dir.join("workspaces"),
+            None => self.default_folder(),
         }
+    }
+
+    /// The folder the workspaces are kept in when the settings name none.
+    fn default_folder(&self) -> PathBuf {
+        self.data_dir.join("workspaces")
     }
 
     /// Everything the interface needs at start; reopens the last workspace when it can. A last
@@ -208,16 +215,7 @@ impl AppState {
         self.cache = None;
         self.draft = None;
         let folder = self.folder();
-        let (raw, list_error) = match list_workspaces(&folder) {
-            Ok(raw) => (raw, None),
-            Err(error) => (
-                WorkspaceList {
-                    workspaces: Vec::new(),
-                    unreadable: Vec::new(),
-                },
-                Some(CommandError::from(error)),
-            ),
-        };
+        let (raw, list_error) = list_folder(&folder);
         let last = self.settings.last_workspace.clone();
         let open = last
             .and_then(|id| self.load_from(raw.clone(), &id).ok())
@@ -424,6 +422,21 @@ impl AppState {
     }
 }
 
+/// The listing of a workspace folder, as a start shows it: a folder that cannot be listed gives
+/// an empty list and the error.
+fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
+    match list_workspaces(folder) {
+        Ok(raw) => (raw, None),
+        Err(error) => (
+            WorkspaceList {
+                workspaces: Vec::new(),
+                unreadable: Vec::new(),
+            },
+            Some(CommandError::from(error)),
+        ),
+    }
+}
+
 /// What the interface receives about a workspace that was just opened.
 fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     let snapshots = workspace.snapshots()?;
@@ -440,6 +453,8 @@ fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
 mod data_tests;
 #[cfg(test)]
 mod export_tests;
+#[cfg(test)]
+mod folder_tests;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]

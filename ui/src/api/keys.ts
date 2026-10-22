@@ -19,6 +19,11 @@ export const keys = {
   selectingSnapshot: ["app", "workspace", "switching", "snapshot"] as const,
   /** The others: a new workspace, another name, the demo. */
   changing: ["app", "workspace", "changing"] as const,
+  /**
+   * Where the change of the workspaces folder is: checked, offered, moving, done, or failed. Kept
+   * here and not in a page, so that the page that comes back after a press of the sidebar shows it.
+   */
+  folderChange: ["settings", "folder"] as const,
   /** The file that is open for import: the `ImportDraft` the pages of the import flow share. */
   importDraft: ["import", "draft"] as const,
   /** What the review of that file found: the `ImportReview` of the last mapping it was read with. */

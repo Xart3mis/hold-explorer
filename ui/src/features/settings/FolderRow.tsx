@@ -1,0 +1,250 @@
+import { FolderOpen } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { asCommandError, type AppError } from "../../api/error";
+import { chooseFolder, showInFolder } from "../../api/window";
+import type { useWorkspaceFolder } from "../../app/actions/folder";
+import { useStart } from "../../app/actions/start";
+import type { AppStart } from "../../bindings/AppStart";
+import type { FolderMoved } from "../../bindings/FolderMoved";
+import { Button, Notice, Progress } from "../../components";
+import { t } from "../../text/i18n";
+import styles from "./SettingsPage.module.css";
+
+export interface FolderRowProps {
+  start: AppStart;
+  /** The change of the folder, as the page holds it for the other rows as well. */
+  folder: ReturnType<typeof useWorkspaceFolder>;
+}
+
+/**
+ * The workspaces folder: its path, "Change folder", "Use the default folder" when another is in
+ * use, and "Show in folder". A folder that was chosen is checked, then offered in a notice in the
+ * row: move its workspace files there, leave them where they are, or cancel. While the change
+ * runs the row shows its progress; then a notice lists what moved and what was left, and why.
+ */
+export function FolderRow({ start, folder }: FolderRowProps) {
+  const { change, check, move, offerDefault, fail, dismiss } = folder;
+  const { isBusy } = useStart();
+  const [showError, setShowError] = useState<AppError | null>(null);
+  const labelId = useId();
+  const path = start.list.folder;
+  const isDefault = start.settings.workspace_dir === null;
+  const checking = change?.step === "checking";
+  const moving = change?.step === "moving";
+  // While a folder is checked, offered, or changed, no other is chosen.
+  const deciding = checking || moving || change?.step === "offer";
+
+  const chooseOther = () => {
+    dismiss();
+    chooseFolder().then(
+      (chosen) => {
+        if (chosen !== null) check.mutate(chosen);
+      },
+      (error: unknown) => {
+        fail({ ...asCommandError(error), kind: "Dialog" });
+      },
+    );
+  };
+
+  return (
+    <div className={styles.row}>
+      <div className={styles.value}>
+        <span id={labelId} className={styles.label}>
+          {t("settings.folder")}
+        </span>
+        <span className={styles.path}>{path}</span>
+        <span className={styles.help}>{t("settings.folderHelp")}</span>
+      </div>
+      <div className={styles.buttons}>
+        <Button
+          aria-describedby={labelId}
+          icon={FolderOpen}
+          isPending={checking}
+          isInert={isBusy || deciding}
+          onPress={chooseOther}
+        >
+          {t("settings.folderChange")}
+        </Button>
+        {isDefault ? null : (
+          <Button aria-describedby={labelId} isInert={isBusy || deciding} onPress={offerDefault}>
+            {t("settings.folderDefault")}
+          </Button>
+        )}
+        <Button
+          aria-describedby={labelId}
+          isInert={moving}
+          onPress={() => {
+            setShowError(null);
+            showInFolder(path).catch((error: unknown) => {
+              setShowError(asCommandError(error));
+            });
+          }}
+        >
+          {t("common.showInFolder")}
+        </Button>
+      </div>
+      {showError === null ? null : (
+        <Notice
+          tone="danger"
+          title={t("shell.folderError")}
+          onDismiss={() => {
+            setShowError(null);
+          }}
+        >
+          {showError.message}
+        </Notice>
+      )}
+      {change?.step === "offer" ? (
+        <Offer
+          from={path}
+          to={change.check?.path ?? null}
+          count={change.check?.movable.length ?? null}
+          onMove={(moveFiles) => {
+            move.mutate({ path: change.check?.path ?? null, moveFiles });
+          }}
+          onCancel={dismiss}
+        />
+      ) : null}
+      {change?.step === "moving" ? (
+        <div className={styles.progress}>
+          <Progress
+            label={
+              !change.choice.moveFiles
+                ? t("settings.folderSwitching")
+                : change.choice.path === null
+                  ? t("settings.folderMovingDefault")
+                  : t("settings.folderMoving", { to: change.choice.path })
+            }
+          />
+          <span className={styles.help}>{t("settings.folderWaiting")}</span>
+        </div>
+      ) : null}
+      {change?.step === "done" ? <Moved moved={change.moved} onDismiss={dismiss} /> : null}
+      {change?.step === "failed" ? (
+        <Notice
+          tone="danger"
+          title={
+            change.error.kind === "Dialog"
+              ? t("settings.folderDialogError")
+              : t("settings.folderNotChanged")
+          }
+          onDismiss={dismiss}
+        >
+          {change.error.message}
+        </Notice>
+      ) : null}
+    </div>
+  );
+}
+
+interface OfferProps {
+  from: string;
+  /** The folder offered; `null` for the default one. */
+  to: string | null;
+  /** How many workspace files a move would take; `null` when that is not known (the default). */
+  count: number | null;
+  onMove: (moveFiles: boolean) => void;
+  onCancel: () => void;
+}
+
+/** The choice of what happens to the workspace files: moved, left, or nothing changes. */
+function Offer({ from, to, count, onMove, onCancel }: OfferProps) {
+  const choices = useRef<HTMLSpanElement>(null);
+  // The choice is asked for here, so the keyboard is taken to it.
+  useEffect(() => {
+    choices.current?.querySelector("button")?.focus();
+  }, []);
+  const nothingToMove = count === 0;
+  const title = nothingToMove
+    ? t("settings.folderEmptyTitle")
+    : count === null
+      ? t("settings.folderMoveDefaultTitle")
+      : t("settings.folderMoveTitle", { count });
+  const body = nothingToMove
+    ? t("settings.folderEmptyBody", { from, to: to ?? "" })
+    : to === null
+      ? t("settings.folderMoveDefaultBody", { from })
+      : t("settings.folderMoveBody", { from, to });
+  return (
+    <Notice tone="info" title={title}>
+      <span className={styles.offer}>
+        <span>{body}</span>
+        <span ref={choices} className={styles.choices}>
+          {nothingToMove ? (
+            <Button
+              variant="quiet"
+              onPress={() => {
+                onMove(false);
+              }}
+            >
+              {t("settings.folderUse")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="quiet"
+                onPress={() => {
+                  onMove(true);
+                }}
+              >
+                {t("settings.folderMoveThem")}
+              </Button>
+              <Button
+                variant="quiet"
+                onPress={() => {
+                  onMove(false);
+                }}
+              >
+                {t("settings.folderLeaveThem")}
+              </Button>
+            </>
+          )}
+          <Button variant="quiet" onPress={onCancel}>
+            {t("common.cancel")}
+          </Button>
+        </span>
+      </span>
+    </Notice>
+  );
+}
+
+/** What a change did: the files moved, and each file left where it was with the reason. */
+function Moved({ moved, onDismiss }: { moved: FolderMoved; onDismiss: () => void }) {
+  const to = moved.start.list.folder;
+  const title =
+    moved.moved.length === 0 && moved.left.length === 0
+      ? t("settings.folderChanged", { to })
+      : t("settings.folderMovedTitle", { count: moved.moved.length, to });
+  return (
+    <Notice
+      tone={moved.left.length === 0 ? "success" : "warning"}
+      title={title}
+      onDismiss={onDismiss}
+    >
+      <span className={styles.offer}>
+        {moved.moved.length === 0 ? null : (
+          <span role="list" aria-label={t("settings.folderMovedList")} className={styles.files}>
+            {moved.moved.map((file) => (
+              <span role="listitem" key={file} className={styles.file}>
+                {file}
+              </span>
+            ))}
+          </span>
+        )}
+        {moved.left.length === 0 ? null : (
+          <>
+            <span>{t("settings.folderLeftTitle", { count: moved.left.length })}</span>
+            <span role="list" aria-label={t("settings.folderLeftList")} className={styles.files}>
+              {moved.left.map((file) => (
+                <span role="listitem" key={file.path} className={styles.left}>
+                  <span className={styles.file}>{file.file_name}</span>
+                  <span>{file.message}</span>
+                </span>
+              ))}
+            </span>
+          </>
+        )}
+      </span>
+    </Notice>
+  );
+}
