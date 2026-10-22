@@ -312,6 +312,24 @@ describe("the author name", () => {
     expect(setName).toHaveBeenCalledTimes(1);
   });
 
+  it("saves the name without the spaces around it and shows it that way", async () => {
+    const setName = vi.fn(({ name }: { name: string }) => withSettings({ author_name: name }));
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_author_name: setName },
+    });
+    await page();
+    await user.type(nameField(), "  Ada  {Enter}");
+    await waitFor(() => {
+      expect(setName).toHaveBeenCalledTimes(1);
+    });
+    expect(setName).toHaveBeenCalledWith({ name: "Ada" });
+    await waitFor(() => {
+      expect(nameField()).toHaveValue("Ada");
+    });
+  });
+
   it("saves nothing when the name was not changed", async () => {
     const setName = vi.fn(({ name }: { name: string }) => withSettings({ author_name: name }));
     const { user } = renderApp({

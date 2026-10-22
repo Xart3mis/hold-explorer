@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { api } from "../../api/commands";
 import { keys } from "../../api/keys";
 import type { AppStart } from "../../bindings/AppStart";
 import type { Settings } from "../../bindings/Settings";
@@ -12,29 +11,24 @@ const SETTINGS_SCOPE = { id: "settings" };
 export type OptimisticField = "theme" | "density";
 
 /**
- * What is known about the changes of one setting that are on their way. The cached start shows
- * the value that was asked for last, at once; this keeps the value the settings file is known to
- * hold, to go back to when the last change fails.
+ * What is known about the changes of the settings that are on their way. The cached start shows
+ * the value that was asked for last, at once; `saved` keeps the value the settings file is known
+ * to hold, to go back to when the last change fails.
  */
 interface Changes {
-  /** The number of the change that was asked for last. */
-  latest: number;
-  /** The value the settings file holds, as far as the answers say. */
-  saved: Settings[OptimisticField] | undefined;
+  /** The number of the change that was asked for last, per setting. */
+  latest: Record<OptimisticField, number>;
+  /** The value the settings file holds, as far as the answers say, per setting. */
+  saved: { [F in OptimisticField]: Settings[F] | undefined };
 }
 
-const changesOf = new WeakMap<QueryClient, Map<OptimisticField, Changes>>();
+const changesOf = new WeakMap<QueryClient, Changes>();
 
-function changesFor(client: QueryClient, field: OptimisticField): Changes {
-  let byField = changesOf.get(client);
-  if (!byField) {
-    byField = new Map();
-    changesOf.set(client, byField);
-  }
-  let changes = byField.get(field);
+function changesFor(client: QueryClient): Changes {
+  let changes = changesOf.get(client);
   if (!changes) {
-    changes = { latest: 0, saved: undefined };
-    byField.set(field, changes);
+    changes = { latest: { theme: 0, density: 0 }, saved: { theme: undefined, density: undefined } };
+    changesOf.set(client, changes);
   }
   return changes;
 }
@@ -59,7 +53,7 @@ function setField<F extends OptimisticField>(client: QueryClient, field: F, valu
  */
 export function useOptimisticSetting<F extends OptimisticField>(
   field: F,
-  call: (value: Value<F>) => ReturnType<typeof api.setTheme>,
+  call: (value: Value<F>) => Promise<Settings>,
 ) {
   const client = useQueryClient();
   const mutationKey = [`${field}Change`];
@@ -69,30 +63,32 @@ export function useOptimisticSetting<F extends OptimisticField>(
     mutationKey,
     mutationFn: call,
     onMutate: (value) => {
-      const changes = changesFor(client, field);
+      const changes = changesFor(client);
       // This change is in the cache already; with no other on its way, the value on screen is
       // the saved one. The cache says so, not a count of this module, so a cache that was
       // cleared (as the tests clear it after each) leaves nothing counted behind.
       if (client.isMutating({ mutationKey }) <= 1) {
-        changes.saved = client.getQueryData<AppStart>(keys.start)?.settings[field];
+        changes.saved[field] = client.getQueryData<AppStart>(keys.start)?.settings[field];
       }
-      changes.latest += 1;
+      changes.latest[field] += 1;
       setField(client, field, value);
-      return { change: changes.latest };
+      return { change: changes.latest[field] };
     },
     onSuccess: (settings, _value, asked) => {
-      const changes = changesFor(client, field);
-      changes.saved = settings[field];
+      const changes = changesFor(client);
+      changes.saved[field] = settings[field];
       changeStart(client, (state) => {
-        const shown = asked.change === changes.latest ? settings[field] : state.settings[field];
+        const shown =
+          asked.change === changes.latest[field] ? settings[field] : state.settings[field];
         return { ...state, settings: { ...state.settings, [field]: shown } };
       });
     },
     // An earlier change that fails leaves a later one alone.
     onError: (_error, _value, asked) => {
-      const { latest, saved } = changesFor(client, field);
-      if (asked?.change !== latest || saved === undefined) return;
-      setField(client, field, saved as Value<F>);
+      const { latest, saved } = changesFor(client);
+      const back = saved[field];
+      if (asked?.change !== latest[field] || back === undefined) return;
+      setField(client, field, back);
     },
   });
 }
