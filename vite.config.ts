@@ -37,5 +37,8 @@ export default defineConfig({
     // allowance of ui/src/test/slow.ts and the wait of the queries grow the same way.
     // ui/src/test/limits.ts holds the times.
     testTimeout: testLimits(process.env).test,
+    // Half the cores: a test renders the whole app, and with a worker on every core the runs
+    // slow each other until waits and limits that are fine alone are passed.
+    maxWorkers: "50%",
   },
 });
