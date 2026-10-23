@@ -42,7 +42,7 @@ let marks = 0;
 /**
  * Runs in the page. Marks the first shown element of `role` whose accessible name is `name` (or
  * matches the pattern `source`/`flags`) with `data-e2e="<token>"`, inside the element `scope`
- * selects, and says whether one was found. The name is read as the accessibility tree reads it in
+ * selects, and says whether one was found. With no token, it only says so and marks nothing. The name is read as the accessibility tree reads it in
  * the cases the interface uses: `aria-label`, then `aria-labelledby`, then a `<label for>`, then
  * the text inside, leaving out what is inside an `aria-hidden` element. With `enabledOnly`, an
  * element that is disabled, natively or by `aria-disabled`, does not count.
@@ -52,7 +52,7 @@ function markInPage(
   name: string,
   flags: string | null,
   scope: string | null,
-  token: string,
+  token: string | null,
   enabledOnly: boolean,
 ): boolean {
   const implicit: Record<string, string> = {
@@ -101,8 +101,10 @@ function markInPage(
     flags === null
       ? (candidate: string) => candidate === name
       : (candidate: string) => new RegExp(name, flags).test(candidate);
-  for (const old of document.querySelectorAll(`[data-e2e="${token}"]`)) {
-    old.removeAttribute("data-e2e");
+  if (token !== null) {
+    for (const old of document.querySelectorAll(`[data-e2e="${token}"]`)) {
+      old.removeAttribute("data-e2e");
+    }
   }
   const disabled = (element: Element) =>
     element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
@@ -113,7 +115,7 @@ function markInPage(
       matches(nameOf(element)),
   );
   if (found === undefined) return false;
-  found.setAttribute("data-e2e", token);
+  if (token !== null) found.setAttribute("data-e2e", token);
   return true;
 }
 
@@ -145,6 +147,41 @@ export async function scope(role: string, name: Name, where: Where = {}): Promis
   return `[data-e2e="${token}"]`;
 }
 
+/**
+ * Runs in the page. Marks the first shown element that `selector` matches, inside the element
+ * `scope` selects, with `data-e2e="<token>"`, and says whether there was one.
+ */
+function markFirstInPage(selector: string, scope: string | null, token: string): boolean {
+  const root = scope === null ? document : document.querySelector(scope);
+  if (root === null) return false;
+  for (const old of document.querySelectorAll(`[data-e2e="${token}"]`)) {
+    old.removeAttribute("data-e2e");
+  }
+  const found = [...root.querySelectorAll(selector)].find(
+    (element) => element.getClientRects().length > 0,
+  );
+  if (found === undefined) return false;
+  found.setAttribute("data-e2e", token);
+  return true;
+}
+
+/**
+ * Waits for the first shown element that the CSS `selector` matches, and returns a selector of
+ * that one element alone: WebdriverIO's `$` refuses a selector that matches more than one.
+ */
+export async function first(selector: string, where: Where = {}): Promise<string> {
+  marks += 1;
+  const token = `m${String(marks)}`;
+  await browser.waitUntil(
+    () => browser.execute(markFirstInPage, selector, where.within ?? null, token),
+    {
+      ...(where.timeout === undefined ? {} : { timeout: where.timeout }),
+      timeoutMsg: `Nothing shown matches ${selector}${where.within === undefined ? "" : ` within ${where.within}`}.`,
+    },
+  );
+  return `[data-e2e="${token}"]`;
+}
+
 /** Whether an element of `role` named `name` is shown now, without waiting. */
 export async function isShown(role: string, name: Name, where: Where = {}): Promise<boolean> {
   return browser.execute(
@@ -153,7 +190,7 @@ export async function isShown(role: string, name: Name, where: Where = {}): Prom
     typeof name === "string" ? name : name.source,
     typeof name === "string" ? null : name.flags,
     where.within ?? null,
-    "probe",
+    null,
     where.enabled === true,
   );
 }
@@ -248,14 +285,20 @@ export async function importWorkbook(): Promise<void> {
 
 /** The text of the filter bar's total, once it is read and not on its way. */
 export async function filterTotal(): Promise<string> {
-  const total = '[data-part="filter-total"]';
   let shown = "";
   await browser.waitUntil(
     async () => {
-      const element = await $(total);
-      if (!(await element.isExisting())) return false;
-      if ((await element.getAttribute("aria-busy")) === "true") return false;
-      shown = await textOf(total);
+      // Read in one pass in the page, so that no element is held across a render.
+      const read = await browser.execute(() => {
+        const total = document.querySelector('[data-part="filter-total"]');
+        if (total === null) return null;
+        return {
+          busy: total.getAttribute("aria-busy") === "true",
+          text: total.textContent.replace(/\s+/g, " ").trim(),
+        };
+      });
+      if (read === null || read.busy) return false;
+      shown = read.text;
       return /\d/.test(shown);
     },
     { timeoutMsg: "The total of the filter bar was not read." },
@@ -278,16 +321,18 @@ export async function chipLabels(): Promise<string[]> {
  */
 export async function addDisciplineFilter(): Promise<string> {
   const before = await chipLabels();
-  await $('[data-part="add-filter-chip"]').click();
+  const add = await $(await first('[data-part="add-filter-chip"]'));
+  await add.waitForClickable();
+  await add.click();
   const fields = await scope("menu", text.filters.picker.fields);
   await press("menuitem", startsWith(text.import.field.Discipline), { within: fields });
   const editor = await scope(
     "dialog",
     fill(text.filters.picker.filterBy, { field: text.import.field.Discipline }),
   );
-  const first = await $(`${editor} [role="option"]`);
-  await first.waitForClickable();
-  await first.click();
+  const option = await $(await first('[role="option"]', { within: editor }));
+  await option.waitForClickable();
+  await option.click();
   await key(KEYS.escape);
   let added: string | undefined;
   await browser.waitUntil(

@@ -1,6 +1,7 @@
 // 4. Search for a line ID and open its panel.
 import {
   find,
+  first,
   isShown,
   key,
   KEYS,
@@ -17,8 +18,7 @@ describe("the search", () => {
     // A line of the demo workspace: the first row of Lines.
     await press("link", text.destinations.name.lines);
     await pageReady();
-    const row = await $('[role="row"][data-key]');
-    await row.waitForExist();
+    const row = await $(await first('[role="row"][data-key]'));
     const lineId = await row.getAttribute("data-key");
     if (lineId === null || lineId === "") throw new Error("The first row of Lines has no key.");
 

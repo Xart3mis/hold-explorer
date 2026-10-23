@@ -41,8 +41,6 @@ let runDir: string | undefined;
 /** The D-Bus daemon from the PATH; `dbus-daemon --session` reads the system's session config. */
 const BUS_DAEMON = "dbus-daemon";
 
-/** How long tauri-driver has to listen on its port, and a child to stop when asked. */
-
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
