@@ -34,6 +34,11 @@
   inline-size: var(--size-bar-label-width);
 }
 
+/* The helper line of a checkbox wraps where the helper lines of the fields wrap. */
+.checkHelp {
+  max-inline-size: var(--layout-prose-max-width);
+}
+
 /* The author name is a line of text, no wider than a line of prose. */
 .name {
   max-inline-size: var(--layout-prose-max-width);

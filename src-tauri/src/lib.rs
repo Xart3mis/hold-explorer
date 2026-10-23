@@ -93,7 +93,7 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
 const IDENTIFIER: &str = "io.github.xart3mis.holdexplorer";
 
 /// The version of the app: the configuration has none of its own, so Tauri reports this one.
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Why the app could not start.
 #[derive(Debug)]

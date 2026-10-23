@@ -12,7 +12,7 @@ use super::settings::{load_settings, save_settings, Settings};
 use super::test_support::Fixture;
 use super::update::{
     fetch_latest_tag, fetch_latest_tag_within, is_due, notice_for, parse_version, UpdateError,
-    UpdateNotice,
+    UpdateNotice, UpdateStep,
 };
 
 /// The path the check asks for on a server of the tests.
@@ -250,7 +250,7 @@ fn fetch_gives_up_on_a_server_that_never_answers() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}{PATH}", listener.local_addr().unwrap());
     let started = Instant::now();
-    let result = fetch_latest_tag_within(&url, "0.1.0", Duration::from_millis(300));
+    let result = fetch_latest_tag_within(&url, "0.1.0", Duration::from_millis(300), false);
     assert!(
         matches!(result, Err(UpdateError::Request(ureq::Error::Timeout(_)))),
         "{result:?}"
@@ -314,6 +314,7 @@ fn only_a_version_this_session_offered_opens_its_release_page() {
 fn skipping_a_version_saves_it_and_hides_it_until_a_newer_one() {
     let fx = Fixture::new();
     let mut state = fx.state();
+    assert!(state.update_offer("v0.2.0", "0.1.0").is_some());
     let settings = state.skip_version("0.2.0").unwrap();
     assert_eq!(settings.skipped_version.as_deref(), Some("0.2.0"));
     assert_eq!(
@@ -361,4 +362,81 @@ fn the_switch_is_saved_at_once() {
     assert!(!load_settings(&fx.config()).update_check);
     assert!(state.set_update_check(true).unwrap().update_check);
     assert!(load_settings(&fx.config()).update_check);
+}
+
+#[test]
+fn only_a_version_this_session_offered_can_be_skipped() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let refused = state.skip_version("0.2.0").unwrap_err();
+    assert_eq!(refused.kind, ErrorKind::NotOffered);
+    assert_eq!(state.settings().skipped_version, None);
+    assert_eq!(load_settings(&fx.config()).skipped_version, None);
+    assert!(state.update_offer("v0.2.0", "0.1.0").is_some());
+    for other in ["0.3.0", "v0.2.0", ""] {
+        assert_eq!(
+            state.skip_version(other).unwrap_err().kind,
+            ErrorKind::NotOffered,
+            "{other:?}"
+        );
+    }
+    assert!(state.skip_version("0.2.0").is_ok());
+}
+
+#[test]
+fn a_tag_longer_than_64_characters_is_no_version() {
+    let longest = format!("1.2.3-{}", "a".repeat(58));
+    assert_eq!(longest.len(), 64);
+    assert!(parse_version(&longest).is_some());
+    let longer = format!("1.2.3-{}", "a".repeat(59));
+    assert_eq!(parse_version(&longer), None);
+    assert_eq!(
+        notice_for(&format!("v9.0.0-{}", "a".repeat(60)), "0.1.0", None),
+        None
+    );
+}
+
+#[test]
+fn fetch_that_must_use_https_asks_nothing_over_http() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let url = format!("http://{}{PATH}", listener.local_addr().unwrap());
+    let result = fetch_latest_tag_within(&url, "0.1.0", Duration::from_secs(2), true);
+    assert!(
+        matches!(
+            result,
+            Err(UpdateError::Request(ureq::Error::RequireHttpsOnly(_)))
+        ),
+        "{result:?}"
+    );
+    assert!(listener.accept().is_err(), "a connection was made");
+}
+
+#[test]
+fn a_check_that_is_not_due_answers_the_offer_of_this_session_again() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.set_update_url("http://127.0.0.1:9/test".into());
+    assert_eq!(
+        state.update_step(noon(), "0.1.0"),
+        UpdateStep::Ask("http://127.0.0.1:9/test".into())
+    );
+    // Nothing offered yet: a check that is not due answers nothing.
+    let later = noon() + chrono::Duration::hours(1);
+    assert_eq!(state.update_step(later, "0.1.0"), UpdateStep::Answer(None));
+    assert!(state.update_offer("v0.2.0", "0.1.0").is_some());
+    let again = UpdateStep::Answer(Some(UpdateNotice {
+        version: "0.2.0".into(),
+    }));
+    assert_eq!(state.update_step(later, "0.1.0"), again);
+    // Skipped, it is not answered again.
+    state.skip_version("0.2.0").unwrap();
+    assert_eq!(state.update_step(later, "0.1.0"), UpdateStep::Answer(None));
+    // Turned off, nothing is answered either.
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.update_step(noon(), "0.1.0");
+    assert!(state.update_offer("v0.2.0", "0.1.0").is_some());
+    state.set_update_check(false).unwrap();
+    assert_eq!(state.update_step(later, "0.1.0"), UpdateStep::Answer(None));
 }

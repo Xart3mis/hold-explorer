@@ -25,12 +25,15 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::VERSION;
+
 use crate::app::{
     check_extension, diagnostics, fetch_latest_tag, fonts, save, AppStart, AppState, CommandError,
     Content, CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
     FolderMoved, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
     ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice,
-    Theme, UpdateNotice, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView, Writes,
+    Theme, UpdateNotice, UpdateStep, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    Writes,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -683,20 +686,28 @@ fn cannot_open(path: &Path, error: &tauri_plugin_opener::Error) -> CommandError 
 
 /// Looks for a newer release, when a check is due: the attempt is saved under the lock, the
 /// request runs with the state free, and a newer version that was not skipped is the answer.
+/// When none is due, the version this session offered is the answer again, so a window that is
+/// loaded again keeps the notice.
 /// The check is silent: whatever fails, the answer is `None`.
 #[tauri::command]
 pub async fn update_check<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<Option<UpdateNotice>, CommandError> {
-    let current = env!("CARGO_PKG_VERSION");
     let now = chrono::Utc::now();
-    let Ok(Some(url)) = blocking(app.clone(), move |state| Ok(state.update_due(now))).await else {
+    let step = blocking(
+        app.clone(),
+        move |state| Ok(state.update_step(now, VERSION)),
+    )
+    .await;
+    let url = match step {
+        Ok(UpdateStep::Ask(url)) => url,
+        Ok(UpdateStep::Answer(notice)) => return Ok(notice),
+        Err(_) => return Ok(None),
+    };
+    let Ok(Ok(tag)) = unlocked(move || Ok(fetch_latest_tag(&url, VERSION))).await else {
         return Ok(None);
     };
-    let Ok(Ok(tag)) = unlocked(move || Ok(fetch_latest_tag(&url, current))).await else {
-        return Ok(None);
-    };
-    let offered = blocking(app, move |state| Ok(state.update_offer(&tag, current))).await;
+    let offered = blocking(app, move |state| Ok(state.update_offer(&tag, VERSION))).await;
     Ok(offered.unwrap_or(None))
 }
 
@@ -747,6 +758,7 @@ mod tests {
 
     const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
     const LIB: &str = include_str!("lib.rs");
+    const COMMANDS: &str = include_str!("commands.rs");
     /// For every command, one arguments object exactly as the interface sends it. The interface
     /// tests call every function of its `api` with the same values and compare what leaves.
     const COMMAND_ARGS: &str = include_str!("../../ui/src/api/command-args.json");
@@ -950,7 +962,8 @@ mod tests {
                 ("solve_order", "ViewChanged"),
                 // Turned off above, so nothing is asked.
                 ("update_check", "Ok"),
-                ("update_skip", "Ok"),
+                // No check offered the version.
+                ("update_skip", "NotOffered"),
                 ("workspace_create", "Ok"),
                 ("workspace_current", "Ok"),
                 ("workspace_list", "Ok"),
@@ -965,7 +978,7 @@ mod tests {
         let state = state.lock().unwrap();
         assert_eq!(state.settings().theme, crate::app::Theme::Light);
         assert!(!state.settings().update_check);
-        assert_eq!(state.settings().skipped_version.as_deref(), Some("0.2.0"));
+        assert_eq!(state.settings().skipped_version, None);
     }
 
     /// Points the update check of the harness at `url`.
@@ -1031,6 +1044,57 @@ mod tests {
             page,
             "https://github.com/Xart3mis/hold-explorer/releases/tag/v99.0.0"
         );
+    }
+
+    #[test]
+    fn a_reload_hears_the_offer_of_this_session_again_without_asking() {
+        let harness = Harness::new();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        ask_updates_at(
+            &harness,
+            format!("http://{}/releases/latest", listener.local_addr().unwrap()),
+        );
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap() > 2 {
+                line.clear();
+            }
+            let body = r#"{"tag_name":"v99.0.0"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+        });
+        let offer = json!({ "version": "99.0.0" });
+        assert_eq!(
+            harness.invoke("update_check", &json!({})),
+            Ok(offer.clone())
+        );
+        server.join().unwrap();
+        let (listener, url) = silent_server();
+        ask_updates_at(&harness, url);
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(offer));
+        assert!(!was_asked(&listener));
+        harness
+            .invoke("update_skip", &json!({ "version": "99.0.0" }))
+            .unwrap();
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        assert!(!was_asked(&listener));
+    }
+
+    #[test]
+    fn update_check_reads_the_one_version_of_the_app() {
+        let start = COMMANDS
+            .find("pub async fn update_check")
+            .expect("commands.rs has update_check");
+        let body = &COMMANDS[start..];
+        let body = &body[..body.find("\n}\n").expect("the function ends")];
+        assert!(!body.contains("env!("), "{body}");
+        assert!(body.contains("VERSION"), "{body}");
     }
 
     #[test]

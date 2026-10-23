@@ -393,7 +393,7 @@
     "densityCompact": "Compact",
     "densityError": "The density was not saved",
     "updateCheck": "Check for updates at start",
-    "updateCheckHelp": "At most once a day, Hold Explorer asks GitHub whether a newer version is out. It sends nothing but its own version.",
+    "updateCheckHelp": "At most once a day, Hold Explorer asks GitHub whether a newer version is out. It sends only its version number to GitHub.",
     "updateCheckError": "The update check setting was not saved",
     "authorName": "Author name",
     "authorNameNotSaved": "The author name {{name}} was not saved. {{reason}}",

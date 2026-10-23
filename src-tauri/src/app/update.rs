@@ -22,6 +22,9 @@ const RELEASE_PAGE: &str = "https://github.com/Xart3mis/hold-explorer/releases/t
 /// How long the request may take, from the connection to the last byte of the answer.
 const TIMEOUT: Duration = Duration::from_secs(8);
 
+/// The longest tag that is read as a version.
+const TAG_LIMIT: usize = 64;
+
 /// How long after an attempt the next one is due.
 const INTERVAL_HOURS: i64 = 24;
 
@@ -103,8 +106,12 @@ fn number(text: &str) -> Option<u64> {
 }
 
 /// Parses "v1.2.3" or "1.2.3" (pre-release suffixes count as older than the bare version).
-/// "1.2" reads as "1.2.0". Anything else, spaces included, is no version.
+/// "1.2" reads as "1.2.0". Anything else, spaces included, is no version, and so is a tag longer
+/// than 64 characters.
 pub fn parse_version(tag: &str) -> Option<Version> {
+    if tag.len() > TAG_LIMIT {
+        return None;
+    }
     let text = tag.strip_prefix('v').unwrap_or(tag);
     let (core, pre) = match text.split_once('-') {
         Some((core, pre)) => (core, Some(pre)),
@@ -187,18 +194,21 @@ struct Release {
 
 /// One request to `url`, 8 s timeout, User-Agent and Accept of decision 1; the `tag_name` field.
 pub fn fetch_latest_tag(url: &str, version: &str) -> Result<String, UpdateError> {
-    fetch_latest_tag_within(url, version, TIMEOUT)
+    fetch_latest_tag_within(url, version, TIMEOUT, !cfg!(test))
 }
 
-/// [`fetch_latest_tag`] with the time it may take. No redirect is followed, so no other address
-/// is ever asked, and no cookie is sent: the crate is built without cookies.
+/// [`fetch_latest_tag`] with the time it may take, and whether only https is asked (always,
+/// outside the tests, whose servers speak plain HTTP). No redirect is followed, so no other
+/// address is ever asked, and no cookie is sent: the crate is built without cookies.
 pub(super) fn fetch_latest_tag_within(
     url: &str,
     version: &str,
     timeout: Duration,
+    https_only: bool,
 ) -> Result<String, UpdateError> {
     let config = ureq::Agent::config_builder()
         .timeout_global(Some(timeout))
+        .https_only(https_only)
         .http_status_as_error(false)
         .max_redirects(0)
         .user_agent(format!("HoldExplorer/{version}"))
@@ -219,7 +229,36 @@ pub(super) fn fetch_latest_tag_within(
         .map_err(|_| UpdateError::Body)
 }
 
+/// What a check does at start: ask the address, or answer at once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateStep {
+    /// The check is due: ask this address.
+    Ask(String),
+    /// The check is not due: this is the answer.
+    Answer(Option<UpdateNotice>),
+}
+
 impl AppState {
+    /// The first step of a check at `now`, for this build's version `current`. When a check is
+    /// due, the address to ask ([`AppState::update_due`]). Otherwise, while the check is on, the
+    /// newest version this session offered that is still newer than `current` and not skipped,
+    /// so a window that is loaded again shows the notice again.
+    pub fn update_step(&mut self, now: DateTime<Utc>, current: &str) -> UpdateStep {
+        if let Some(url) = self.update_due(now) {
+            return UpdateStep::Ask(url);
+        }
+        if !self.settings.update_check {
+            return UpdateStep::Answer(None);
+        }
+        let skipped = self.settings.skipped_version.as_deref();
+        let again = self
+            .offered
+            .iter()
+            .filter_map(|version| notice_for(version, current, skipped))
+            .max_by(|a, b| parse_version(&a.version).cmp(&parse_version(&b.version)));
+        UpdateStep::Answer(again)
+    }
+
     /// When a check is due at `now`, saves `now` as the time of the attempt (before the request,
     /// so a failed one counts too) and returns the address to ask; `None` otherwise. A time that
     /// cannot be saved is kept for this session, and the check still runs.
@@ -246,8 +285,13 @@ impl AppState {
         Some(notice)
     }
 
-    /// Saves `version` as the one to skip.
+    /// Saves `version` as the one to skip; `NotOffered` unless a check offered it this session.
     pub fn skip_version(&mut self, version: &str) -> Result<Settings, CommandError> {
+        if !self.offered.contains(version) {
+            return Err(not_offered(
+                "Hold Explorer skips only the version its update check found in this session, so nothing was skipped. Use the Skip this version button of the update notice.",
+            ));
+        }
         let next = Settings {
             skipped_version: Some(version.to_string()),
             ..self.settings.clone()
@@ -263,8 +307,7 @@ impl AppState {
         if self.offered.contains(version) {
             Ok(format!("{RELEASE_PAGE}{version}"))
         } else {
-            Err(CommandError::new(
-                ErrorKind::NotOffered,
+            Err(not_offered(
                 "Hold Explorer opens only the release page of the version its update check found in this session, so this page was not opened. Use the Release page button of the update notice.",
             ))
         }
@@ -275,4 +318,9 @@ impl AppState {
     pub(crate) fn set_update_url(&mut self, url: String) {
         self.update_url = url;
     }
+}
+
+/// A refusal of a version no check offered this session.
+fn not_offered(message: &str) -> CommandError {
+    CommandError::new(ErrorKind::NotOffered, message)
 }

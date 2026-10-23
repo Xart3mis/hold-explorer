@@ -77,6 +77,36 @@ describe("the update notice", () => {
     expect(screen.getByText(available("0.2.0"))).toBeInTheDocument();
   });
 
+  it("keeps Skip this version inert while the release page is being opened", async () => {
+    let finish = (): void => undefined;
+    const skip = vi.fn((): Settings => openStart().settings);
+    const { user } = renderApp({
+      start: openStart(),
+      handlers: {
+        update_check: () => ({ version: "0.2.0" }),
+        open_release_page: () =>
+          new Promise<null>((resolve) => {
+            finish = () => {
+              resolve(null);
+            };
+          }),
+        update_skip: skip,
+      },
+    });
+    const shown = await notice();
+    await user.click(within(shown).getByRole("button", { name: words.updateReleasePage }));
+    const skipButton = within(shown).getByRole("button", { name: words.updateSkip });
+    await waitFor(() => {
+      expect(skipButton).toHaveAttribute("data-inert");
+    });
+    await user.click(skipButton);
+    expect(skip).not.toHaveBeenCalled();
+    finish();
+    await waitFor(() => {
+      expect(skipButton).not.toHaveAttribute("data-inert");
+    });
+  });
+
   it("says why the release page could not be opened", async () => {
     const message = "Hold Explorer could not open the release page: no browser.";
     const { user } = renderApp({

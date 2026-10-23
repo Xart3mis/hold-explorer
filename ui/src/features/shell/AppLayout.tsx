@@ -482,6 +482,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
                             </Button>
                             <Button
                               variant="quiet"
+                              // Nothing is skipped while the page of the version is being opened.
+                              isInert={update.openPage.isPending}
                               onPress={() => {
                                 update.skip.mutate(updateNotice.version, {
                                   onError: (error) => {

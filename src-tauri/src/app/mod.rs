@@ -40,7 +40,7 @@ pub use import::{
 };
 pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
-pub use update::{fetch_latest_tag, UpdateNotice};
+pub use update::{fetch_latest_tag, UpdateNotice, UpdateStep};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 pub use writes::{CloseRequest, Writes, CLOSING_HELD, CLOSING_RESUMED};
 

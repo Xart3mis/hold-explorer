@@ -195,7 +195,7 @@ export function SettingsPage() {
           >
             {t("settings.updateCheck")}
           </Checkbox>
-          <span id={updateHelpId} className={styles.help}>
+          <span id={updateHelpId} className={[styles.help, styles.checkHelp].join(" ")}>
             {t("settings.updateCheckHelp")}
           </span>
           {setUpdateCheck.isError ? (
