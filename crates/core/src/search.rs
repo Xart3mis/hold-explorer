@@ -1439,4 +1439,52 @@ mod tests {
         // the first of the run, "ss" from ß.
         assert_eq!(origin, [(2, 4), (2, 4), (4, 7), (7, 8), (9, 11), (9, 11)]);
     }
+
+    /// The value of a hit is the key the filter of its field takes: filtering by it keeps exactly
+    /// the holds the hit counts, so choosing a hit in the interface filters to what it found.
+    #[test]
+    fn a_hit_value_is_the_key_of_its_filter() {
+        use crate::filter::{Dim, FieldFilter, FilterSpec, Status};
+        let mut released = person("L2", "Ann Lee", "Checker");
+        released.released = true;
+        released.stress_calc = "SC-9".to_string();
+        let mut holds = vec![
+            person("L1", "Ann Lee", "Checker"),
+            released,
+            with_remark("L3", "Hold pending  573-PR-1"),
+            with_remark("L4", "HOLD PENDING 573-pr-1"),
+            hold("L5", "Process", "Vendor data", "x", 1),
+        ];
+        holds[0].stress_calc = "SC-9".to_string();
+        let dataset = build(holds);
+        let checked = [
+            ("Ann", SearchKind::Person, Dim::Name),
+            ("Checker", SearchKind::Role, Dim::Role),
+            ("pending", SearchKind::Remark, Dim::Remark),
+            ("Vendor", SearchKind::HoldType, Dim::HoldType),
+            ("Process", SearchKind::Discipline, Dim::Discipline),
+            ("SC-9", SearchKind::StressCalc, Dim::StressCalc),
+        ];
+        for (query, kind, dim) in checked {
+            let results = search(&dataset, query, 8);
+            let hit = results
+                .groups
+                .iter()
+                .flat_map(|group| &group.hits)
+                .find(|hit| hit.kind == kind)
+                .unwrap_or_else(|| panic!("a {kind:?} hit for {query}"));
+            let spec = FilterSpec {
+                status: Status::All,
+                fields: vec![FieldFilter {
+                    dim,
+                    values: vec![hit.value.clone()],
+                    negate: false,
+                }],
+                ..FilterSpec::default()
+            };
+            let kept = dataset.rows.iter().filter(|row| spec.matches(row)).count();
+            assert_eq!(kept, hit.holds, "{kind:?} {}", hit.value);
+            assert!(kept > 0);
+        }
+    }
 }

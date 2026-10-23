@@ -7,7 +7,9 @@
 // - "N more in Lines" sets the text as the text filter and opens Lines, "N more in Blockers" the
 //   same on Blockers;
 // - Enter with no result highlighted sets the text as the text filter of the data destination
-//   shown, or of Lines from any other page.
+//   shown, or of Lines from any other page;
+// - a result whose holds are all released also sets the status to All when the status hides
+//   released holds (owner, 2026-10-23), whatever its kind, so its rows are there to see.
 //
 // The addresses are those the screens write (their address modules), and the filters are set
 // through the filters of the workspace, as Overview's links set them. The command palette chooses
@@ -29,6 +31,7 @@ import {
   DEFAULT_LINES_STATE,
   LINES_PATH,
   linesAddress,
+  parseLinesAddress,
   withSelection,
 } from "../lines/address";
 
@@ -73,9 +76,10 @@ export interface ChoiceEffect {
   focus: "heading" | "table";
 }
 
-/** Where the user is when they choose. */
+/** Where the user is when they choose: the address shown. */
 export interface ChoicePlace {
   pathname: string;
+  search: string;
 }
 
 /** The data destinations that are built: the pages a text filter is set on in place. */
@@ -91,8 +95,39 @@ function withText(text: string): (current: Filters) => Filters {
   return (current) => ({ ...current, text });
 }
 
+/**
+ * The filters with released holds kept as well, when they hide them now (owner, 2026-10-23): a
+ * result whose holds are all released is found under the status that shows it. The status the
+ * user chose stays when it already shows released holds.
+ */
+function showingReleased(current: Filters): Filters {
+  return current.status === "Open" ? { ...current, status: "All" } : current;
+}
+
+/** The change of a result to the filters, with the status widened for a released result. */
+function forHit(
+  hit: SearchHit,
+  change: ((current: Filters) => Filters) | null,
+): ((current: Filters) => Filters) | null {
+  if (!hit.released) return change;
+  return change === null ? showingReleased : (current) => showingReleased(change(current));
+}
+
+/**
+ * The address of Lines with a line in the panel. Lines that is shown already keeps its sort and
+ * the rest of its address; only a page of hold rows turns to the lines, where the line has a row.
+ */
+function lineAddress(lineId: string, { pathname, search }: ChoicePlace): string {
+  if (pathname === LINES_PATH && parseLinesAddress(search).rows === "lines") {
+    return `${LINES_PATH}${withSelection(search, "lines", lineId)}`;
+  }
+  const keep = pathname === LINES_PATH ? search : "";
+  return linesAddress(DEFAULT_LINES_STATE, withSelection(keep, "lines", lineId));
+}
+
 /** What a choice does from a place; see the top of this file. */
-export function effectOf(choice: SearchChoice, { pathname }: ChoicePlace): ChoiceEffect {
+export function effectOf(choice: SearchChoice, place: ChoicePlace): ChoiceEffect {
+  const { pathname } = place;
   if (choice.kind === "text") {
     return {
       address: isDataPage(pathname) ? null : linesAddress(DEFAULT_LINES_STATE),
@@ -120,8 +155,8 @@ export function effectOf(choice: SearchChoice, { pathname }: ChoicePlace): Choic
   const { hit } = choice;
   if (hit.kind === "Line") {
     return {
-      address: linesAddress(DEFAULT_LINES_STATE, withSelection("", "lines", hit.value)),
-      filters: null,
+      address: lineAddress(hit.value, place),
+      filters: forHit(hit, null),
       selection: { kind: "line", lineId: hit.value },
       focus: "heading",
     };
@@ -129,17 +164,19 @@ export function effectOf(choice: SearchChoice, { pathname }: ChoicePlace): Choic
   if (hit.kind === "Blocker") {
     return {
       address: blockersAddress(hit.value),
-      filters: null,
+      filters: forHit(hit, null),
       selection: { kind: "blocker", key: hit.value },
       focus: "heading",
     };
   }
   const dim = DIM_OF_KIND[hit.kind];
-  const value = { key: hit.value, label: textOf(hit.parts) };
+  // The value is the key the filter of its field takes (crates/core/src/search.rs); a remark's
+  // shown text may be cut around the match, so the value names it in the chip as well.
+  const value = { key: hit.value, label: hit.value };
   return {
     address: linesAddress(DEFAULT_HOLDS_STATE),
     // The value takes the place of what the field was filtered by.
-    filters: (current) => withValues(current, dim, [value], false),
+    filters: forHit(hit, (current) => withValues(current, dim, [value], false)),
     selection: null,
     focus: "table",
   };
@@ -214,7 +251,7 @@ export function useSearchChoice(): (choice: SearchChoice) => void {
 
   return useCallback(
     (choice: SearchChoice) => {
-      const effect = effectOf(choice, { pathname: location.pathname });
+      const effect = effectOf(choice, { pathname: location.pathname, search: location.search });
       if (effect.filters !== null) update(effect.filters);
       if (effect.focus === "heading") {
         // The panel takes the focus to its heading when it shows another selection; when it

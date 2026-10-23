@@ -1,8 +1,9 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { defaultFilters, type Filters } from "../../app/filters/state";
 import { queryClient } from "../../app/query";
 import { keys } from "../../api/keys";
+import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SearchResults } from "../../bindings/SearchResults";
 import type { ViewRef } from "../../bindings/ViewRef";
 import en from "../../locales/en.json";
@@ -10,6 +11,8 @@ import { must, renderApp, topBar } from "../../test/app";
 import { expectAccessible } from "../../test/axe";
 import { openStart, opened, workspace } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
+import { group, valuePage } from "../../test/filters";
+import { holdsView } from "../../test/lines";
 import { searchGroups, searchHit, searchResults } from "../../test/search";
 import { SLOW } from "../../test/slow";
 import { focusSearchField } from "./SearchField";
@@ -461,5 +464,185 @@ describe("accessibility", () => {
     // The results lie over the page, outside its landmarks, as every overlay does.
     await typeAndOpen(user, "573");
     await expectAccessible();
+  });
+});
+
+/** The groups of every test, with a discipline and a stress calc among the hold values. */
+function everyKind(released: boolean): SearchResults["groups"] {
+  return searchGroups().map((group) => {
+    const hits =
+      group.kind === "Holds"
+        ? [
+            ...group.hits,
+            searchHit("Discipline", "Process", "|Process|", { holds: 913 }),
+            searchHit("StressCalc", "SC-573", "SC-|573|", { holds: 4 }),
+          ]
+        : group.hits;
+    return {
+      ...group,
+      total: Math.max(group.total, hits.length),
+      hits: hits.map((hit) => ({ ...hit, released })),
+    };
+  });
+}
+
+const KINDS = [
+  ["Line", "78B04-573-00004-PR-004"],
+  ["Blocker", "Piping / 573-PR-1450"],
+  ["Person", "R. Tanaka"],
+  ["Role", "Checker"],
+  ["Remark", "HOLD PENDING 573-PR-1450"],
+  ["HoldType", "Process data"],
+  ["Discipline", "Process"],
+  ["StressCalc", "SC-573"],
+] as const;
+
+describe("a result whose holds are all released", () => {
+  it.each(KINDS)("of the kind %s widens the status to All holds", SLOW, async (_kind, name) => {
+    const { user } = renderSearch("/overview", (query) => ({ query, groups: everyKind(true) }));
+    const { list } = await typeAndOpen(user, "573");
+    expect(filtersNow()?.status ?? defaultFilters.status).toBe("Open");
+    await user.click(within(list).getByRole("option", { name }));
+    await waitFor(() => {
+      expect(filtersNow()?.status).toBe("All");
+    });
+    // The status control of the filter bar shows it.
+    expect(
+      await screen.findByRole("button", {
+        name: en.filters.status.name.replace("{{status}}", en.filters.status.All),
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it.each(KINDS)("of the kind %s, with open holds, keeps the status", SLOW, async (_kind, name) => {
+    const { user } = renderSearch("/overview", (query) => ({ query, groups: everyKind(false) }));
+    const { list } = await typeAndOpen(user, "573");
+    await user.click(within(list).getByRole("option", { name }));
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox", { name: words.results })).toBeNull();
+    });
+    expect(filtersNow()?.status ?? defaultFilters.status).toBe("Open");
+  });
+
+  it("keeps Released holds as the user chose it", SLOW, async () => {
+    const { user } = renderSearch("/overview", (query) => ({ query, groups: everyKind(true) }));
+    act(() => {
+      queryClient.setQueryData<Filters>(keys.workspaceFilters(workspace().id), {
+        ...defaultFilters,
+        status: "Released",
+      });
+    });
+    const { list } = await typeAndOpen(user, "573");
+    await user.click(within(list).getByRole("option", { name: "R. Tanaka" }));
+    await waitFor(() => {
+      expect(filtersNow()?.fields).toHaveLength(1);
+    });
+    expect(filtersNow()?.status).toBe("Released");
+  });
+});
+
+describe("a line chosen while Lines is shown", () => {
+  it("keeps the sort and the rest of the address of the lines", SLOW, async () => {
+    const { user, router } = renderSearch("/lines?sort=LineId&reverse=1");
+    const { list } = await typeAndOpen(user, "573");
+    await user.click(within(list).getByRole("option", { name: "78B04-573-00004-PR-004" }));
+    await waitFor(() => {
+      expect(new URLSearchParams(router.state.location.search).get("line")).toBe(
+        "78B04-573-00004-PR-004",
+      );
+    });
+    const parts = new URLSearchParams(router.state.location.search);
+    expect(parts.get("sort")).toBe("LineId");
+    expect(parts.get("reverse")).toBe("1");
+  });
+
+  it("turns the hold rows to the lines, where the line has a row", SLOW, async () => {
+    const { user, router } = renderSearch("/lines?rows=holds&sort=Blocker&hold=3");
+    const { list } = await typeAndOpen(user, "573");
+    await user.click(within(list).getByRole("option", { name: "78B04-573-00004-PR-004" }));
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?line=78B04-573-00004-PR-004");
+    });
+  });
+});
+
+describe("a remark chosen", () => {
+  it(
+    "filters by the key the values of its field have, and the holds are read with it",
+    SLOW,
+    async () => {
+      // The command folds a remark's key (crates/core/src/search.rs); the picker's values have the
+      // same key under the remark as written.
+      const key = "HOLD PENDING 573-PR-1450";
+      const specs: FilterSpec[] = [];
+      const { user } = renderApp({
+        start: openStart(),
+        path: "/overview",
+        handlers: {
+          search: ({ query }) => ({
+            query,
+            groups: [
+              {
+                kind: "Lines",
+                total: 1,
+                hits: [searchHit("Line", "78B04-573-00004-PR-004", "78B04-|573|-00004-PR-004")],
+              },
+              {
+                kind: "Remarks",
+                total: 1,
+                hits: [searchHit("Remark", key, "Hold pending |573|-PR-1450", { holds: 4 })],
+              },
+            ],
+          }),
+          filter_values: () => valuePage({ values: [group("Hold pending 573-PR-1450", 4, key)] }),
+          holds: ({ spec }) => {
+            specs.push(spec);
+            return holdsView();
+          },
+        },
+      });
+      const { list } = await typeAndOpen(user, "573");
+      await user.click(within(list).getByRole("option", { name: "Hold pending 573-PR-1450" }));
+      await waitFor(() => {
+        expect(specs.at(-1)?.fields).toEqual([{ dim: "Remark", values: [key], negate: false }]);
+      });
+      // The key is the one the values of the field are listed under.
+      const listed = valuePage({ values: [group("Hold pending 573-PR-1450", 4, key)] });
+      expect(listed.values.map((value) => value.key)).toContain(specs.at(-1)?.fields[0]?.values[0]);
+      expect(filtersNow()?.fields).toEqual([
+        { dim: "Remark", values: [{ key, label: key }], negate: false },
+      ]);
+    },
+  );
+});
+
+describe("what is typed is sent, by the clock", () => {
+  it("150 ms after typing stops, and not a millisecond before", SLOW, async () => {
+    const { sent } = renderSearch();
+    const input = await field();
+    // Only the clock of the debounce is faked; everything else runs as it does.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      act(() => {
+        input.focus();
+      });
+      fireEvent.change(input, { target: { value: "573" } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(149);
+      });
+      expect(sent).toEqual([]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      // The reading goes out once React has drawn the new text; nothing else waits on the clock.
+      for (let turns = 0; turns < 20 && sent.length === 0; turns += 1) {
+        await act(async () => {
+          await Promise.resolve();
+        });
+      }
+      expect(sent).toEqual(["573"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
