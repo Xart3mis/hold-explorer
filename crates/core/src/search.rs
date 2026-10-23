@@ -744,8 +744,8 @@ fn fold_into(text: &str, out: &mut String, mut origin: Option<&mut Vec<(usize, u
 
 /// Cuts a text longer than [`REMARK_CHARS`] to that many characters around the matched
 /// `ranges` (in text order, without overlaps), marking each cut with "…". When several matches
-/// span more than fits, the first is kept in view and the cut comes after it; the matches cut
-/// off are not marked. The cut never goes through a match: a single match longer than fits is
+/// span more than fits, the first is kept in view and the cut comes after it, before any match
+/// it would go through; the matches cut off are not shown. The cut never goes through a match: a single match longer than fits is
 /// kept whole.
 fn cut_around(text: &str, ranges: Vec<(usize, usize)>) -> (String, Vec<(usize, usize)>) {
     let length = text.chars().count();
@@ -763,7 +763,7 @@ fn cut_around(text: &str, ranges: Vec<(usize, usize)>) -> (String, Vec<(usize, u
         }
     }
     let span = span_end - span_start;
-    let (from, to) = if span_end < REMARK_CHARS {
+    let (from, mut to) = if span_end < REMARK_CHARS {
         // The start of the text, and a cut after.
         (0, REMARK_CHARS - 1)
     } else if span_start > length - REMARK_CHARS {
@@ -779,6 +779,15 @@ fn cut_around(text: &str, ranges: Vec<(usize, usize)>) -> (String, Vec<(usize, u
     } else {
         (span_start, span_end)
     };
+    // A later match the window's end would cut is left out whole: the window ends before it.
+    if let Some(start) = ranges
+        .iter()
+        .map(|(start, end)| (char_at(*start), char_at(*end)))
+        .find(|(start, end)| *start < to && *end > to)
+        .map(|(start, _)| start)
+    {
+        to = start;
+    }
     let byte_at = |index: usize| {
         text.char_indices()
             .nth(index)
@@ -1325,6 +1334,22 @@ mod tests {
     }
 
     #[test]
+    fn a_remark_window_ends_before_a_match_it_would_cut() {
+        // "vendor" and "drawing" are too far apart to show both; "drawing" starts at character
+        // 118, where the window kept for "vendor" would end within it.
+        let remark = format!(
+            "Await vendor {} drawing {}",
+            "z".repeat(104),
+            "lorem ipsum ".repeat(10)
+        );
+        assert_eq!(remark.find("drawing"), Some(118));
+        let ds = build(vec![with_remark("L1", &remark)]);
+        let hit = only_hit(&search(&ds, "vendro drawng", 8), SearchGroupKind::Remarks);
+        assert_eq!(shown(&hit), format!("{}…", &remark[..118]));
+        assert_eq!(marked(&hit), ["vendor"]);
+    }
+
+    #[test]
     fn an_overlapping_occurrence_at_a_word_start_is_found() {
         let ds = build(vec![
             hold("XA-A-A", "Piping", "MISC.", "x", 1),
@@ -1385,7 +1410,7 @@ mod tests {
         // Four characters, one edit: allowed.
         assert_eq!(found("pumo"), ["PUMP SEAL"]);
         // Seven characters, two edits: refused.
-        assert!(!found("drewinf").contains(&"AWAIT DRAWING".to_string()));
+        assert!(found("drewinf").is_empty());
         // Eight characters, two edits: allowed.
         assert_eq!(found("drewinfs"), ["CHECK DRAWINGS"]);
     }
