@@ -540,7 +540,7 @@ pub fn arm_timeout(app: &AppHandle); // exits 1 after 60 s without smoke_ready, 
     group: ci-${{ github.ref }}
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
   ```
-- After `Build the app` on Windows, start `target/release/hx-desktop.exe` with `HX_SMOKE=1` and a temporary `APPDATA` and `LOCALAPPDATA`. Wait at most 120 s. Require exit code 0 and a line `ready <sample>`, and print the sample. The same step runs on Linux under `xvfb-run`.
+- After `Build the app` on Windows, start `target/release/hx-desktop.exe` with `HX_SMOKE=1` (the runner is a fresh machine, so its own application data folders are used; Tauri reads the known folders, not the `APPDATA`/`LOCALAPPDATA` variables). Wait at most 120 s. Require exit code 0 and a line `ready <sample>`, and print the sample. The same step runs on Linux under `xvfb-run`.
 - Document where the dates are recorded: the WebView2 sample is printed in the log, and the Linux sample is printed by both e2e and smoke.
 
 **Tests:** the CI run on the branch, reported with the smoke output from both systems.
@@ -637,3 +637,8 @@ pub fn arm_timeout(app: &AppHandle); // exits 1 after 60 s without smoke_ready, 
   - the old accessibility package: Task 6;
   - WebDriver: Task 8.
 - The M1c-3 follow-ups that fit here: the slow `findBy` waits (Task 6) and "Copy diagnostics" (Task 2). A panic during a folder move is reported now that the crash log exists (Task 1); the move's own report stays later.
+
+## Corrections during the build (2026-10-23)
+
+- Task 1 (review): crash logs record the full backtrace format with instruction addresses and an anchor address; the release profile keeps symbols (function names) where the size limit allows, and a Windows PDB, when produced, is kept as a release-workflow artifact (Task 10), never shipped. The local data folder is found with `dirs::data_local_dir()`, as Tauri does. A panic while the app is built takes the startup failure path. Native dialogs are skipped with `HX_NO_NATIVE_DIALOG=1` or `HX_SMOKE=1`. At most 5 crash logs per run; paths under home and local data are shortened in a logged message.
+- Task 9: the smoke run does not redirect `APPDATA`/`LOCALAPPDATA`; Tauri's folders come from the system's known folders.
