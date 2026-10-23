@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { Select } from "./Select";
 
@@ -213,9 +213,9 @@ describe("Select", () => {
         <Select label="Loading" options={options} isPending />
       </>,
     );
-    await expectAccessible();
+    await expectNoAxeViolations();
     await user.click(screen.getByRole("button", { name: /Group by/ }));
     expect(screen.getByRole("listbox")).toBeInTheDocument();
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

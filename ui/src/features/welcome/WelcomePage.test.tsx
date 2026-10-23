@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { IMPORT_EXTENSIONS } from "../../api/files";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import {
   opened,
@@ -155,7 +155,7 @@ describe("the welcome page on a first run", () => {
   it("has no accessibility violation", SLOW, async () => {
     renderApp({ start: startState(), path: "/welcome" });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 
@@ -372,7 +372,7 @@ describe("the welcome page with workspaces", () => {
       expect(names()).toEqual(["Tank farm", "Unit 573 piping", "Empty"]);
       // Sorting opens nothing.
       expect(open).not.toHaveBeenCalled();
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
     },
   );
 
@@ -473,7 +473,7 @@ describe("the welcome page with workspaces", () => {
   it("has no accessibility violation", SLOW, async () => {
     renderApp({ start: openStart(), path: "/welcome" });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 
@@ -533,7 +533,7 @@ describe("workspace files that cannot be read", () => {
   it("have no accessibility violation", SLOW, async () => {
     renderApp({ start: start(), path: "/welcome" });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 
@@ -716,6 +716,6 @@ describe("creating a workspace on the welcome page", () => {
     renderApp({ start: startState(), path: "/welcome?new=1" });
     const main = await page();
     await within(main).findByRole("textbox", { name: en.workspaces.nameLabel });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

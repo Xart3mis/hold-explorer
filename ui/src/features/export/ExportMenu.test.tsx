@@ -5,7 +5,7 @@ import { openHoldsFilter } from "../../api/filter";
 import type { CopyFormat } from "../../bindings/CopyFormat";
 import type { SaveFormat } from "../../bindings/SaveFormat";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { breakdownGroups } from "../../test/breakdown";
 import { solveView } from "../../test/blockers";
@@ -847,13 +847,13 @@ describe("accessibility", () => {
     const lines = renderAt("/lines");
     await rowOf(lineId(0));
     await openMenu(lines.user);
-    await expectAccessible();
+    await expectNoAxeViolations();
     lines.unmount();
 
     const overview = renderAt("/overview");
     const open = await openMenu(overview.user);
     await overview.user.click(within(open).getByRole("menuitem", { name: menu.chartsSvg }));
     await screen.findByRole("menu", { name: menu.chartsSvg });
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

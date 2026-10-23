@@ -7,7 +7,7 @@ import { defaultFilters, type Filters } from "../../app/filters/state";
 import { queryClient } from "../../app/query";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { breakdownGroups, groupDetail } from "../../test/breakdown";
 import { filterOptions } from "../../test/filters";
@@ -185,7 +185,7 @@ describe("BreakdownPage", () => {
       );
       // Sorting is presentation: the groups and the lines were read once.
       expect(breakdown).toHaveBeenCalledTimes(1);
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
     },
   );
 
@@ -744,7 +744,7 @@ describe("BreakdownPage", () => {
     const table = await groupTable();
     await user.click(await findRow(table, "Civil"));
     await findRow(table, lineId(0));
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

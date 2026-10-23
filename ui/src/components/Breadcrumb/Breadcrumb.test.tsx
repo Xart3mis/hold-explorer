@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Breadcrumb } from "./Breadcrumb";
 
 /** What the rules of one selector declare, from the stylesheet of the component. */
@@ -215,6 +215,6 @@ describe("Breadcrumb", () => {
         current="Map columns"
       />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

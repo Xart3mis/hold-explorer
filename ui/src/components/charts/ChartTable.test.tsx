@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { tableViewport } from "../../test/viewport";
 import { ChartTable, ChartViewToggle, type ChartTableRow } from "./ChartTable";
@@ -95,7 +95,7 @@ describe("ChartTable's sort", () => {
     expect(order(table)).toEqual(["Piping", "Electrical", "Civil", "No value", "All others"]);
     await user.click(within(table).getByRole("columnheader", { name: "Lines" }));
     expect(order(table)).toEqual(["Piping", "Electrical", "Civil", "No value", "All others"]);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -228,7 +228,7 @@ describe("ChartTable with long headers", () => {
     await user.keyboard("{ArrowRight}");
     expect(screen.getByRole("columnheader", { name: "Client" })).toHaveFocus();
     expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -302,6 +302,6 @@ describe("ChartViewToggle", () => {
     await user.keyboard("{Enter}");
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("chart")).toBeInTheDocument();
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

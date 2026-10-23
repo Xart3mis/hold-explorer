@@ -10,7 +10,7 @@ import type { TargetCheck } from "../../bindings/TargetCheck";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { must, topBar } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { opened, otherWorkspace, startState } from "../../test/fixtures";
 import { choose, openFlow, pageTitled } from "../../test/flow";
 import {
@@ -333,13 +333,13 @@ describe("what the review page shows", () => {
   it("has no accessibility violation, clean and with everything expanded", SLOW, async () => {
     const { user } = reviewing(reviewWithFindings(12));
     const main = await ready();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     for (const toggle of within(main)
       .getAllByRole("button")
       .filter((button) => button.getAttribute("aria-expanded") === "false")) {
       if (!toggle.hasAttribute("aria-haspopup")) await user.click(toggle);
     }
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

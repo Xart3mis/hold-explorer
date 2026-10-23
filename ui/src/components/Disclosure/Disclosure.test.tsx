@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { Disclosure, DisclosureGroup, DisclosureStatement } from "./Disclosure";
 
@@ -159,8 +159,8 @@ describe("Disclosure", () => {
         </Disclosure>
       </DisclosureGroup>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     await user.click(screen.getByRole("button", { name: /Release dates/ }));
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

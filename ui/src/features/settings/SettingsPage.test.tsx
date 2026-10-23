@@ -6,7 +6,7 @@ import type { Theme } from "../../bindings/Theme";
 import { applyDensity } from "../../design/density";
 import { applyTheme } from "../../design/theme";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { renderApp } from "../../test/app";
 import { openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -297,10 +297,10 @@ describe("SettingsPage", () => {
   it("has no accessibility violation", SLOW, async () => {
     const { user } = renderApp({ start: openStart(), path: "/settings" });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(screen.getByRole("button", { name: new RegExp(en.settings.theme) }));
     await screen.findAllByRole("option");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -704,11 +704,11 @@ describe("the author name", () => {
       },
     });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.type(nameField(), "x");
     await user.tab();
     await screen.findByText(TOO_LONG);
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

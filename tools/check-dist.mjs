@@ -15,16 +15,18 @@
 // 'unsafe-inline': the styles a component library adds at run time would then be refused in the
 // built app only. The first frame of the window gets its color from `tauri.conf.json` instead.
 //
-// Every `http://` and `https://` reference in every file is reported, except four kinds:
+// Every `http://` and `https://` reference in every file is reported, and so is every other
+// mention of `localhost`, except four kinds:
 //   1. XML namespaces (`http://www.w3.org/...`): names, never fetched.
 //   2. License text: a preserved license comment, and `*.LICENSE.txt` files. A comment counts
 //      only when it starts a line and opens with `/*!` or with `@license`, the two forms a
 //      bundler keeps. So a `/*` inside a string of minified code never opens one.
 //   3. Links inside the message text of a bundled library, listed one by one in MESSAGE_LINKS with
 //      the library and the reason. A link that is not in the list fails the check.
-//   4. An address a bundled library only parses other addresses against, listed in PARSING_BASES
-//      with the library and the reason. It must match exactly: the same host with a port or a
-//      path is an address someone could request, and fails the check.
+//   4. A statement of a bundled library that names `localhost` only to parse other addresses
+//      against it, listed in LOCALHOST_USES with the library and the reason. The statement must
+//      match as a whole: the same host in a request, with a port or a path, or without the
+//      scheme is a name someone could request, and fails the check.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
@@ -55,10 +57,22 @@ const MESSAGE_LINKS = [
   },
 ];
 
-/** Addresses that are only the base another address is parsed against. None is ever requested. */
-const PARSING_BASES = [
+/**
+ * The only places the name `localhost` may appear: a bundled library parsing other addresses
+ * against it. Each entry is the whole statement as the library writes it (in any of the three
+ * quotes), so the same address in a request (`fetch("http://localhost")`), with a port, with a
+ * path, or without `http://` is not covered and fails. Nothing here is ever requested.
+ */
+const LOCALHOST_USES = [
   {
-    url: "http://localhost",
+    pattern: /\bnew URL\(\s*(["'`])http:\/\/localhost\1\s*\)/g,
+    library: "react-aria",
+    reason:
+      "`new URL(path, base)` needs a base that is a whole address to read a relative path. Only " +
+      "the path, the query, and the fragment of the result are read.",
+  },
+  {
+    pattern: /\b(?:let|var|const)\s+[\w$]+\s*=\s*(["'`])http:\/\/localhost\1\s*;/g,
     library: "react-router",
     reason:
       "The base of `new URL(path, base)` where the page gives no origin of its own, to split a " +
@@ -105,11 +119,12 @@ function withoutLicenseText(text) {
 }
 
 function isAllowed(url) {
-  return (
-    url.startsWith(XML_NAMESPACE) ||
-    MESSAGE_LINKS.some((link) => url.startsWith(link.prefix)) ||
-    PARSING_BASES.some((base) => url === base.url)
-  );
+  return url.startsWith(XML_NAMESPACE) || MESSAGE_LINKS.some((link) => url.startsWith(link.prefix));
+}
+
+/** The text with the listed uses of `localhost` taken out. What still names it is a problem. */
+function withoutListedLocalhost(text) {
+  return LOCALHOST_USES.reduce((rest, use) => rest.replace(use.pattern, ""), text);
 }
 
 /** Every problem in the directory, as `{ file, problem }`. An empty list means the build is clean. */
@@ -142,10 +157,17 @@ function scan(dir) {
     }
     if (/\.LICENSE\.txt$/i.test(file)) continue;
     const seen = new Set();
-    for (const url of withoutLicenseText(text).match(URL_PATTERN) ?? []) {
+    const code = withoutListedLocalhost(withoutLicenseText(text));
+    for (const url of code.match(URL_PATTERN) ?? []) {
       if (isAllowed(url) || seen.has(url)) continue;
       seen.add(url);
       problems.push({ file, problem: `refers to another host: ${url}` });
+    }
+    // The name alone is reported too: `localhost:1420`, `ws://localhost`, a bare "localhost".
+    for (const name of code.match(/[\w.:/-]{0,30}localhost[\w.:/-]{0,30}/gi) ?? []) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      problems.push({ file, problem: `refers to localhost, which is not a listed use: ${name}` });
     }
   }
   return problems;

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { VisuallyHidden } from "./VisuallyHidden";
 
 describe("VisuallyHidden", () => {
@@ -31,6 +31,6 @@ describe("VisuallyHidden", () => {
         4 <VisuallyHidden>rows</VisuallyHidden>
       </p>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

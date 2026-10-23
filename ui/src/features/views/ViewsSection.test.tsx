@@ -11,7 +11,7 @@ import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
 import { must, renderApp } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { opened, openStart, otherWorkspace } from "../../test/fixtures";
 import type { Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
@@ -658,8 +658,8 @@ describe("the saved views by keyboard alone", () => {
     await waitFor(() => {
       expect(viewLink("Civil holds")).toHaveAttribute("aria-current", "true");
     });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await openMenu(user, "All blockers");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

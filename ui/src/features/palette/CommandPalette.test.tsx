@@ -13,7 +13,7 @@ import { applyDensity } from "../../design/density";
 import { applyTheme } from "../../design/theme";
 import en from "../../locales/en.json";
 import { must, renderApp, type RenderAppOptions } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { renderAt } from "../../test/export";
 import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -206,10 +206,10 @@ describe("opening and closing", () => {
   it("passes the accessibility checker", SLOW, async () => {
     const { user } = renderPalette();
     await openAndType(user);
-    await expectAccessible();
+    await expectNoAxeViolations();
     await user.keyboard("57");
     await within(await list()).findByRole("option", { name: /78B04-573-00004-PR-004/ });
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 

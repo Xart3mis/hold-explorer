@@ -8,7 +8,7 @@ import { queryClient } from "../../app/query";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SolveView } from "../../bindings/SolveView";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { manySteps, solveView } from "../../test/blockers";
 import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
@@ -465,7 +465,7 @@ describe("BlockersPage", () => {
       ).toEqual(["1", "2", "3", "4"]);
       // Sorting is presentation: the solve order was read once.
       expect(solveOrder).toHaveBeenCalledTimes(1);
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
     },
   );
 
@@ -891,11 +891,11 @@ describe("BlockersPage", () => {
     const table = await stepTable();
     await user.click(await stepRow(table, 2));
     await curve();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     // And with the table view of the curve.
     await user.click(screen.getByRole("button", { name: en.charts.tableView }));
     await screen.findByRole("grid", { name: fill(en.charts.tableName, { name: text.curve }) });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

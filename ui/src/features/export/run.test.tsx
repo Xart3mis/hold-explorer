@@ -13,7 +13,7 @@ import type { ExportRequest } from "../../bindings/ExportRequest";
 import type { SaveFormat } from "../../bindings/SaveFormat";
 import { ToastRegion } from "../../components/ToastRegion/ToastRegion";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { openStart, opened } from "../../test/fixtures";
 import { commandFailure, mockCommands, type Handlers } from "../../test/ipc";
 import { windowApi } from "../../test/window";
@@ -305,7 +305,7 @@ describe("useSaveExport", () => {
     expect(
       within(notice).queryByRole("button", { name: en.export.chooseAnother }),
     ).not.toBeInTheDocument();
-    await expectAccessible(document.body);
+    await expectNoAxeViolations(document.body);
     await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

@@ -1,7 +1,7 @@
 import { expect } from "vitest";
-import { axe } from "vitest-axe";
+import axe from "axe-core";
 
-export interface AccessibleOptions {
+export interface AxeOptions {
   /**
    * The container is a whole page, so everything in it must sit inside a landmark. A component
    * rendered on its own has no landmark around it, and the rule is left out for it.
@@ -18,11 +18,11 @@ export interface AccessibleOptions {
  * DESIGN.md by `node tools/design/check-tokens.mjs`, as long as a component only combines the
  * pairs listed there.
  */
-export async function expectAccessible(
+export async function expectNoAxeViolations(
   container: Element = document.body,
-  options: AccessibleOptions = {},
+  options: AxeOptions = {},
 ): Promise<void> {
-  const results = await axe(container, {
+  const results = await axe.run(container, {
     rules: {
       region: { enabled: options.page === true },
       // jsdom draws nothing, so contrast cannot be measured here; see above for where it is checked.

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { PageHeader } from "./PageHeader";
 
@@ -99,6 +99,6 @@ describe("PageHeader", () => {
         actions={<Button variant="primary">Continue</Button>}
       />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

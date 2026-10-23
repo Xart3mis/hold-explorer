@@ -3,7 +3,7 @@ import type { UserEvent } from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must } from "../../test/app";
 import { manySteps } from "../../test/blockers";
 import { filterOptions } from "../../test/filters";
@@ -499,6 +499,6 @@ describe("accessibility", () => {
     await rowOf(lineId(0));
     await ctrlClick(app.user, await rowOf(lineId(1)));
     await openPanel(app.user);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

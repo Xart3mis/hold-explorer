@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { Button } from "../Button/Button";
 import { Checkbox } from "../Checkbox/Checkbox";
@@ -346,9 +346,9 @@ describe("Popover", () => {
   it("has no accessibility violation, closed and open", SLOW, async () => {
     const user = userEvent.setup();
     render(<Sample />);
-    await expectAccessible();
+    await expectNoAxeViolations();
     await user.click(screen.getByRole("button", { name: "Filter" }));
     await screen.findByRole("dialog");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

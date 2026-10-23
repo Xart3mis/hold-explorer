@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { TextField } from "./TextField";
 
 describe("TextField", () => {
@@ -107,6 +107,6 @@ describe("TextField", () => {
         <TextField label="Loading" isPending />
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatCount } from "../../text/format";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Heatmap, type HeatmapProps } from "./Heatmap";
 import { step } from "./scale";
 
@@ -209,7 +209,7 @@ describe("Heatmap", () => {
     await user.keyboard("{Control>}{Home}{/Control}{ArrowDown}{ArrowDown}");
     expect(cell(2, 0)).toHaveFocus();
     expect(screen.getByRole("tooltip")).not.toHaveTextContent(hint);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 
   it("says nothing of a press where the screen gives no action", async () => {
@@ -386,8 +386,8 @@ describe("Heatmap", () => {
     const { rerender } = render(heatmap({ onCellPress: () => undefined }));
     await user.tab();
     await screen.findByRole("tooltip");
-    await expectAccessible();
+    await expectNoAxeViolations();
     rerender(heatmap({ view: "table" }));
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

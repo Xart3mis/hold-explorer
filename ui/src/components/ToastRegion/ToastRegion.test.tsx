@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { ToastRegion, useToast, type ToastApi } from "./ToastRegion";
 
 let toast: ToastApi;
@@ -464,12 +464,12 @@ describe("ToastRegion", () => {
 
   it("has no accessibility violation, empty and with toasts", async () => {
     setup();
-    await expectAccessible();
+    await expectNoAxeViolations();
     show({
       message: "Snapshot deleted.",
       action: { label: "Undo", onAction: () => undefined, isUndo: true },
     });
     show({ message: "Snapshot imported.", tone: "success" });
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

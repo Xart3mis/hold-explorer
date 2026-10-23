@@ -4,7 +4,7 @@ import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { openFlow, pageTitled } from "../../test/flow";
 import { exportDraft, freeTarget, review, unmappedDraft } from "../../test/import";
 import { commandFailure } from "../../test/ipc";
@@ -213,7 +213,7 @@ describe("the sheet page", () => {
   it("has no accessibility violation", SLOW, async () => {
     openFlow("/import/sheet", { draft: workbook() });
     await pageTitled(text.title);
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

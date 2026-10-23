@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import i18n from "../../text/i18n";
 import { AddFilterChip, FilterChip } from "./FilterChip";
 
@@ -98,7 +98,7 @@ describe("FilterChip", () => {
     expect(onPress).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: removeDiscipline }));
     expect(onRemove).toHaveBeenCalledTimes(1);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 
   it("reads a negated filter as is not", () => {
@@ -267,7 +267,7 @@ describe("FilterChip", () => {
         />
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });
 
@@ -304,6 +304,6 @@ describe("AddFilterChip", () => {
         <AddFilterChip onPress={() => undefined} isDisabled />
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

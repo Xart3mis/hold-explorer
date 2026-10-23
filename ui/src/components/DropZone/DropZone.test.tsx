@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Notice } from "../Notice/Notice";
 import { Progress } from "../Progress/Progress";
 import { DropZone } from "./DropZone";
@@ -106,7 +106,7 @@ describe("DropZone", () => {
 
   it("has no accessibility violation at rest, with a file over it, importing, and in error", async () => {
     const { container, rerender } = render(<DropZone {...texts} onChoose={() => undefined} />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(
       <DropZone
         {...texts}
@@ -114,7 +114,7 @@ describe("DropZone", () => {
         active={{ title: "Drop to import", text: "Holds_2026-10-07.xlsx" }}
       />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(
       <DropZone
         {...texts}
@@ -122,7 +122,7 @@ describe("DropZone", () => {
         progress={<Progress label="Reading the file" />}
       />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(
       <DropZone
         {...texts}
@@ -130,6 +130,6 @@ describe("DropZone", () => {
         error={<Notice tone="danger">The file could not be read.</Notice>}
       />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

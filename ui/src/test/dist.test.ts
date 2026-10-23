@@ -131,14 +131,41 @@ describe("check-dist", () => {
     expect(repository.output).toContain("https://github.com/ungap/other");
   });
 
-  it("allows the base the router parses addresses against, and no address on that host", () => {
-    const base = check({ "assets/index.js": "var base = new URL(`http://localhost`);" });
-    expect(base.status).toBe(0);
+  it("allows the bases the libraries parse addresses against, and no address on that host", () => {
+    const bases = [
+      "var base = new URL(`http://localhost`);",
+      'const base = new URL("http://localhost");',
+      "function f(e,t,n=!1){let r=`http://localhost`;e&&(r=e.location.href)}",
+      'let base = "http://localhost";',
+    ];
+    for (const code of bases) {
+      const base = check({ "assets/index.js": code });
+      expect(base.output, code).toContain("PASSED");
+      expect(base.status, code).toBe(0);
+    }
 
     for (const address of ["http://localhost:3000/api", "http://localhost/data.json"]) {
       const request = check({ "assets/index.js": `fetch("${address}");` });
       expect(request.status).toBe(1);
       expect(request.output).toContain(address);
+    }
+  });
+
+  it("fails every other reference to localhost, the listed address used another way included", () => {
+    const others = [
+      'fetch("http://localhost");',
+      'new URL("http://localhost:1420");',
+      'new URL("http://localhost/path");',
+      'const host = "localhost";',
+      'const socket = "ws://localhost";',
+      'const dev = "localhost:1420";',
+      'let base = "http://localhost" + path;',
+      'const url = "HTTP://LOCALHOST";',
+    ];
+    for (const code of others) {
+      const run = check({ "assets/index.js": code });
+      expect(run.status, code).toBe(1);
+      expect(run.output.toLowerCase(), code).toContain("localhost");
     }
   });
 

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { defaultFilters, useFilters, type Filters } from "../../app/filters/state";
 import { destinationPages } from "../../app/router";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import type { Handlers } from "../../test/ipc";
@@ -300,7 +300,7 @@ describe("the new parts of the Overview and the accessibility checker", () => {
   it("has no violation with stale holds, without, and with empty top lists", SLOW, async () => {
     const some = renderOverview();
     await content();
-    await expectAccessible(some.container, { page: true });
+    await expectNoAxeViolations(some.container, { page: true });
     some.unmount();
 
     const none = renderOverview(() =>
@@ -312,6 +312,6 @@ describe("the new parts of the Overview and the accessibility checker", () => {
       }),
     );
     await content();
-    await expectAccessible(none.container, { page: true });
+    await expectNoAxeViolations(none.container, { page: true });
   });
 });

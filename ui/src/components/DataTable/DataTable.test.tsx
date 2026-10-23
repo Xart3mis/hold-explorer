@@ -6,7 +6,7 @@ import { useContext, useState } from "react";
 import { TableStateContext } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must } from "../../test/app";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
@@ -505,7 +505,7 @@ describe("DataTable", () => {
     SLOW,
     async () => {
       const { rerender } = render(table());
-      await expectAccessible();
+      await expectNoAxeViolations();
       rerender(
         table({
           selectedKey: "78B02-538-CW-2207",
@@ -515,11 +515,11 @@ describe("DataTable", () => {
           rowActions: () => <Button variant="quiet">Show holds</Button>,
         }),
       );
-      await expectAccessible();
+      await expectNoAxeViolations();
       rerender(table({ rows: [], isLoading: true }));
-      await expectAccessible();
+      await expectNoAxeViolations();
       rerender(table({ rows: [], emptyState: <p>No holds match these filters.</p> }));
-      await expectAccessible();
+      await expectNoAxeViolations();
     },
   );
 });

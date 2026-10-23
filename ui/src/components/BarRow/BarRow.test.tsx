@@ -2,7 +2,7 @@ import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { BarRow, BarRowGroup } from "./BarRow";
 
 /** A row that can be pressed has an action; these tests do not care what it does. */
@@ -316,16 +316,16 @@ describe("BarRow", () => {
         />
       </BarRowGroup>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(
       <BarRowGroup aria-label="Top lines">
         <BarRow opens isIdentifier label="L-1001" value="4" fraction={1} onPress={press} />
         <BarRow opens isIdentifier label="L-1187" value="3" fraction={0.75} onPress={press} />
       </BarRowGroup>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<BarRowGroup aria-label="Holds by discipline" isLoading />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });
 
@@ -373,6 +373,6 @@ describe("a static BarRow", () => {
         />
       </BarRowGroup>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

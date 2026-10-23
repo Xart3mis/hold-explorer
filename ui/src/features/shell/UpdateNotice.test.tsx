@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Settings } from "../../bindings/Settings";
 import type { UpdateNotice } from "../../bindings/UpdateNotice";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -161,6 +161,6 @@ describe("the update notice", () => {
   it("has no accessibility violation", SLOW, async () => {
     renderApp({ start: openStart(), handlers: { update_check: () => ({ version: "0.2.0" }) } });
     await notice();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
