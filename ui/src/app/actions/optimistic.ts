@@ -6,13 +6,13 @@ import { changeStart } from "./start";
 
 /**
  * Changes of the settings are sent one after another as well, so the last one asked for is the
- * last one saved. Every action that saves a setting (the theme, the density, the author name)
- * runs in this scope.
+ * last one saved. Every action that saves a setting (the theme, the density, the author name,
+ * the update check, a skipped version) runs in this scope.
  */
 export const SETTINGS_SCOPE = { id: "settings" };
 
 /** The settings that are applied at once, before they are saved. */
-export type OptimisticField = "theme" | "density";
+export type OptimisticField = "theme" | "density" | "update_check";
 
 /**
  * What is known about the changes of the settings that are on their way. The cached start shows
@@ -31,7 +31,10 @@ const changesOf = new WeakMap<QueryClient, Changes>();
 function changesFor(client: QueryClient): Changes {
   let changes = changesOf.get(client);
   if (!changes) {
-    changes = { latest: { theme: 0, density: 0 }, saved: { theme: undefined, density: undefined } };
+    changes = {
+      latest: { theme: 0, density: 0, update_check: 0 },
+      saved: { theme: undefined, density: undefined, update_check: undefined },
+    };
     changesOf.set(client, changes);
   }
   return changes;
@@ -45,9 +48,9 @@ function setField<F extends OptimisticField>(client: QueryClient, field: F, valu
 }
 
 /**
- * The action that changes a setting that is applied at once: the theme or the density. It is no
- * action on the open workspace: it runs beside them, and nothing waits for it. See
- * ui/src/app/actions/start.ts for what every action does.
+ * The action that changes a setting that is applied at once: the theme, the density, or whether a
+ * newer release is looked for at start. It is no action on the open workspace: it runs beside
+ * them, and nothing waits for it. See ui/src/app/actions/start.ts for what every action does.
  *
  * The cached start shows the value that was asked for last, at once (AppProviders applies what
  * the cached start holds). A later choice that is still on its way stays on screen when an

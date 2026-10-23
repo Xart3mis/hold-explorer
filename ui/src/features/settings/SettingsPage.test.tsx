@@ -21,6 +21,9 @@ const settings = (theme: Theme): Settings => ({
   workspace_dir: null,
   workspace_folder_chosen: false,
   last_workspace: null,
+  update_check: true,
+  update_checked_at: null,
+  skipped_version: null,
 });
 
 afterEach(() => {
@@ -706,5 +709,66 @@ describe("the author name", () => {
     await user.tab();
     await screen.findByText(TOO_LONG);
     await expectAccessible(document.body, { page: true });
+  });
+});
+
+describe("the update check", () => {
+  const box = () => screen.getByRole("checkbox", { name: en.settings.updateCheck });
+
+  it("is on by default, with what it sends under it", async () => {
+    renderApp({ start: openStart(), path: "/settings" });
+    await page();
+    expect(box()).toBeChecked();
+    expect(box()).toHaveAccessibleDescription(en.settings.updateCheckHelp);
+  });
+
+  it("is saved at once and stays as saved when the page comes back", SLOW, async () => {
+    const set = vi.fn(({ enabled }: { enabled: boolean }) =>
+      withSettings({ update_check: enabled }),
+    );
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_update_check: set },
+    });
+    await page();
+    await user.click(box());
+    expect(box()).not.toBeChecked();
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(1);
+    });
+    expect(set).toHaveBeenCalledWith({ enabled: false });
+    await user.click(screen.getByRole("link", { name: en.destinations.name.overview }));
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await user.click(screen.getByRole("link", { name: en.destinations.name.settings }));
+    await page();
+    expect(box()).not.toBeChecked();
+    await user.click(box());
+    await waitFor(() => {
+      expect(set).toHaveBeenLastCalledWith({ enabled: true });
+    });
+    expect(box()).toBeChecked();
+  });
+
+  it("goes back and says why when it could not be saved", async () => {
+    const message =
+      "Could not save the settings to /home/ada/.config/hold-explorer/settings.json: permission denied. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.";
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_update_check: () => {
+          throw commandFailure("Settings", message);
+        },
+      },
+    });
+    await page();
+    await user.click(box());
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.updateCheckError);
+    expect(alert).toHaveTextContent(message);
+    await waitFor(() => {
+      expect(box()).toBeChecked();
+    });
   });
 });

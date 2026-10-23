@@ -18,6 +18,7 @@ import { inApp, onClosingHeld, onFileDrag } from "../../api/window";
 import { useSelectionFollowsView } from "../../app/actions/selection";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
+import { useUpdateNotice } from "../../app/actions/update";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
 import { searchWithSelection } from "../../app/selection";
 import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
@@ -139,6 +140,9 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const [dropProblem, setDropProblem] = useState<string | null>(null);
   // The window was asked to close while a file is being saved: Rust closes it once that is done.
   const [closing, setClosing] = useState(false);
+  // A newer release, found by the one check made after the start.
+  const update = useUpdateNotice();
+  const updateNotice = update.notice;
   // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
   const [detailFocus] = useState(createDetailFocus);
   const { selection } = useSelection();
@@ -385,6 +389,7 @@ function LoadedShell({ start, destinations }: ShellProps) {
                 settingsProblem !== null ||
                 dropProblem !== null ||
                 warning !== null ||
+                updateNotice !== null ||
                 older !== null ? (
                   <div className={styles.notices}>
                     {closing ? <Notice tone="info">{t("shell.closingHeld")}</Notice> : null}
@@ -450,6 +455,52 @@ function LoadedShell({ start, destinations }: ShellProps) {
                         }}
                       >
                         {warning.message}
+                      </Notice>
+                    )}
+                    {updateNotice === null ? null : (
+                      <Notice
+                        tone="info"
+                        actions={
+                          <>
+                            <Button
+                              variant="quiet"
+                              reservesPendingSpace
+                              isPending={update.openPage.isPending}
+                              onPress={() => {
+                                update.openPage.mutate(updateNotice.version, {
+                                  onError: (error) => {
+                                    setProblem({
+                                      kind: "action",
+                                      title: t("shell.updateReleasePageError"),
+                                      message: asCommandError(error).message,
+                                    });
+                                  },
+                                });
+                              }}
+                            >
+                              {t("shell.updateReleasePage")}
+                            </Button>
+                            <Button
+                              variant="quiet"
+                              onPress={() => {
+                                update.skip.mutate(updateNotice.version, {
+                                  onError: (error) => {
+                                    setProblem({
+                                      kind: "action",
+                                      title: t("shell.updateSkipError"),
+                                      message: asCommandError(error).message,
+                                    });
+                                  },
+                                });
+                              }}
+                            >
+                              {t("shell.updateSkip")}
+                            </Button>
+                          </>
+                        }
+                        onDismiss={update.hide}
+                      >
+                        {t("shell.updateAvailable", { version: updateNotice.version })}
                       </Notice>
                     )}
                     {older === null ? null : (

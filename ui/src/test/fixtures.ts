@@ -86,6 +86,9 @@ export function startState(overrides: Partial<AppStart> = {}): AppStart {
       workspace_dir: null,
       workspace_folder_chosen: false,
       last_workspace: null,
+      update_check: true,
+      update_checked_at: null,
+      skipped_version: null,
     },
     list: {
       workspaces: [],

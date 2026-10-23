@@ -76,6 +76,9 @@ export const DEV_STATES = [
   "warning",
   // The settings file could not be understood at start and was set aside.
   "settings-problem",
+  // The check after the start found a newer release: the shell offers its release page, and to
+  // skip it. Every other state finds none.
+  "update-available",
   // A move of the workspaces folder (Change folder in Settings) where the new folder already holds
   // a file of every name, so no file moves and the result says why for each:
   //   dev.html?state=folder-taken#/settings
@@ -522,6 +525,9 @@ function world(state: DevState, theme: Theme, density: Density): World {
       workspace_dir: null,
       workspace_folder_chosen: false,
       last_workspace: null,
+      update_check: true,
+      update_checked_at: null,
+      skipped_version: null,
     },
     list: { workspaces: [], unreadable: [], folder: FOLDER },
     list_error: null,
@@ -593,6 +599,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
       start.open = { ...opened(4, null), views: DEV_VIEWS };
       break;
     case "open":
+    case "update-available":
     case "view-resynced":
     case "no-dates":
     case "overview-loading":
@@ -934,6 +941,20 @@ export function installDevCommands(
       }
       return start.settings;
     },
+    settings_set_update_check: (payload) => {
+      const { enabled } = payload as { enabled: boolean };
+      start.settings = { ...start.settings, update_check: enabled };
+      return start.settings;
+    },
+    update_check: () =>
+      later(400, () =>
+        state === "update-available" && start.settings.update_check ? { version: "0.2.0" } : null,
+      ),
+    update_skip: (payload) => {
+      start.settings = { ...start.settings, skipped_version: text(payload, "version") };
+      return start.settings;
+    },
+    open_release_page: () => later(300, () => null),
     settings_set_author_name: (payload) => {
       const name = text(payload, "name").trim();
       if (Array.from(name).length > 80) {

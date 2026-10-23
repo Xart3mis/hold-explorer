@@ -26,11 +26,11 @@ use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    check_extension, diagnostics, fonts, save, AppStart, AppState, CommandError, Content,
-    CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
+    check_extension, diagnostics, fetch_latest_tag, fonts, save, AppStart, AppState, CommandError,
+    Content, CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
     FolderMoved, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
     ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice,
-    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView, Writes,
+    Theme, UpdateNotice, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView, Writes,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -130,6 +130,15 @@ pub async fn settings_set_author_name<R: Runtime>(
     name: String,
 ) -> Result<Settings, CommandError> {
     blocking(app, move |state| state.set_author_name(&name)).await
+}
+
+/// Sets and saves whether a newer release is looked for at start.
+#[tauri::command]
+pub async fn settings_set_update_check<R: Runtime>(
+    app: AppHandle<R>,
+    enabled: bool,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_update_check(enabled)).await
 }
 
 /// Checks a folder to keep the workspaces in, and names the workspace files a move would take.
@@ -672,12 +681,62 @@ fn cannot_open(path: &Path, error: &tauri_plugin_opener::Error) -> CommandError 
     )
 }
 
+/// Looks for a newer release, when a check is due: the attempt is saved under the lock, the
+/// request runs with the state free, and a newer version that was not skipped is the answer.
+/// The check is silent: whatever fails, the answer is `None`.
+#[tauri::command]
+pub async fn update_check<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<UpdateNotice>, CommandError> {
+    let current = env!("CARGO_PKG_VERSION");
+    let now = chrono::Utc::now();
+    let Ok(Some(url)) = blocking(app.clone(), move |state| Ok(state.update_due(now))).await else {
+        return Ok(None);
+    };
+    let Ok(Ok(tag)) = unlocked(move || Ok(fetch_latest_tag(&url, current))).await else {
+        return Ok(None);
+    };
+    let offered = blocking(app, move |state| Ok(state.update_offer(&tag, current))).await;
+    Ok(offered.unwrap_or(None))
+}
+
+/// Saves a version the user chose to skip: it is not offered again, a newer one is.
+#[tauri::command]
+pub async fn update_skip<R: Runtime>(
+    app: AppHandle<R>,
+    version: String,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.skip_version(&version)).await
+}
+
+/// Opens the release page of the version this session's update check offered, in the system's
+/// browser. Any other version is refused with `NotOffered`.
+#[tauri::command]
+pub async fn open_release_page<R: Runtime>(
+    app: AppHandle<R>,
+    version: String,
+) -> Result<(), CommandError> {
+    let url = blocking(app.clone(), move |state| state.release_page(&version)).await?;
+    app.opener()
+        .open_url(&url, None::<&str>)
+        .map_err(|error| {
+            CommandError::new(
+                ErrorKind::Open,
+                format!(
+                    "Hold Explorer could not open the release page {url}: {error}. Open it in your browser by hand."
+                ),
+            )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
     use std::sync::Mutex;
 
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use tauri::ipc::{CallbackFn, InvokeBody};
     use tauri::test::{get_ipc_response, mock_builder, mock_context, noop_assets, MockRuntime};
     use tauri::webview::InvokeRequest;
@@ -873,6 +932,8 @@ mod tests {
                 ("matrix", "ViewChanged"),
                 // The workspace of the fixture is not the open one.
                 ("move_view", "ViewChanged"),
+                // No update check offered a version yet.
+                ("open_release_page", "NotOffered"),
                 ("overview", "ViewChanged"),
                 ("rename_view", "ViewChanged"),
                 ("restore_view", "ViewChanged"),
@@ -883,9 +944,13 @@ mod tests {
                 ("settings_set_author_name", "Ok"),
                 ("settings_set_density", "Ok"),
                 ("settings_set_theme", "Ok"),
+                ("settings_set_update_check", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),
                 ("solve_order", "ViewChanged"),
+                // Turned off above, so nothing is asked.
+                ("update_check", "Ok"),
+                ("update_skip", "Ok"),
                 ("workspace_create", "Ok"),
                 ("workspace_current", "Ok"),
                 ("workspace_list", "Ok"),
@@ -899,6 +964,130 @@ mod tests {
         let state = harness.app.state::<Mutex<AppState>>();
         let state = state.lock().unwrap();
         assert_eq!(state.settings().theme, crate::app::Theme::Light);
+        assert!(!state.settings().update_check);
+        assert_eq!(state.settings().skipped_version.as_deref(), Some("0.2.0"));
+    }
+
+    /// Points the update check of the harness at `url`.
+    fn ask_updates_at(harness: &Harness, url: String) {
+        let state = harness.app.state::<Mutex<AppState>>();
+        state.lock().unwrap().set_update_url(url);
+    }
+
+    /// A listener on 127.0.0.1 that accepts nothing by itself, and the address of the check on it.
+    fn silent_server() -> (TcpListener, String) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = format!("http://{}/releases/latest", listener.local_addr().unwrap());
+        (listener, url)
+    }
+
+    /// Whether anything connected to the listener of `silent_server`.
+    fn was_asked(listener: &TcpListener) -> bool {
+        match listener.accept() {
+            Ok(_) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => false,
+            Err(error) => panic!("the listener failed: {error}"),
+        }
+    }
+
+    #[test]
+    fn update_check_asks_with_the_state_free_and_answers_a_newer_version() {
+        let harness = Harness::new();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        ask_updates_at(
+            &harness,
+            format!("http://{}/releases/latest", listener.local_addr().unwrap()),
+        );
+        let app = harness.app.handle().clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap() > 2 {
+                line.clear();
+            }
+            // The request is made with the state free, and the attempt was saved before it.
+            let state = app.state::<Mutex<AppState>>();
+            let free = state
+                .try_lock()
+                .is_ok_and(|state| state.settings().update_checked_at.is_some());
+            let body = r#"{"tag_name":"v99.0.0"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            free
+        });
+        let answer = harness.invoke("update_check", &json!({})).unwrap();
+        assert_eq!(answer, json!({ "version": "99.0.0" }));
+        assert!(server.join().unwrap(), "the state was locked while asking");
+        // The version the check returned is the one whose page may be opened.
+        let state = harness.app.state::<Mutex<AppState>>();
+        let page = state.lock().unwrap().release_page("99.0.0").unwrap();
+        assert_eq!(
+            page,
+            "https://github.com/Xart3mis/hold-explorer/releases/tag/v99.0.0"
+        );
+    }
+
+    #[test]
+    fn update_check_answers_none_when_it_fails() {
+        let harness = Harness::new();
+        // The address of the tests' state is no address at all.
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        // A server that refuses.
+        let harness = Harness::new();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        ask_updates_at(
+            &harness,
+            format!("http://{}/releases/latest", listener.local_addr().unwrap()),
+        );
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut line = String::new();
+            while reader.read_line(&mut line).unwrap() > 2 {
+                line.clear();
+            }
+            stream
+                .write_all(b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                .unwrap();
+        });
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn update_check_answers_none_without_asking_when_not_due_or_off() {
+        // Not due: the attempt before was a moment ago, and failed.
+        let harness = Harness::new();
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        let (listener, url) = silent_server();
+        ask_updates_at(&harness, url);
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        assert!(!was_asked(&listener));
+        // Off.
+        let harness = Harness::new();
+        let (listener, url) = silent_server();
+        ask_updates_at(&harness, url);
+        let settings = harness
+            .invoke("settings_set_update_check", &json!({ "enabled": false }))
+            .unwrap();
+        assert_eq!(settings["update_check"], json!(false));
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        assert!(!was_asked(&listener));
+    }
+
+    #[test]
+    fn open_release_page_refuses_a_version_no_check_offered() {
+        let harness = Harness::new();
+        assert_eq!(
+            harness.outcome("open_release_page", &json!({ "version": "0.2.0" })),
+            "NotOffered"
+        );
     }
 
     #[test]

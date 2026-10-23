@@ -11,6 +11,7 @@ mod import;
 mod search;
 mod settings;
 mod snapshots;
+mod update;
 mod views;
 mod workspaces;
 mod writes;
@@ -39,6 +40,7 @@ pub use import::{
 };
 pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
+pub use update::{fetch_latest_tag, UpdateNotice};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 pub use writes::{CloseRequest, Writes, CLOSING_HELD, CLOSING_RESUMED};
 
@@ -115,6 +117,12 @@ pub struct AppState {
     cache: Option<Cache>,
     /// The files an export wrote since the application started, which `export_open` may open.
     written: HashSet<PathBuf>,
+    /// The versions an update check offered since the application started, whose release page
+    /// `open_release_page` may open.
+    offered: HashSet<String>,
+    /// The address the update check asks: [`update::RELEASES_URL`]. In the tests it is no address, so
+    /// no test reaches the network, until a test names a server of its own.
+    update_url: String,
     /// The writes in progress. Shared: the close of the window reads it without the state lock,
     /// and an export writes its file with the lock free.
     writes: Arc<Writes>,
@@ -172,6 +180,12 @@ impl AppState {
             draft: None,
             cache: None,
             written: HashSet::new(),
+            offered: HashSet::new(),
+            update_url: if cfg!(test) {
+                String::new()
+            } else {
+                update::RELEASES_URL.to_string()
+            },
             writes: Arc::default(),
             #[cfg(test)]
             dataset_builds: 0,
@@ -343,6 +357,17 @@ impl AppState {
     pub fn set_density(&mut self, density: Density) -> Result<Settings, CommandError> {
         let next = Settings {
             density,
+            ..self.settings.clone()
+        };
+        self.save(&next)?;
+        self.settings = next;
+        Ok(self.settings.clone())
+    }
+
+    /// Sets and saves whether a newer release is looked for at start.
+    pub fn set_update_check(&mut self, enabled: bool) -> Result<Settings, CommandError> {
+        let next = Settings {
+            update_check: enabled,
             ..self.settings.clone()
         };
         self.save(&next)?;
@@ -558,5 +583,7 @@ mod snapshot_tests;
 mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod update_tests;
 #[cfg(test)]
 mod views_tests;

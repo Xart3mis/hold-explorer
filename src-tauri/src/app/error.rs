@@ -79,6 +79,8 @@ pub enum ErrorKind {
     SettingsSetAside,
     /// A file the app did not write this session was to be opened.
     NotWritten,
+    /// A release page was to be opened for a version no update check offered this session.
+    NotOffered,
     /// The clipboard could not be read or set.
     Clipboard,
     /// The system could not open a file.

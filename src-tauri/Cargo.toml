@@ -34,6 +34,9 @@ tauri-plugin-single-instance.workspace = true
 tauri-plugin-window-state.workspace = true
 tempfile.workspace = true
 ts-rs.workspace = true
+# The one request the app makes, the update check: rustls with the webpki roots (`rustls` turns
+# on `rustls-webpki-roots`), no native TLS, no gzip, no cookies.
+ureq = { version = "3", default-features = false, features = ["rustls", "rustls-webpki-roots"] }
 
 [dev-dependencies]
 # Already in the lock through hx-core and hx-export: the tests read back the files an export saves.

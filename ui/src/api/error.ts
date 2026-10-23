@@ -53,6 +53,7 @@ const COMMAND_KINDS: Record<ErrorKind, true> = {
   Settings: true,
   SettingsSetAside: true,
   NotWritten: true,
+  NotOffered: true,
   Clipboard: true,
   Open: true,
   Extension: true,
