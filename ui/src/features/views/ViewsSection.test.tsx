@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { useEffect, useState } from "react";
 import { describe, expect, it } from "vitest";
+import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { useFilters } from "../../app/filters/state";
 import { destinationPages } from "../../app/router";
@@ -14,14 +15,17 @@ import { expectAccessible } from "../../test/axe";
 import { opened, openStart, otherWorkspace } from "../../test/fixtures";
 import type { Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { disciplineFilter, savedView } from "../../test/views";
+import { disciplineFilter, savedView, takenRefusal } from "../../test/views";
 import { SIDEBAR_STORAGE_KEY } from "../shell/window";
 import { FilterBar } from "../filters/FilterBar";
 
 const text = en.views;
 const names = en.destinations.name;
 
-type Probe = ReturnType<typeof useFilters> & { open: (id: string) => void };
+type Probe = ReturnType<typeof useFilters> & {
+  open: (id: string) => void;
+  select: (id: number) => void;
+};
 
 /** What the page of the test reads: the filters, and the action that opens a workspace. */
 const probe: { page?: Probe } = {};
@@ -37,12 +41,16 @@ function now(): Probe {
 function Screen({ name }: { name: string }) {
   const filters = useFilters();
   const { openWorkspace } = useWorkspaceActions();
+  const { selectSnapshot } = useSnapshotActions();
   const [marked, setMarked] = useState(false);
   useEffect(() => {
     probe.page = {
       ...filters,
       open: (id) => {
         openWorkspace.mutate(id);
+      },
+      select: (id) => {
+        selectSnapshot.mutate(id);
       },
     };
   });
@@ -426,7 +434,7 @@ describe("the menu of a saved view", () => {
       await user.click(within(toast).getByRole("button", { name: en.common.undo }));
       expect(
         await screen.findByRole("group", {
-          name: 'A saved view named "All blockers" already exists.',
+          name: takenRefusal("All blockers"),
         }),
       ).toBeInTheDocument();
       expect(
@@ -444,7 +452,99 @@ describe("the menu of a saved view", () => {
     await waitFor(() => {
       expect(screen.getByText(text.empty)).toBeInTheDocument();
     });
-    expect(screen.getByText(text.title).parentElement).toHaveFocus();
+    expect(screen.getByRole("group", { name: text.title })).toHaveFocus();
+  });
+
+  it("keeps the keyboard on the menu button of a view it moved, down and up", SLOW, async () => {
+    const { user } = renderWith([civil, blockers, piping]);
+    const list = await viewList();
+    const order = () =>
+      within(list)
+        .getAllByRole("link")
+        .map((link) => link.textContent);
+    const menuButton = (name: string) =>
+      screen.getByRole("button", { name: text.actions.replace("{{name}}", name) });
+    /** Opens the menu of a view by its keys and chooses the item `steps` down from the first. */
+    const choose = async (name: string, steps: number) => {
+      menuButton(name).focus();
+      await user.keyboard("{Enter}");
+      const menu = await screen.findByRole("menu", {
+        name: text.actions.replace("{{name}}", name),
+      });
+      await waitFor(() => {
+        expect(within(menu).getByRole("menuitem", { name: text.rename })).toHaveFocus();
+      });
+      await user.keyboard(`${"{ArrowDown}".repeat(steps)}{Enter}`);
+    };
+
+    await choose("Civil holds", 1);
+    await waitFor(() => {
+      expect(order()).toEqual(["All blockers", "Civil holds", "Piping lines"]);
+    });
+    await waitFor(() => {
+      expect(menuButton("Civil holds")).toHaveFocus();
+    });
+
+    // Move up is the second item of the menu, after Rename; the first view has it disabled.
+    await choose("Piping lines", 1);
+    await waitFor(() => {
+      expect(order()).toEqual(["All blockers", "Piping lines", "Civil holds"]);
+    });
+    await waitFor(() => {
+      expect(menuButton("Piping lines")).toHaveFocus();
+    });
+  });
+
+  it("says a name refused as the field lost the focus once, under the field", SLOW, async () => {
+    const { user } = renderWith([civil, blockers]);
+    await viewList();
+    await user.click(
+      within(await openMenu(user, "Civil holds")).getByRole("menuitem", { name: text.rename }),
+    );
+    await user.keyboard("All blockers");
+    await user.click(screen.getByRole("heading", { name: "Overview" }));
+    expect(await screen.findByText(takenRefusal("All blockers"))).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: takenRefusal("All blockers") })).toBeNull();
+  });
+});
+
+describe("the saved views and the actions on the workspace", () => {
+  it("keeps a list a view change answered after an older answer of a workspace action", async () => {
+    const remove = held<SavedView[]>();
+    const select = held<WorkspaceOpen>();
+    const { user } = renderWith([civil], {
+      handlers: { delete_view: remove.handler, snapshot_select: select.handler },
+    });
+    await viewList();
+    await screen.findByRole("heading", { name: "Overview" });
+    // The delete is on its way when a snapshot is selected.
+    await user.click(
+      within(await openMenu(user, "Civil holds")).getByRole("menuitem", { name: text.delete }),
+    );
+    await waitFor(() => {
+      expect(remove.handler).toHaveBeenCalledTimes(1);
+    });
+    act(() => {
+      now().select(1);
+    });
+    await waitFor(() => {
+      expect(select.handler).toHaveBeenCalledTimes(1);
+    });
+    // The Rust side read the list for the selection before the delete: the delete answers first,
+    // and the selection's older list comes after it.
+    await act(async () => {
+      must(remove.waiting[0], "the delete").resolve([]);
+      await Promise.resolve();
+    });
+    await screen.findByRole("group", { name: "Deleted view Civil holds" });
+    await act(async () => {
+      must(select.waiting[0], "the selection").resolve(opened({ selected: 1, views: [civil] }));
+      await Promise.resolve();
+    });
+    // The selection's answer is in the cached start: the older snapshot is in view.
+    expect(await screen.findByRole("button", { name: en.snapshots.toNewest })).toBeInTheDocument();
+    expect(screen.getByText(text.empty)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: text.title })).toBeNull();
   });
 });
 

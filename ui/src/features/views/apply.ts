@@ -1,7 +1,9 @@
 // What a saved view is on screen (owner, 2026-10-19; DESIGN.md, "Saved views"):
 //
 // - its address is the address of a data screen without its selection: `line`, `hold`,
-//   `blocker`, and on Breakdown the groups that are open (`open`), which are a selection too;
+//   `blocker`, and on Breakdown the groups that are open (`open`), which are a selection too.
+//   It is written by the screen's own address module from the state it reads, so the same
+//   screen has one address however it was reached;
 // - applying it sets the filters of the workspace to its filters, then opens its address;
 // - it is current while the address shown, its selection left out, and the filters are its own.
 //
@@ -10,11 +12,9 @@
 // this session, then from the filters on screen, and otherwise are the keys themselves, as the
 // picker shows a ticked value the snapshot does not list.
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { asCommandError } from "../../api/error";
 import { keys } from "../../api/keys";
-import { useSavedViews } from "../../app/actions/views";
 import { isSameDim } from "../../app/filters/dims";
 import { useFilters, type Filters } from "../../app/filters/state";
 import { toSpec } from "../../app/filters/spec";
@@ -22,18 +22,18 @@ import { useShell } from "../../app/shell/context";
 import type { Dim } from "../../bindings/Dim";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SavedView } from "../../bindings/SavedView";
-import { useToast } from "../../components";
 import { t } from "../../text/i18n";
+import { BLOCKERS_PATH, searchWithStepSort, stepSort } from "../blockers/address";
+import { BREAKDOWN_PATH, breakdownAddress, parseBreakdownAddress } from "../breakdown/address";
+import { LINES_PATH, linesAddress, parseLinesAddress } from "../lines/address";
 
 /** The parts of an address that select something on the page rather than say what it shows. */
 const SELECTION = new Set(["line", "hold", "blocker"]);
-/** Breakdown's expanded groups: a selection on that page alone. */
-const BREAKDOWN_OPEN = { path: "/breakdown", key: "open" };
 
 /** The longest name a saved view may have, in characters (decision 6 of the plan). */
 export const NAME_LIMIT = 80;
 
-/** The key of one `key=value` part of a query, decoded. A part that cannot be decoded is its text. */
+/** The key of one `key=value` part of a query, decoded; one that cannot be decoded, as written. */
 function keyOf(part: string): string {
   const [raw = ""] = part.split("=", 1);
   try {
@@ -43,20 +43,34 @@ function keyOf(part: string): string {
   }
 }
 
-function isSelection(pathname: string, key: string): boolean {
-  return SELECTION.has(key) || (pathname === BREAKDOWN_OPEN.path && key === BREAKDOWN_OPEN.key);
+/**
+ * The address of a screen that has no address module: the path, and the query without what
+ * selects, the other parts as the page wrote them.
+ */
+function withoutSelection(pathname: string, search: string): string {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  const kept = query.split("&").filter((part) => part !== "" && !SELECTION.has(keyOf(part)));
+  return kept.length === 0 ? pathname : `${pathname}?${kept.join("&")}`;
 }
 
 /**
- * The address a view saves from the address shown: the path, and the query without what selects.
- * The other parts are kept as the page wrote them, in their order.
+ * The address a view keeps of the screen at an address: the state its screen reads from it,
+ * written again by the screen's own address module, without the selection (a line, a hold, a
+ * blocker, and Breakdown's open groups) and without any part the screen does not read. Two
+ * spellings of the same screen give the same address: Breakdown at `/breakdown` and at
+ * `/breakdown?mode=list&by=Discipline` is one screen, and its address is the second.
  */
 export function viewAddress(pathname: string, search: string): string {
-  const query = search.startsWith("?") ? search.slice(1) : search;
-  const kept = query
-    .split("&")
-    .filter((part) => part !== "" && !isSelection(pathname, keyOf(part)));
-  return kept.length === 0 ? pathname : `${pathname}?${kept.join("&")}`;
+  switch (pathname) {
+    case BREAKDOWN_PATH:
+      return breakdownAddress({ ...parseBreakdownAddress(search), open: [] });
+    case LINES_PATH:
+      return linesAddress(parseLinesAddress(search));
+    case BLOCKERS_PATH:
+      return `${BLOCKERS_PATH}${searchWithStepSort("", stepSort(search))}`;
+    default:
+      return withoutSelection(pathname, search);
+  }
 }
 
 /** The path of an address. */
@@ -65,25 +79,31 @@ export function pathOf(address: string): string {
   return at === -1 ? address : address.slice(0, at);
 }
 
-/** The parts of an address's query, decoded, in an order that does not depend on how it was written. */
-function partsOf(address: string): string[] {
+/** The search text of an address: `?` and what follows, or nothing. */
+function searchOf(address: string): string {
   const at = address.indexOf("?");
-  const query = at === -1 ? "" : address.slice(at + 1);
-  return [...new URLSearchParams(query).entries()]
+  return at === -1 ? "" : address.slice(at);
+}
+
+/** The parts of an address's query, decoded, in an order that does not depend on its spelling. */
+function partsOf(address: string): string[] {
+  return [...new URLSearchParams(searchOf(address)).entries()]
     .map(([key, value]) => `${key}\u0000${value}`)
     .sort();
 }
 
 /**
- * Whether two addresses open the same screen: the same path and the same parts, however each was
- * encoded and in whatever order. A page writes its whole query again when a row is selected, so
- * the same parts may come back spelled another way.
+ * Whether two addresses are the same screen: the state their screen reads from them is the same,
+ * their selection left out. A screen without an address module compares the parts of its query,
+ * however each was encoded and in whatever order.
  */
 export function isSameAddress(one: string, other: string): boolean {
-  if (pathOf(one) !== pathOf(other)) return false;
-  const a = partsOf(one);
-  const b = partsOf(other);
-  return a.length === b.length && a.every((part, index) => part === b[index]);
+  const a = viewAddress(pathOf(one), searchOf(one));
+  const b = viewAddress(pathOf(other), searchOf(other));
+  if (pathOf(a) !== pathOf(b)) return false;
+  const x = partsOf(a);
+  const y = partsOf(b);
+  return x.length === y.length && x.every((part, index) => part === y[index]);
 }
 
 /** Whether two values that came from JSON are the same, whatever the order of their keys. */
@@ -112,7 +132,7 @@ export function isSameSpec(one: FilterSpec, other: FilterSpec): boolean {
   return isSameValue(one, other);
 }
 
-/** The label a value of a dimension was picked under in one of these filters, the first that has it. */
+/** The label a value of a dimension was picked under in the first of these filters that has it. */
 function labelIn(known: readonly Filters[], dim: Dim, key: string): string | undefined {
   for (const filters of known) {
     const entry = filters.fields.find((held) => isSameDim(held.dim, dim));
@@ -203,60 +223,4 @@ export function useRememberFilters(): (workspace: string, id: number, filters: F
     },
     [client],
   );
-}
-
-/**
- * The toasts of the saved views: what was done, the Undo of a delete, and what failed. An Undo
- * belongs to the workspace it was offered in, and its toast goes when another workspace opens.
- */
-export function useViewToasts() {
-  const toast = useToast();
-  const { start } = useShell();
-  const { deleteView, restoreView } = useSavedViews();
-  const workspace = start.open?.workspace.id ?? null;
-  const offered = useRef<{ toast: string; workspace: string }[]>([]);
-  useEffect(() => {
-    const [stays, goes] = [
-      offered.current.filter((held) => held.workspace === workspace),
-      offered.current.filter((held) => held.workspace !== workspace),
-    ];
-    for (const held of goes) toast.dismiss(held.toast);
-    offered.current = stays;
-  }, [workspace, toast]);
-
-  /** Says that something failed, in the words of the command. */
-  const failed = useCallback(
-    (error: unknown) => {
-      toast.show({ message: asCommandError(error).message });
-    },
-    [toast],
-  );
-
-  /**
-   * Deletes a view at once and offers to put it back where it was. `onDone` is called once the
-   * view is gone.
-   */
-  const remove = useCallback(
-    (owner: string, view: SavedView, index: number, onDone?: () => void) => {
-      // Each call answers on its own promise: two deletes in a row each get their toast.
-      void deleteView.mutateAsync({ workspace: owner, id: view.id }).then(() => {
-        onDone?.();
-        const shown = toast.show({
-          message: t("views.deleted", { name: view.name }),
-          action: {
-            label: t("common.undo"),
-            isUndo: true,
-            onAction: () => {
-              offered.current = offered.current.filter((held) => held.toast !== shown);
-              void restoreView.mutateAsync({ workspace: owner, view, index }).catch(failed);
-            },
-          },
-        });
-        offered.current = [...offered.current, { toast: shown, workspace: owner }];
-      }, failed);
-    },
-    [deleteView, restoreView, toast, failed],
-  );
-
-  return { remove, failed, toast };
 }

@@ -26,6 +26,7 @@ import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../comp
 import { formatDateTime } from "../../text/format";
 import { t } from "../../text/i18n";
 import { DetailPanel } from "../detail/DetailPanel";
+import { ViewActionsProvider } from "../views/actions";
 import { createDetailFocus, DetailFocusContext, useSelection } from "../detail/selection";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
 import type { ShellProblem } from "./problem";
@@ -304,140 +305,144 @@ function LoadedShell({ start, destinations }: ShellProps) {
 
   return (
     <ShellContext value={shell}>
-      <DetailFocusContext value={detailFocus}>
-        <TopBarSlotProvider>
-          <div
-            data-detail={detail === null ? undefined : isWide ? "beside" : "overlay"}
-            className={styles.layout}
-          >
-            <TopBar
-              start={start}
-              destinations={destinations}
-              renameErrorId={problem?.kind === "rename" ? problemId : undefined}
-              onProblem={setProblem}
-            />
-            {hasSidebar ? (
-              <Sidebar
+      <ViewActionsProvider>
+        <DetailFocusContext value={detailFocus}>
+          <TopBarSlotProvider>
+            <div
+              data-detail={detail === null ? undefined : isWide ? "beside" : "overlay"}
+              className={styles.layout}
+            >
+              <TopBar
+                start={start}
                 destinations={destinations}
-                addressOf={addressOf}
-                onRestart={restart}
-                form={sidebarForm}
-                onFormChange={setSidebarForm}
+                renameErrorId={problem?.kind === "rename" ? problemId : undefined}
+                onProblem={setProblem}
               />
-            ) : null}
-            <main className={styles.content}>
-              {problem !== null ||
-              notice !== null ||
-              settingsProblem !== null ||
-              dropProblem !== null ||
-              warning !== null ||
-              older !== null ? (
-                <div className={styles.notices}>
-                  {problem === null ? null : (
-                    <div id={problemId}>
-                      <Notice
-                        tone="danger"
-                        title={problem.title}
-                        onDismiss={() => {
-                          setProblem(null);
-                        }}
-                      >
-                        {problem.message}
-                      </Notice>
-                    </div>
-                  )}
-                  {notice === null ? null : (
-                    <Notice
-                      tone="info"
-                      title={notice.title}
-                      onDismiss={() => {
-                        setNotice(null);
-                      }}
-                    >
-                      {notice.text}
-                    </Notice>
-                  )}
-                  {settingsProblem === null ? null : (
-                    <Notice
-                      tone="warning"
-                      title={t("shell.settingsProblem")}
-                      onDismiss={() => {
-                        setDismissedSettings(settingsProblem.message);
-                      }}
-                    >
-                      {settingsProblem.message}
-                    </Notice>
-                  )}
-                  {dropProblem === null ? null : (
-                    <Notice
-                      tone="warning"
-                      title={t("shell.dropUnavailable")}
-                      onDismiss={() => {
-                        setDropProblem(null);
-                      }}
-                    >
-                      <span className={styles.noticeLine}>{dropProblem}</span>
-                      <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
-                    </Notice>
-                  )}
-                  {warning === null ? null : (
-                    <Notice
-                      tone="warning"
-                      title={t("workspaces.warningTitle")}
-                      onDismiss={() => {
-                        setDismissedWarning(warning.message);
-                      }}
-                    >
-                      {warning.message}
-                    </Notice>
-                  )}
-                  {older === null ? null : (
-                    <Notice
-                      tone="info"
-                      actions={
-                        <Button
-                          variant="quiet"
-                          reservesPendingSpace
-                          isPending={selectSnapshot.isPending}
-                          isInert={isBusy}
-                          onPress={() => {
-                            selectSnapshot.mutate(older.newest.id, {
-                              onSuccess: () => {
-                                setProblem(null);
-                              },
-                              onError: (error) => {
-                                setProblem({
-                                  kind: "action",
-                                  title: t("snapshots.selectError"),
-                                  message: asCommandError(error).message,
-                                });
-                              },
-                            });
+              {hasSidebar ? (
+                <Sidebar
+                  destinations={destinations}
+                  addressOf={addressOf}
+                  onRestart={restart}
+                  form={sidebarForm}
+                  onFormChange={setSidebarForm}
+                />
+              ) : null}
+              <main className={styles.content}>
+                {problem !== null ||
+                notice !== null ||
+                settingsProblem !== null ||
+                dropProblem !== null ||
+                warning !== null ||
+                older !== null ? (
+                  <div className={styles.notices}>
+                    {problem === null ? null : (
+                      <div id={problemId}>
+                        <Notice
+                          tone="danger"
+                          title={problem.title}
+                          onDismiss={() => {
+                            setProblem(null);
                           }}
                         >
-                          {t("snapshots.toNewest")}
-                        </Button>
-                      }
-                    >
-                      {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
-                    </Notice>
-                  )}
+                          {problem.message}
+                        </Notice>
+                      </div>
+                    )}
+                    {notice === null ? null : (
+                      <Notice
+                        tone="info"
+                        title={notice.title}
+                        onDismiss={() => {
+                          setNotice(null);
+                        }}
+                      >
+                        {notice.text}
+                      </Notice>
+                    )}
+                    {settingsProblem === null ? null : (
+                      <Notice
+                        tone="warning"
+                        title={t("shell.settingsProblem")}
+                        onDismiss={() => {
+                          setDismissedSettings(settingsProblem.message);
+                        }}
+                      >
+                        {settingsProblem.message}
+                      </Notice>
+                    )}
+                    {dropProblem === null ? null : (
+                      <Notice
+                        tone="warning"
+                        title={t("shell.dropUnavailable")}
+                        onDismiss={() => {
+                          setDropProblem(null);
+                        }}
+                      >
+                        <span className={styles.noticeLine}>{dropProblem}</span>
+                        <span className={styles.noticeLine}>{t("shell.dropUnavailableHelp")}</span>
+                      </Notice>
+                    )}
+                    {warning === null ? null : (
+                      <Notice
+                        tone="warning"
+                        title={t("workspaces.warningTitle")}
+                        onDismiss={() => {
+                          setDismissedWarning(warning.message);
+                        }}
+                      >
+                        {warning.message}
+                      </Notice>
+                    )}
+                    {older === null ? null : (
+                      <Notice
+                        tone="info"
+                        actions={
+                          <Button
+                            variant="quiet"
+                            reservesPendingSpace
+                            isPending={selectSnapshot.isPending}
+                            isInert={isBusy}
+                            onPress={() => {
+                              selectSnapshot.mutate(older.newest.id, {
+                                onSuccess: () => {
+                                  setProblem(null);
+                                },
+                                onError: (error) => {
+                                  setProblem({
+                                    kind: "action",
+                                    title: t("snapshots.selectError"),
+                                    message: asCommandError(error).message,
+                                  });
+                                },
+                              });
+                            }}
+                          >
+                            {t("snapshots.toNewest")}
+                          </Button>
+                        }
+                      >
+                        {t("snapshots.older", { date: formatDateTime(older.selected.taken_at) })}
+                      </Notice>
+                    )}
+                  </div>
+                ) : null}
+                <div
+                  ref={scrolled}
+                  data-stale={isSwitching ? "" : undefined}
+                  className={styles.scroll}
+                >
+                  {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
+                  <Outlet key={`${pathname}#${String(restarts)}`} />
                 </div>
-              ) : null}
-              <div
-                ref={scrolled}
-                data-stale={isSwitching ? "" : undefined}
-                className={styles.scroll}
-              >
-                {/* A page is built anew for each address, so nothing of the page before keeps the focus. */}
-                <Outlet key={`${pathname}#${String(restarts)}`} />
-              </div>
-              {dragged === null ? null : <DropFrame paths={dragged} />}
-            </main>
-            {detail === null ? null : <DetailPanel selection={detail} className={styles.detail} />}
-          </div>
-        </TopBarSlotProvider>
-      </DetailFocusContext>
+                {dragged === null ? null : <DropFrame paths={dragged} />}
+              </main>
+              {detail === null ? null : (
+                <DetailPanel selection={detail} className={styles.detail} />
+              )}
+            </div>
+          </TopBarSlotProvider>
+        </DetailFocusContext>
+      </ViewActionsProvider>
     </ShellContext>
   );
 }

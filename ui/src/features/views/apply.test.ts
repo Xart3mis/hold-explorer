@@ -13,27 +13,39 @@ import {
 } from "./apply";
 
 describe("the address a view saves", () => {
-  it("leaves out a line, a hold, and a blocker, and keeps the rest as it was written", () => {
-    expect(viewAddress("/lines", "?rows=holds&sort=age&hold=3")).toBe("/lines?rows=holds&sort=age");
-    expect(viewAddress("/lines", "?line=78B-1&sort=holds")).toBe("/lines?sort=holds");
-    expect(viewAddress("/blockers", "?blocker=Piping%7CStress")).toBe("/blockers");
-    expect(viewAddress("/overview", "")).toBe("/overview");
+  it("is written by the screen's address module, without a line, a hold, or a blocker", () => {
+    expect(viewAddress("/lines", "?rows=holds&sort=OldestFirst&hold=3")).toBe(
+      "/lines?rows=holds&sort=OldestFirst",
+    );
+    expect(viewAddress("/lines", "?line=78B-1&sort=Easiest")).toBe("/lines?sort=Easiest");
+    expect(viewAddress("/blockers", "?blocker=Piping%7CStress&sort=holds&dir=asc")).toBe(
+      "/blockers?sort=holds&dir=asc",
+    );
+    expect(viewAddress("/overview", "?line=78B-1")).toBe("/overview");
   });
 
-  it("leaves out Breakdown's open groups, which are a selection there and nowhere else", () => {
-    expect(viewAddress("/breakdown", "?mode=list&by=Role&open=Lead,Checker&sort=holds")).toBe(
-      "/breakdown?mode=list&by=Role&sort=holds",
-    );
-    expect(viewAddress("/lines", "?open=1")).toBe("/lines?open=1");
+  it("writes Breakdown in full, and leaves out its open groups, a selection there alone", () => {
+    expect(viewAddress("/breakdown", "")).toBe("/breakdown?mode=list&by=Discipline");
+    expect(
+      viewAddress("/breakdown", "?mode=list&by=Role&open=Lead,Checker&sort=holds&dir=desc"),
+    ).toBe("/breakdown?mode=list&by=Role&sort=holds&dir=desc");
+  });
+
+  it("leaves out what the screen does not read", () => {
+    expect(viewAddress("/lines", "?open=1&sort=nothing")).toBe("/lines");
   });
 });
 
 describe("whether two addresses are the same screen", () => {
-  it("compares the parts, however they were encoded and ordered", () => {
-    expect(isSameAddress("/breakdown?by=Role&sort=holds", "/breakdown?sort=holds&by=Role")).toBe(
+  it("compares the state the screen reads, however the address spells it", () => {
+    expect(isSameAddress("/breakdown", "/breakdown?mode=list&by=Discipline")).toBe(true);
+    expect(isSameAddress("/breakdown?by=Role&mode=list", "/breakdown?mode=list&by=Role")).toBe(
       true,
     );
-    expect(isSameAddress("/lines?q=a%20b", "/lines?q=a+b")).toBe(true);
+    expect(isSameAddress("/breakdown?mode=list&by=Role&open=Lead", "/breakdown?by=Role")).toBe(
+      true,
+    );
+    expect(isSameAddress("/breakdown?by=Role", "/breakdown")).toBe(false);
     expect(isSameAddress("/lines?rows=holds", "/lines")).toBe(false);
     expect(isSameAddress("/lines", "/blockers")).toBe(false);
   });

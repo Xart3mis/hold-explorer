@@ -17,6 +17,7 @@ import { api } from "../../api/commands";
 import { asCommandError, isErrorKind } from "../../api/error";
 import { keys } from "../../api/keys";
 import type { AppStart } from "../../bindings/AppStart";
+import type { SavedView } from "../../bindings/SavedView";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import { startQuery } from "../query";
@@ -38,6 +39,44 @@ export function listed(start: AppStart, workspace: WorkspaceView): AppStart {
 /** The workspace a command opened is the open one, with the snapshot the command selected. */
 export function showOpened(client: QueryClient, open: WorkspaceOpen): void {
   changeStart(client, (state) => listed({ ...state, open }, open.workspace));
+}
+
+/**
+ * The list of saved views a view command answered last, the workspace it belongs to, and its
+ * place in the order of those answers. An action on the workspace answers with the views as well,
+ * read by the Rust side whenever its turn came there, which may have been before a view command
+ * that answered first here: such an older list must not take the place of the newer one.
+ */
+let viewsAnswer: { workspace: string; views: SavedView[]; order: number } | null = null;
+let viewsAnswers = 0;
+
+/** How many lists of saved views the view commands have answered so far. */
+export function viewsAnswered(): number {
+  return viewsAnswers;
+}
+
+/** Writes the list a view command answered into the cached start, while its workspace is open. */
+export function showViews(client: QueryClient, workspace: string, views: SavedView[]): void {
+  viewsAnswers += 1;
+  viewsAnswer = { workspace, views, order: viewsAnswers };
+  changeStart(client, (start) =>
+    start.open?.workspace.id === workspace ? { ...start, open: { ...start.open, views } } : start,
+  );
+}
+
+/**
+ * After an action on the workspace wrote its answer: when a view command answered after the
+ * action was sent, for the workspace that is open now, its list is the newer one and is put back.
+ * `since` is what `viewsAnswered()` was when the action was sent.
+ */
+export function keepNewerViews(client: QueryClient, since: number): void {
+  const held = viewsAnswer;
+  if (held === null || held.order <= since) return;
+  changeStart(client, (start) =>
+    start.open?.workspace.id === held.workspace
+      ? { ...start, open: { ...start.open, views: held.views } }
+      : start,
+  );
 }
 
 /**

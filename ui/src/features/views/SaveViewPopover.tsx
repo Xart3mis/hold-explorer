@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { asCommandError } from "../../api/error";
 import { useStart } from "../../app/actions/start";
-import { useSavedViews, viewsOf } from "../../app/actions/views";
+import { viewsOf } from "../../app/actions/views";
 import { destinations } from "../../app/destinations";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
@@ -11,7 +11,8 @@ import type { SavedView } from "../../bindings/SavedView";
 import { Button, Popover, TextField } from "../../components";
 import { t } from "../../text/i18n";
 import { chipsOf } from "../filters/chips";
-import { useRememberFilters, useViewToasts, viewAddress, withinLimit } from "./apply";
+import { useViewActions } from "./actions";
+import { useRememberFilters, viewAddress, withinLimit } from "./apply";
 import styles from "./SaveViewPopover.module.css";
 
 /** The kind of the refusal of a name another view has. */
@@ -35,8 +36,7 @@ function SaveViewForm({ close }: { close: () => void }) {
   const { start } = useShell();
   const { filters, spec } = useFilters();
   const location = useLocation();
-  const { saveView } = useSavedViews();
-  const { remove, toast } = useViewToasts();
+  const { saveView, remove, done } = useViewActions();
   const remember = useRememberFilters();
   const workspace = start.open?.workspace.id ?? null;
   const views = viewsOf(start);
@@ -66,10 +66,7 @@ function SaveViewForm({ close }: { close: () => void }) {
           const saved = list.find((view) => !before.has(view.id));
           if (saved !== undefined) remember(workspace, saved.id, filters);
           close();
-          toast.show({
-            message: t("views.saved", { name: saved?.name ?? typed.trim() }),
-            tone: "success",
-          });
+          done(t("views.saved", { name: saved?.name ?? typed.trim() }));
         },
         (failure: unknown) => {
           setSaving(false);
@@ -89,7 +86,14 @@ function SaveViewForm({ close }: { close: () => void }) {
   const replace = (taken: { view: SavedView; index: number }) => {
     if (workspace === null) return;
     setSaving(true);
-    remove(workspace, taken.view, taken.index, save);
+    remove(workspace, taken.view, taken.index, {
+      onDone: save,
+      // The other view is still there, and so is this one's name: Save and Replace it can be
+      // pressed again. The toast says why.
+      onFailed: () => {
+        setSaving(false);
+      },
+    });
   };
 
   return (

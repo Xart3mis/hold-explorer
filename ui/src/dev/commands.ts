@@ -794,41 +794,54 @@ export function installDevCommands(
     if (current.list.length >= 100) {
       throw failure(
         "TooManyViews",
-        "A workspace holds at most 100 saved views. Delete a view you no longer use, then save again.",
+        `A workspace holds at most 100 saved views, and this one holds ${String(current.list.length)}. Delete a view you no longer use, then save again.`,
       );
     }
   };
 
-  /** A data screen's path, and no selection in its query, as the Rust side demands. */
+  /** A data screen's path, and no selection in its query, in the words of the Rust side. */
   const checkAddress = (address: string) => {
-    const [path = "", query = ""] = address.split(/\?(.*)/s, 2);
-    const keys = query === "" ? [] : query.split("&").map((pair) => pair.split("=")[0] ?? "");
-    const selection = keys.some(
-      (key) =>
-        key.includes("%") ||
-        ["line", "hold", "blocker"].includes(key) ||
-        (path === "/breakdown" && key === "open"),
-    );
-    if (
-      !["/overview", "/breakdown", "/lines", "/blockers"].includes(path) ||
-      selection ||
-      address.includes("#")
-    ) {
-      throw failure(
+    const refused = (why: string) =>
+      failure(
         "ViewAddress",
-        `The address "${address}" cannot be saved as a view. This is a fault of Hold Explorer; report it, and save the view again from the screen.`,
+        `The address "${address}" cannot be saved as a view: ${why}. This is a fault of Hold Explorer; report it, and save the view again from the screen.`,
       );
+    if (address.includes("#")) throw refused("it has a fragment");
+    const at = address.indexOf("?");
+    const path = at === -1 ? address : address.slice(0, at);
+    const query = at === -1 ? "" : address.slice(at + 1);
+    if (!["/overview", "/breakdown", "/lines", "/blockers"].includes(path)) {
+      throw refused("it is not the address of Overview, Breakdown, Lines, or Blockers");
+    }
+    for (const pair of query.split("&")) {
+      const [key = ""] = pair.split("=", 1);
+      if (key.includes("%")) throw refused("a name in its query is escaped");
+      if (["line", "hold", "blocker"].includes(key) || (path === "/breakdown" && key === "open")) {
+        throw refused(`it carries the selection "${key}"`);
+      }
     }
   };
 
-  const checkName = (current: { list: SavedView[] }, name: string, except: number | null) => {
+  /** The name trimmed, in the words of the Rust side when it is empty or too long. */
+  const clean = (raw: string): string => {
+    const name = raw.trim();
     const length = Array.from(name).length;
-    if (length < 1 || length > 80) {
+    if (length === 0) {
       throw failure(
         "ViewName",
-        `A saved view needs a name of 1 to 80 characters, and this one has ${String(length)}. Type a shorter or longer name, then save again.`,
+        "A saved view needs a name of at least one character. Type a name, then save again.",
       );
     }
+    if (length > 80) {
+      throw failure(
+        "ViewName",
+        `A saved view's name has at most 80 characters, and this one has ${String(length)}. Shorten the name, then save again.`,
+      );
+    }
+    return name;
+  };
+
+  const checkFree = (current: { list: SavedView[] }, name: string, except: number | null) => {
     const taken = current.list.find(
       (view) => view.id !== except && view.name.toLowerCase() === name.toLowerCase(),
     );
@@ -996,14 +1009,15 @@ export function installDevCommands(
       if (state === "workspaces-pending") return new Promise<WorkspaceOpen>(() => undefined);
       return later(300, () => open(workspace));
     },
-    // The saved views keep the rules of the Rust side that a person can meet in the interface: a
-    // name of 1 to 80 characters, unique without regard to case, and at most 100 views.
+    // The saved views keep the rules of the Rust side (src-tauri/src/app/views.rs), in its order
+    // and its words: a name of 1 to 80 characters, unique without regard to case, an address of
+    // a data screen without a selection, and at most 100 views.
     save_view: (payload) => {
       const current = viewsOf(payload);
-      const name = text(payload, "name").trim();
+      const name = clean(text(payload, "name"));
       const address = text(payload, "address");
-      checkName(current, name, null);
       checkAddress(address);
+      checkFree(current, name, null);
       checkRoom(current);
       const id = current.nextId();
       current.issue(id + 1);
@@ -1018,9 +1032,9 @@ export function installDevCommands(
     rename_view: (payload) => {
       const current = viewsOf(payload);
       const id = idOf(payload);
-      const name = text(payload, "name").trim();
+      const name = clean(text(payload, "name"));
       const found = current.find(id);
-      checkName(current, name, id);
+      checkFree(current, name, id);
       return current.keep(current.list.map((view) => (view === found ? { ...view, name } : view)));
     },
     delete_view: (payload) => {
@@ -1031,10 +1045,8 @@ export function installDevCommands(
     restore_view: (payload) => {
       const current = viewsOf(payload);
       const { view, index } = payload as { view: SavedView; index: number };
-      const name = view.name.trim();
-      checkName(current, name, null);
+      const name = clean(view.name);
       checkAddress(view.address);
-      checkRoom(current);
       if (view.id < 1 || view.id >= current.nextId()) current.find(-1);
       if (current.list.some((other) => other.id === view.id)) {
         throw failure(
@@ -1042,6 +1054,8 @@ export function installDevCommands(
           "That saved view is in the list already, so it was not restored. Reload the list; if it keeps happening, report it.",
         );
       }
+      checkFree(current, name, null);
+      checkRoom(current);
       const next = [...current.list];
       next.splice(Math.min(index, next.length), 0, { ...view, name });
       return current.keep(next);

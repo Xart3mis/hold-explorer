@@ -16,7 +16,7 @@ import { keys } from "../../api/keys";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SavedView } from "../../bindings/SavedView";
-import { changeStart } from "./start";
+import { showViews } from "./start";
 
 /** The one queue the saved-view commands wait in. */
 const VIEWS_SCOPE = { id: "saved-views" };
@@ -53,11 +53,6 @@ export function viewsOf(start: AppStart | undefined): readonly SavedView[] {
  */
 export function useSavedViews() {
   const client = useQueryClient();
-  const keep = (workspace: string, views: SavedView[]) => {
-    changeStart(client, (start) =>
-      start.open?.workspace.id === workspace ? { ...start, open: { ...start.open, views } } : start,
-    );
-  };
   const options = <Variables extends { workspace: string }>(
     mutationFn: (variables: Variables) => Promise<SavedView[]>,
   ) => ({
@@ -65,7 +60,7 @@ export function useSavedViews() {
     scope: VIEWS_SCOPE,
     mutationFn,
     onSuccess: (views: SavedView[], { workspace }: Variables) => {
-      keep(workspace, views);
+      showViews(client, workspace, views);
     },
   });
 

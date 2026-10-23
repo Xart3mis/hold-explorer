@@ -60,6 +60,10 @@
   color: var(--color-success-text);
 }
 
+.icon[data-tone="danger"] {
+  color: var(--color-danger-text);
+}
+
 .message {
   flex: 1;
   min-inline-size: 0;

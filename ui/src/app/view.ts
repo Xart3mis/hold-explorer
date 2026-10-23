@@ -122,7 +122,7 @@ import type { ErrorKind } from "../bindings/ErrorKind";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
-import { listed } from "./actions/start";
+import { keepNewerViews, listed, viewsAnswered } from "./actions/start";
 import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
@@ -595,29 +595,42 @@ export interface WorkspaceAction<Variables, Data> {
   onSuccess?: (data: Data, variables: Variables) => unknown;
 }
 
+/** What an action on the workspace notes when it is sent. */
+export interface ActionSent {
+  /** How many lists of saved views the view commands had answered (`viewsAnswered`). */
+  views: number;
+}
+
 /**
  * The options of a mutation that changes the open workspace or its selection; pass them to
  * `useMutation`. See the rule at the top of this file.
  *
  * It fixes what such an action must not be without: the scope, so the actions run one after
  * another; the key, so every reader of `useStart().isBusy` sees it and no snapshot query is
- * enabled meanwhile; and the dropping of the snapshot queries that are in flight when the action
- * is asked for, whose answers the Rust side may give for either view.
+ * enabled meanwhile; the dropping of the snapshot queries that are in flight when the action is
+ * asked for, whose answers the Rust side may give for either view; and the saved views a view
+ * command answered after the action was sent, which its answer, read earlier, must not replace.
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
   { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
-): UseMutationOptions<Data, Error, Variables> {
+): UseMutationOptions<Data, Error, Variables, ActionSent> {
   return {
     mutationKey: kind === "selecting" ? keys.selectingSnapshot : keys[kind],
     scope: WORKSPACE_SCOPE,
     mutationFn,
-    onMutate: (variables: Variables) => {
+    onMutate: async (variables: Variables) => {
       onAsk?.(variables);
-      return client.cancelQueries({ queryKey: keys.snapshots });
+      // Taken before the command is sent: a list of views answered after this is newer than the
+      // one the action answers with.
+      const views = viewsAnswered();
+      await client.cancelQueries({ queryKey: keys.snapshots });
+      return { views };
     },
-    ...(onSuccess === undefined
-      ? {}
-      : { onSuccess: (data: Data, variables: Variables) => onSuccess(data, variables) }),
+    onSuccess: (data: Data, variables: Variables, sent: ActionSent) => {
+      const done = onSuccess?.(data, variables);
+      keepNewerViews(client, sent.views);
+      return done;
+    },
   };
 }

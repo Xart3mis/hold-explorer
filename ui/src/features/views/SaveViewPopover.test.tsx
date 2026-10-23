@@ -14,9 +14,9 @@ import { held } from "../../test/actions";
 import { must, renderApp } from "../../test/app";
 import { expectAccessible } from "../../test/axe";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
-import type { Handlers } from "../../test/ipc";
+import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
-import { disciplineFilter, savedView } from "../../test/views";
+import { disciplineFilter, nameRefusal, savedView, takenRefusal } from "../../test/views";
 import { FilterBar } from "../filters/FilterBar";
 
 const text = en.views;
@@ -99,7 +99,7 @@ describe("Save view", () => {
       const save = vi.fn<NonNullable<Handlers["save_view"]>>(({ name, address, filters }) => [
         { id: 1, name: name.trim(), address, filters },
       ]);
-      const { user } = await renderAt("/lines?rows=holds&sort=age&hold=3", {
+      const { user } = await renderAt("/lines?rows=holds&sort=OldestFirst&hold=3", {
         filters: civil,
         handlers: { save_view: save },
       });
@@ -117,7 +117,7 @@ describe("Save view", () => {
       expect(save).toHaveBeenCalledWith({
         workspace: workspace().id,
         name: "Lines · Civil, Piping",
-        address: "/lines?rows=holds&sort=age",
+        address: "/lines?rows=holds&sort=OldestFirst",
         filters: disciplineFilter("Civil", "Piping"),
       });
       expect(
@@ -161,7 +161,7 @@ describe("Save view", () => {
     const field = within(dialog).getByRole("textbox", { name: text.name });
     await user.clear(field);
     await user.type(field, "CIVIL WORK{Enter}");
-    const message = 'A saved view named "Civil work" already exists.';
+    const message = takenRefusal("Civil work");
     expect(await within(dialog).findByText(message)).toBeInTheDocument();
     expect(field).toHaveAttribute("aria-invalid", "true");
     expect(viewNames()).toEqual(["Civil work", "Open lines"]);
@@ -175,7 +175,7 @@ describe("Save view", () => {
     // Undo cannot put the old view back while the new one has its name, and says so.
     await user.click(within(toast).getByRole("button", { name: en.common.undo }));
     expect(
-      await screen.findByRole("group", { name: 'A saved view named "CIVIL WORK" already exists.' }),
+      await screen.findByRole("group", { name: takenRefusal("CIVIL WORK") }),
     ).toBeInTheDocument();
   });
 
@@ -187,11 +187,7 @@ describe("Save view", () => {
     await user.click(field);
     await user.paste("x".repeat(81));
     await user.keyboard("{Enter}");
-    expect(
-      await within(dialog).findByText(
-        "A saved view needs a name of 1 to 80 characters, and this one has 81.",
-      ),
-    ).toBeInTheDocument();
+    expect(await within(dialog).findByText(nameRefusal(81))).toBeInTheDocument();
     expect(field).toHaveAttribute("aria-invalid", "true");
     expect(viewNames()).toEqual([]);
     // Typing again takes the mark away.
@@ -236,4 +232,107 @@ describe("Save view", () => {
       expect(button).toHaveFocus();
     },
   );
+});
+
+describe("Save view on Breakdown", () => {
+  function renderBreakdown(views: SavedView[] = [], path = "/breakdown", handlers: Handlers = {}) {
+    // The real Breakdown page, which writes its own address once it is used.
+    return renderApp({ start: openStart({ open: opened({ views }) }), path, handlers });
+  }
+
+  function viewLink(name: string): HTMLElement {
+    return within(screen.getByRole("list", { name: text.title })).getByRole("link", { name });
+  }
+
+  it("saves the screen in full, and keeps it current when a group is expanded", SLOW, async () => {
+    const save = vi.fn<NonNullable<Handlers["save_view"]>>(({ name, address, filters }) => [
+      { id: 1, name, address, filters },
+    ]);
+    const { user, router } = renderBreakdown([], "/breakdown", { save_view: save });
+    const table = await screen.findByRole("treegrid", {
+      name: en.breakdown.table.replace("{{dim}}", "Discipline"),
+    });
+    await within(table).findByRole("rowheader", { name: "Civil" });
+    const dialog = await openPopover(user);
+    await user.click(within(dialog).getByRole("button", { name: text.saveButton }));
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ address: "/breakdown?mode=list&by=Discipline" }),
+    );
+    await waitFor(() => {
+      expect(viewLink(en.destinations.name.breakdown)).toHaveAttribute("aria-current", "true");
+    });
+
+    // A group expanded is a selection: the screen is still the view's.
+    const civil = must(
+      within(table).getByRole("rowheader", { name: "Civil" }).closest<HTMLElement>("[role='row']"),
+    );
+    await user.click(civil);
+    await waitFor(() => {
+      expect(router.state.location.search).toBe("?mode=list&by=Discipline&open=Civil");
+    });
+    expect(viewLink(en.destinations.name.breakdown)).toHaveAttribute("aria-current", "true");
+  });
+
+  it("marks a view current on the same screen however its address spells it", async () => {
+    const bare = savedView({ id: 1, name: "Groups", address: "/breakdown" });
+    renderBreakdown([bare], "/breakdown?mode=list&by=Discipline");
+    await screen.findByRole("list", { name: text.title });
+    await waitFor(() => {
+      expect(viewLink("Groups")).toHaveAttribute("aria-current", "true");
+    });
+  });
+});
+
+describe("Replace it", () => {
+  it("can be tried again when the delete of the other view fails", SLOW, async () => {
+    const taken = savedView({ id: 7, name: "Civil work", address: "/blockers" });
+    const { user } = await renderAt("/lines", {
+      views: [taken],
+      handlers: {
+        delete_view: () => {
+          throw commandFailure("Io", "The workspace file could not be written.");
+        },
+      },
+    });
+    const dialog = await openPopover(user);
+    const field = within(dialog).getByRole("textbox", { name: text.name });
+    await user.clear(field);
+    await user.type(field, "Civil work{Enter}");
+    await user.click(await within(dialog).findByRole("button", { name: text.replace }));
+    expect(
+      await screen.findByRole("group", {
+        name: "The workspace file could not be written.",
+        // Behind the popover, which is still open.
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+    const save = within(dialog).getByRole("button", { name: text.saveButton });
+    await waitFor(() => {
+      expect(save).not.toHaveAttribute("aria-busy");
+    });
+    expect(field).not.toHaveAttribute("readonly");
+  });
+
+  it("offers no Undo of the replaced view once another workspace is open", SLOW, async () => {
+    const taken = savedView({ id: 7, name: "Civil work", address: "/blockers" });
+    const { user } = await renderAt("/lines", {
+      views: [taken],
+      handlers: { workspace_open: () => opened({ workspace: otherWorkspace }) },
+    });
+    const dialog = await openPopover(user);
+    const field = within(dialog).getByRole("textbox", { name: text.name });
+    await user.clear(field);
+    await user.type(field, "Civil work{Enter}");
+    await user.click(await within(dialog).findByRole("button", { name: text.replace }));
+    await screen.findByRole("group", { name: "Deleted view Civil work" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: text.saveTitle })).not.toBeInTheDocument();
+    });
+    act(() => {
+      must(probe.open, "the page of the test")(otherWorkspace.id);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("group", { name: "Deleted view Civil work" })).toBeNull();
+    });
+  });
 });

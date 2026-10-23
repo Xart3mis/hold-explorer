@@ -1,4 +1,4 @@
-import { CircleCheck, Info, X, type LucideIcon } from "lucide-react";
+import { CircleCheck, Info, OctagonAlert, X, type LucideIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -17,8 +17,9 @@ import { Icon } from "../Icon/Icon";
 import styles from "./ToastRegion.module.css";
 
 /**
- * The most toasts shown at once. A newer toast pushes out the oldest one that offers no undo. One
- * that carries an undo is never pushed out, so for a moment there can be more.
+ * The most toasts shown at once. A newer toast pushes out the oldest one that offers no undo and
+ * says of no failure. One that carries an undo, or says that something failed, is never pushed
+ * out, so for a moment there can be more.
  */
 const MAX_TOASTS = 3;
 
@@ -51,8 +52,11 @@ export interface ToastOptions {
    * file". `Ctrl+Z` never runs it. Given only with `action`.
    */
   secondaryAction?: ToastAction;
-  /** An icon that says how it went. A failure that needs reading is a notice, not a toast. */
-  tone?: "info" | "success";
+  /**
+   * An icon that says how it went. `danger` says that something failed: such a toast stays until
+   * it is closed, and is never pushed out. A failure that needs more than a sentence is a notice.
+   */
+  tone?: "info" | "success" | "danger";
 }
 
 export interface ToastApi {
@@ -84,7 +88,13 @@ export function useToast(): ToastApi {
 const icons: Record<NonNullable<ToastOptions["tone"]>, LucideIcon> = {
   info: Info,
   success: CircleCheck,
+  danger: OctagonAlert,
 };
+
+/** Whether a toast keeps its place for a newer one: it offers an undo, or says what failed. */
+function isKept(item: ToastOptions): boolean {
+  return item.action?.isUndo === true || item.tone === "danger";
+}
 
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -218,8 +228,10 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
   const [held, setHeld] = useState(false);
   const remaining = useRef<number | null>(null);
 
+  // A failure stays until it is closed: it has no timer.
+  const isTimed = item.tone !== "danger";
   useEffect(() => {
-    if (held || item.leaving) return;
+    if (held || item.leaving || !isTimed) return;
     remaining.current ??= durationToken("--timeout-toast");
     // Without the token stylesheet there is no timeout to keep, and the toast stays until closed.
     if (remaining.current === null) return;
@@ -233,7 +245,7 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
         remaining.current = Math.max(0, remaining.current - (Date.now() - started));
       }
     };
-  }, [held, item.leaving, id, onDismiss]);
+  }, [held, item.leaving, isTimed, id, onDismiss]);
 
   const left = useCallback(() => {
     onLeft(id);
@@ -335,7 +347,7 @@ export function ToastRegion({ children }: { children: ReactNode }) {
       const going: string[] = [];
       for (const item of staying) {
         if (staying.length - going.length < MAX_TOASTS) break;
-        if (item.action?.isUndo !== true) going.push(item.id);
+        if (!isKept(item)) going.push(item.id);
       }
       // A toast that was already leaving goes now as well.
       const gone = latest.current.filter((item) => item.leaving || going.includes(item.id));

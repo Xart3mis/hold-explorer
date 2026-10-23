@@ -42,9 +42,9 @@ const CLOSED: Picker = {
 
 /**
  * The filter bar of a data screen: the status, one chip per active filter, the way to add one,
- * the way to clear them, the number of holds the filters keep, and "Save view". It reads the filters every
- * data screen shares (`useFilters`) and the options of the snapshot in view for them, so it takes
- * no props; a page places it under its header (`bar` of `Page`).
+ * the way to clear them, the number of holds the filters keep, and "Save view". It reads the
+ * filters every data screen shares (`useFilters`) and the options of the snapshot in view for
+ * them, so it takes no props; a page places it under its header (`bar` of `Page`).
  *
  * A chip and "Add filter" open the one picker of the bar. It stands under the place its control
  * had when it opened and keeps that place: what is ticked in it widens a chip, adds one, or

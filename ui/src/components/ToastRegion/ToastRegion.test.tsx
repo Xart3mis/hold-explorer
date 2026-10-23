@@ -16,6 +16,11 @@ function Capture() {
   return <input aria-label="Workspace name" />;
 }
 
+function must<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new Error("The test expected a value.");
+  return value;
+}
+
 function setup() {
   render(
     <ToastRegion>
@@ -349,6 +354,30 @@ describe("ToastRegion", () => {
       "Third. Undo",
       `Third. ${en.common.dismiss}`,
     ]);
+  });
+
+  it("keeps a failure until it is closed: never pushed out and never timed out", () => {
+    vi.useFakeTimers();
+    setup();
+    show({ message: "The view could not be restored.", tone: "danger" });
+    const live = screen.getByRole("status");
+    const failure = must(live.querySelector('[data-part="toast"]'));
+    expect(failure.querySelector("[data-tone='danger']")).not.toBeNull();
+    for (const message of ["First.", "Second.", "Third."]) show({ message });
+    expect(live).toHaveTextContent("The view could not be restored.");
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(live).toHaveTextContent("The view could not be restored.");
+    act(() => {
+      fireEvent.click(
+        within(failure as HTMLElement).getByRole("button", { name: en.common.dismiss }),
+      );
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(live).not.toHaveTextContent("The view could not be restored.");
   });
 
   it("leaves after the toast timeout", () => {

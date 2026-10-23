@@ -96,7 +96,6 @@ export function MenuButton({
   className,
   ...props
 }: MenuButtonProps) {
-  const offset = lengthToken("--space-1");
   const inert = !isPending && isInert;
   const unavailable = !isPending && !inert && isUnavailable;
   // Busy means an action runs: not so for a button that is unavailable.
@@ -129,23 +128,51 @@ export function MenuButton({
         {isPending ? <Spinner /> : <Icon icon={ChevronDown} className={styles.chevron} />}
       </RacButton>
       {described ? <VisuallyHidden id={descriptionId}>{description}</VisuallyHidden> : null}
-      <Popover
+      <MenuOverlay
         placement={align === "end" ? "bottom end" : "bottom start"}
-        className={cx(styles.popover)}
-        style={{ zIndex: "var(--z-dropdown)" }}
-        {...(offset === null ? {} : { offset })}
+        label={menuLabel}
+        // The menu carries its own name. Left alone it would take the text of its button, which
+        // is a value ("Unit 573 piping") and does not say what the menu holds.
+        isNamedApart
       >
-        <RacMenu
-          aria-label={menuLabel}
-          className={cx(styles.menu)}
-          // The menu carries its own name. Left alone it would take the text of its button, which
-          // is a value ("Unit 573 piping") and does not say what the menu holds.
-          render={(domProps) => <div {...domProps} aria-labelledby={undefined} />}
-        >
-          {children}
-        </RacMenu>
-      </Popover>
+        {children}
+      </MenuOverlay>
     </MenuTrigger>
+  );
+}
+
+interface MenuOverlayProps {
+  placement: "bottom start" | "bottom end" | "end top";
+  /** The name of the menu. */
+  label: string;
+  /**
+   * The menu is named by `label` alone, not by its button: a button that shows a value would
+   * otherwise name it.
+   */
+  isNamedApart?: boolean;
+  children?: ReactNode;
+}
+
+/** The overlay of a menu button: the popover, `--space-1` from its button, and the menu in it. */
+function MenuOverlay({ placement, label, isNamedApart = false, children }: MenuOverlayProps) {
+  const offset = lengthToken("--space-1");
+  return (
+    <Popover
+      placement={placement}
+      className={cx(styles.popover)}
+      style={{ zIndex: "var(--z-dropdown)" }}
+      {...(offset === null ? {} : { offset })}
+    >
+      <RacMenu
+        aria-label={label}
+        className={cx(styles.menu)}
+        {...(isNamedApart
+          ? { render: (domProps) => <div {...domProps} aria-labelledby={undefined} /> }
+          : {})}
+      >
+        {children}
+      </RacMenu>
+    </Popover>
   );
 }
 
@@ -335,24 +362,13 @@ export function IconMenuButton({
   children,
   className,
 }: IconMenuButtonProps) {
-  const offset = lengthToken("--space-1");
   return (
     <MenuTrigger {...(onOpenChange === undefined ? {} : { onOpenChange })}>
       <IconButton icon={icon} label={label} className={className} />
-      <Popover
-        placement={placement}
-        className={cx(styles.popover)}
-        style={{ zIndex: "var(--z-dropdown)" }}
-        {...(offset === null ? {} : { offset })}
-      >
-        <RacMenu
-          aria-label={menuLabel}
-          className={cx(styles.menu)}
-          render={(domProps) => <div {...domProps} aria-labelledby={undefined} />}
-        >
-          {children}
-        </RacMenu>
-      </Popover>
+      {/* The menu is named by its button, whose name is the label. */}
+      <MenuOverlay placement={placement} label={menuLabel}>
+        {children}
+      </MenuOverlay>
     </MenuTrigger>
   );
 }

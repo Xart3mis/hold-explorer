@@ -93,9 +93,10 @@ export interface SidebarProps {
 
 /**
  * The destinations of the list, in its order and in its two groups: what the snapshot holds, then,
- * set apart at the bottom, the setup. Between the two stand the saved views of the workspace. A destination that is not built yet looks and behaves like
- * the others, except for the Soon tag after its label. The last item collapses the sidebar to a
- * rail of icons and expands it again; the names stay for assistive technology and in tooltips.
+ * set apart at the bottom, the setup. Between the two stand the saved views of the workspace. A
+ * destination that is not built yet looks and behaves like the others, except for the Soon tag
+ * after its label. The last item collapses the sidebar to a rail of icons and expands it again;
+ * the names stay for assistive technology and in tooltips.
  */
 export function Sidebar({ destinations, addressOf, onRestart, form, onFormChange }: SidebarProps) {
   const id = useId();
