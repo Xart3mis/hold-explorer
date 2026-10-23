@@ -21,8 +21,19 @@ pub(super) fn logs_folder() -> String {
 /// The diagnostics text, plain lines `Name: value`, then the newest crash log of `local_data`
 /// (or the words "No crash log"). `webview` is the version of the WebView, when one was found.
 /// It names no workspace and no snapshot: only how many workspaces there are, and the kinds of
-/// the files that could not be read.
+/// the files that could not be read. The home folder and the local data folder are written `~`
+/// and `<local data>` throughout, as in the crash logs.
 pub fn diagnostics(state: &AppState, local_data: &Path, webview: Option<&str>) -> String {
+    diagnostics_at(state, local_data, webview, std::env::home_dir().as_deref())
+}
+
+/// [`diagnostics`] for the home folder `home`, which tests choose.
+pub(super) fn diagnostics_at(
+    state: &AppState,
+    local_data: &Path,
+    webview: Option<&str>,
+    home: Option<&Path>,
+) -> String {
     let folder = state.folder();
     let (list, list_error) = list_folder(&folder);
     let workspaces = match &list_error {
@@ -44,14 +55,10 @@ pub fn diagnostics(state: &AppState, local_data: &Path, webview: Option<&str>) -
     } else {
         format!("{} ({})", kinds.len(), kinds.join(", "))
     };
-    let problem = state
-        .settings_set_aside
-        .as_ref()
-        .or(state.settings_blocked.as_ref())
-        .map_or_else(
-            || "none".to_string(),
-            |error| format!("{:?}: {}", error.kind, error.message),
-        );
+    let problem = state.settings_problem_at_start.as_ref().map_or_else(
+        || "none".to_string(),
+        |error| format!("{:?}: {}", error.kind, error.message),
+    );
     let mut text = format!(
         "Version: {}\n\
          OS: {}\n\
@@ -87,5 +94,5 @@ pub fn diagnostics(state: &AppState, local_data: &Path, webview: Option<&str>) -
             Err(error) => text.push_str(&format!("Crash log: could not be read ({error})\n")),
         },
     }
-    text
+    crash::redact(&text, home, local_data)
 }

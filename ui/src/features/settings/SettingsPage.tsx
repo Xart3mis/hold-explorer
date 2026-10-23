@@ -32,8 +32,8 @@ function isDensity(value: string): value is Density {
  * Settings: the theme and the density, applied at once and saved; the name notes are signed
  * with, saved when the field is left or Enter is pressed; then About: the version of the app, the
  * folder the workspaces are kept in, with a way to show it and to change it, and the settings
- * file and the logs folder, each with a way to show it, and Copy diagnostics. While the folder changes, the other settings are inert, and the
- * folder row says so.
+ * file and the logs folder, each with a way to show it, and Copy diagnostics. While the folder
+ * changes, the other settings are inert, and the folder row says so.
  */
 export function SettingsPage() {
   const { start } = useShell();

@@ -99,6 +99,9 @@ pub struct AppState {
     settings_blocked: Option<CommandError>,
     /// That the settings file was set aside at start, until the first start reports it.
     settings_set_aside: Option<CommandError>,
+    /// The problem the settings file had when the state was made, kept for Copy diagnostics: the
+    /// start reports `settings_set_aside` once and forgets it.
+    settings_problem_at_start: Option<CommandError>,
     open: Option<Workspace>,
     /// The id of the workspace in `open`, kept beside it so a check of the view reads no file.
     open_id: Option<String>,
@@ -135,6 +138,7 @@ impl AppState {
             config_dir,
             data_dir,
             settings,
+            settings_problem_at_start: set_aside.clone().or_else(|| blocked.clone()),
             settings_blocked: blocked,
             settings_set_aside: set_aside,
             open: None,
