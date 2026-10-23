@@ -16,11 +16,6 @@ function required(name: string): string {
   return value;
 }
 
-/** The synthetic workbook of this run, which the open dialog answers with. */
-export function workbookPath(): string {
-  return required(OPEN_VAR);
-}
-
 /** The folder of this run where the save dialog saves. */
 export function saveDir(): string {
   return required(SAVE_DIR_VAR);

@@ -6,6 +6,10 @@
 // tauri-driver hands its environment to WebKitWebDriver and so to the app, and `tauri:options`
 // carries no environment, so the folders are given to tauri-driver as it is started. The spec
 // files run one after the other on the one port.
+//
+// Each spec file has a D-Bus session bus of its own as well: the app's single-instance plugin
+// takes a name on the session bus, and an app left over on a shared bus would make the next
+// spec's app hand over to it and exit.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { connect } from "node:net";
@@ -25,24 +29,22 @@ const DRIVER = process.env.TAURI_DRIVER ?? "tauri-driver";
 const HOST = "127.0.0.1";
 const PORT = 4444;
 
-/** How long tauri-driver has to listen on its port, and to stop when asked. */
+/** How long tauri-driver has to listen on its port, and a child to stop when asked. */
 const DRIVER_START_MS = 30_000;
-const DRIVER_STOP_MS = 10_000;
+const STOP_MS = 10_000;
 
-/** The tauri-driver of this worker, and the folders of its run. */
+/** The tauri-driver and the session bus of this worker, and the folders of its run. */
 let driver: ChildProcess | undefined;
+let bus: ChildProcess | undefined;
 let runDir: string | undefined;
+
+/** The D-Bus daemon from the PATH; `dbus-daemon --session` reads the system's session config. */
+const BUS_DAEMON = "dbus-daemon";
+
+/** How long tauri-driver has to listen on its port, and a child to stop when asked. */
 
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Stops tauri-driver at once and removes the folders of the run, when they are still there. */
-function stopNow(): void {
-  if (driver !== undefined && !exited(driver)) driver.kill("SIGTERM");
-  driver = undefined;
-  if (runDir !== undefined) rmSync(runDir, { recursive: true, force: true });
-  runDir = undefined;
 }
 
 /** Whether the child process has ended. */
@@ -50,11 +52,82 @@ function exited(child: ChildProcess): boolean {
   return child.exitCode !== null || child.signalCode !== null;
 }
 
-/** Resolves once something listens on the port of tauri-driver; fails when `driver` has exited. */
+/** Resolves when the child process has ended, at once when it already has. */
+function exitOf(child: ChildProcess): Promise<void> {
+  if (exited(child)) return Promise.resolve();
+  return new Promise((resolve) =>
+    child.once("exit", () => {
+      resolve();
+    }),
+  );
+}
+
+/** Asks the child to stop, and kills it when it has not within `STOP_MS`. */
+async function stop(child: ChildProcess | undefined): Promise<void> {
+  if (child === undefined || exited(child)) return;
+  child.kill("SIGTERM");
+  await Promise.race([exitOf(child), pause(STOP_MS)]);
+  if (!exited(child)) {
+    child.kill("SIGKILL");
+    await exitOf(child);
+  }
+}
+
+/** Stops tauri-driver and the bus at once and removes the folders of the run, when still there. */
+function stopNow(): void {
+  for (const child of [driver, bus]) {
+    if (child !== undefined && !exited(child)) child.kill("SIGTERM");
+  }
+  driver = undefined;
+  bus = undefined;
+  if (runDir !== undefined) rmSync(runDir, { recursive: true, force: true });
+  runDir = undefined;
+}
+
+/**
+ * Starts a session bus of its own for this spec file, and resolves with its address, which the
+ * daemon prints as its first line.
+ */
+function startBus(log: number): Promise<{ child: ChildProcess; address: string }> {
+  const child = spawn(BUS_DAEMON, ["--session", "--nofork", "--print-address=1"], {
+    stdio: ["ignore", "pipe", log],
+  });
+  return new Promise((resolve, reject) => {
+    let printed = "";
+    const timer = setTimeout(() => {
+      fail(new Error(`${BUS_DAEMON} printed no address within ${String(STOP_MS / 1000)} s.`));
+    }, STOP_MS);
+    function fail(error: Error): void {
+      clearTimeout(timer);
+      child.kill("SIGTERM");
+      reject(error);
+    }
+    child.once("error", (error) => {
+      fail(new Error(`${BUS_DAEMON} could not be started: ${error.message}`));
+    });
+    child.once("exit", (code) => {
+      fail(new Error(`${BUS_DAEMON} exited (${String(code)}) before it printed its address.`));
+    });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      printed += chunk.toString("utf8");
+      const end = printed.indexOf("\n");
+      if (end === -1) return;
+      clearTimeout(timer);
+      child.removeAllListeners("exit");
+      resolve({ child, address: printed.slice(0, end).trim() });
+    });
+  });
+}
+
+/** Resolves once something listens on the port of tauri-driver; fails when it exits first. */
 async function listening(child: ChildProcess, log: string): Promise<void> {
+  let gone = exited(child);
+  void exitOf(child).then(() => {
+    gone = true;
+  });
   const deadline = Date.now() + DRIVER_START_MS;
   while (Date.now() < deadline) {
-    if (exited(child)) {
+    if (gone) {
       throw new Error(
         `tauri-driver exited before it listened on port ${String(PORT)}. See ${log}.`,
       );
@@ -95,7 +168,9 @@ export const config: WebdriverIO.Config = {
   framework: "mocha",
   reporters: ["spec"],
   // The first start of WebKit, and the demo workspace that is built, take a while on a runner.
-  mochaOpts: { ui: "bdd", timeout: 180_000 },
+  // The test timeout is above the sum of the longest waits of any spec (about 17 minutes, for
+  // the saved view), so a wait that fails reports its own message and not Mocha's timeout.
+  mochaOpts: { ui: "bdd", timeout: 1_200_000 },
   waitforTimeout: 30_000,
   connectionRetryTimeout: 120_000,
   connectionRetryCount: 1,
@@ -115,6 +190,12 @@ export const config: WebdriverIO.Config = {
         `tauri-driver could not be run (${DRIVER}): ${help.error.message}. Install it as e2e/README.md says, or set TAURI_DRIVER to its path.`,
       );
     }
+    const daemon = spawnSync(BUS_DAEMON, ["--version"], { stdio: "ignore" });
+    if (daemon.error !== undefined) {
+      missing.push(
+        `${BUS_DAEMON} could not be run: ${daemon.error.message}. Install D-Bus as e2e/README.md says.`,
+      );
+    }
     if (missing.length > 0) {
       // WebdriverIO logs an error thrown here and runs the specs anyway, each of which would
       // fail on what is missing; the run stops here instead, saying what is missing.
@@ -126,7 +207,8 @@ export const config: WebdriverIO.Config = {
 
   /**
    * In the worker of a spec file, before its session: fresh home, config, and data folders, the
-   * paths the dialogs answer with, and a tauri-driver that hands them to the app.
+   * paths the dialogs answer with, a session bus of its own, and a tauri-driver that hands them
+   * all to the app.
    */
   async beforeSession(_config, _capabilities, _specs, cid) {
     runDir = mkdtempSync(path.join(tmpdir(), "hx-e2e-"));
@@ -137,8 +219,18 @@ export const config: WebdriverIO.Config = {
     process.env[OPEN_VAR] = path.join(runDir, "Holds.xlsx");
     process.env[SAVE_DIR_VAR] = saveDir;
 
+    // WebdriverIO calls no afterSession for a session that could not be created: the worker's
+    // exit stops tauri-driver and the bus then, so that the next spec file finds its port free.
+    process.once("exit", stopNow);
+
+    const log = path.join(LOGS, `tauri-driver-${cid}.log`);
+    const out = openSync(log, "a");
+    const started = await startBus(out);
+    bus = started.child;
+
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      DBUS_SESSION_BUS_ADDRESS: started.address,
       HOME: home,
       XDG_CONFIG_HOME: path.join(home, ".config"),
       XDG_DATA_HOME: path.join(home, ".local", "share"),
@@ -148,12 +240,7 @@ export const config: WebdriverIO.Config = {
     };
     delete env.HX_SMOKE;
 
-    const log = path.join(LOGS, `tauri-driver-${cid}.log`);
-    const out = openSync(log, "a");
     driver = spawn(DRIVER, ["--port", String(PORT)], { env, stdio: ["ignore", out, out] });
-    // WebdriverIO calls no afterSession for a session that could not be created: the worker's
-    // exit stops tauri-driver then, so that the next spec file finds its port free.
-    process.once("exit", stopNow);
     await listening(driver, log);
   },
 
@@ -172,16 +259,15 @@ export const config: WebdriverIO.Config = {
     }
   },
 
-  /** After the session of a spec file: tauri-driver stops, with WebKitWebDriver, and the folders go. */
+  /**
+   * After the session of a spec file: tauri-driver stops, with WebKitWebDriver, then the bus, and
+   * the folders go.
+   */
   async afterSession() {
-    const child = driver;
+    await stop(driver);
     driver = undefined;
-    if (child !== undefined && !exited(child)) {
-      child.kill("SIGTERM");
-      const deadline = Date.now() + DRIVER_STOP_MS;
-      while (!exited(child) && Date.now() < deadline) await pause(100);
-      if (!exited(child)) child.kill("SIGKILL");
-    }
+    await stop(bus);
+    bus = undefined;
     if (runDir !== undefined) rmSync(runDir, { recursive: true, force: true });
     runDir = undefined;
   },

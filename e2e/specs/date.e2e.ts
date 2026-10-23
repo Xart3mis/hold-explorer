@@ -6,7 +6,8 @@ import { fill, find, importWorkbook, text } from "../support/page.ts";
 
 /**
  * Runs in the page: a date as ui/src/text/format.ts writes one (`formatDate`), with the same
- * locale and options, in the window's own engine.
+ * locale and options, in the window's own engine. The locale and options are a copy of those of
+ * `formatDate` in ui/src/text/format.ts, and must be changed with them.
  */
 function formatInPage(year: number, month: number, day: number): string {
   return new Intl.DateTimeFormat("en-GB", {

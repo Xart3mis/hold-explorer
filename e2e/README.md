@@ -7,7 +7,11 @@ answered with paths from the environment (`HX_E2E_OPEN`, `HX_E2E_SAVE_DIR`) and 
 never runs. The release build has none of this.
 
 Each spec file in `specs/` runs alone, in a fresh home, config, and data folder of its own, with
-its own `tauri-driver`. Before its tests, `hx-cli synth` writes a synthetic workbook into that
+its own `tauri-driver` and its own D-Bus session bus. The bus matters: the app's single-instance
+plugin takes a name on the session bus, and an app left over from one spec on a shared bus would
+make the next spec's app hand over to it and exit. The config starts `dbus-daemon --session` for
+each spec file, gives its address to the app as `DBUS_SESSION_BUS_ADDRESS`, and stops it after
+the spec. Before its tests, `hx-cli synth` writes a synthetic workbook into that
 folder; the open dialog answers with it. No real project file is used.
 
 | Spec              | What it does                                                                   |
@@ -25,11 +29,11 @@ folder; the open dialog answers with it. No real project file is used.
 
 What CI does (`.github/workflows/ci.yml`, job `e2e`), on Ubuntu:
 
-1. Install the packages Tauri builds with, the WebKit driver, and a virtual display:
+1. Install the packages Tauri builds with, the WebKit driver, a virtual display, and D-Bus:
 
    ```sh
    sudo apt-get install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
-     libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb
+     libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb dbus
    ```
 
    On another distribution, `WebKitWebDriver` comes with its WebKitGTK package or a package of

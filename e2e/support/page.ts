@@ -27,10 +27,14 @@ export function startsWith(start: string): RegExp {
   return new RegExp(`^${literal(start)}(\\s|$)`);
 }
 
-/** Where to look: anywhere, or inside an element found before (`scope` of `find`). */
+/**
+ * Where to look: anywhere, or inside an element found before (`scope` of `find`). With `enabled`,
+ * only an element that is not disabled counts.
+ */
 export interface Where {
   within?: string;
   timeout?: number;
+  enabled?: boolean;
 }
 
 let marks = 0;
@@ -40,7 +44,8 @@ let marks = 0;
  * matches the pattern `source`/`flags`) with `data-e2e="<token>"`, inside the element `scope`
  * selects, and says whether one was found. The name is read as the accessibility tree reads it in
  * the cases the interface uses: `aria-label`, then `aria-labelledby`, then a `<label for>`, then
- * the text inside.
+ * the text inside, leaving out what is inside an `aria-hidden` element. With `enabledOnly`, an
+ * element that is disabled, natively or by `aria-disabled`, does not count.
  */
 function markInPage(
   role: string,
@@ -48,6 +53,7 @@ function markInPage(
   flags: string | null,
   scope: string | null,
   token: string,
+  enabledOnly: boolean,
 ): boolean {
   const implicit: Record<string, string> = {
     button: 'button, [role="button"]',
@@ -62,6 +68,14 @@ function markInPage(
   const root = scope === null ? document : document.querySelector(scope);
   if (root === null) return false;
   const clean = (value: string) => value.replace(/\s+/g, " ").trim();
+  // The text of a node, without the text of the aria-hidden elements inside it (a search result
+  // shows its ID once for the eye, aria-hidden, and once for the accessibility tree).
+  const textOf = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (node instanceof Element && node.getAttribute("aria-hidden") === "true") return "";
+    return [...node.childNodes].map(textOf).join("");
+  };
+  const ownText = (element: Element): string => [...element.childNodes].map(textOf).join("");
   const nameOf = (element: Element): string => {
     const label = element.getAttribute("aria-label");
     if (label !== null && label !== "") return clean(label);
@@ -70,15 +84,18 @@ function markInPage(
       return clean(
         by
           .split(/\s+/)
-          .map((id) => document.getElementById(id)?.textContent ?? "")
+          .map((id) => {
+            const target = document.getElementById(id);
+            return target === null ? "" : ownText(target);
+          })
           .join(" "),
       );
     }
     if (element.id !== "") {
       const owner = document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
-      if (owner !== null) return clean(owner.textContent);
+      if (owner !== null) return clean(ownText(owner));
     }
-    return clean(element.textContent);
+    return clean(ownText(element));
   };
   const matches =
     flags === null
@@ -87,8 +104,13 @@ function markInPage(
   for (const old of document.querySelectorAll(`[data-e2e="${token}"]`)) {
     old.removeAttribute("data-e2e");
   }
+  const disabled = (element: Element) =>
+    element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
   const found = [...root.querySelectorAll(selector)].find(
-    (element) => element.getClientRects().length > 0 && matches(nameOf(element)),
+    (element) =>
+      element.getClientRects().length > 0 &&
+      !(enabledOnly && disabled(element)) &&
+      matches(nameOf(element)),
   );
   if (found === undefined) return false;
   found.setAttribute("data-e2e", token);
@@ -105,13 +127,35 @@ export async function scope(role: string, name: Name, where: Where = {}): Promis
   const source = typeof name === "string" ? name : name.source;
   const flags = typeof name === "string" ? null : name.flags;
   await browser.waitUntil(
-    () => browser.execute(markInPage, role, source, flags, where.within ?? null, token),
+    () =>
+      browser.execute(
+        markInPage,
+        role,
+        source,
+        flags,
+        where.within ?? null,
+        token,
+        where.enabled === true,
+      ),
     {
       ...(where.timeout === undefined ? {} : { timeout: where.timeout }),
-      timeoutMsg: `No ${role} named ${String(name)} was shown${where.within === undefined ? "" : ` within ${where.within}`}.`,
+      timeoutMsg: `No ${where.enabled === true ? "enabled " : ""}${role} named ${String(name)} was shown${where.within === undefined ? "" : ` within ${where.within}`}.`,
     },
   );
   return `[data-e2e="${token}"]`;
+}
+
+/** Whether an element of `role` named `name` is shown now, without waiting. */
+export async function isShown(role: string, name: Name, where: Where = {}): Promise<boolean> {
+  return browser.execute(
+    markInPage,
+    role,
+    typeof name === "string" ? name : name.source,
+    typeof name === "string" ? null : name.flags,
+    where.within ?? null,
+    "probe",
+    where.enabled === true,
+  );
 }
 
 /** Waits for a shown element of `role` named `name`, and returns it. */
@@ -124,13 +168,6 @@ export async function press(role: string, name: Name, where: Where = {}): Promis
   const element = await find(role, name, where);
   await element.waitForClickable();
   await element.click();
-}
-
-/** Whether a control can be pressed: not disabled, natively or by its ARIA state. */
-export async function isEnabled(element: WebdriverIO.Element): Promise<boolean> {
-  const disabled = await element.getAttribute("disabled");
-  const ariaDisabled = await element.getAttribute("aria-disabled");
-  return disabled === null && ariaDisabled !== "true";
 }
 
 /** The text of the element as one line, its runs of white space made one space. */
@@ -203,17 +240,13 @@ export async function importWorkbook(): Promise<void> {
   await started();
   await press("button", text.welcome.openFile);
   await pageTitled(text.import.review.title, 60_000);
-  const importButton = await find("button", text.import.review.import);
-  await browser.waitUntil(() => isEnabled(importButton), {
-    timeout: 60_000,
-    timeoutMsg: "The review never allowed the import.",
-  });
-  await importButton.click();
+  // Found again on each try, enabled, as the review renders the button anew while it checks.
+  await press("button", text.import.review.import, { enabled: true, timeout: 60_000 });
   await pageTitled(text.destinations.name.overview, 60_000);
   await overviewFigures();
 }
 
-/** The selector of the filter bar's total, and its text once it is read and not on its way. */
+/** The text of the filter bar's total, once it is read and not on its way. */
 export async function filterTotal(): Promise<string> {
   const total = '[data-part="filter-total"]';
   let shown = "";

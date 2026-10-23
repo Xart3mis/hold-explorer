@@ -1,5 +1,15 @@
 // 4. Search for a line ID and open its panel.
-import { find, key, KEYS, openDemo, press, scope, startsWith, text } from "../support/page.ts";
+import {
+  find,
+  isShown,
+  key,
+  KEYS,
+  openDemo,
+  press,
+  scope,
+  startsWith,
+  text,
+} from "../support/page.ts";
 
 describe("the search", () => {
   it("finds a line by its ID and opens it in the panel", async () => {
@@ -17,7 +27,10 @@ describe("the search", () => {
     const results = await scope("listbox", text.search.results);
     await press("option", startsWith(lineId), { within: results });
     await find("heading", startsWith(lineId));
-    await key(KEYS.escape); // Escape closes the panel.
+    await key(KEYS.escape);
+    await browser.waitUntil(async () => !(await isShown("heading", startsWith(lineId))), {
+      timeoutMsg: `Escape did not close the panel of ${lineId}.`,
+    });
   });
 });
 
