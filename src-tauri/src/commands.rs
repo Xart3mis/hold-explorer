@@ -25,8 +25,6 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::crash;
-
 use crate::app::{
     check_extension, diagnostics, fonts, save, AppStart, AppState, CommandError, Content,
     CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
@@ -631,9 +629,9 @@ where
     R: Runtime,
     P: FnOnce(&str) -> Result<(), CommandError> + Send + 'static,
 {
-    let local_data = crash::local_data_folder(crate::IDENTIFIER);
     let webview = tauri::webview_version().ok();
     let text = blocking(app, move |state| {
+        let local_data = state.local_data_dir().to_path_buf();
         Ok(diagnostics(state, &local_data, webview.as_deref()))
     })
     .await?;
@@ -702,7 +700,11 @@ mod tests {
     impl Harness {
         fn new() -> Harness {
             let dir = TempDir::new().unwrap();
-            let state = AppState::new(dir.path().join("config"), dir.path().join("data"));
+            let state = AppState::new(
+                dir.path().join("config"),
+                dir.path().join("data"),
+                dir.path().join("local"),
+            );
             let app = mock_builder()
                 .manage(Mutex::new(state))
                 .manage(crate::app::SessionClipboard::default())

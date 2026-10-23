@@ -786,7 +786,7 @@ fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
     let mut state = fx.state();
     // A file where the folder in use should be: it cannot be listed, so a move is refused after
     // the new folder was made.
-    fs::create_dir_all(fx.data()).unwrap();
+    fs::create_dir_all(fx.local()).unwrap();
     fs::write(fx.workspaces(), "in the way").unwrap();
     let new = elsewhere(&fx, "new");
     let error = state
@@ -815,7 +815,7 @@ fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
 fn a_refused_set_removes_every_empty_level_it_made_and_no_folder_that_was_there() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    fs::create_dir_all(fx.data()).unwrap();
+    fs::create_dir_all(fx.local()).unwrap();
     fs::write(fx.workspaces(), "in the way").unwrap();
     // Two levels are made under a folder that was there before.
     let above = elsewhere(&fx, "above");

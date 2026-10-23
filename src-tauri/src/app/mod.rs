@@ -93,7 +93,8 @@ struct Columns {
 /// What the application holds between commands.
 pub struct AppState {
     config_dir: PathBuf,
-    data_dir: PathBuf,
+    /// The local data folder: the default workspaces folder and the crash logs live under it.
+    local_data_dir: PathBuf,
     settings: Settings,
     /// Why saving the settings is refused, when the settings file could not be read or moved aside.
     settings_blocked: Option<CommandError>,
@@ -127,16 +128,33 @@ pub struct AppState {
 
 impl AppState {
     /// Reads the settings from `config_dir` at once. Workspaces are kept in `workspaces/` under
-    /// `data_dir` unless the settings name another folder.
-    pub fn new(config_dir: PathBuf, data_dir: PathBuf) -> AppState {
+    /// `local_data_dir` unless the settings name another folder.
+    ///
+    /// A user of an earlier version has them in `workspaces/` under `data_dir`, which is the
+    /// local data folder on Linux and macOS but not on Windows. When the settings name no folder,
+    /// the default folder holds no workspace file, and the old one holds at least one, the old
+    /// folder becomes the chosen folder and is saved in the settings; nothing is moved. When the
+    /// settings cannot be saved, the old folder is used for this session only.
+    pub fn new(config_dir: PathBuf, data_dir: PathBuf, local_data_dir: PathBuf) -> AppState {
         let LoadedSettings {
-            settings,
+            mut settings,
             blocked,
             set_aside,
         } = load_settings_checked(&config_dir);
+        if settings.workspace_dir.is_none() {
+            let default = local_data_dir.join("workspaces");
+            let old = data_dir.join("workspaces");
+            if old != default && !holds_workspace_files(&default) && holds_workspace_files(&old) {
+                settings.workspace_dir = Some(old.to_string_lossy().into_owned());
+                if blocked.is_none() {
+                    // A failed save repeats the carry-over at the next start, which is harmless.
+                    let _ = save_settings(&config_dir, &settings);
+                }
+            }
+        }
         AppState {
             config_dir,
-            data_dir,
+            local_data_dir,
             settings,
             settings_problem_at_start: set_aside.clone().or_else(|| blocked.clone()),
             settings_blocked: blocked,
@@ -205,7 +223,12 @@ impl AppState {
 
     /// The folder the workspaces are kept in when the settings name none.
     fn default_folder(&self) -> PathBuf {
-        self.data_dir.join("workspaces")
+        self.local_data_dir.join("workspaces")
+    }
+
+    /// The local data folder, where the crash logs are written.
+    pub fn local_data_dir(&self) -> &Path {
+        &self.local_data_dir
     }
 
     /// Everything the interface needs at start; reopens the last workspace when it can. A last
@@ -236,7 +259,7 @@ impl AppState {
         AppStart {
             version: env!("CARGO_PKG_VERSION").to_string(),
             settings_file: settings_file(&self.config_dir),
-            logs_folder: diagnostics::logs_folder(),
+            logs_folder: diagnostics::logs_folder(&self.local_data_dir),
             settings: self.settings.clone(),
             list: workspaces::list_view(raw, &folder),
             list_error,
@@ -439,6 +462,13 @@ impl AppState {
 
 /// The listing of a workspace folder, as a start shows it: a folder that cannot be listed gives
 /// an empty list and the error.
+/// Whether the folder holds a file the store lists, readable or not. A folder that cannot be
+/// listed holds none.
+fn holds_workspace_files(folder: &Path) -> bool {
+    list_workspaces(folder)
+        .is_ok_and(|list| !list.workspaces.is_empty() || !list.unreadable.is_empty())
+}
+
 fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
     match list_workspaces(folder) {
         Ok(raw) => (raw, None),
@@ -507,6 +537,8 @@ mod export_tests;
 mod folder_tests;
 #[cfg(test)]
 mod import_tests;
+#[cfg(test)]
+mod local_folder_tests;
 #[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]

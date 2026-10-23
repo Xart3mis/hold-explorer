@@ -10,12 +10,9 @@ use crate::crash;
 /// How many lines of the newest crash log the text holds.
 pub(super) const CRASH_LOG_LINES: usize = 60;
 
-/// The folder of the crash logs, as text: under the same local data folder the crash hook writes
-/// to.
-pub(super) fn logs_folder() -> String {
-    crash::logs_dir(&crash::local_data_folder(crate::IDENTIFIER))
-        .to_string_lossy()
-        .into_owned()
+/// The folder of the crash logs under `local_data`, as text: the folder the crash hook writes to.
+pub(super) fn logs_folder(local_data: &Path) -> String {
+    crash::logs_dir(local_data).to_string_lossy().into_owned()
 }
 
 /// The diagnostics text, plain lines `Name: value`, then the newest crash log of `local_data`

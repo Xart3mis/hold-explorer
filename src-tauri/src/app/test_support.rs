@@ -12,8 +12,8 @@ use super::import::{ImportCommit, ImportPhase, TargetChoice};
 use super::snapshots::ViewRef;
 use super::AppState;
 
-/// One temporary folder that holds the configuration folder `config/`, the data folder `data/`
-/// (with the workspace folder `data/workspaces/`), and input files in `input/`.
+/// One temporary folder that holds the configuration folder `config/`, the data folder `data/`,
+/// the local data folder `local/` (with the workspace folder `local/workspaces/`), and input files in `input/`.
 pub(super) struct Fixture {
     pub(super) dir: TempDir,
 }
@@ -33,13 +33,24 @@ impl Fixture {
         self.dir.path().join("data")
     }
 
+    /// The local data folder, which holds the workspace folder `local/workspaces/` by default.
+    pub(super) fn local(&self) -> PathBuf {
+        self.dir.path().join("local")
+    }
+
+    /// The default workspace folder.
     pub(super) fn workspaces(&self) -> PathBuf {
+        self.local().join("workspaces")
+    }
+
+    /// The workspace folder of earlier versions, `data/workspaces/`.
+    pub(super) fn old_workspaces(&self) -> PathBuf {
         self.data().join("workspaces")
     }
 
     /// A state on the configuration and data folders, as the app starts.
     pub(super) fn state(&self) -> AppState {
-        AppState::new(self.config(), self.data())
+        AppState::new(self.config(), self.data(), self.local())
     }
 
     /// The path of the input file `name`; the input folder is made when missing.

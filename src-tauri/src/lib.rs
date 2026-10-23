@@ -175,7 +175,8 @@ fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
     tauri::WebviewWindowBuilder::from_config(app.handle(), &main)?.build()?;
     let config_dir = app.path().app_config_dir()?;
     let data_dir = app.path().app_data_dir()?;
-    let state = AppState::new(config_dir, data_dir);
+    let local_data_dir = app.path().app_local_data_dir()?;
+    let state = AppState::new(config_dir, data_dir, local_data_dir);
     // The window exists but has drawn nothing yet: drawing starts with the event loop.
     if let Some(window) = app.get_webview_window("main") {
         // A failure leaves the dark frame, which the page replaces once it has loaded.
