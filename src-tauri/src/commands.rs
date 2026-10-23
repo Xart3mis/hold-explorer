@@ -244,7 +244,8 @@ pub async fn restore_view<R: Runtime>(
     .await
 }
 
-/// Moves a saved view to an index of the list.
+/// Moves a saved view to an index of the list. The index counts in the list as it is after the
+/// view is taken out of it; an index past the end puts the view last.
 #[tauri::command]
 pub async fn move_view<R: Runtime>(
     app: AppHandle<R>,
@@ -800,27 +801,40 @@ mod tests {
         let workspace = open["workspace"]["id"].as_str().unwrap().to_string();
         assert_eq!(open["views"], serde_json::json!([]));
 
+        // Ids 1 and 2 are issued first, so that the fixture's id 3 is one that was.
+        for (n, name) in ["One", "Two"].into_iter().enumerate() {
+            let mut filler = args["save_view"].clone();
+            filler["workspace"] = workspace.clone().into();
+            filler["name"] = name.into();
+            let listed = harness.invoke("save_view", &filler).unwrap();
+            assert_eq!(listed[n]["id"], n + 1);
+        }
         let mut save = args["save_view"].clone();
         save["workspace"] = workspace.clone().into();
         let saved = harness.invoke("save_view", &save).unwrap();
-        assert_eq!(saved[0]["id"], 1);
-        assert_eq!(saved[0]["name"], "Old valve holds");
-        assert_eq!(saved[0]["address"], "/lines?mode=holds&sort=age");
-        assert_eq!(saved[0]["filters"]["text"], "valve");
+        assert_eq!(saved[2]["id"], 3);
+        assert_eq!(saved[2]["name"], "Old valve holds");
+        assert_eq!(saved[2]["address"], "/lines?mode=holds&sort=age");
+        assert_eq!(saved[2]["filters"]["text"], "valve");
 
-        let rename = serde_json::json!({"workspace": workspace, "id": 1, "name": "Stale"});
+        let rename = serde_json::json!({"workspace": workspace, "id": 3, "name": "Stale"});
         let renamed = harness.invoke("rename_view", &rename).unwrap();
-        assert_eq!(renamed[0]["name"], "Stale");
+        assert_eq!(renamed[2]["name"], "Stale");
 
-        let delete = serde_json::json!({"workspace": workspace, "id": 1});
+        let delete = serde_json::json!({"workspace": workspace, "id": 3});
         assert_eq!(
-            harness.invoke("delete_view", &delete).unwrap(),
-            serde_json::json!([])
+            harness
+                .invoke("delete_view", &delete)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            2
         );
         let mut restore = args["restore_view"].clone();
         restore["workspace"] = workspace.clone().into();
         let restored = harness.invoke("restore_view", &restore).unwrap();
-        assert_eq!(restored[0]["id"], 3);
+        assert_eq!(restored[1]["id"], 3);
         let moved = harness
             .invoke(
                 "move_view",

@@ -157,6 +157,8 @@ impl AppState {
             .and_then(|path| Workspace::open(&path).ok())
             .and_then(|workspace| describe(&workspace).ok().map(|open| (workspace, open)))
             .map(|(workspace, mut open)| {
+                // The damage of the saved views was reported when the workspace was opened.
+                open.warning = None;
                 // The snapshot that was selected stays selected while the workspace has it.
                 if let Some(id) =
                     was_selected.filter(|id| open.snapshots.iter().any(|s| s.id == *id))

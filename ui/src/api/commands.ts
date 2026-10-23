@@ -185,6 +185,7 @@ export const api = {
   /** Puts a deleted view back with its id at `index` of the list. */
   restoreView: (workspace: string, view: SavedView, index: number) =>
     call("restore_view", { workspace, view, index }),
+  /** Moves a view to `index` of the list as it is after the view is taken out; past the end is last. */
   moveView: (workspace: string, id: number, index: number) =>
     call("move_view", { workspace, id, index }),
   importOpen: (path: string) => call("import_open", { path }),

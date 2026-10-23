@@ -675,7 +675,8 @@ export function installDevCommands(
 
   // The saved views of each workspace, in sidebar order; they last until the page is reloaded.
   const views = new Map<string, SavedView[]>();
-  let nextView = 1;
+  // The next id of each workspace: one more than the highest ever given.
+  const nextViews = new Map<string, number>();
 
   const open = (workspace: WorkspaceView): WorkspaceOpen => {
     const held = snapshots.get(workspace.id) ?? [];
@@ -735,12 +736,45 @@ export function installDevCommands(
         }
         return found;
       },
+      nextId: (): number => nextViews.get(workspace) ?? 1,
+      issue: (next: number) => nextViews.set(workspace, next),
       keep: (next: SavedView[]): SavedView[] => {
         views.set(workspace, next);
         if (start.open) start.open = { ...start.open, views: next };
         return next;
       },
     };
+  };
+
+  const checkRoom = (current: { list: SavedView[] }) => {
+    if (current.list.length >= 100) {
+      throw failure(
+        "TooManyViews",
+        "A workspace holds at most 100 saved views. Delete a view you no longer use, then save again.",
+      );
+    }
+  };
+
+  /** A data screen's path, and no selection in its query, as the Rust side demands. */
+  const checkAddress = (address: string) => {
+    const [path = "", query = ""] = address.split(/\?(.*)/s, 2);
+    const keys = query === "" ? [] : query.split("&").map((pair) => pair.split("=")[0] ?? "");
+    const selection = keys.some(
+      (key) =>
+        key.includes("%") ||
+        ["line", "hold", "blocker"].includes(key) ||
+        (path === "/breakdown" && key === "open"),
+    );
+    if (
+      !["/overview", "/breakdown", "/lines", "/blockers"].includes(path) ||
+      selection ||
+      address.includes("#")
+    ) {
+      throw failure(
+        "ViewAddress",
+        `The address "${address}" cannot be saved as a view. This is a fault of Hold Explorer; report it, and save the view again from the screen.`,
+      );
+    }
   };
 
   const checkName = (current: { list: SavedView[] }, name: string, except: number | null) => {
@@ -923,20 +957,18 @@ export function installDevCommands(
     save_view: (payload) => {
       const current = viewsOf(payload);
       const name = text(payload, "name").trim();
+      const address = text(payload, "address");
       checkName(current, name, null);
-      if (current.list.length >= 100) {
-        throw failure(
-          "TooManyViews",
-          "A workspace holds at most 100 saved views. Delete a view you no longer use, then save again.",
-        );
-      }
+      checkAddress(address);
+      checkRoom(current);
+      const id = current.nextId();
+      current.issue(id + 1);
       const saved: SavedView = {
-        id: nextView,
+        id,
         name,
-        address: text(payload, "address"),
+        address,
         filters: (payload as { filters: FilterSpec }).filters,
       };
-      nextView += 1;
       return current.keep([...current.list, saved]);
     },
     rename_view: (payload) => {
@@ -955,10 +987,19 @@ export function installDevCommands(
     restore_view: (payload) => {
       const current = viewsOf(payload);
       const { view, index } = payload as { view: SavedView; index: number };
-      checkName(current, view.name.trim(), null);
+      const name = view.name.trim();
+      checkName(current, name, null);
+      checkAddress(view.address);
+      checkRoom(current);
+      if (view.id < 1 || view.id >= current.nextId()) current.find(-1);
+      if (current.list.some((other) => other.id === view.id)) {
+        throw failure(
+          "Internal",
+          "That saved view is in the list already, so it was not restored. Reload the list; if it keeps happening, report it.",
+        );
+      }
       const next = [...current.list];
-      next.splice(Math.min(index, next.length), 0, view);
-      nextView = Math.max(nextView, view.id + 1);
+      next.splice(Math.min(index, next.length), 0, { ...view, name });
       return current.keep(next);
     },
     move_view: (payload) => {

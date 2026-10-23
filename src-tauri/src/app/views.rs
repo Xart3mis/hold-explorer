@@ -44,11 +44,17 @@ pub(super) fn read_views(
 fn clean_name(name: &str) -> Result<String, CommandError> {
     let name = name.trim();
     let length = name.chars().count();
-    if length == 0 || length > NAME_LIMIT {
+    if length == 0 {
+        return Err(CommandError::new(
+            ErrorKind::ViewName,
+            "A saved view needs a name of at least one character. Type a name, then save again.",
+        ));
+    }
+    if length > NAME_LIMIT {
         return Err(CommandError::new(
             ErrorKind::ViewName,
             format!(
-                "A saved view needs a name of 1 to {NAME_LIMIT} characters, and this one has {length}. Type a shorter or longer name, then save again."
+                "A saved view's name has at most {NAME_LIMIT} characters, and this one has {length}. Shorten the name, then save again."
             ),
         ));
     }
@@ -81,6 +87,14 @@ fn check_name_free(
 /// selection. Breakdown's `open` names a selected group, so it counts as a selection there.
 fn check_address(address: &str) -> Result<(), CommandError> {
     let (path, query) = address.split_once('?').unwrap_or((address, ""));
+    if address.contains('#') {
+        return Err(CommandError::new(
+            ErrorKind::ViewAddress,
+            format!(
+                "The address \"{address}\" cannot be saved as a view: it has a fragment. This is a fault of Hold Explorer; report it, and save the view again from the screen."
+            ),
+        ));
+    }
     let refused = |why: &str| {
         CommandError::new(
             ErrorKind::ViewAddress,
@@ -96,6 +110,10 @@ fn check_address(address: &str) -> Result<(), CommandError> {
     }
     for pair in query.split('&') {
         let key = pair.split_once('=').map_or(pair, |(key, _)| key);
+        // An escaped key could spell a selection; the interface writes none.
+        if key.contains('%') {
+            return Err(refused("a name in its query is escaped"));
+        }
         if SELECTION_PARAMS.contains(&key) || (path == "/breakdown" && key == "open") {
             return Err(refused(&format!("it carries the selection \"{key}\"")));
         }
@@ -186,6 +204,10 @@ impl AppState {
         let name = clean_name(&view.name)?;
         check_address(&view.address)?;
         let mut views = list_for_write(workspace)?;
+        // Only an id that was issued can come back.
+        if view.id < 1 || view.id >= workspace.next_view_id()? {
+            return Err(view_not_found());
+        }
         if views.iter().any(|other| other.id == view.id) {
             return Err(CommandError::internal(
                 "That saved view is in the list already, so it was not restored. Reload the list; if it keeps happening, report it.",
@@ -198,8 +220,9 @@ impl AppState {
         Ok(views)
     }
 
-    /// Moves a view to `index` of the list as it is after the view is taken out; an index past
-    /// the end puts it last. Returns the list.
+    /// Moves a view to `index` of the list as it is after the view is taken out (so moving to
+    /// the end is the length of the list less one, and any larger index is the end too). Returns
+    /// the list.
     pub fn move_view(
         &mut self,
         workspace: &str,
@@ -243,10 +266,12 @@ fn position(views: &[SavedView], id: i64) -> Result<usize, CommandError> {
     views
         .iter()
         .position(|view| view.id == id)
-        .ok_or_else(|| {
-            CommandError::new(
-                ErrorKind::ViewNotFound,
-                "That saved view is not in the list. It may have been deleted already; the list shows the views there are.",
-            )
-        })
+        .ok_or_else(view_not_found)
+}
+
+fn view_not_found() -> CommandError {
+    CommandError::new(
+        ErrorKind::ViewNotFound,
+        "That saved view is not in the list. It may have been deleted already; the list shows the views there are.",
+    )
 }

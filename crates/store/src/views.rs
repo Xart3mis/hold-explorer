@@ -65,7 +65,8 @@ impl Workspace {
         let counter = counter
             .and_then(|text| text.parse::<i64>().ok())
             .unwrap_or(1);
-        // Whatever the counter says, never an id a view in the list holds.
+        // Whatever the counter says, never an id a view in the list holds. A damaged list holds
+        // none we can read, and the next write replaces it, so it counts as empty here.
         let highest = self
             .saved_views()
             .unwrap_or_default()

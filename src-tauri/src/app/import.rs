@@ -607,7 +607,10 @@ impl AppState {
             },
             &options,
         )?;
-        Ok((snapshot, describe(workspace)?))
+        let mut open = describe(workspace)?;
+        // The damage of the saved views is reported when the workspace is opened.
+        open.warning = None;
+        Ok((snapshot, open))
     }
 
     /// Undoes what a failed commit did to the workspaces. Returns a sentence for the user when a

@@ -385,3 +385,88 @@ fn a_warning_about_the_views_and_one_about_the_settings_are_both_in_the_warning(
         warning.message
     );
 }
+
+#[test]
+fn an_escaped_key_or_a_fragment_cannot_hide_a_selection() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let id = state.open_id();
+    for bad in [
+        "/lines?%6Cine=L1",
+        "/lines?mode=holds&bl%6Fcker=P",
+        "/lines?mode=holds&%6C%69ne=L1",
+        "/lines#top",
+        "/lines?mode=holds#line=L1",
+    ] {
+        assert_eq!(
+            kind(state.save_view(&id, "Bad", bad, FilterSpec::default())),
+            ErrorKind::ViewAddress,
+            "{bad}"
+        );
+    }
+    // A value may be escaped; only a key may not.
+    state
+        .save_view(&id, "Good", "/lines?mode=a%20b", FilterSpec::default())
+        .unwrap();
+}
+
+#[test]
+fn a_restored_id_must_be_one_that_was_issued() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let views = save(&mut state, "A").unwrap();
+    let id = state.open_id();
+    for bad in [i64::MAX, 0, -1, 2, 50] {
+        let view = SavedView {
+            id: bad,
+            name: "Back".into(),
+            ..views[0].clone()
+        };
+        assert_eq!(
+            kind(state.restore_view(&id, view, 0)),
+            ErrorKind::ViewNotFound,
+            "{bad}"
+        );
+    }
+    assert_eq!(listed(&state), views);
+    // The counter did not move, so the next save still gets 2.
+    assert_eq!(save(&mut state, "B").unwrap()[1].id, 2);
+}
+
+#[test]
+fn an_empty_name_says_a_name_needs_a_character() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let error = save(&mut state, "  ").unwrap_err();
+    assert_eq!(error.kind, ErrorKind::ViewName);
+    assert!(
+        error.message.contains("at least one character"),
+        "{}",
+        error.message
+    );
+    assert!(!error.message.contains("has 0"), "{}", error.message);
+}
+
+#[test]
+fn an_import_does_not_repeat_the_warning_about_damaged_views() {
+    let fx = Fixture::new();
+    let state = small(&fx);
+    store_raw(&state, "{not json");
+    let id = state.open_id();
+    let mut again = fx.state();
+    assert!(again.open_workspace(&id).unwrap().warning.is_some());
+    again.import_open(&fx.synth("b.xlsx", 2)).unwrap();
+    let done = again
+        .import_commit(
+            super::ImportCommit {
+                target: super::TargetChoice::Existing { id },
+                taken_at: super::test_support::at("2026-10-06 00:00:00"),
+                date_edited: false,
+                replace: None,
+            },
+            &super::test_support::no_progress,
+        )
+        .unwrap();
+    assert!(done.open.warning.is_none());
+    assert!(done.open.views.is_empty());
+}
