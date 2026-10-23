@@ -14,7 +14,7 @@ import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import { formatDateTime } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { EXPORT_SHORTCUT, IMPORT_SHORTCUT } from "../shell/shortcuts";
+import { EXPORT_SHORTCUT, IMPORT_SHORTCUT, SHEET_SHORTCUT } from "../shell/shortcuts";
 
 /** The groups of the palette, in the order it shows them. */
 export const PALETTE_GROUPS = [
@@ -51,6 +51,8 @@ export interface PaletteActions {
   /** Opens a destination as its sidebar item or its shortcut does. */
   openDestination: (path: string) => void;
   startImport: () => void;
+  /** Opens the shortcut sheet. */
+  openShortcuts: () => void;
   /** Runs the shown screen's `Ctrl+E` item; `null` where `Ctrl+E` does nothing. */
   exportView: (() => void) | null;
   clearFilters: () => void;
@@ -172,6 +174,14 @@ function actionItems(context: PaletteContext): PaletteItem[] {
       run: saveView,
     });
   }
+  items.push({
+    id: "action:shortcuts",
+    group: "actions",
+    label: t("palette.shortcuts"),
+    keywords: keywordsOf("palette.keywords.shortcuts"),
+    shortcut: SHEET_SHORTCUT,
+    run: actions.openShortcuts,
+  });
   return items;
 }
 

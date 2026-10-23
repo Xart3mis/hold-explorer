@@ -42,7 +42,8 @@ import { useSearchChoice } from "../search/choose";
 import { MatchedText } from "../search/results";
 import { MIN_QUERY_LENGTH, SEND_AFTER_MS } from "../search/SearchField";
 import type { ShellProblem } from "../shell/problem";
-import { ariaKeyShortcuts, formatShortcut, MODAL_ATTRIBUTE } from "../shell/shortcuts";
+import { KeyCaps } from "../shell/KeyCaps";
+import { ariaKeyShortcuts, MODAL_ATTRIBUTE } from "../shell/shortcuts";
 import { useSelectSnapshot } from "../shell/SnapshotSelector";
 import { usePageExport } from "../shell/topBarSlot";
 import { useApplyView } from "../views/apply";
@@ -156,20 +157,6 @@ function useLines(text: string) {
     error: failed ? asCommandError(query.error).message : null,
     retry: () => void query.refetch(),
   };
-}
-
-/** The shortcut of an item as key caps, one for each key. Decoration: the item names it. */
-function KeyCaps({ shortcut }: { shortcut: string }) {
-  const parts = formatShortcut(shortcut).split("+");
-  return (
-    <kbd aria-hidden="true" className={styles.keys}>
-      {parts.map((part, index) => (
-        <kbd key={index} className={styles.key}>
-          {part === "" ? "+" : part}
-        </kbd>
-      ))}
-    </kbd>
-  );
 }
 
 /** What describes an item to assistive technology after its label. */
@@ -367,6 +354,8 @@ export interface CommandPaletteProps {
   onRestart: () => void;
   /** Says what went wrong, for the shell to show under the top bar; `null` takes it back. */
   onProblem: (problem: ShellProblem | null) => void;
+  /** Opens the shortcut sheet. */
+  openShortcuts: () => void;
 }
 
 /**
@@ -382,6 +371,7 @@ export function CommandPalette({
   openDestination,
   onRestart,
   onProblem,
+  openShortcuts,
 }: CommandPaletteProps) {
   const { start, report } = useShell();
   const { isBusy } = useStart();
@@ -415,6 +405,7 @@ export function CommandPalette({
     actions: {
       openDestination,
       startImport: () => void startImport(),
+      openShortcuts,
       exportView,
       clearFilters: clear,
       setTheme: (theme) => {

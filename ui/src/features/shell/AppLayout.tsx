@@ -31,7 +31,9 @@ import { createDetailFocus, DetailFocusContext, useSelection } from "../detail/s
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
 import { CommandPalette } from "../palette/CommandPalette";
 import type { ShellProblem } from "./problem";
-import { shortcutBindings, usePaletteShortcut, useShortcuts } from "./shortcuts";
+import { focusSearchField } from "../search/SearchField";
+import { shortcutBindings, usePageShortcuts, usePaletteShortcut, useShortcuts } from "./shortcuts";
+import { ShortcutSheet } from "./ShortcutSheet";
 import styles from "./Shell.module.css";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -281,11 +283,20 @@ function LoadedShell({ start, destinations }: ShellProps) {
 
   // The command palette: Ctrl+K opens it from anywhere, and closes it.
   const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // The shortcut sheet: `?` opens it. The two modals never stand over each other: Ctrl+K over the
+  // sheet closes it and opens the palette, and the sheet's item in the palette closes the palette.
+  const [isSheetOpen, setSheetOpen] = useState(false);
   usePaletteShortcut(
     useCallback(() => {
+      setSheetOpen(false);
       setPaletteOpen((isOpen) => !isOpen);
     }, []),
   );
+  const openSheet = useCallback(() => {
+    setPaletteOpen(false);
+    setSheetOpen(true);
+  }, []);
+  usePageShortcuts({ focusSearch: focusSearchField, openSheet });
 
   // The detail panel shows while the address of a data destination selects a line, a hold, or a
   // blocker, and there is a snapshot to read it from.
@@ -462,7 +473,9 @@ function LoadedShell({ start, destinations }: ShellProps) {
               openDestination={openDestination}
               onRestart={restart}
               onProblem={setProblem}
+              openShortcuts={openSheet}
             />
+            <ShortcutSheet isOpen={isSheetOpen} onOpenChange={setSheetOpen} />
           </TopBarSlotProvider>
         </DetailFocusContext>
       </ViewActionsProvider>

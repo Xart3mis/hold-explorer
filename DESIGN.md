@@ -1585,6 +1585,19 @@ The one place every destination and action of the app is reached from the keyboa
 - **Motion:** the scrim fades in over `--duration-slow`; the surface fades in and moves `--space-2` down to its place over `--duration-slow` with `--ease-out`. Both leave at once, so the focus is where the item chosen puts it. Under reduced motion both fade in place.
 - **Disabled:** never. An item that cannot run now is left out.
 
+### Shortcut sheet
+
+Every shortcut of the app on one page, for a reader who wants to know the key and not hunt for it. It is the second of the two modals the app has (the other is the command palette). It is drawn from the one list of shortcuts in `shortcuts.ts`, so a shortcut cannot exist without its line here.
+
+- **Opening:** `?` (the character typed, so Shift and `/` on a US layout) opens it as a shortcut of the page: not in a text field, not under a menu, a list, or a popover. The command palette's "Keyboard shortcuts" item, which shows `?`, opens it too. `/` is the neighbor key: it moves the focus to the search field, on the same terms.
+- **Closing:** Escape, the Close button, or a press on the scrim closes it, and the focus goes back where it was. While it is open, no other shortcut of the app fires, except `Ctrl+K`, which closes the sheet and opens the command palette, so the two modals never stand over each other.
+- **Scrim and surface:** as the command palette's: `--color-scrim` and a surface in `--color-surface-overlay` with a `--border-width-thin` border in `--color-border-default`, corner `--radius-lg`, `--shadow-modal`, at `--z-modal`. `--size-palette-width` wide and never taller than `--size-palette-max-height` nor than the room under its top, which is `--size-palette-offset` below the top of the window; the groups scroll inside it and the title stays.
+- **Title:** "Keyboard shortcuts" in `--text-section-title` and `--color-text-primary`, with a quiet Close button at its trailing edge. The dialog is named by the title.
+- **Groups:** Go to, Actions, Tables, Panel and dialogs, in that order, each a list under its heading (`--text-caption` in `--color-text-muted`, as tall as a row). A group has no box of its own: the surface is the one container.
+- **Row:** at least `--density-row-height` tall, padding `--space-2` at the sides. The label in `--text-body` and `--color-text-primary` at the leading edge, the keys at the trailing edge. Rows are not interactive: they take no focus and no hover.
+- **Keys:** each key a key cap, as in the command palette ("Shortcut"): `--text-mono` in `--color-text-muted`, a `--border-width-thin` border in `--color-border-default`, corner `--radius-xs`, `--size-tag-height` tall, the caps `--space-0-5` apart. A cap is a `kbd`. The row reads to assistive technology as its label followed by its shortcut written out ("Control plus 1"), not as separate caps.
+- **Motion:** as the command palette's: the scrim fades in over `--duration-slow`, the surface fades in and moves `--space-2` down to its place; both leave at once. Under reduced motion both fade in place.
+
 ### Drop zone
 
 - **Shape:** at least `--size-dropzone-min-height` tall, padding `--space-10`, corner `--radius-md`, a `--border-width-thin` dashed border in `--color-border-strong`, no fill.

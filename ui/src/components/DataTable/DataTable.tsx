@@ -47,7 +47,7 @@ import {
   type SortDescriptor,
   type TableLayoutProps,
 } from "react-aria-components";
-import { t } from "../../text/i18n";
+import { t, type MessageKey } from "../../text/i18n";
 import { Button } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
@@ -133,6 +133,38 @@ function isSortable(column: ColumnBase<never>): boolean {
 }
 
 /** A column of a table. It stays whatever the width of the table. */
+/** A key or a press the table answers, for the shortcut sheet to list. */
+export interface TableKey {
+  /** As a shortcut is written: modifiers, then the key, joined by `+`. */
+  shortcut: string;
+  /** Catalog key of what it does. */
+  label: MessageKey;
+}
+
+/**
+ * Every key and press of a table, as DESIGN.md "Table" documents them (Selection and Focus). The
+ * shortcut sheet lists exactly these; a test holds the two to each other.
+ */
+export const TABLE_KEYS: readonly TableKey[] = [
+  { shortcut: "Up", label: "shortcuts.table.up" },
+  { shortcut: "Down", label: "shortcuts.table.down" },
+  { shortcut: "Left", label: "shortcuts.table.left" },
+  { shortcut: "Right", label: "shortcuts.table.right" },
+  { shortcut: "Page Up", label: "shortcuts.table.pageUp" },
+  { shortcut: "Page Down", label: "shortcuts.table.pageDown" },
+  { shortcut: "Home", label: "shortcuts.table.home" },
+  { shortcut: "End", label: "shortcuts.table.end" },
+  { shortcut: "Enter", label: "shortcuts.table.enter" },
+  { shortcut: "Esc", label: "shortcuts.table.escape" },
+  { shortcut: "Ctrl+Click", label: "shortcuts.table.ctrlClick" },
+  { shortcut: "Shift+Click", label: "shortcuts.table.shiftClick" },
+  { shortcut: "Shift+Up", label: "shortcuts.table.shiftUp" },
+  { shortcut: "Shift+Down", label: "shortcuts.table.shiftDown" },
+  { shortcut: "Ctrl+A", label: "shortcuts.table.selectAll" },
+  { shortcut: "Ctrl+Space", label: "shortcuts.table.ctrlSpace" },
+  { shortcut: "Shift+Space", label: "shortcuts.table.shiftSpace" },
+];
+
 export interface DataTableColumn<Item> extends ColumnBase<Item> {
   /** It has none: a column with a priority is a `LeavingColumn`. */
   priority?: never;

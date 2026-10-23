@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
-import { IN_PAGE_ATTRIBUTE } from "../../components";
+import { IN_PAGE_ATTRIBUTE, TABLE_KEYS } from "../../components";
 import {
   ariaKeyShortcuts,
   formatShortcut,
@@ -10,6 +10,9 @@ import {
   matchesShortcut,
   MODAL_ATTRIBUTE,
   PALETTE_SHORTCUT,
+  SEARCH_SHORTCUT,
+  SHEET_SHORTCUT,
+  SHORTCUTS,
   shortcutBindings,
 } from "./shortcuts";
 
@@ -313,5 +316,72 @@ describe("how a shortcut is written", () => {
     expect(ariaKeyShortcuts("Ctrl+1")).toBe("Control+1");
     expect(ariaKeyShortcuts("Ctrl+I")).toBe("Control+I");
     expect(ariaKeyShortcuts("Ctrl+,")).toBe("Control+,");
+  });
+});
+
+describe("the character ?", () => {
+  it("is matched by the character typed, with Shift as a US layout types it", () => {
+    expect(matchesShortcut(key({ key: "?", shiftKey: true }), SHEET_SHORTCUT)).toBe(true);
+    // A layout that types the question mark without Shift, or a test that omits it.
+    expect(matchesShortcut(key({ key: "?" }), SHEET_SHORTCUT)).toBe(true);
+    // The key of the slash without Shift types the slash: it is the search shortcut's.
+    expect(matchesShortcut(key({ key: "/" }), SHEET_SHORTCUT)).toBe(false);
+    expect(matchesShortcut(key({ key: "?", shiftKey: true }), SEARCH_SHORTCUT)).toBe(false);
+    expect(matchesShortcut(key({ key: "?", shiftKey: true, ctrlKey: true }), SHEET_SHORTCUT)).toBe(
+      false,
+    );
+  });
+});
+
+describe("SHORTCUTS", () => {
+  const listed = (group: string) =>
+    SHORTCUTS.filter((entry) => entry.group === group).map((entry) => entry.shortcut);
+
+  it("has an entry for every binding the shell registers", () => {
+    const bound = [
+      ...shortcutBindings(destinations, {
+        open: vi.fn(),
+        startImport: vi.fn(),
+        hasWorkspace: true,
+      }).map((binding) => binding.shortcut),
+      EXPORT_SHORTCUT,
+      PALETTE_SHORTCUT,
+      SEARCH_SHORTCUT,
+      SHEET_SHORTCUT,
+    ];
+    const all = SHORTCUTS.map((entry) => entry.shortcut);
+    for (const shortcut of bound) expect(all).toContain(shortcut);
+  });
+
+  it("has an entry for every key the table documents, in the Tables group", () => {
+    for (const { shortcut } of TABLE_KEYS) expect(listed("tables")).toContain(shortcut);
+    expect(listed("tables")).toHaveLength(TABLE_KEYS.length);
+    // The keys DESIGN.md "Table" names.
+    for (const named of [
+      "Up",
+      "Down",
+      "Home",
+      "End",
+      "Enter",
+      "Esc",
+      "Ctrl+Click",
+      "Shift+Click",
+      "Shift+Up",
+      "Shift+Down",
+      "Ctrl+A",
+      "Ctrl+Space",
+      "Shift+Space",
+    ]) {
+      expect(listed("tables")).toContain(named);
+    }
+  });
+
+  it("names a group for every entry, and a catalog text for every label", () => {
+    const groups = new Set(["go", "actions", "tables", "panel"]);
+    for (const entry of SHORTCUTS) {
+      expect(groups.has(entry.group)).toBe(true);
+      expect(entry.label).not.toBe("");
+    }
+    expect(listed("panel")).toContain("Esc");
   });
 });

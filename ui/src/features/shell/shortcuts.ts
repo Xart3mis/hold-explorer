@@ -1,9 +1,9 @@
 // Keyboard shortcuts are registered here and nowhere else. The shortcuts of the destinations
 // come from the destination list; the shortcuts that are not a destination's are named below.
 import { useEffect, useMemo, useRef } from "react";
-import { needsWorkspace, type Destination } from "../../app/destinations";
-import { IN_PAGE_ATTRIBUTE } from "../../components";
-import { t } from "../../text/i18n";
+import { destinations, needsWorkspace, type Destination } from "../../app/destinations";
+import { IN_PAGE_ATTRIBUTE, TABLE_KEYS } from "../../components";
+import { t, type MessageKey } from "../../text/i18n";
 import { useOfferExport } from "./topBarSlot";
 
 /** Starts an import. */
@@ -14,6 +14,12 @@ export const EXPORT_SHORTCUT = "Ctrl+E";
 
 /** Opens the command palette, and closes it. */
 export const PALETTE_SHORTCUT = "Ctrl+K";
+
+/** Moves the focus to the search field. */
+export const SEARCH_SHORTCUT = "/";
+
+/** Opens the shortcut sheet. It is Shift and the slash on a US layout; the character is matched. */
+export const SHEET_SHORTCUT = "?";
 
 /**
  * The mark of a modal: the command palette, the shortcut sheet. While an element that carries it
@@ -73,10 +79,13 @@ function isKey(event: KeyboardEvent, key: string): boolean {
 /** Whether a key press is this shortcut: the same key with exactly the modifiers it names. */
 export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
   const wanted = parse(shortcut);
+  // The question mark is matched by the character typed: it takes Shift on a US layout and none
+  // on others, so Shift does not count for it.
+  const shiftMatches = wanted.key === "?" || event.shiftKey === wanted.shift;
   return (
     isKey(event, wanted.key) &&
     event.ctrlKey === wanted.ctrl &&
-    event.shiftKey === wanted.shift &&
+    shiftMatches &&
     event.altKey === wanted.alt &&
     !event.metaKey
   );
@@ -235,6 +244,71 @@ export function usePaletteShortcut(toggle: () => void): void {
   );
   useShortcuts(bindings);
 }
+
+/**
+ * Listens for `SEARCH_SHORTCUT` and `SHEET_SHORTCUT` while the component that calls it is shown.
+ * Both belong to the page: never in a text field, never under an overlay or a modal.
+ */
+export function usePageShortcuts(actions: { focusSearch: () => void; openSheet: () => void }) {
+  const latest = useRef(actions);
+  useEffect(() => {
+    latest.current = actions;
+  });
+  const bindings = useMemo(
+    (): ShortcutBinding[] => [
+      {
+        shortcut: SEARCH_SHORTCUT,
+        isPageOnly: true,
+        run: () => {
+          latest.current.focusSearch();
+        },
+      },
+      {
+        shortcut: SHEET_SHORTCUT,
+        isPageOnly: true,
+        run: () => {
+          latest.current.openSheet();
+        },
+      },
+    ],
+    [],
+  );
+  useShortcuts(bindings);
+}
+
+export interface ShortcutEntry {
+  /** As a shortcut is written: `Ctrl+K`, `?`, `Shift+Space`. */
+  shortcut: string;
+  group: "go" | "actions" | "tables" | "panel";
+  /** Catalog key of what it does. */
+  label: string;
+}
+
+/**
+ * Every shortcut of the app, the shortcut sheet's single source: the destinations' own, then the
+ * shortcuts named in this file, the keys of a table (`TABLE_KEYS`), and Escape. A test holds it
+ * to the bindings the shell registers.
+ */
+export const SHORTCUTS: readonly ShortcutEntry[] = [
+  ...destinations.flatMap((destination): ShortcutEntry[] =>
+    destination.shortcut === undefined
+      ? []
+      : [
+          {
+            shortcut: destination.shortcut,
+            group: "go",
+            label: `destinations.name.${destination.id}` as const satisfies MessageKey,
+          },
+        ],
+  ),
+  { shortcut: SEARCH_SHORTCUT, group: "go", label: "shortcuts.label.search" },
+  { shortcut: PALETTE_SHORTCUT, group: "actions", label: "shortcuts.label.palette" },
+  { shortcut: IMPORT_SHORTCUT, group: "actions", label: "shortcuts.label.import" },
+  { shortcut: EXPORT_SHORTCUT, group: "actions", label: "shortcuts.label.export" },
+  { shortcut: SHEET_SHORTCUT, group: "actions", label: "shortcuts.label.sheet" },
+  ...TABLE_KEYS.map(({ shortcut, label }): ShortcutEntry => ({ shortcut, group: "tables", label })),
+  { shortcut: "Esc", group: "panel", label: "shortcuts.label.closeOverlay" },
+];
 
 /** A shortcut as a tooltip shows it, with the names of the keys taken from the text catalog. */
 export function formatShortcut(shortcut: string): string {

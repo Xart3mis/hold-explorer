@@ -216,7 +216,47 @@
       "saveView": "bookmark",
       "view": "view",
       "snapshot": "snapshot",
-      "workspace": "workspace open"
+      "workspace": "workspace open",
+      "shortcuts": "keys help hotkeys"
+    },
+    "shortcuts": "Keyboard shortcuts"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "close": "Close",
+    "plus": "plus",
+    "group": {
+      "go": "Go to",
+      "actions": "Actions",
+      "tables": "Tables",
+      "panel": "Panel and dialogs"
+    },
+    "label": {
+      "search": "Search",
+      "palette": "Command palette",
+      "import": "Import",
+      "export": "Export this view",
+      "sheet": "Keyboard shortcuts",
+      "closeOverlay": "Close the detail panel, a menu, or a dialog"
+    },
+    "table": {
+      "up": "Move up a row",
+      "down": "Move down a row",
+      "left": "Collapse the row",
+      "right": "Expand the row",
+      "pageUp": "Move up a page",
+      "pageDown": "Move down a page",
+      "home": "First loaded row",
+      "end": "Last loaded row",
+      "enter": "Open the row",
+      "escape": "Clear the selection",
+      "ctrlClick": "Add the row to the selection, or take it out",
+      "shiftClick": "Select the rows from the last one pressed",
+      "shiftUp": "Extend the selection up a row",
+      "shiftDown": "Extend the selection down a row",
+      "selectAll": "Select every loaded row",
+      "ctrlSpace": "Add the focused row to the selection, or take it out",
+      "shiftSpace": "Select the rows from the last one pressed to the focused row"
     }
   },
   "views": {

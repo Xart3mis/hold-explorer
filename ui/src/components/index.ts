@@ -24,6 +24,7 @@ export { ChoiceGroup, type Choice, type ChoiceGroupProps } from "./ChoiceGroup/C
 export {
   childKeyOfRow,
   DataTable,
+  TABLE_KEYS,
   textChars,
   type ColumnSize,
   type DataTableChildColumn,
@@ -33,6 +34,7 @@ export {
   type DataTableProps,
   type DataTableSort,
   type LeavingColumn,
+  type TableKey,
 } from "./DataTable/DataTable";
 export {
   Disclosure,
