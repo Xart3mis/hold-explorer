@@ -1,40 +1,15 @@
-import {
-  ChartBarDecreasing,
-  Flag,
-  History,
-  LayoutGrid,
-  List,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Settings,
-  SlidersHorizontal,
-  Users,
-  Waypoints,
-  type LucideIcon,
-} from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useId } from "react";
 import { useLocation } from "react-router";
 import { IconButton } from "../../components";
-import type { Destination, DestinationId } from "../../app/destinations";
+import { destinationIcons } from "../../app/destinationIcons";
+import type { Destination } from "../../app/destinations";
 import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
 import { ViewsSection } from "../views/ViewsSection";
 import { NavItem } from "./NavItem";
 import type { SidebarForm } from "./window";
 import styles from "./Shell.module.css";
-
-/** The icon of each destination, from the one outline set. */
-export const destinationIcons: Record<DestinationId, LucideIcon> = {
-  overview: LayoutGrid,
-  breakdown: ChartBarDecreasing,
-  lines: List,
-  blockers: Waypoints,
-  history: History,
-  people: Users,
-  "follow-up": Flag,
-  rules: SlidersHorizontal,
-  settings: Settings,
-};
 
 function Group({
   items,

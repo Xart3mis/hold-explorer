@@ -12,15 +12,17 @@ import { showOpened } from "./start";
  * for, before anything of that snapshot can be read: its position names another hold there, or
  * none. A line stays selected, and the panel reads it again for the snapshot that is shown. The
  * address is the one the snapshot was chosen at, as it is when it is chosen; a selection that
- * fails leaves the hold closed.
+ * fails leaves the hold closed. `origin` names the control the selection belongs to (see
+ * `WorkspaceAction`), whichever control asks for it.
  */
-export function useSnapshotActions() {
+export function useSnapshotActions(origin?: string) {
   const client = useQueryClient();
   const leave = useLeaveSelection();
 
   const selectSnapshot = useMutation(
     workspaceAction(client, {
       kind: "selecting",
+      ...(origin === undefined ? {} : { origin }),
       onAsk: () => {
         leave.forSnapshot();
       },

@@ -4,6 +4,7 @@
 // from its answer. Narrowing the fixed items by their labels is presentation: the palette matches
 // nothing against the data of a snapshot.
 import type { LucideIcon } from "lucide-react";
+import { destinationIcons } from "../../app/destinationIcons";
 import { needsWorkspace, type Destination } from "../../app/destinations";
 import type { Density } from "../../bindings/Density";
 import type { SavedView } from "../../bindings/SavedView";
@@ -13,7 +14,6 @@ import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import { formatDateTime } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
-import { destinationIcons } from "../shell/Sidebar";
 import { EXPORT_SHORTCUT, IMPORT_SHORTCUT } from "../shell/shortcuts";
 
 /** The groups of the palette, in the order it shows them. */

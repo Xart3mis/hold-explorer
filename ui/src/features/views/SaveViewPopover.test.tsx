@@ -92,6 +92,22 @@ function viewNames(): (string | null)[] {
 }
 
 describe("Save view", () => {
+  it("closes on Escape in its name field, and gives the focus back to Save view", async () => {
+    const { user } = await renderAt("/lines");
+    const dialog = await openPopover(user);
+    const field = within(dialog).getByRole("textbox", { name: text.name });
+    await waitFor(() => {
+      expect(field).toHaveFocus();
+    });
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: text.saveTitle })).not.toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(saveButton()).toHaveFocus();
+    });
+  });
+
   it(
     "proposes the destination and the first chip's value, selected, and saves on Enter",
     SLOW,

@@ -1,5 +1,13 @@
 import { OctagonAlert, Search } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import {
   Autocomplete,
   Dialog,
@@ -60,8 +68,11 @@ interface RecentEntry {
   id: string;
   /** The result of a line, which the search answered once; the fixed items are built anew. */
   hit: SearchHit | null;
-  /** The workspace a line was chosen in: a line of another workspace names nothing here. */
-  workspace: string | null;
+  /**
+   * The snapshot a line was chosen in, by its workspace and its id: a line is offered again only
+   * there, since another snapshot may not have it, or have it with other holds.
+   */
+  snapshot: { workspace: string; id: number } | null;
 }
 
 /** A group of the list as it is drawn: its heading, its items. */
@@ -195,15 +206,10 @@ function PaletteOption({
       }}
       className={cx(styles.item)}
       // The component library passes no `aria-keyshortcuts` through, so the element is given it.
-      render={(props) =>
-        "href" in props ? (
-          <a {...props} aria-keyshortcuts={keyShortcuts}>
-            {props.children}
-          </a>
-        ) : (
-          <div {...props} aria-keyshortcuts={keyShortcuts} />
-        )
-      }
+      // No item has an address, so the element is never a link.
+      render={(props) => (
+        <div {...(props as ComponentProps<"div">)} aria-keyshortcuts={keyShortcuts} />
+      )}
     >
       {item.icon === undefined ? null : <Icon icon={item.icon} className={styles.icon} />}
       <Text
@@ -387,7 +393,6 @@ export function CommandPalette({
   const workspaces = useOpenWorkspace(destinations, onProblem);
   const chooseSearch = useSearchChoice();
 
-  const workspace = start.open?.workspace.id ?? null;
   const openLine = useCallback(
     (hit: SearchHit) => {
       chooseSearch({ kind: "hit", hit });
@@ -436,14 +441,19 @@ export function CommandPalette({
 
   // The items chosen in this session, the last chosen first.
   const [recent, setRecent] = useState<readonly RecentEntry[]>([]);
-  const hasSnapshot = start.open?.selected != null;
+  const inView =
+    start.open?.selected == null
+      ? null
+      : { workspace: start.open.workspace.id, id: start.open.selected };
   const recentOf = (fixed: readonly PaletteItem[]): PaletteItem[] => {
     const byId = new Map(fixed.map((item) => [item.id, item]));
     const offered: PaletteItem[] = [];
     for (const entry of recent) {
       if (entry.hit !== null) {
-        if (hasSnapshot && entry.workspace === workspace)
+        const at = entry.snapshot;
+        if (at !== null && at.workspace === inView?.workspace && at.id === inView.id) {
           offered.push(lineItem(entry.hit, openLine));
+        }
         continue;
       }
       const item = byId.get(entry.id);
@@ -485,7 +495,7 @@ export function CommandPalette({
 
   const choose = (item: PaletteItem) => {
     setRecent((current) => [
-      { id: item.id, hit: item.hit ?? null, workspace },
+      { id: item.id, hit: item.hit ?? null, snapshot: item.hit === undefined ? null : inView },
       // More than are shown are kept: one that cannot run now may come back.
       ...current.filter((entry) => entry.id !== item.id).slice(0, KEPT_COUNT - 1),
     ]);

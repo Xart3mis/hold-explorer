@@ -16,10 +16,12 @@ import { must, renderApp, type RenderAppOptions } from "../../test/app";
 import { expectAccessible } from "../../test/axe";
 import { renderAt } from "../../test/export";
 import { openStart, opened, otherWorkspace, workspace } from "../../test/fixtures";
-import { searchResults } from "../../test/search";
+import { commandFailure } from "../../test/ipc";
+import { searchHit, searchResults } from "../../test/search";
 import { SLOW } from "../../test/slow";
 import { savedView } from "../../test/views";
 import { windowApi } from "../../test/window";
+import { SEND_AFTER_MS } from "../search/SearchField";
 
 const words = en.palette;
 const groups = words.group;
@@ -242,6 +244,9 @@ describe("lines", () => {
       },
     });
     await openAndType(user, "5");
+    // Past the moment typing counts as stopped: one character is never sent.
+    await act(() => new Promise((resolve) => setTimeout(resolve, SEND_AFTER_MS * 3)));
+    expect(sent).not.toContain("5");
     expect(await headings()).not.toContain(groups.lines);
     await user.keyboard("73");
     await within(await list()).findByRole("option", { name: /78B04-573-00004-PR-004/ });
@@ -251,6 +256,71 @@ describe("lines", () => {
     ]);
     expect(within(await list()).queryByRole("option", { name: /Tanaka/ })).toBeNull();
     expect(sent.at(-1)).toBe("573");
+    expect(sent).not.toContain("5");
+  });
+
+  it("says why the line IDs could not be read, and reads them again with Try again", async () => {
+    let fails = true;
+    const { user } = renderPalette("/overview", {
+      handlers: {
+        search: ({ query }: { view: ViewRef; query: string }): SearchResults => {
+          if (fails) throw commandFailure("Database", "The snapshot could not be read.");
+          return searchResults(query);
+        },
+      },
+    });
+    await openAndType(user, "573");
+    const retry = await within(await list()).findByRole("option", { name: /Try again/ });
+    expect(await itemsOf(groups.lines)).toEqual([en.common.retry]);
+    expect(retry).toHaveTextContent(
+      "The line IDs could not be read: The snapshot could not be read.",
+    );
+    fails = false;
+    await user.keyboard("{Enter}");
+    await within(await list()).findByRole("option", { name: /78B04-573-00004-PR-004/ });
+    expect(within(await list()).queryByRole("option", { name: /Try again/ })).toBeNull();
+    expect(await palette()).toBeInTheDocument();
+  });
+
+  it("never shows the answer for a text that is no longer the one typed", async () => {
+    const late: { resolve: (answer: SearchResults) => void } = { resolve: () => undefined };
+    const { user } = renderPalette("/overview", {
+      handlers: {
+        search: ({ query }: { view: ViewRef; query: string }) =>
+          query === "57"
+            ? new Promise<SearchResults>((resolve) => {
+                late.resolve = resolve;
+              })
+            : {
+                query,
+                groups: [
+                  {
+                    kind: "Lines",
+                    total: 1,
+                    hits: [searchHit("Line", "78B09-573-00097-PR-007", "78B09-|573|-00097-PR-007")],
+                  },
+                ],
+              },
+      },
+    });
+    await openAndType(user, "57");
+    await act(() => new Promise((resolve) => setTimeout(resolve, SEND_AFTER_MS * 3)));
+    await user.keyboard("3");
+    await within(await list()).findByRole("option", { name: /78B09-573-00097-PR-007/ });
+    act(() => {
+      late.resolve({
+        query: "57",
+        groups: [
+          {
+            kind: "Lines",
+            total: 1,
+            hits: [searchHit("Line", "78B57-000-00001-PR-001", "78B|57|-000-00001-PR-001")],
+          },
+        ],
+      });
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, SEND_AFTER_MS)));
+    expect(await itemsOf(groups.lines)).toEqual(["78B09-573-00097-PR-007"]);
   });
 
   it("opens a line as the search field does", async () => {
@@ -355,8 +425,11 @@ describe("each group runs what its own control does", () => {
       "aria-expanded",
       "true",
     );
-    // Closed by a press outside, it gives the focus back to its trigger, as when it was pressed.
-    await user.click(document.body);
+    // Escape in its field closes it, and the focus goes back to its trigger, as when it was pressed.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: en.views.saveTitle })).toBeNull();
+    });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: en.views.save })).toHaveFocus();
     });
@@ -393,6 +466,125 @@ describe("each group runs what its own control does", () => {
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith({ id: otherWorkspace.id });
     });
+  });
+});
+
+describe("the control of an action started here shows its spinner", () => {
+  const spinners = (control: HTMLElement) => control.querySelectorAll("[data-part='spinner']");
+
+  it("the snapshot selector, for a snapshot", async () => {
+    let finish: (open: WorkspaceOpen) => void = () => undefined;
+    const { user } = renderPalette("/lines", {
+      handlers: {
+        snapshot_select: () =>
+          new Promise<WorkspaceOpen>((resolve) => {
+            finish = resolve;
+          }),
+      },
+    });
+    await openAndType(user, "snapshot");
+    await within(await list()).findByRole("option", { name: /14:05/ });
+    await user.keyboard("{Enter}");
+    const selector = screen.getByRole("button", { name: /^Snapshot/ });
+    await waitFor(() => {
+      expect(spinners(selector)).toHaveLength(1);
+    });
+    expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(1);
+    act(() => {
+      finish(opened({ selected: 1 }));
+    });
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(0);
+    });
+  });
+
+  it("the workspace switcher, for a workspace", async () => {
+    let finish: (open: WorkspaceOpen) => void = () => undefined;
+    const { user } = renderPalette("/overview", {
+      handlers: {
+        workspace_open: () =>
+          new Promise<WorkspaceOpen>((resolve) => {
+            finish = resolve;
+          }),
+      },
+    });
+    await choose(user, otherWorkspace.name);
+    const switcher = screen.getByRole("button", {
+      name: `${en.workspaces.switcher} Unit 573 piping`,
+    });
+    await waitFor(() => {
+      expect(spinners(switcher)).toHaveLength(1);
+    });
+    expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(1);
+    act(() => {
+      finish(opened({ workspace: otherWorkspace }));
+    });
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-part='spinner']")).toHaveLength(0);
+    });
+  });
+});
+
+describe("Ctrl+K from wherever the keys are", () => {
+  /** Presses Ctrl+K and expects the palette with its field focused, shown to assistive technology. */
+  async function opensPalette(user: ReturnType<typeof renderApp>["user"]) {
+    await user.keyboard("{Control>}k{/Control}");
+    const dialog = await palette();
+    const input = within(dialog).getByRole("textbox");
+    await waitFor(() => {
+      expect(input).toHaveFocus();
+    });
+    expect(dialog.closest("[aria-hidden='true']")).toBeNull();
+  }
+
+  it("opens from the name field of Save view", async () => {
+    const { user } = renderPalette("/lines");
+    await user.click(await screen.findByRole("button", { name: en.views.save }));
+    const name = await screen.findByRole("textbox", { name: en.views.name });
+    await waitFor(() => {
+      expect(name).toHaveFocus();
+    });
+    await opensPalette(user);
+  });
+
+  it("opens from the name field of a saved view being renamed", async () => {
+    const { user } = renderPalette("/lines", {
+      start: openStart({ open: opened({ views: [savedView({ id: 4, name: "Civil lines" })] }) }),
+    });
+    const actions = en.views.actions.replace("{{name}}", "Civil lines");
+    await user.click(await screen.findByRole("button", { name: actions }));
+    await user.click(await screen.findByRole("menuitem", { name: en.views.rename }));
+    const name = await screen.findByRole("textbox", { name: en.views.nameLabel });
+    await waitFor(() => {
+      expect(name).toHaveFocus();
+    });
+    await opensPalette(user);
+  });
+
+  it("opens from the name field of the workspace being renamed", async () => {
+    const { user } = renderPalette("/lines");
+    await user.click(
+      await screen.findByRole("button", { name: `${en.workspaces.switcher} Unit 573 piping` }),
+    );
+    await user.click(await screen.findByRole("menuitem", { name: en.workspaces.rename }));
+    const name = await screen.findByRole("textbox", { name: en.workspaces.nameLabel });
+    await waitFor(() => {
+      expect(name).toHaveFocus();
+    });
+    await opensPalette(user);
+  });
+
+  it("opens from the author name field of Settings", async () => {
+    const { user } = renderPalette("/settings");
+    await user.click(await screen.findByRole("textbox", { name: en.settings.authorName }));
+    await opensPalette(user);
+  });
+
+  it("opens over the open snapshot menu, with its own field focused", async () => {
+    const { user } = renderPalette("/lines");
+    await user.click(await screen.findByRole("button", { name: /^Snapshot/ }));
+    await screen.findByRole("menu", { name: en.snapshots.menu });
+    await opensPalette(user);
   });
 });
 
@@ -481,6 +673,25 @@ describe("recent items", () => {
     await choose(user, "78B04-573-00004-PR-004");
     await openAndType(user);
     expect(must((await itemsOf(groups.recent))[0], "a recent item")).toBe("78B04-573-00004-PR-004");
+  });
+});
+
+describe("recent lines", () => {
+  it("are offered again only for the snapshot they were chosen in", SLOW, async () => {
+    const { user } = renderPalette("/lines", {
+      handlers: { snapshot_select: ({ id }: { id: number }) => opened({ selected: id }) },
+    });
+    await choose(user, "78B04-573-00004-PR-004");
+    await openAndType(user);
+    expect(await itemsOf(groups.recent)).toEqual(["78B04-573-00004-PR-004"]);
+    await user.keyboard("snapshot");
+    await within(await list()).findByRole("option", { name: /14:05/ });
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^Snapshot/ })).not.toHaveAttribute("aria-busy");
+    });
+    await openAndType(user);
+    expect(await itemsOf(groups.recent)).not.toContain("78B04-573-00004-PR-004");
   });
 });
 

@@ -1,11 +1,12 @@
 /*
  * The command palette; DESIGN.md, "Command palette". A modal over the scrim, centered across the
  * window near its top: the field, then the groups, which scroll inside it while the field stays.
+ * The overlay is the scrim and holds the surface, so the two stand at the layer of a modal.
  */
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: var(--z-scrim);
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -20,8 +21,6 @@
 }
 
 .modal {
-  position: relative;
-  z-index: var(--z-modal);
   display: flex;
   inline-size: var(--size-palette-width);
   max-inline-size: 100%;

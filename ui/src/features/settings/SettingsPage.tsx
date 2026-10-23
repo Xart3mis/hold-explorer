@@ -139,6 +139,8 @@ export function SettingsPage() {
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.nativeEvent.isComposing) saveName();
+              // The keys the field does not use go on to the shortcuts of the app.
+              else event.continuePropagation();
             }}
             className={styles.name}
           />

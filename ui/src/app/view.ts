@@ -597,6 +597,24 @@ export interface WorkspaceAction<Variables, Data> {
   mutationFn: (variables: Variables) => Promise<Data>;
   /** Writes what the command returned into the cached start. The action lasts until it is done. */
   onSuccess?: (data: Data, variables: Variables) => unknown;
+  /**
+   * The control the action belongs to, whichever control asked for it: the snapshot selector for
+   * a snapshot chosen in the command palette. It ends the key (`actionKey`), so that control
+   * shows the spinner while the action runs.
+   */
+  origin?: string;
+}
+
+/**
+ * The key of an action on the workspace of a kind, and of the control it belongs to when it has
+ * one. It starts with the key of its kind, so every reader of the kind still sees it.
+ */
+export function actionKey(
+  kind: WorkspaceAction<unknown, unknown>["kind"],
+  origin?: string,
+): readonly unknown[] {
+  const base = kind === "selecting" ? keys.selectingSnapshot : keys[kind];
+  return origin === undefined ? base : [...base, origin];
 }
 
 /** What an action on the workspace notes when it is sent. */
@@ -617,10 +635,10 @@ export interface ActionSent {
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
-  { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
+  { kind, onAsk, mutationFn, onSuccess, origin }: WorkspaceAction<Variables, Data>,
 ): UseMutationOptions<Data, Error, Variables, ActionSent> {
   return {
-    mutationKey: kind === "selecting" ? keys.selectingSnapshot : keys[kind],
+    mutationKey: actionKey(kind, origin),
     scope: WORKSPACE_SCOPE,
     mutationFn,
     onMutate: async (variables: Variables) => {

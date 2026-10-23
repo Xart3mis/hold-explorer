@@ -21,8 +21,10 @@ export interface Rename {
 /**
  * The actions on the workspaces: open one, create one, rename the open one, and read the
  * workspaces folder again. See ui/src/app/actions/start.ts for what every action does.
+ * `origin` names the control an opening belongs to (see `WorkspaceAction`), whichever control
+ * asks for it.
  */
-export function useWorkspaceActions() {
+export function useWorkspaceActions(origin?: string) {
   const client = useQueryClient();
   // Neither a line nor a hold of one workspace names anything in another.
   const leave = useLeaveSelection();
@@ -30,6 +32,7 @@ export function useWorkspaceActions() {
   const openWorkspace = useMutation(
     workspaceAction(client, {
       kind: "switching",
+      ...(origin === undefined ? {} : { origin }),
       onAsk: () => {
         leave.forWorkspace();
       },

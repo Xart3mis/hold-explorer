@@ -62,6 +62,9 @@ function RenameField({ name, isPending, error, onSave, onCancel }: RenameFieldPr
           } else if (event.key === "Escape") {
             event.preventDefault();
             if (!isPending) onCancel("keys");
+          } else {
+            // The keys the field does not use go on to the shortcuts of the app.
+            event.continuePropagation();
           }
         }}
         onBlur={() => {

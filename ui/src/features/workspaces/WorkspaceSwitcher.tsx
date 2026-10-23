@@ -1,11 +1,13 @@
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Input, TextField as RacTextField } from "react-aria-components";
+import { useIsMutating } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router";
 import { asCommandError } from "../../api/error";
 import { useStart } from "../../app/actions/start";
 import { useWorkspaceActions, WORKSPACE_CHANGED } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
+import { actionKey } from "../../app/view";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
@@ -77,6 +79,9 @@ function RenameField({ name, isPending, failed, errorId, onSave, onCancel }: Ren
           } else if (event.key === "Escape") {
             event.preventDefault();
             if (!isPending) onCancel("keys");
+          } else {
+            // The keys the field does not use go on to the shortcuts of the app.
+            event.continuePropagation();
           }
         }}
         onBlur={(event) => {
@@ -104,17 +109,23 @@ function RenameField({ name, isPending, failed, errorId, onSave, onCancel }: Ren
   );
 }
 
+/** The control an opening asked for through `useOpenWorkspace` belongs to. */
+const WORKSPACE_SWITCHER = "workspace-switcher";
+
 /**
  * The way the switcher opens another workspace, for it and for the command palette: the action
  * on the workspace, then Overview when the page shown is not a destination, which belongs to what
- * was open; its failure is said by `onProblem`, and taken back once an opening works.
- * `isPending` is true while an opening asked for through this hook runs.
+ * was open; its failure is said by `onProblem`, and taken back once an opening works. The opening
+ * belongs to the switcher, whichever of the two asks for it: `isPending` is true while any
+ * opening asked for through this hook runs, so the switcher shows the spinner also for a
+ * workspace chosen in the palette.
  */
 export function useOpenWorkspace(
   destinations: readonly Destination[],
   onProblem: (problem: ShellProblem | null) => void,
 ) {
-  const { openWorkspace } = useWorkspaceActions();
+  const { openWorkspace } = useWorkspaceActions(WORKSPACE_SWITCHER);
+  const running = useIsMutating({ mutationKey: actionKey("switching", WORKSPACE_SWITCHER) });
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const open = (other: string) => {
@@ -135,7 +146,7 @@ export function useOpenWorkspace(
       },
     });
   };
-  return { open, isPending: openWorkspace.isPending };
+  return { open, isPending: running > 0 };
 }
 
 export interface WorkspaceSwitcherProps {

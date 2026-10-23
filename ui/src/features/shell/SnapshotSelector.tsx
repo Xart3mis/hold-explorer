@@ -1,6 +1,8 @@
+import { useIsMutating } from "@tanstack/react-query";
 import { asCommandError } from "../../api/error";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
+import { actionKey } from "../../app/view";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import { MenuButton, MenuItem, MenuSection } from "../../components";
 import { formatDate, formatDateTime } from "../../text/format";
@@ -14,13 +16,19 @@ export interface SnapshotSelectorProps {
   onProblem: (problem: ShellProblem | null) => void;
 }
 
+/** The control a selection asked for through `useSelectSnapshot` belongs to. */
+const SNAPSHOT_SELECTOR = "snapshot-selector";
+
 /**
  * The way the snapshot selector selects a snapshot, for it and for the command palette: the
  * action on the workspace, with its failure said by `onProblem` and taken back once a selection
- * works. `isPending` is true while a selection asked for through this hook runs.
+ * works. The selection belongs to the selector, whichever of the two asks for it: `isPending` is
+ * true while any selection asked for through this hook runs, so the selector shows the spinner
+ * also for a snapshot chosen in the palette.
  */
 export function useSelectSnapshot(onProblem: (problem: ShellProblem | null) => void) {
-  const { selectSnapshot } = useSnapshotActions();
+  const { selectSnapshot } = useSnapshotActions(SNAPSHOT_SELECTOR);
+  const running = useIsMutating({ mutationKey: actionKey("selecting", SNAPSHOT_SELECTOR) });
   const select = (id: number) => {
     selectSnapshot.mutate(id, {
       onSuccess: () => {
@@ -35,7 +43,7 @@ export function useSelectSnapshot(onProblem: (problem: ShellProblem | null) => v
       },
     });
   };
-  return { select, isPending: selectSnapshot.isPending };
+  return { select, isPending: running > 0 };
 }
 
 /**

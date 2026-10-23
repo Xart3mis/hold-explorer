@@ -192,6 +192,7 @@ export function useExportShortcut(run: (() => void) | null): void {
     latest.current = run;
   });
   const isOn = run !== null;
+  // Offered from here, so the palette's "Export this view" exists exactly where Ctrl+E works.
   useOfferExport(isOn, latest);
   const bindings = useMemo(
     (): ShortcutBinding[] =>

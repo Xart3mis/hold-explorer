@@ -113,7 +113,11 @@ function SaveViewForm({ close }: { close: () => void }) {
           event.target.select();
         }}
         onKeyDown={(event) => {
-          if (event.key !== "Enter") return;
+          // Every other key goes on: Escape to the popover, which closes, Ctrl+K to the palette.
+          if (event.key !== "Enter") {
+            event.continuePropagation();
+            return;
+          }
           event.preventDefault();
           save();
         }}
