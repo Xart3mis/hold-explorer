@@ -17,6 +17,11 @@ version: string,
  */
 settings_file: string, 
 /**
+ * The absolute path of the folder the crash logs are written to, whether or not it exists
+ * yet.
+ */
+logs_folder: string, 
+/**
  * The user's settings.
  */
 settings: Settings, 

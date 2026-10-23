@@ -423,7 +423,16 @@
     "settingsFile": "Settings file",
     "settingsFileHelp": "Your settings are kept in this file.",
     "settingsFileShow": "Show in folder: settings file",
-    "settingsFileError": "The settings file could not be shown"
+    "settingsFileError": "The settings file could not be shown",
+    "logsFolder": "Logs folder",
+    "logsFolderHelp": "Hold Explorer writes a log here when it crashes.",
+    "logsFolderShow": "Show in folder: logs folder",
+    "logsFolderError": "The logs folder could not be shown",
+    "diagnostics": "Diagnostics",
+    "diagnosticsHelp": "Copies the version, the system, the folders, and the newest crash log, to paste into a bug report. It names no workspace, snapshot, or hold.",
+    "diagnosticsCopy": "Copy diagnostics",
+    "diagnosticsCopied": "Copied",
+    "diagnosticsError": "The diagnostics could not be copied"
   },
   "import": {
     "title": "Import",

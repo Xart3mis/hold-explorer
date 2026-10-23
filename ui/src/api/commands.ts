@@ -132,6 +132,7 @@ interface CommandMap {
     result: null;
   };
   export_open: { args: { path: string }; result: null };
+  diagnostics_copy: { args: Record<string, never>; result: string };
 }
 
 export type CommandName = keyof CommandMap;
@@ -271,4 +272,6 @@ export const api = {
     call("export_copy", { request, format, view }),
   /** Opens a file the app saved in this session; rejects with `NotWritten` for any other. */
   exportOpen: (path: string) => call("export_open", { path }),
+  /** Copies the diagnostics text to the clipboard and returns it. */
+  diagnosticsCopy: () => call("diagnostics_copy", {}),
 };

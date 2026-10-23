@@ -190,6 +190,7 @@ impl AppState {
             start: AppStart {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 settings_file: super::settings::settings_file(&self.config_dir),
+                logs_folder: super::diagnostics::logs_folder(),
                 settings: self.settings.clone(),
                 list: list_view(raw, &to),
                 list_error,

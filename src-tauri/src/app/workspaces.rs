@@ -79,6 +79,9 @@ pub struct AppStart {
     pub version: String,
     /// The absolute path of the settings file, `settings.json`, whether or not it exists yet.
     pub settings_file: String,
+    /// The absolute path of the folder the crash logs are written to, whether or not it exists
+    /// yet.
+    pub logs_folder: String,
     /// The user's settings.
     pub settings: Settings,
     /// The workspaces in the folder in use.

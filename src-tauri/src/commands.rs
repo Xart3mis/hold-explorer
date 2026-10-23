@@ -25,12 +25,14 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::crash;
+
 use crate::app::{
-    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, Density,
-    ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck, FolderMoved, GroupDetail,
-    HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView,
-    SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice, Theme, ViewRef,
-    WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    check_extension, diagnostics, fonts, save, AppStart, AppState, CommandError, Content,
+    CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
+    FolderMoved, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
+    ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice,
+    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -603,6 +605,43 @@ where
     unlocked(move || put(content, &text)).await
 }
 
+/// Builds the diagnostics text with the state locked, copies it to the system's clipboard with
+/// the state free, and returns it.
+#[tauri::command]
+pub async fn diagnostics_copy<R: Runtime>(app: AppHandle<R>) -> Result<String, CommandError> {
+    let session = app.clone();
+    diagnostics_with(app, move |text| {
+        let clipboard = session.try_state::<SessionClipboard>().ok_or_else(|| {
+            CommandError::internal(
+                "The clipboard of the application is not available. Restart Hold Explorer; if it keeps happening, report it.",
+            )
+        })?;
+        clipboard.copy(
+            Content::Text(text.to_string()),
+            &ExportText::default(),
+            fonts(),
+        )
+    })
+    .await
+}
+
+/// [`diagnostics_copy`] with the function that puts the text on the clipboard.
+async fn diagnostics_with<R, P>(app: AppHandle<R>, put: P) -> Result<String, CommandError>
+where
+    R: Runtime,
+    P: FnOnce(&str) -> Result<(), CommandError> + Send + 'static,
+{
+    let local_data = crash::local_data_folder(crate::IDENTIFIER);
+    let webview = tauri::webview_version().ok();
+    let text = blocking(app, move |state| {
+        Ok(diagnostics(state, &local_data, webview.as_deref()))
+    })
+    .await?;
+    let copied = text.clone();
+    unlocked(move || put(&copied)).await?;
+    Ok(text)
+}
+
 /// Opens a file the app saved in this session with the system's program for it.
 #[tauri::command]
 pub async fn export_open<R: Runtime>(app: AppHandle<R>, path: PathBuf) -> Result<(), CommandError> {
@@ -639,7 +678,7 @@ mod tests {
     use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
     use tempfile::TempDir;
 
-    use crate::app::{AppState, ErrorKind, ExportPhase};
+    use crate::app::{AppState, CommandError, ErrorKind, ExportPhase};
 
     const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
     const LIB: &str = include_str!("lib.rs");
@@ -728,12 +767,57 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_copy_builds_unlocked_and_returns_what_it_copied() {
+        let harness = Harness::new();
+        let app = harness.app.handle().clone();
+        let seen = std::sync::Arc::new(Mutex::new(None));
+        let put = {
+            let app = app.clone();
+            let seen = seen.clone();
+            move |text: &str| {
+                // The clipboard is set with the state free.
+                let state = app.state::<Mutex<AppState>>();
+                assert!(
+                    state.try_lock().is_ok(),
+                    "the state was locked while copying"
+                );
+                *seen.lock().unwrap() = Some(text.to_string());
+                Ok(())
+            }
+        };
+        let returned = tauri::async_runtime::block_on(super::diagnostics_with(app, put)).unwrap();
+        assert!(returned.starts_with("Version: "), "{returned}");
+        assert_eq!(seen.lock().unwrap().as_deref(), Some(returned.as_str()));
+    }
+
+    #[test]
+    fn diagnostics_copy_reports_a_clipboard_that_failed() {
+        let harness = Harness::new();
+        let put = |_: &str| {
+            Err(CommandError::new(
+                ErrorKind::Clipboard,
+                "The clipboard refused the text.",
+            ))
+        };
+        let error = tauri::async_runtime::block_on(super::diagnostics_with(
+            harness.app.handle().clone(),
+            put,
+        ))
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Clipboard);
+    }
+
+    #[test]
     fn every_command_reads_the_arguments_the_interface_sends() {
         let harness = Harness::new();
         // In the order of their names. Nothing is open at first; the demo then opens a workspace
         // with four snapshots, and `workspace_create` an empty one.
+        // `diagnostics_copy` takes no arguments and would set the clipboard of the machine that
+        // runs the tests; `diagnostics_copy_builds_unlocked_and_returns_what_it_copied` runs it
+        // with a clipboard of its own.
         let outcomes: Vec<(String, String)> = command_args()
             .iter()
+            .filter(|(command, _)| command.as_str() != "diagnostics_copy")
             .map(|(command, args)| (command.clone(), harness.outcome(command, args)))
             .collect();
         let outcomes: Vec<(&str, &str)> = outcomes

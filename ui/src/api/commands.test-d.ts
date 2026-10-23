@@ -59,6 +59,7 @@ export type Checks = [
   Check<Equal<ReturnType<typeof api.exportSave>, Promise<ExportSaved>>>,
   Check<Equal<ReturnType<typeof api.exportCopy>, Promise<null>>>,
   Check<Equal<ReturnType<typeof api.exportOpen>, Promise<null>>>,
+  Check<Equal<ReturnType<typeof api.diagnosticsCopy>, Promise<string>>>,
   Check<Equal<AppStart["list_error"], CommandError | null>>,
   Check<Equal<WorkspaceOpen["warning"], CommandError | null>>,
 ];

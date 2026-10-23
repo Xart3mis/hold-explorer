@@ -66,6 +66,7 @@ describe("mockCommands", () => {
       app_start: () => ({
         version: "0.1.0",
         settings_file: "/c/settings.json",
+        logs_folder: "/c/logs",
         settings,
         list: { workspaces: [], unreadable: [], folder: "/w" },
         list_error: { kind: "Io", message: "Could not read /w." },

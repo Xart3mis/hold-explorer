@@ -3,6 +3,7 @@
 
 mod data;
 mod demo;
+mod diagnostics;
 mod error;
 mod export;
 mod folder;
@@ -24,6 +25,7 @@ use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use data::{FilterOptions, GroupDetail, HoldsView};
+pub use diagnostics::diagnostics;
 pub use error::{CommandError, ErrorKind};
 pub use export::{
     check_extension, fonts, save, Content, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
@@ -230,6 +232,7 @@ impl AppState {
         AppStart {
             version: env!("CARGO_PKG_VERSION").to_string(),
             settings_file: settings_file(&self.config_dir),
+            logs_folder: diagnostics::logs_folder(),
             settings: self.settings.clone(),
             list: workspaces::list_view(raw, &folder),
             list_error,
@@ -492,6 +495,8 @@ fn describe_with_warning(workspace: &Workspace) -> Result<WorkspaceOpen, Command
 
 #[cfg(test)]
 mod data_tests;
+#[cfg(test)]
+mod diagnostics_tests;
 #[cfg(test)]
 mod export_tests;
 #[cfg(test)]

@@ -203,6 +203,7 @@ export function isDevState(value: string): value is DevState {
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
 /** Where the development page says the settings file is. */
 const SETTINGS_FILE = "/home/ada/.config/hold-explorer/settings.json";
+const LOGS_FOLDER = "/home/ada/.local/share/hold-explorer/logs";
 
 /** What a reading answers when the workspace file is locked. */
 const LOCKED =
@@ -513,6 +514,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
   const start: AppStart = {
     version: "0.1.0",
     settings_file: SETTINGS_FILE,
+    logs_folder: LOGS_FOLDER,
     settings: {
       theme,
       density,
@@ -1400,6 +1402,7 @@ export function installDevCommands(
       return later(150, () => null);
     },
     export_open: () => null,
+    diagnostics_copy: () => later(150, () => "Version: 0.1.0\nOS: linux\n"),
     // The folder dialog picks a folder on the project drive; the file dialog an export.
     "plugin:dialog|open": (payload) => {
       const { options } = payload as { options: { directory?: boolean } };

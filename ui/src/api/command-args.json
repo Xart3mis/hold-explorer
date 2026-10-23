@@ -284,5 +284,6 @@
     "format": { "kind": "Chart", "chart": { "kind": "Bars", "dim": "Discipline" } },
     "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
   },
-  "export_open": { "path": "exports/Unit 573 piping Lines 7 Oct 2026.xlsx" }
+  "export_open": { "path": "exports/Unit 573 piping Lines 7 Oct 2026.xlsx" },
+  "diagnostics_copy": {}
 }

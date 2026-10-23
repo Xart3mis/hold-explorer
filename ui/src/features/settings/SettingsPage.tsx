@@ -10,7 +10,9 @@ import type { Density } from "../../bindings/Density";
 import type { Theme } from "../../bindings/Theme";
 import { Notice, SectionTitle, Select, TextField, type SelectOption } from "../../components";
 import { t } from "../../text/i18n";
+import { DiagnosticsRow } from "./DiagnosticsRow";
 import { FolderRow } from "./FolderRow";
+import { LogsFolderRow } from "./LogsFolderRow";
 import { SettingsFileRow } from "./SettingsFileRow";
 import styles from "./SettingsPage.module.css";
 
@@ -30,7 +32,7 @@ function isDensity(value: string): value is Density {
  * Settings: the theme and the density, applied at once and saved; the name notes are signed
  * with, saved when the field is left or Enter is pressed; then About: the version of the app, the
  * folder the workspaces are kept in, with a way to show it and to change it, and the settings
- * file, with a way to show it. While the folder changes, the other settings are inert, and the
+ * file and the logs folder, each with a way to show it, and Copy diagnostics. While the folder changes, the other settings are inert, and the
  * folder row says so.
  */
 export function SettingsPage() {
@@ -186,6 +188,10 @@ export function SettingsPage() {
           <FolderRow start={start} folder={folder} />
 
           <SettingsFileRow path={start.settings_file} isWaiting={waiting} />
+
+          <LogsFolderRow path={start.logs_folder} isWaiting={waiting} />
+
+          <DiagnosticsRow isWaiting={waiting} />
         </section>
       </div>
     </Page>

@@ -81,6 +81,7 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::export_save,
         commands::export_copy,
         commands::export_open,
+        commands::diagnostics_copy,
     ]
 }
 

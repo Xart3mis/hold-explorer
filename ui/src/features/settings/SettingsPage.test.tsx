@@ -213,6 +213,75 @@ describe("SettingsPage", () => {
     expect(alert).toHaveTextContent("The file does not exist yet.");
   });
 
+  it("shows the logs folder and shows it in the file manager", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    expect(within(about).getByText(en.settings.logsFolder)).toBeInTheDocument();
+    expect(
+      within(about).getByText("/home/ada/.local/share/hold-explorer/logs"),
+    ).toBeInTheDocument();
+    const show = within(about).getByRole("button", { name: en.settings.logsFolderShow });
+    expect(show).toHaveTextContent(en.common.showInFolder);
+    await user.click(show);
+    expect(windowApi.showInFolder).toHaveBeenLastCalledWith(
+      "/home/ada/.local/share/hold-explorer/logs",
+    );
+  });
+
+  it("says why the logs folder could not be shown", async () => {
+    windowApi.showInFolder.mockRejectedValue(new Error("The folder does not exist yet."));
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    await user.click(within(about).getByRole("button", { name: en.settings.logsFolderShow }));
+    const alert = await within(about).findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.logsFolderError);
+    expect(alert).toHaveTextContent("The folder does not exist yet.");
+  });
+
+  it("copies the diagnostics and says so in a toast", async () => {
+    const copy = vi.fn(() => "Version: 0.1.0\n");
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { diagnostics_copy: copy },
+    });
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    expect(await screen.findByRole("group", { name: en.settings.diagnosticsCopied })).toBeVisible();
+    expect(copy).toHaveBeenCalledTimes(1);
+    expect(within(main).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a clipboard that failed in place, and copies again", async () => {
+    const message = "The system did not let Hold Explorer write to the clipboard. Try again.";
+    let fail = true;
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        diagnostics_copy: () => {
+          if (fail) throw commandFailure("Clipboard", message);
+          return "Version: 0.1.0\n";
+        },
+      },
+    });
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    const alert = await within(main).findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.diagnosticsError);
+    expect(alert).toHaveTextContent(message);
+    expect(screen.queryByRole("group", { name: en.settings.diagnosticsCopied })).toBeNull();
+
+    fail = false;
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    expect(await screen.findByRole("group", { name: en.settings.diagnosticsCopied })).toBeVisible();
+    await waitFor(() => {
+      expect(within(main).queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("works without a workspace", async () => {
     renderApp({ start: startState(), path: "/settings" });
     const main = await page();
