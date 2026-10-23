@@ -90,6 +90,15 @@
   max-inline-size: var(--layout-prose-max-width);
 }
 
+/*
+ * The progress and the result of a change of the folder take the focus when they appear, so the
+ * keyboard follows the change; they are read, not used, so they show no focus ring of their own.
+ */
+.progress:focus,
+.result:focus {
+  outline: none;
+}
+
 /* The text of a notice of the folder row, then its choices or its lists, a line apart. */
 .offer {
   display: flex;

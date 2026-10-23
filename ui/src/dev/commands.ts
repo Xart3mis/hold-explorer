@@ -765,7 +765,7 @@ export function installDevCommands(
         ...start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`),
         ...start.list.unreadable.map((file) => file.file_name),
       ].sort();
-      return later(300, () => ({ path, movable }));
+      return later(300, () => ({ path, movable, count: movable.length }));
     },
     set_workspace_folder: (payload): Promise<FolderMoved> => {
       const { path, moveFiles } = payload as { path: string | null; moveFiles: boolean };

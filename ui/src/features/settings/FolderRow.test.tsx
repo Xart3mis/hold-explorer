@@ -19,7 +19,13 @@ const TAKEN =
 const checked: FolderCheck = {
   path: NEW,
   movable: ["a1b2c3d4e5f60718.holdx-ws", "b2c3d4e5f6071829.holdx-ws", "c3d4e5f607182930.holdx-ws"],
+  count: 3,
 };
+
+/** The region of the row that holds this element and takes the focus: the progress or a notice. */
+function regionOf(element: HTMLElement): Element | null {
+  return element.closest('[tabindex="-1"]');
+}
 
 /** The answer of a change to `NEW`: the start the Rust side has then, and what moved. */
 function movedTo(start: AppStart, moveFiles: boolean): FolderMoved {
@@ -115,9 +121,13 @@ describe("The workspaces folder in Settings", () => {
       await user.keyboard("{Enter}");
       expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: true });
       // While the files move, the row shows it and the rest of the settings wait.
-      expect(
-        await screen.findByRole("progressbar", { name: `Moving the workspaces to ${NEW}` }),
-      ).toBeInTheDocument();
+      const progress = await screen.findByRole("progressbar", {
+        name: `Moving the workspaces to ${NEW}`,
+      });
+      // The keyboard follows the change: to the progress, which takes the place of the choice.
+      await waitFor(() => {
+        expect(regionOf(progress)).toHaveFocus();
+      });
       expect(screen.getByText(en.settings.folderWaiting)).toBeInTheDocument();
       const theme = screen.getByRole("button", { name: new RegExp(en.settings.theme) });
       expect(theme.closest("[inert]")).not.toBeNull();
@@ -127,7 +137,11 @@ describe("The workspaces folder in Settings", () => {
       );
 
       answer.settle(movedTo(start, true));
-      expect(await screen.findByText(`Moved 2 workspace files to ${NEW}`)).toBeInTheDocument();
+      const title = await screen.findByText(`Moved 2 workspace files to ${NEW}`);
+      // Then to the result.
+      await waitFor(() => {
+        expect(regionOf(title)).toHaveFocus();
+      });
       const moved = screen.getByRole("list", { name: en.settings.folderMovedList });
       expect(
         within(moved)
@@ -142,8 +156,12 @@ describe("The workspaces folder in Settings", () => {
       expect(theme.closest("[inert]")).toBeNull();
       await expectAccessible(document.body, { page: true });
 
-      await user.click(screen.getByRole("button", { name: en.common.dismiss }));
+      await user.tab();
+      expect(screen.getByRole("button", { name: en.common.dismiss })).toHaveFocus();
+      await user.keyboard("{Enter}");
       expect(screen.queryByText(`Moved 2 workspace files to ${NEW}`)).not.toBeInTheDocument();
+      // The notice is gone, and the keyboard is back on the button that started it all.
+      expect(screen.getByRole("button", { name: en.settings.folderChange })).toHaveFocus();
     },
   );
 
@@ -160,7 +178,52 @@ describe("The workspaces folder in Settings", () => {
     await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
     await user.click(await screen.findByRole("button", { name: en.settings.folderLeaveThem }));
     expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: false });
-    expect(await screen.findByText(`The workspaces are now kept in ${NEW}`)).toBeInTheDocument();
+    const title = await screen.findByText(`The workspaces are now kept in ${NEW}`);
+    await waitFor(() => {
+      expect(regionOf(title)).toHaveFocus();
+    });
+  });
+
+  it("offers Use this folder when nothing would move, and the keyboard follows the change", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const setFolder = vi.fn(() => movedTo(start, false));
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => ({ path: NEW, movable: [], count: 0 }),
+        set_workspace_folder: setFolder,
+      },
+    });
+    await page();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    const use = await screen.findByRole("button", { name: en.settings.folderUse });
+    expect(use).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: false });
+    const title = await screen.findByText(`The workspaces are now kept in ${NEW}`);
+    await waitFor(() => {
+      expect(regionOf(title)).toHaveFocus();
+    });
+  });
+
+  it("says that no file moved when every file was left", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => checked,
+        set_workspace_folder: () => ({ ...movedTo(start, true), moved: [] }),
+      },
+    });
+    await page();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    await user.click(await screen.findByRole("button", { name: en.settings.folderMoveThem }));
+    expect(await screen.findByText(en.settings.folderNoneMoved)).toBeInTheDocument();
+    expect(screen.getByText(TAKEN)).toBeInTheDocument();
   });
 
   it("changes nothing on Cancel, and nothing when the dialog is cancelled", async () => {
@@ -182,6 +245,7 @@ describe("The workspaces folder in Settings", () => {
     await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
     await user.click(await screen.findByRole("button", { name: en.common.cancel }));
     expect(screen.queryByText(moveTitle)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: en.settings.folderChange })).toHaveFocus();
     expect(screen.getByRole("button", { name: en.settings.folderChange })).not.toHaveAttribute(
       "aria-busy",
     );
@@ -219,7 +283,8 @@ describe("The workspaces folder in Settings", () => {
       moved: ["a1b2c3d4e5f60718.holdx-ws"],
       left: [],
     }));
-    const check = vi.fn(() => ({ path: OLD, movable: ["a1b2c3d4e5f60718.holdx-ws"] }));
+    const checked = later<FolderCheck>();
+    const check = vi.fn(() => checked.promise);
     const { user } = renderApp({
       start: custom,
       path: "/settings",
@@ -227,6 +292,15 @@ describe("The workspaces folder in Settings", () => {
     });
     await page();
     await user.click(screen.getByRole("button", { name: en.settings.folderDefault }));
+    // The spinner is on the button that started the check, and on that one alone.
+    const spinnerIn = (name: string) =>
+      screen.getByRole("button", { name }).querySelector('[data-part="spinner"]');
+    await waitFor(() => {
+      expect(spinnerIn(en.settings.folderDefault)).not.toBeNull();
+    });
+    expect(spinnerIn(en.settings.folderChange)).toBeNull();
+    // The count comes from the check, not from the list it names.
+    checked.settle({ path: OLD, movable: ["a1b2c3d4e5f60718.holdx-ws"], count: 1 });
     expect(await screen.findByText("Move 1 workspace to the default folder?")).toBeInTheDocument();
     expect(check).toHaveBeenCalledWith({ path: null });
     expect(screen.getByRole("button", { name: en.settings.folderMoveThem })).toHaveFocus();

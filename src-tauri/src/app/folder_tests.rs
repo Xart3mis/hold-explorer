@@ -3,8 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::error::{CommandError, ErrorKind};
+use super::folder::{move_file, same_bytes};
 use super::settings::load_settings;
-use super::test_support::Fixture;
+use super::test_support::{import, small, Fixture};
 use super::AppState;
 
 /// Creates a workspace of each name in the folder in use and returns their files. The last one
@@ -486,6 +487,7 @@ fn damaged_and_newer_files_move_whole() {
 
     let check = state.check_workspace_folder(Some(&text(&new))).unwrap();
     assert_eq!(check.movable.len(), 3);
+    assert_eq!(check.count, 3);
     let result = state.set_workspace_folder(Some(&text(&new)), true).unwrap();
 
     assert!(result.left.is_empty(), "{:?}", result.left);
@@ -522,4 +524,179 @@ fn a_copy_of_an_unreadable_file_is_compared_byte_for_byte_and_not_opened() {
     assert_eq!(checked.into_inner(), 0);
     assert_eq!(result.moved, vec!["damaged.holdx-ws".to_string()]);
     assert!(!damaged.exists());
+}
+
+/// A file `name` with `content` in the folder `dir`, made when missing.
+fn file_in(dir: &Path, name: &str, content: &str) -> PathBuf {
+    fs::create_dir_all(dir).unwrap();
+    let path = dir.join(name);
+    fs::write(&path, content).unwrap();
+    path
+}
+
+fn verified(_: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[test]
+fn a_removal_that_took_the_original_and_then_failed_keeps_the_copy_as_moved() {
+    let fx = Fixture::new();
+    let file = file_in(&elsewhere(&fx, "old"), "a.holdx-ws", "content");
+    let to = elsewhere(&fx, "new");
+    fs::create_dir_all(&to).unwrap();
+
+    let result = move_file(&file, &to, &verified, &|path: &Path| {
+        fs::remove_file(path)?;
+        Err(std::io::Error::other("reported after the file was gone"))
+    });
+
+    result.unwrap();
+    assert!(!file.exists());
+    assert_eq!(
+        fs::read_to_string(to.join("a.holdx-ws")).unwrap(),
+        "content"
+    );
+    assert_eq!(names(&to), vec!["a.holdx-ws".to_string()]);
+}
+
+#[test]
+fn a_removal_that_finds_the_original_gone_counts_the_file_as_moved() {
+    let fx = Fixture::new();
+    let file = file_in(&elsewhere(&fx, "old"), "a.holdx-ws", "content");
+    let to = elsewhere(&fx, "new");
+    fs::create_dir_all(&to).unwrap();
+
+    let result = move_file(&file, &to, &verified, &|path: &Path| {
+        fs::remove_file(path)?;
+        Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+    });
+
+    result.unwrap();
+    assert_eq!(
+        fs::read_to_string(to.join("a.holdx-ws")).unwrap(),
+        "content"
+    );
+}
+
+#[test]
+fn a_removal_that_failed_with_the_original_in_place_removes_the_copy() {
+    let fx = Fixture::new();
+    let file = file_in(&elsewhere(&fx, "old"), "a.holdx-ws", "content");
+    let to = elsewhere(&fx, "new");
+    fs::create_dir_all(&to).unwrap();
+
+    let error = move_file(&file, &to, &verified, &|_: &Path| {
+        Err(std::io::Error::other("held by another program"))
+    })
+    .unwrap_err();
+
+    assert_eq!(error.kind, ErrorKind::MoveRemove);
+    assert!(
+        error.message.contains("held by another program"),
+        "{}",
+        error.message
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), "content");
+    assert!(names(&to).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_moved_file_keeps_its_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let files = create(&mut state, &["A"]);
+    fs::set_permissions(&files[0], fs::Permissions::from_mode(0o644)).unwrap();
+    let new = elsewhere(&fx, "new");
+
+    let result = state.set_workspace_folder(Some(&text(&new)), true).unwrap();
+
+    assert_eq!(result.moved, vec![name_of(&files[0])]);
+    let mode = fs::metadata(new.join(name_of(&files[0])))
+        .unwrap()
+        .permissions()
+        .mode();
+    assert_eq!(mode & 0o777, 0o644);
+}
+
+#[test]
+fn a_name_taken_while_the_copy_was_checked_leaves_the_file_and_the_other_file_whole() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let files = create(&mut state, &["A"]);
+    let before = fs::read(&files[0]).unwrap();
+    let new = elsewhere(&fx, "new");
+    let other = new.join(name_of(&files[0]));
+    // Another program writes a file of the name while the copy is checked.
+    let check = |_: &Path| {
+        fs::write(&other, "another file").unwrap();
+        Ok(())
+    };
+
+    let result = state
+        .set_workspace_folder_with(Some(&text(&new)), true, &check)
+        .unwrap();
+
+    assert!(result.moved.is_empty());
+    assert_eq!(result.left.len(), 1);
+    assert_eq!(result.left[0].kind, ErrorKind::NameTaken);
+    assert_eq!(fs::read_to_string(&other).unwrap(), "another file");
+    assert_eq!(names(&new), vec![name_of(&files[0])]);
+    assert_eq!(fs::read(&files[0]).unwrap(), before);
+}
+
+#[test]
+fn same_bytes_finds_a_copy_of_another_length_and_one_of_other_content() {
+    let fx = Fixture::new();
+    let original = fx.text("original", "abcdef");
+    let shorter = fx.text("shorter", "abcde");
+    let other = fx.text("other", "abcdeX");
+    let equal = fx.text("equal", "abcdef");
+
+    assert_eq!(same_bytes(&original, &equal), Ok(()));
+    let length = same_bytes(&original, &shorter).unwrap_err();
+    assert!(length.contains('5') && length.contains('6'), "{length}");
+    assert_eq!(
+        same_bytes(&original, &other).unwrap_err(),
+        "differs from the file"
+    );
+}
+
+#[test]
+fn the_selected_snapshot_is_selected_again_after_the_move() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    import(
+        &mut state,
+        &fx.synth("b.xlsx", 2),
+        "2026-10-06 00:00:00",
+        false,
+    );
+    let snapshots = state.current().unwrap().unwrap().snapshots;
+    let older = snapshots[0].id;
+    state.select_snapshot(older).unwrap();
+    let new = elsewhere(&fx, "new");
+
+    let result = state.set_workspace_folder(Some(&text(&new)), true).unwrap();
+
+    assert_eq!(state.selected_snapshot(), Some(older));
+    assert_eq!(result.start.open.unwrap().selected, Some(older));
+}
+
+#[test]
+fn the_default_folder_written_another_way_is_saved_as_the_default() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state
+        .set_workspace_folder(Some(&text(&elsewhere(&fx, "new"))), false)
+        .unwrap();
+    fs::create_dir_all(fx.workspaces()).unwrap();
+
+    let result = state
+        .set_workspace_folder(Some(&text(&fx.workspaces().join("."))), false)
+        .unwrap();
+
+    assert_eq!(result.start.settings.workspace_dir, None);
+    assert_eq!(load_settings(&fx.config()).workspace_dir, None);
 }

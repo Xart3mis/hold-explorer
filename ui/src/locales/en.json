@@ -295,6 +295,7 @@
     "folderSwitching": "Changing the workspaces folder",
     "folderWaiting": "The other settings wait until the workspaces folder has changed.",
     "folderChanged": "The workspaces are now kept in {{to}}",
+    "folderNoneMoved": "No workspace file was moved",
     "folderMovedTitle_one": "Moved {{count, number}} workspace file to {{to}}",
     "folderMovedTitle_other": "Moved {{count, number}} workspace files to {{to}}",
     "folderMovedList": "Workspace files moved",

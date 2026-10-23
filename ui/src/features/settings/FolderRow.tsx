@@ -34,6 +34,31 @@ export function FolderRow({ start, folder }: FolderRowProps) {
   // While a folder is checked, offered, or changed, no other is chosen.
   const deciding = checking || moving || change?.step === "offer";
 
+  // The keyboard follows the change: from the choice to the progress, from the progress to the
+  // result, and back to "Change folder" when there is nothing more to read.
+  const buttons = useRef<HTMLDivElement>(null);
+  const progress = useRef<HTMLDivElement>(null);
+  const result = useRef<HTMLDivElement>(null);
+  const focusChange = () => {
+    buttons.current?.querySelector("button")?.focus();
+  };
+  const step = change?.step;
+  const before = useRef(step);
+  useEffect(() => {
+    const was = before.current;
+    before.current = step;
+    if (step === "moving" && was === "offer") progress.current?.focus();
+    // A quick answer may come before a render showed the progress: from the offer straight on.
+    if ((step === "done" || step === "failed") && was !== undefined && was !== step) {
+      if (result.current) result.current.focus();
+      else focusChange();
+    }
+  }, [step]);
+  const putAway = () => {
+    dismiss();
+    focusChange();
+  };
+
   const chooseOther = () => {
     dismiss();
     chooseFolder().then(
@@ -55,11 +80,11 @@ export function FolderRow({ start, folder }: FolderRowProps) {
         <span className={styles.path}>{path}</span>
         <span className={styles.help}>{t("settings.folderHelp")}</span>
       </div>
-      <div className={styles.buttons}>
+      <div ref={buttons} className={styles.buttons}>
         <Button
           aria-describedby={labelId}
           icon={FolderOpen}
-          isPending={checking}
+          isPending={change?.step === "checking" && change.path !== null}
           isInert={isBusy || deciding}
           onPress={chooseOther}
         >
@@ -68,6 +93,8 @@ export function FolderRow({ start, folder }: FolderRowProps) {
         {isDefault ? null : (
           <Button
             aria-describedby={labelId}
+            isPending={change?.step === "checking" && change.path === null}
+            reservesPendingSpace
             isInert={isBusy || deciding}
             onPress={() => {
               dismiss();
@@ -106,15 +133,15 @@ export function FolderRow({ start, folder }: FolderRowProps) {
           from={path}
           to={change.check.path}
           isDefault={change.path === null}
-          count={change.check.movable.length}
+          count={change.check.count}
           onMove={(moveFiles) => {
             move.mutate({ path: change.path, moveFiles });
           }}
-          onCancel={dismiss}
+          onCancel={putAway}
         />
       ) : null}
       {change?.step === "moving" ? (
-        <div className={styles.progress}>
+        <div ref={progress} tabIndex={-1} className={styles.progress}>
           <Progress
             label={
               !change.choice.moveFiles
@@ -127,19 +154,25 @@ export function FolderRow({ start, folder }: FolderRowProps) {
           <span className={styles.help}>{t("settings.folderWaiting")}</span>
         </div>
       ) : null}
-      {change?.step === "done" ? <Moved moved={change.moved} onDismiss={dismiss} /> : null}
+      {change?.step === "done" ? (
+        <div ref={result} tabIndex={-1} className={styles.result}>
+          <Moved moved={change.moved} onDismiss={putAway} />
+        </div>
+      ) : null}
       {change?.step === "failed" ? (
-        <Notice
-          tone="danger"
-          title={
-            change.error.kind === "Dialog"
-              ? t("settings.folderDialogError")
-              : t("settings.folderNotChanged")
-          }
-          onDismiss={dismiss}
-        >
-          {change.error.message}
-        </Notice>
+        <div ref={result} tabIndex={-1} className={styles.result}>
+          <Notice
+            tone="danger"
+            title={
+              change.error.kind === "Dialog"
+                ? t("settings.folderDialogError")
+                : t("settings.folderNotChanged")
+            }
+            onDismiss={putAway}
+          >
+            {change.error.message}
+          </Notice>
+        </div>
       ) : null}
     </div>
   );
@@ -220,9 +253,11 @@ function Offer({ from, to, isDefault, count, onMove, onCancel }: OfferProps) {
 function Moved({ moved, onDismiss }: { moved: FolderMoved; onDismiss: () => void }) {
   const to = moved.start.list.folder;
   const title =
-    moved.moved.length === 0 && moved.left.length === 0
-      ? t("settings.folderChanged", { to })
-      : t("settings.folderMovedTitle", { count: moved.moved.length, to });
+    moved.moved.length > 0
+      ? t("settings.folderMovedTitle", { count: moved.moved.length, to })
+      : moved.left.length > 0
+        ? t("settings.folderNoneMoved")
+        : t("settings.folderChanged", { to });
   return (
     <Notice
       tone={moved.left.length === 0 ? "success" : "warning"}

@@ -11,4 +11,8 @@ path: string,
 /**
  * The workspace files in the folder now in use that a move would take.
  */
-movable: Array<string>, };
+movable: Array<string>, 
+/**
+ * How many files that is.
+ */
+count: number, };

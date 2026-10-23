@@ -20,6 +20,8 @@ pub struct FolderCheck {
     pub path: String,
     /// The workspace files in the folder now in use that a move would take.
     pub movable: Vec<String>,
+    /// How many files that is.
+    pub count: usize,
 }
 
 /// What a change of the workspace folder did.
@@ -49,12 +51,13 @@ impl AppState {
     /// nearest folder above it that exists is writable. Nothing is created and nothing changes.
     pub fn check_workspace_folder(&self, path: Option<&str>) -> Result<FolderCheck, CommandError> {
         let folder = self.usable_folder(path, false)?;
-        let movable = workspace_files(&self.folder())?
+        let movable: Vec<String> = workspace_files(&self.folder())?
             .iter()
             .map(|(file, _)| file_name(file))
             .collect();
         Ok(FolderCheck {
             path: folder.to_string_lossy().into_owned(),
+            count: movable.len(),
             movable,
         })
     }
@@ -96,6 +99,7 @@ impl AppState {
 
         // Closed before any file is touched: a file that is open cannot be removed on Windows.
         let was_open = self.open.take().map(|open| open.path().to_path_buf());
+        let was_selected = self.selected;
         self.open_id = None;
         self.selected = None;
         self.cache = None;
@@ -105,17 +109,23 @@ impl AppState {
         let mut left = Vec::new();
         for (file, readable) in files {
             let name = file_name(&file);
+            let removal = |path: &Path| std::fs::remove_file(path);
             let verified = if readable {
-                move_file(&file, &to, &|copy| {
-                    check(copy).map_err(|error| {
-                        format!(
-                            "is not a workspace this version can open ({})",
-                            error.message
-                        )
-                    })
-                })
+                move_file(
+                    &file,
+                    &to,
+                    &|copy| {
+                        check(copy).map_err(|error| {
+                            format!(
+                                "is not a workspace this version can open ({})",
+                                error.message
+                            )
+                        })
+                    },
+                    &removal,
+                )
             } else {
-                move_file(&file, &to, &|copy| same_bytes(&file, copy))
+                move_file(&file, &to, &|copy| same_bytes(&file, copy), &removal)
             };
             match verified {
                 Ok(()) => moved.push(name),
@@ -130,7 +140,7 @@ impl AppState {
 
         let to_text = to.to_string_lossy().into_owned();
         let next = Settings {
-            workspace_dir: (to != self.default_folder()).then(|| to_text.clone()),
+            workspace_dir: (!same_folder(&to, &self.default_folder())).then(|| to_text.clone()),
             ..self.settings.clone()
         };
         let saved = self.save(&next);
@@ -146,7 +156,13 @@ impl AppState {
         let open = reopen
             .and_then(|path| Workspace::open(&path).ok())
             .and_then(|workspace| describe(&workspace).ok().map(|open| (workspace, open)))
-            .map(|(workspace, open)| {
+            .map(|(workspace, mut open)| {
+                // The snapshot that was selected stays selected while the workspace has it.
+                if let Some(id) =
+                    was_selected.filter(|id| open.snapshots.iter().any(|s| s.id == *id))
+                {
+                    open.selected = Some(id);
+                }
                 self.install(workspace, &open);
                 open
             });
@@ -238,7 +254,10 @@ fn same_folder(a: &Path, b: &Path) -> bool {
     resolved(a) == resolved(b)
 }
 
-/// The path itself when it exists, else the nearest folder above it that does.
+/// The path itself when it exists, else the nearest folder above it that does. A check probes
+/// that folder, and the change later creates the folder itself, so the two can disagree: the
+/// folder above may change between them, or allow a file but not a folder. The change then
+/// refuses on its own, before any file is touched.
 fn nearest_existing(path: &Path) -> PathBuf {
     path.ancestors()
         .find(|ancestor| ancestor.symlink_metadata().is_ok())
@@ -266,7 +285,7 @@ fn workspace_files(folder: &Path) -> Result<Vec<(PathBuf, bool)>, CommandError> 
 
 /// Whether the copy holds exactly the bytes of the original: the same length, then the same
 /// content, read side by side. The problem, in words, when it does not.
-fn same_bytes(original: &Path, copy: &Path) -> Result<(), String> {
+pub(super) fn same_bytes(original: &Path, copy: &Path) -> Result<(), String> {
     use std::io::Read;
     let unreadable = |error: std::io::Error| format!("could not be read back ({error})");
     let mut a = std::io::BufReader::new(File::open(original).map_err(unreadable)?);
@@ -304,12 +323,15 @@ fn file_name(path: &Path) -> String {
 
 /// Moves the workspace file `file` into the folder `to` under its name: copied to a temporary
 /// name there, flushed, verified with `verify` (which says what is wrong with the copy), given its
-/// name (never over another file), and only then removed from where it was. A failure at any step
-/// removes the copy and leaves the file whole where it was; the error's kind names the step.
-fn move_file(
+/// name (never over another file), and only then removed from where it was with `remove`. A
+/// failure at any step removes the copy and leaves the file whole where it was; the error's kind
+/// names the step. The one exception: when `remove` fails but the original is gone all the same,
+/// the copy is the last one, so it stays and the file counts as moved.
+pub(super) fn move_file(
     file: &Path,
     to: &Path,
     verify: &dyn Fn(&Path) -> Result<(), String>,
+    remove: &dyn Fn(&Path) -> std::io::Result<()>,
 ) -> Result<(), CommandError> {
     let name = file_name(file);
     let from = file
@@ -348,6 +370,14 @@ fn move_file(
             "{copied} of its {length} bytes were copied"
         )));
     }
+    // The copy is made as the system's temporary files are, readable by its owner only.
+    #[cfg(unix)]
+    {
+        let permissions = source.metadata().map_err(|e| not_copied(&e))?.permissions();
+        copy.as_file()
+            .set_permissions(permissions)
+            .map_err(|e| not_copied(&e))?;
+    }
     copy.as_file().sync_all().map_err(|e| not_copied(&e))?;
     drop(source);
 
@@ -381,20 +411,42 @@ fn move_file(
     })?;
     drop(placed);
 
-    std::fs::remove_file(file).map_err(|error| {
-        // The original stays, so the copy goes: the file is in one folder only.
-        let removed = std::fs::remove_file(&target);
-        let copy_note = match removed {
-            Ok(()) => "the copy was removed".to_string(),
-            Err(e) => format!(
-                "the copy in {place} could not be removed either ({e}), so the file is in both folders; delete one of the two"
-            ),
-        };
-        CommandError::new(
-            ErrorKind::MoveRemove,
-            format!(
-                "{name} could not be removed from {from} ({error}), so {copy_note}, and the file was left whole in {from}. Close any program that holds it, then move it by hand."
-            ),
-        )
-    })
+    // The new folder holds the name for good before the original goes.
+    #[cfg(unix)]
+    File::open(to)
+        .and_then(|folder| folder.sync_all())
+        .map_err(|error| {
+            let removed = std::fs::remove_file(&target);
+            CommandError::new(
+                ErrorKind::MoveRename,
+                match removed {
+                    Ok(()) => format!(
+                        "The copy of {name} could not be written for good in {place} ({error}). The copy was removed again, and the file is whole in {from}. Move it there by hand."
+                    ),
+                    Err(e) => format!(
+                        "The copy of {name} could not be written for good in {place} ({error}), and it could not be removed again ({e}). The file is whole in {from}. Delete the copy in {place}, then move the file there by hand."
+                    ),
+                },
+            )
+        })?;
+
+    let error = match remove(file) {
+        Ok(()) => return Ok(()),
+        // Gone already: the copy is the file now.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => error,
+    };
+    // Only while the original is still there may the copy go; otherwise it is the last one.
+    if file.symlink_metadata().is_err() {
+        return Ok(());
+    }
+    let message = match std::fs::remove_file(&target) {
+        Ok(()) => format!(
+            "{name} could not be removed from {from} ({error}). The copy in {place} was removed again, and the file is whole in {from}. Close any program that holds it, then move it by hand."
+        ),
+        Err(e) => format!(
+            "{name} could not be removed from {from} ({error}). Its copy in {place} could not be removed either ({e}). The file is now in both folders. Delete the one in {from} once the workspace opens from {place}."
+        ),
+    };
+    Err(CommandError::new(ErrorKind::MoveRemove, message))
 }
