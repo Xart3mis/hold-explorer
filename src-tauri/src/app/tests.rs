@@ -143,6 +143,7 @@ fn settings_are_written_through_a_temporary_file_that_is_gone_afterwards() {
         density: Density::Compact,
         author_name: "Ada Lovelace".into(),
         workspace_dir: Some("/somewhere".into()),
+        workspace_folder_chosen: true,
         last_workspace: Some("abc".into()),
     };
     save_settings(&fx.config(), &settings).unwrap();

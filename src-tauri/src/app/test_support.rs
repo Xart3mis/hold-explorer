@@ -13,7 +13,8 @@ use super::snapshots::ViewRef;
 use super::AppState;
 
 /// One temporary folder that holds the configuration folder `config/`, the data folder `data/`,
-/// the local data folder `local/` (with the workspace folder `local/workspaces/`), and input files in `input/`.
+/// the local data folder `local/` (with the workspace folder `local/workspaces/`), and input
+/// files in `input/`.
 pub(super) struct Fixture {
     pub(super) dir: TempDir,
 }

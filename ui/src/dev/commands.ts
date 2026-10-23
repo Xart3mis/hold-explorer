@@ -520,6 +520,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
       density,
       author_name: "",
       workspace_dir: null,
+      workspace_folder_chosen: false,
       last_workspace: null,
     },
     list: { workspaces: [], unreadable: [], folder: FOLDER },

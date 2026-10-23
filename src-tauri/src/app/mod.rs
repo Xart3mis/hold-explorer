@@ -141,11 +141,12 @@ impl AppState {
             blocked,
             set_aside,
         } = load_settings_checked(&config_dir);
-        if settings.workspace_dir.is_none() {
+        if settings.workspace_dir.is_none() && !settings.workspace_folder_chosen {
             let default = local_data_dir.join("workspaces");
             let old = data_dir.join("workspaces");
             if old != default && !holds_workspace_files(&default) && holds_workspace_files(&old) {
                 settings.workspace_dir = Some(old.to_string_lossy().into_owned());
+                settings.workspace_folder_chosen = true;
                 if blocked.is_none() {
                     // A failed save repeats the carry-over at the next start, which is harmless.
                     let _ = save_settings(&config_dir, &settings);
@@ -460,8 +461,6 @@ impl AppState {
     }
 }
 
-/// The listing of a workspace folder, as a start shows it: a folder that cannot be listed gives
-/// an empty list and the error.
 /// Whether the folder holds a file the store lists, readable or not. A folder that cannot be
 /// listed holds none.
 fn holds_workspace_files(folder: &Path) -> bool {
@@ -469,6 +468,8 @@ fn holds_workspace_files(folder: &Path) -> bool {
         .is_ok_and(|list| !list.workspaces.is_empty() || !list.unreadable.is_empty())
 }
 
+/// The listing of a workspace folder, as a start shows it: a folder that cannot be listed gives
+/// an empty list and the error.
 fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
     match list_workspaces(folder) {
         Ok(raw) => (raw, None),

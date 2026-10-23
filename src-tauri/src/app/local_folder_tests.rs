@@ -2,7 +2,7 @@
 //! over for a user who already has workspaces there.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use super::settings::load_settings;
 use super::test_support::Fixture;
@@ -22,15 +22,11 @@ fn workspace_in_local_folder(fx: &Fixture) {
     state.create_workspace("New").unwrap();
 }
 
-fn same(a: &Path, b: &Path) -> bool {
-    a == b
-}
-
 #[test]
 fn with_no_settings_and_no_files_the_default_is_the_local_folder() {
     let fx = Fixture::new();
     let state = fx.state();
-    assert!(same(&state.folder(), &fx.workspaces()));
+    assert_eq!(state.folder(), fx.workspaces());
     assert_ne!(fx.workspaces(), fx.old_workspaces());
     assert_eq!(state.settings().workspace_dir, None);
     assert!(!fx.config().join("settings.json").exists());
@@ -67,8 +63,13 @@ fn the_carry_over_is_made_once_and_the_start_after_it_finds_the_same_folder() {
     let fx = Fixture::new();
     workspace_in_old_folder(&fx);
     drop(fx.state());
+    let file = fx.config().join("settings.json");
+    let before = fs::read_to_string(&file).unwrap();
+    let modified = fs::metadata(&file).unwrap().modified().unwrap();
     let again = fx.state();
     assert_eq!(again.folder(), fx.old_workspaces());
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
+    assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), modified);
 }
 
 #[test]
@@ -137,4 +138,39 @@ fn the_logs_folder_of_the_start_is_built_from_the_local_data_folder_of_the_state
         start.logs_folder,
         crash::logs_dir(&local).to_string_lossy().into_owned()
     );
+}
+
+#[test]
+fn a_carry_over_does_not_come_back_after_the_default_folder_is_chosen() {
+    let fx = Fixture::new();
+    workspace_in_old_folder(&fx);
+    let mut state = fx.state();
+    assert_eq!(state.folder(), fx.old_workspaces());
+    state.set_workspace_folder(None, false).unwrap();
+    assert_eq!(state.folder(), fx.workspaces());
+    let restarted = fx.state();
+    assert_eq!(restarted.folder(), fx.workspaces());
+    assert_eq!(restarted.settings().workspace_dir, None);
+    assert!(restarted.settings().workspace_folder_chosen);
+}
+
+#[test]
+fn a_folder_the_user_chose_is_remembered_as_chosen() {
+    let fx = Fixture::new();
+    assert!(!fx.state().settings().workspace_folder_chosen);
+    let mut state = fx.state();
+    state
+        .set_workspace_folder(Some(&fx.dir.path().join("mine").to_string_lossy()), false)
+        .unwrap();
+    assert!(load_settings(&fx.config()).workspace_folder_chosen);
+}
+
+#[test]
+fn when_the_old_folder_is_the_default_nothing_is_carried_over() {
+    let fx = Fixture::new();
+    workspace_in_old_folder(&fx);
+    let state = AppState::new(fx.config(), fx.data(), fx.data());
+    assert_eq!(state.settings().workspace_dir, None);
+    assert!(!state.settings().workspace_folder_chosen);
+    assert!(!fx.config().join("settings.json").exists());
 }

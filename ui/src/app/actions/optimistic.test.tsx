@@ -14,6 +14,7 @@ const settings = (changes: Partial<Settings>): Settings => ({
   density: "Comfortable",
   author_name: "",
   workspace_dir: null,
+  workspace_folder_chosen: false,
   last_workspace: null,
   ...changes,
 });

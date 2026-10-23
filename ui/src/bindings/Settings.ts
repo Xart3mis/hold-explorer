@@ -24,6 +24,11 @@ author_name: string,
  */
 workspace_dir: string | null, 
 /**
+ * Whether a folder was chosen, the default folder included, or the old folder was carried
+ * over: from then on the old folder is never carried over again.
+ */
+workspace_folder_chosen: boolean, 
+/**
  * The id of the workspace that was open last.
  */
 last_workspace: string | null, };

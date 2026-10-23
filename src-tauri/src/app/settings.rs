@@ -53,6 +53,9 @@ pub struct Settings {
     pub author_name: String,
     /// Where workspaces are kept; `None` means the default folder.
     pub workspace_dir: Option<String>,
+    /// Whether a folder was chosen, the default folder included, or the old folder was carried
+    /// over: from then on the old folder is never carried over again.
+    pub workspace_folder_chosen: bool,
     /// The id of the workspace that was open last.
     pub last_workspace: Option<String>,
 }

@@ -150,6 +150,7 @@ impl AppState {
         let to_text = to.to_string_lossy().into_owned();
         let next = Settings {
             workspace_dir: (!same_folder(&to, &self.default_folder())).then(|| to_text.clone()),
+            workspace_folder_chosen: true,
             ..self.settings.clone()
         };
         let saved = self.save(&next);
