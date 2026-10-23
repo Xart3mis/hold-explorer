@@ -25,6 +25,42 @@ Status: early development. The design is in `docs/superpowers/specs/`.
 
 History, People, Follow-up, and Rules are listed in the sidebar and say "Soon".
 
+## Download
+
+Releases are on the releases page of this repository: https://github.com/Xart3mis/hold-explorer/releases. Each release has three files:
+
+- `HoldExplorer-<version>-windows-x64.exe`: Windows 10 and 11, x64. It is portable: there is nothing to install and it needs no admin rights. Put it in any folder and start it.
+- `HoldExplorer-<version>-linux-x86_64.AppImage`: Linux, x64. Make it executable (`chmod +x HoldExplorer-<version>-linux-x86_64.AppImage`) and start it.
+- `SHA256SUMS.txt`: the SHA-256 checksum of each of the other two files.
+
+### Check the download
+
+Download `SHA256SUMS.txt` to the same folder as the app, then compare the checksums. A file whose checksum differs is damaged or is not the file that was published; delete it and download it again.
+
+- Windows, in PowerShell, in that folder:
+
+      Get-FileHash .\HoldExplorer-<version>-windows-x64.exe -Algorithm SHA256
+
+  Compare the `Hash` it prints with the line for the `.exe` in `SHA256SUMS.txt`. PowerShell prints the hash in capitals and the file has it in small letters; the letters and digits must be the same.
+
+- Linux, in that folder:
+
+      sha256sum --check --ignore-missing SHA256SUMS.txt
+
+  It prints `OK` after the name of each file it found and checked.
+
+### The first start on Windows
+
+The executable is not signed. On the first start of a downloaded copy, Windows SmartScreen may say "Windows protected your PC" and offer only "Don't run". Check the checksum first, then choose "More info" and "Run anyway". Windows asks again only for a newly downloaded file.
+
+### The update check
+
+When it starts, at most once a day, Hold Explorer asks GitHub whether a newer release is out. If one is, a notice says so and offers the release page or to skip that version. Nothing is downloaded or installed by the app.
+
+The request goes to the GitHub API and carries the app's version number (in a `User-Agent` of `HoldExplorer/<version>`). It sends only its version number to GitHub: no file, no workspace data, no name, and no identifier. GitHub sees the network address the request comes from, as with any request. The app makes no other network request, and everything else works offline.
+
+To turn the check off, open Settings and clear "Check for updates at start".
+
 ## Development
 
     cargo test --workspace
