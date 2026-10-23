@@ -19,11 +19,19 @@ const DATA_PATHS: [&str; 4] = ["/overview", "/breakdown", "/lines", "/blockers"]
 /// The query parameters that name a selection, which a saved view never carries.
 const SELECTION_PARAMS: [&str; 3] = ["line", "hold", "blocker"];
 
+#[cfg(test)]
+thread_local! {
+    /// How many times this thread read the saved views of a workspace.
+    pub(super) static VIEW_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// The saved views of `workspace`, and the warning to show when they could not be read: a stored
 /// value that cannot be parsed reads as no views, and is left in the file until a save replaces it.
 pub(super) fn read_views(
     workspace: &Workspace,
 ) -> Result<(Vec<SavedView>, Option<CommandError>), CommandError> {
+    #[cfg(test)]
+    VIEW_READS.with(|reads| reads.set(reads.get() + 1));
     match workspace.saved_views() {
         Ok(views) => Ok((views, None)),
         Err(StoreError::Corrupt { detail }) => Ok((

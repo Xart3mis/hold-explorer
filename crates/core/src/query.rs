@@ -118,9 +118,11 @@ pub struct FilterLabel {
 
 /// Labels every value of every field entry of `spec`, each pair of dimension and value once, in
 /// the order of the filter. A value is labelled from the first hold that has it among those
-/// `spec.without(dim)` keeps, as the picker labels it, and failing that from the first hold of
-/// the snapshot that has it.
-pub fn filter_labels(ds: &Dataset, spec: &FilterSpec) -> Vec<FilterLabel> {
+/// `applied.without(dim)` keeps, as the picker labels it, and failing that from the first hold of
+/// the snapshot that has it. `applied` is `spec` as the snapshot applies it
+/// ([`FilterSpec::applicable`]), so an entry the snapshot cannot apply is labelled but keeps no
+/// hold from labelling another.
+pub fn filter_labels(ds: &Dataset, spec: &FilterSpec, applied: &FilterSpec) -> Vec<FilterLabel> {
     let mut wanted: Vec<(&Dim, &str)> = Vec::new();
     for filter in &spec.fields {
         for key in &filter.values {
@@ -132,7 +134,7 @@ pub fn filter_labels(ds: &Dataset, spec: &FilterSpec) -> Vec<FilterLabel> {
     wanted
         .into_iter()
         .map(|(dim, key)| {
-            let others = spec.without(dim);
+            let others = applied.without(dim);
             let mut first = None;
             for row in ds.rows.iter().filter(|row| dim.value(row) == key) {
                 if others.matches(row) {
@@ -1147,7 +1149,7 @@ mod tests {
     }
 
     fn labels(spec: &FilterSpec) -> Vec<(Dim, String, String)> {
-        filter_labels(&sample(), spec)
+        filter_labels(&sample(), spec, spec)
             .into_iter()
             .map(|l| (l.dim, l.key, l.label))
             .collect()
@@ -1212,18 +1214,50 @@ mod tests {
             ..Default::default()
         };
         // Open holds only: the picker lists the remark as the open hold writes it.
-        assert_eq!(filter_labels(&ds, &spec)[0].label, "Pending 538-PR-100");
+        assert_eq!(
+            filter_labels(&ds, &spec, &spec)[0].label,
+            "Pending 538-PR-100"
+        );
         // Released holds only: the open hold is not kept, and the released one names it.
         let released = FilterSpec {
             status: Status::Released,
             ..spec
         };
-        let label = &filter_labels(&ds, &released)[0].label;
+        let label = &filter_labels(&ds, &released, &released)[0].label;
         assert_ne!(label, "Pending 538-PR-100");
         assert_eq!(
             label,
             &group_by(&ds, &released.without(&Dim::Remark), &Dim::Remark)[0].label
         );
+    }
+
+    #[test]
+    fn filter_labels_take_the_rest_of_the_filter_as_the_snapshot_applies_it() {
+        let mut first = hold("L1", "Civil", "MISC.", "pending   538-pr-100", 10);
+        first.released = true;
+        let ds = Dataset::build(
+            vec![first, hold("L2", "Civil", "MISC.", "Pending 538-PR-100", 5)],
+            RuleSet::builtin(),
+            snapshot(),
+        );
+        // An entry on a column the snapshot lacks keeps no hold as it is written; the snapshot
+        // applies the filter without it, and the picker labels from that.
+        let spec = FilterSpec {
+            fields: vec![
+                field(Dim::Remark, &["PENDING 538-PR-100"]),
+                field(Dim::Custom("Area".into()), &["North"]),
+            ],
+            ..Default::default()
+        };
+        let (applied, _) = spec.applicable(&[], &[]);
+        let labels = filter_labels(&ds, &spec, &applied);
+        assert_eq!(labels[0].label, "Pending 538-PR-100");
+        assert_eq!(
+            labels[0].label,
+            group_by(&ds, &applied.without(&Dim::Remark), &Dim::Remark)[0].label
+        );
+        // Every key of the filter is labelled, those of the entry the snapshot cannot apply too.
+        assert_eq!(labels[1].key, "North");
     }
 
     #[test]

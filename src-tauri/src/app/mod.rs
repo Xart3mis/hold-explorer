@@ -340,7 +340,7 @@ impl AppState {
     /// settings cannot be saved the workspace is still open and the result carries a warning.
     pub fn create_workspace(&mut self, name: &str) -> Result<WorkspaceOpen, CommandError> {
         let workspace = Workspace::create(&self.folder(), name)?;
-        let open = describe(&workspace)?;
+        let open = describe_with_warning(&workspace)?;
         Ok(self.install_and_remember(workspace, open))
     }
 
@@ -365,54 +365,37 @@ impl AppState {
         self.load_from(list, id)
     }
 
+    /// Opens the workspace file of this id from the folder in use, without describing it.
+    fn find(&self, id: &str) -> Result<Workspace, CommandError> {
+        let list = list_workspaces(&self.folder())?;
+        find_in(list, id)
+    }
+
     /// Opens the workspace of this id from a listing of the folder in use. Of several files with
     /// one id, the listing has one as the workspace (the file named by the id, else the first in
     /// byte order) and the others as copies, so a copy is never opened. When no readable
-    /// workspace has the id, a file named by it that could not be read gives its reason.
+    /// workspace has the id, a file named by it that could not be read gives its reason. The
+    /// description carries the damage of the saved views, read once.
     fn load_from(
         &self,
         list: WorkspaceList,
         id: &str,
     ) -> Result<(Workspace, WorkspaceOpen), CommandError> {
-        let path = match list.workspaces.into_iter().find(|w| w.id == id) {
-            Some(info) => info.path,
-            None => {
-                let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
-                return Err(match list.unreadable.into_iter().find(|u| named(&u.path)) {
-                    Some(unreadable) => unreadable.error.into(),
-                    None => CommandError::new(
-                        ErrorKind::WorkspaceNotFound,
-                        "That workspace is not in the workspace folder. It may have been moved or deleted; choose a workspace from the list, or create a new one.",
-                    ),
-                });
-            }
-        };
-        let workspace = Workspace::open(&path)?;
-        let mut open = describe(&workspace)?;
+        let workspace = find_in(list, id)?;
         // Opened here: the damage of its saved views is reported now.
-        open.warning = views::read_views(&workspace)?.1;
+        let open = describe_with_warning(&workspace)?;
         Ok((workspace, open))
     }
 
     /// Makes the workspace the open one, then saves its id as the last workspace. A failed save
-    /// never fails the open: it is returned as the warning. The damage of the saved views is
-    /// reported with it: as `open` carries it (from `load_from`), or read here for a workspace
-    /// that was not the open one; one that was open already had it reported when it was opened.
+    /// never fails the open: it is returned as the warning, with the damage of the saved views
+    /// that `open` carries (`describe_with_warning`) after it.
     fn install_and_remember(
         &mut self,
         workspace: Workspace,
         mut open: WorkspaceOpen,
     ) -> WorkspaceOpen {
-        let views = if open.warning.is_some()
-            || self.open_id.as_deref() == Some(open.workspace.id.as_str())
-        {
-            open.warning.take()
-        } else {
-            match views::read_views(&workspace) {
-                Ok((_, warning)) => warning,
-                Err(error) => Some(error),
-            }
-        };
+        let views = open.warning.take();
         self.install(workspace, &open);
         // Kept in memory even when it cannot be saved, so the next successful save writes it.
         self.settings.last_workspace = Some(open.workspace.id.clone());
@@ -462,20 +445,48 @@ fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
     }
 }
 
+/// The workspace of this id in a listing of the folder in use, opened. Of several files with one
+/// id, the listing has one as the workspace (the file named by the id, else the first in byte
+/// order) and the others as copies, so a copy is never opened. When no readable workspace has the
+/// id, a file named by it that could not be read gives its reason.
+fn find_in(list: WorkspaceList, id: &str) -> Result<Workspace, CommandError> {
+    let path = match list.workspaces.into_iter().find(|w| w.id == id) {
+        Some(info) => info.path,
+        None => {
+            let named = |path: &Path| path.file_stem() == Some(OsStr::new(id));
+            return Err(match list.unreadable.into_iter().find(|u| named(&u.path)) {
+                Some(unreadable) => unreadable.error.into(),
+                None => CommandError::new(
+                    ErrorKind::WorkspaceNotFound,
+                    "That workspace is not in the workspace folder. It may have been moved or deleted; choose a workspace from the list, or create a new one.",
+                ),
+            });
+        }
+    };
+    Ok(Workspace::open(&path)?)
+}
+
 /// What the interface receives about a workspace, with the newest snapshot selected and no
-/// warning. Damaged saved views read as none; the paths that open a workspace (`load_from`,
-/// `install_and_remember`, and through `load_from` the start) report the damage themselves, so
-/// nothing else repeats it.
+/// warning. Damaged saved views read as none; the paths that open a workspace call
+/// [`describe_with_warning`] instead, so the damage is reported once, when it is opened.
 fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
+    let mut open = describe_with_warning(workspace)?;
+    open.warning = None;
+    Ok(open)
+}
+
+/// [`describe`], with the warning that the saved views could not be read when they could not,
+/// from the one reading of them: for a path that opens the workspace.
+fn describe_with_warning(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     let snapshots = workspace.snapshots()?;
     let selected = snapshots.last().map(|snapshot| snapshot.id);
-    let (views, _) = views::read_views(workspace)?;
+    let (views, warning) = views::read_views(workspace)?;
     Ok(WorkspaceOpen {
         workspace: workspace.info()?.into(),
         snapshots,
         selected,
         views,
-        warning: None,
+        warning,
     })
 }
 

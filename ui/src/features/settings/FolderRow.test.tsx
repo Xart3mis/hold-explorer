@@ -1,7 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { keys } from "../../api/keys";
+import type { FolderChange } from "../../app/actions/folder";
+import { queryClient } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FolderCheck } from "../../bindings/FolderCheck";
 import type { FolderMoved } from "../../bindings/FolderMoved";
@@ -220,6 +223,28 @@ describe("The workspaces folder in Settings", () => {
     ).toBeInTheDocument();
   });
 
+  it("leaves out the line about the open workspace when the folder before is not known", async () => {
+    const start = openStart();
+    const left = movedTo(start, false);
+    const answer: FolderMoved = {
+      ...left,
+      start: { ...left.start, list: { ...left.start.list, workspaces: [] } },
+    };
+    renderApp({ start, path: "/settings" });
+    await page();
+    const done: FolderChange = {
+      step: "done",
+      choice: { path: NEW, moveFiles: false },
+      moved: answer,
+      from: null,
+    };
+    act(() => {
+      queryClient.setQueryData(keys.folderChange, done);
+    });
+    await screen.findByText(`The workspaces are now kept in ${NEW}`);
+    expect(screen.queryByText(/stays open from/)).not.toBeInTheDocument();
+  });
+
   it("says nothing of the open workspace when it is in the new folder's list", async () => {
     windowApi.chooseFolder.mockResolvedValue(NEW);
     const start = openStart();
@@ -266,6 +291,32 @@ describe("The workspaces folder in Settings", () => {
     await waitFor(() => {
       expect(screen.queryByText(title)).not.toBeInTheDocument();
     });
+  });
+
+  it("makes the version and the settings file wait with the other rows while the files move", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const answer = later<FolderMoved>();
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => checked,
+        set_workspace_folder: () => answer.promise,
+      },
+    });
+    const main = await page();
+    const showFile = within(main).getByRole("button", { name: en.settings.settingsFileShow });
+    const version = within(main).getByText("0.1.0");
+    expect(showFile.closest("[inert]")).toBeNull();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    await user.click(await screen.findByRole("button", { name: en.settings.folderMoveThem }));
+    await screen.findByRole("progressbar");
+    expect(showFile.closest("[inert]")).not.toBeNull();
+    expect(version.closest("[inert]")).not.toBeNull();
+    answer.settle(movedTo(start, true));
+    await screen.findByText(`Moved 2 workspace files to ${NEW}`);
+    expect(showFile.closest("[inert]")).toBeNull();
   });
 
   it("leaves the files where they are when asked to", async () => {

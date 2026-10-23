@@ -22,13 +22,14 @@ export interface FolderChoice {
  * Where the change of the workspaces folder is: a folder being checked (`path` is `null` for the
  * default one); a checked folder offered, with the files a move would take; the change running;
  * its answer; or a failure of the dialog, of the check, or of the change. A change that runs or
- * has answered keeps the folder it started from (`from`).
+ * has answered keeps the folder it started from (`from`), as the cached start names it; `null`
+ * when that is not known.
  */
 export type FolderChange =
   | { step: "checking"; path: string | null }
   | { step: "offer"; path: string | null; check: FolderCheck }
-  | { step: "moving"; choice: FolderChoice; from: string }
-  | { step: "done"; choice: FolderChoice; moved: FolderMoved; from: string }
+  | { step: "moving"; choice: FolderChoice; from: string | null }
+  | { step: "done"; choice: FolderChoice; moved: FolderMoved; from: string | null }
   | { step: "failed"; error: AppError };
 
 /**
@@ -69,14 +70,14 @@ export function useWorkspaceFolder() {
       kind: "changing",
       onAsk: (choice: FolderChoice) => {
         leave.forWorkspace();
-        const from = client.getQueryData<AppStart>(keys.start)?.list.folder ?? "";
+        const from = client.getQueryData<AppStart>(keys.start)?.list.folder ?? null;
         put({ step: "moving", choice, from });
       },
       mutationFn: ({ path, moveFiles }: FolderChoice) =>
         workspaceApi.setWorkspaceFolder(path, moveFiles),
       onSuccess: (moved: FolderMoved, choice: FolderChoice) => {
         const was = client.getQueryData<FolderChange>(keys.folderChange);
-        const from = was?.step === "moving" ? was.from : "";
+        const from = was?.step === "moving" ? was.from : null;
         changeStart(client, () => moved.start);
         put({ step: "done", choice, moved, from });
       },

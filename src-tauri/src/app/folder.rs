@@ -89,13 +89,13 @@ impl AppState {
         move_files: bool,
         check: CopyCheck,
     ) -> Result<FolderMoved, CommandError> {
-        let (to, created) = self.usable_folder(path, true)?;
+        let (to, made_under) = self.usable_folder(path, true)?;
         let from = self.folder();
         let files = if move_files {
             workspace_files(&from).inspect_err(|_| {
                 // Refused after the folder was made for it: it goes again, when it is empty.
-                if created {
-                    let _ = std::fs::remove_dir(&to);
+                if let Some(above) = &made_under {
+                    remove_made(&to, above);
                 }
             })?
         } else {
@@ -205,12 +205,13 @@ impl AppState {
     /// folder in use, and shown to be writable by a file made in it and removed again. With
     /// `create` a missing folder is made first; without, nothing is created, and a missing folder
     /// is shown writable by the nearest folder above it that exists. Also says whether the folder
-    /// was made here; a folder made here and then refused is removed again when it is empty.
+    /// was made here, by the folder that existed above it (`None` when it was there): a folder
+    /// made here and then refused is removed again, each level it made while it is empty.
     fn usable_folder(
         &self,
         path: Option<&str>,
         create: bool,
-    ) -> Result<(PathBuf, bool), CommandError> {
+    ) -> Result<(PathBuf, Option<PathBuf>), CommandError> {
         let folder = match path {
             Some(path) => PathBuf::from(path),
             None => self.default_folder(),
@@ -240,7 +241,9 @@ impl AppState {
                 ),
             )
         };
-        let existed = folder.symlink_metadata().is_ok();
+        // The nearest folder that is there before anything is made: the levels below it are ours.
+        let above = nearest_existing(&folder);
+        let made_under = (create && above != folder).then_some(above);
         let probed = if create {
             std::fs::create_dir_all(&folder).map_err(|e| unusable("could not be created", &e))?;
             folder.clone()
@@ -249,8 +252,8 @@ impl AppState {
         };
         // A folder made here for a change that is then refused goes again, when nothing is in it.
         let refused = |error: CommandError| {
-            if create && !existed {
-                let _ = std::fs::remove_dir(&folder);
+            if let Some(above) = &made_under {
+                remove_made(&folder, above);
             }
             error
         };
@@ -267,7 +270,7 @@ impl AppState {
         probe
             .close()
             .map_err(|e| refused(unusable("does not let a file be removed", &e)))?;
-        Ok((folder, create && !existed))
+        Ok((folder, made_under))
     }
 }
 
@@ -293,6 +296,17 @@ fn pending_journal(file: &Path) -> Option<UnreadableView> {
             "{name} was left in {from}, because an interrupted write is pending; open it with the version that wrote it first, then move it by hand."
         ),
     })
+}
+
+/// Removes `folder` and each folder above it up to `above`, deepest first, while each is empty:
+/// the levels a refused change made. `remove_dir` removes an empty folder only, so nothing in one
+/// is touched, and the first that cannot be removed ends it.
+fn remove_made(folder: &Path, above: &Path) {
+    for level in folder.ancestors().take_while(|level| *level != above) {
+        if std::fs::remove_dir(level).is_err() {
+            return;
+        }
+    }
 }
 
 /// Whether two folders are one: the same path once both are resolved, as far as they exist.

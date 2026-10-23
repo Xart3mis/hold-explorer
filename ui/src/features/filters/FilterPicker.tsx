@@ -2,6 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useState, type RefObject } from "react";
 import { Menu, MenuItem, Text } from "react-aria-components";
 import { asCommandError } from "../../api/error";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilters } from "../../app/filters/state";
 import type { FilterOptions } from "../../bindings/FilterOptions";
 import { ErrorState, OptionList, Popover, Spinner, TextField } from "../../components";
@@ -33,7 +34,8 @@ interface FieldListProps {
  * filter says what it is filtered to, as its chip does; choosing it opens that filter.
  */
 function FieldList({ options, onChoose }: FieldListProps) {
-  const { filters } = useFilters();
+  // Each value under the label its chip shows.
+  const filters = useLabelledFilters();
   if (options.isError) {
     return (
       <ErrorState

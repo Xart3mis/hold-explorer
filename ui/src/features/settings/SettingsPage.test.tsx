@@ -423,6 +423,69 @@ describe("the author name", () => {
     expect(setName).toHaveBeenCalledTimes(1);
   });
 
+  it("does not send again on leaving a name that was just refused inline", async () => {
+    const setName = vi.fn(() => {
+      throw commandFailure("Settings", TOO_LONG);
+    });
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_author_name: setName },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace{Enter}");
+    expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+    expect(setName).toHaveBeenCalledTimes(1);
+    await user.keyboard("{Control>}1{/Control}");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    expect(setName).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status", { name: /Ada Lovelace/ })).not.toBeInTheDocument();
+  });
+
+  it("sends on leaving a name changed after a refusal", async () => {
+    let refuse = true;
+    const setName = vi.fn(({ name }: { name: string }) => {
+      if (refuse) throw commandFailure("Settings", TOO_LONG);
+      return withSettings({ author_name: name });
+    });
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_author_name: setName },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace{Enter}");
+    expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+    refuse = false;
+    await user.type(nameField(), " King");
+    await user.keyboard("{Control>}1{/Control}");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await waitFor(() => {
+      expect(setName).toHaveBeenLastCalledWith({ name: "Ada Lovelace King" });
+    });
+    expect(setName).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a failed save as a toast after a Ctrl shortcut left the page", async () => {
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_author_name: () => {
+          throw commandFailure("Settings", TOO_LONG);
+        },
+      },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace");
+    await user.keyboard("{Control>}1{/Control}");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await waitFor(() => {
+      expect(screen.getByText(/The author name Ada Lovelace was not saved/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(new RegExp(TOO_LONG.slice(0, 30)))).toBeInTheDocument();
+  });
+
   it("says inline why a name could not be saved and keeps the text", SLOW, async () => {
     const { user } = renderApp({
       start: openStart(),

@@ -271,8 +271,8 @@ function Offer({ from, to, isDefault, count, onMove, onCancel }: OfferProps) {
 
 interface MovedProps {
   moved: FolderMoved;
-  /** The folder the change started from. */
-  from: string;
+  /** The folder the change started from; `null` when it is not known. */
+  from: string | null;
   /** The id the title is given, so the region around the notice is named by it. */
   titleId: string;
   onDismiss: () => void;
@@ -286,8 +286,11 @@ interface MovedProps {
 function Moved({ moved, from, titleId, onDismiss }: MovedProps) {
   const to = moved.start.list.folder;
   const open = moved.start.open?.workspace;
+  // Said only when the folder it stays open from is known.
   const staysBehind =
-    open !== undefined && !moved.start.list.workspaces.some((listed) => listed.id === open.id);
+    open !== undefined &&
+    from !== null &&
+    !moved.start.list.workspaces.some((listed) => listed.id === open.id);
   const title =
     moved.moved.length > 0
       ? t("settings.folderMovedTitle", { count: moved.moved.length, to })

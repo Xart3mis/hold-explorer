@@ -10,11 +10,12 @@ import styles from "./SettingsPage.module.css";
  * button names the file in its accessible name, since the folder row above has a "Show in
  * folder" of its own. A file that cannot be shown (it is written at the first save) says why.
  */
-export function SettingsFileRow({ path }: { path: string }) {
+export function SettingsFileRow({ path, isWaiting }: { path: string; isWaiting: boolean }) {
   const labelId = useId();
   const [error, setError] = useState<AppError | null>(null);
   return (
-    <div className={styles.row}>
+    // Inert, as the other rows are, while the workspaces folder changes.
+    <div className={styles.row} inert={isWaiting}>
       <div className={styles.value}>
         <span id={labelId} className={styles.label}>
           {t("settings.settingsFile")}

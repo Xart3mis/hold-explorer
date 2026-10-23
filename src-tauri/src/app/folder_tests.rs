@@ -810,3 +810,20 @@ fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
         .unwrap_err();
     assert!(empty.is_dir());
 }
+
+#[test]
+fn a_refused_set_removes_every_empty_level_it_made_and_no_folder_that_was_there() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    fs::create_dir_all(fx.data()).unwrap();
+    fs::write(fx.workspaces(), "in the way").unwrap();
+    // Two levels are made under a folder that was there before.
+    let above = elsewhere(&fx, "above");
+    fs::create_dir_all(&above).unwrap();
+    let deepest = above.join("new").join("inner");
+    state
+        .set_workspace_folder(Some(&text(&deepest)), true)
+        .unwrap_err();
+    assert!(!above.join("new").exists());
+    assert!(above.is_dir());
+}

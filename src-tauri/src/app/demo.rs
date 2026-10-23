@@ -9,7 +9,7 @@ use hx_synth::{evolve, generate, write_workbook, SynthConfig};
 use super::error::CommandError;
 use super::import::remove_created;
 use super::workspaces::WorkspaceOpen;
-use super::{describe, AppState};
+use super::{describe_with_warning, AppState};
 
 /// The name of the demo workspace.
 const DEMO_NAME: &str = "Demo";
@@ -56,7 +56,7 @@ impl AppState {
             Workspace::create(&self.folder(), DEMO_NAME).map_err(|e| demo_failed(e.into()))?;
         let path = workspace.path().to_path_buf();
         match build_demo(&mut workspace, scratch_root, after_file)
-            .and_then(|()| describe(&workspace).map_err(demo_failed))
+            .and_then(|()| describe_with_warning(&workspace).map_err(demo_failed))
         {
             Ok(open) => Ok(self.install_and_remember(workspace, open)),
             Err(mut error) => {

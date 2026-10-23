@@ -303,7 +303,7 @@ fn declarations_name_the_keys_of_the_json() {
         }],
         ..FilterSpec::default()
     };
-    names_the_keys_of(&filter_labels(&ds, &labelled)[0]);
+    names_the_keys_of(&filter_labels(&ds, &labelled, &labelled)[0]);
     let detail = line_detail(&ds, &solve_plan(&ds, &open, None), "L-1").unwrap();
     names_the_keys_of(&detail);
     names_the_keys_of(&detail.open[0]);

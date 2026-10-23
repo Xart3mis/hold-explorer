@@ -523,3 +523,51 @@ fn opening_and_starting_report_damaged_views_and_nothing_else_repeats_it() {
     assert!(again.select_snapshot(snapshot).unwrap().warning.is_none());
     assert!(again.current().unwrap().unwrap().warning.is_none());
 }
+
+/// How many times `run` reads the saved views of a workspace.
+fn view_reads(run: impl FnOnce()) -> usize {
+    let before = super::views::VIEW_READS.with(std::cell::Cell::get);
+    run();
+    super::views::VIEW_READS.with(std::cell::Cell::get) - before
+}
+
+#[test]
+fn each_open_reads_the_saved_views_once() {
+    let fx = Fixture::new();
+    let state = small(&fx);
+    let id = state.open_id();
+    drop(state);
+    let mut again = fx.state();
+    again.create_workspace("Other").unwrap();
+    assert_eq!(
+        view_reads(|| {
+            again.open_workspace(&id).unwrap();
+        }),
+        1
+    );
+    assert_eq!(
+        view_reads(|| {
+            fx.state().start();
+        }),
+        1
+    );
+    let other = again.create_workspace("Third").unwrap().workspace.id;
+    again.open_workspace(&id).unwrap();
+    again.import_open(&fx.synth("b.xlsx", 2)).unwrap();
+    assert_eq!(
+        view_reads(|| {
+            again
+                .import_commit(
+                    super::ImportCommit {
+                        target: super::TargetChoice::Existing { id: other },
+                        taken_at: super::test_support::at("2026-10-06 00:00:00"),
+                        date_edited: false,
+                        replace: None,
+                    },
+                    &super::test_support::no_progress,
+                )
+                .unwrap();
+        }),
+        1
+    );
+}

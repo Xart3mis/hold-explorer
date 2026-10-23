@@ -164,13 +164,14 @@ impl AppState {
 
     /// The label of every value of every field entry of `spec`, as the picker labels it in the
     /// snapshot in view; a value the snapshot lacks, or any value without a snapshot, is labelled
-    /// with itself. The whole filter is labelled, the entries the snapshot cannot apply included.
+    /// with itself. The whole filter is labelled, the entries the snapshot cannot apply included;
+    /// the rest of the filter is taken as the snapshot applies it, as the picker takes it.
     pub fn filter_labels(
         &mut self,
         spec: &FilterSpec,
         view: &ViewRef,
     ) -> Result<Vec<FilterLabel>, CommandError> {
-        self.in_view(view, spec, |v| filter_labels(v.dataset, spec))
+        self.in_view(view, spec, |v| filter_labels(v.dataset, spec, &v.spec))
     }
 
     /// A page of Lines from `offset`, at most [`PAGE_ROWS`].

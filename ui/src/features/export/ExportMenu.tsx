@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { OPTIONAL_FIELDS } from "../../api/plantim";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import { useShownView } from "../../app/view";
@@ -228,7 +229,9 @@ export function ExportMenu({
   isEmpty,
   exports,
 }: ExportMenuProps) {
-  const { filters, spec } = useFilters();
+  const { spec } = useFilters();
+  // A file names the filters as the chips read them, each value under its label.
+  const filters = useLabelledFilters();
   const options = useFilterOptions();
   const shownView = useShownView();
   const { save, copy, isRunning } = exports;

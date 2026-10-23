@@ -56,11 +56,14 @@ export function SettingsPage() {
   useEffect(() => {
     typed.current = draft;
   });
+  // The name last refused while the page was there: its reason is shown under the field, so
+  // leaving does not send it again (and no toast repeats the reason). Any other text is sent.
+  const refused = useRef<string | null>(null);
   const { mutate: sendName } = setAuthorName;
   useEffect(
     () => () => {
       const name = typed.current.trim();
-      if (name !== asked.current) sendName(name);
+      if (name !== asked.current && name !== refused.current) sendName(name);
     },
     [sendName],
   );
@@ -81,6 +84,7 @@ export function SettingsPage() {
       },
       onError: () => {
         asked.current = null;
+        refused.current = name;
       },
     });
   };
@@ -167,7 +171,7 @@ export function SettingsPage() {
           <SectionTitle level={2} id={aboutId}>
             {t("settings.about")}
           </SectionTitle>
-          <div className={styles.row}>
+          <div className={styles.row} inert={waiting}>
             <div className={styles.value}>
               <span className={styles.label}>{t("settings.version")}</span>
               <span className={styles.version}>{start.version}</span>
@@ -176,7 +180,7 @@ export function SettingsPage() {
 
           <FolderRow start={start} folder={folder} />
 
-          <SettingsFileRow path={start.settings_file} />
+          <SettingsFileRow path={start.settings_file} isWaiting={waiting} />
         </section>
       </div>
     </Page>

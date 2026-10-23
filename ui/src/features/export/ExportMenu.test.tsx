@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import type { ArgsOf } from "../../api/commands";
 import { beforeEach, describe, expect, it } from "vitest";
 import { openHoldsFilter } from "../../api/filter";
 import type { CopyFormat } from "../../bindings/CopyFormat";
@@ -15,6 +16,7 @@ import { commandFailure } from "../../test/ipc";
 import { lineId, linePage } from "../../test/lines";
 import { ctrlClick, exportButton, itemNames, openMenu, renderAt, rowOf } from "../../test/export";
 import { SLOW } from "../../test/slow";
+import { savedView } from "../../test/views";
 import { windowApi } from "../../test/window";
 import { DEFAULT_BREAKDOWN_STATE } from "../breakdown/address";
 import { DEFAULT_HOLDS_STATE } from "../lines/address";
@@ -573,6 +575,55 @@ describe("the menu waits", () => {
     });
     await app.user.keyboard("{Control>}e{/Control}");
     expect(windowApi.chooseSavePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("the filters a file names", () => {
+  it("names a saved view's Remark and Blocker values by their labels, with nothing kept this session", async () => {
+    const remark = "HOLD PENDING 573-PR-1450";
+    const blocker = "Process|573-PR-1450";
+    const view = savedView({
+      id: 5,
+      name: "Pending",
+      address: "/lines",
+      filters: {
+        ...openHoldsFilter(),
+        fields: [
+          { dim: "Remark", values: [remark], negate: false },
+          { dim: "Blocker", values: [blocker], negate: false },
+        ],
+      },
+    });
+    const saves: ArgsOf<"export_save">[] = [];
+    windowApi.chooseSavePath.mockImplementation((_, extension) =>
+      Promise.resolve(`/home/ada/exports/out.${extension}`),
+    );
+    const { user } = renderApp({
+      start: openStart({ open: opened({ views: [view] }) }),
+      path: "/overview",
+      handlers: {
+        export_save: (args) => {
+          saves.push(args);
+          return { path: args.path, rows: 3 };
+        },
+        filter_labels: () => [
+          { dim: "Remark", key: remark, label: "Hold pending 573-PR-1450" },
+          { dim: "Blocker", key: blocker, label: "Process / 573-PR-1450" },
+        ],
+      },
+    });
+    const views = await screen.findByRole("list", { name: en.views.title });
+    await user.click(within(views).getByRole("link", { name: "Pending" }));
+    await screen.findByRole("button", { name: /Hold remark Hold pending 573-PR-1450/ });
+    const open = await openMenu(user);
+    await user.click(within(open).getByRole("menuitem", { name: menu.excel }));
+    await waitFor(() => {
+      expect(saves).toHaveLength(1);
+    });
+    const named = must(saves[0], "the save").request.filters;
+    expect(named.some((text) => text.includes("Hold pending 573-PR-1450"))).toBe(true);
+    expect(named.some((text) => text.includes("Process / 573-PR-1450"))).toBe(true);
+    expect(named.some((text) => text.includes(remark) || text.includes(blocker))).toBe(false);
   });
 });
 

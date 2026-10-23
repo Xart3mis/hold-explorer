@@ -18,7 +18,7 @@ use ts_rs::TS;
 
 use super::error::{CommandError, ErrorKind};
 use super::workspaces::{list_view, WorkspaceOpen, WorkspaceView};
-use super::{describe, AppState};
+use super::{describe, describe_with_warning, AppState};
 
 /// How many rows of the file the draft previews.
 const PREVIEW_ROWS: usize = 20;
@@ -468,7 +468,7 @@ impl AppState {
         let hash = &draft.opened.content_hash;
         match &self.open {
             Some(open) if open.info()?.id == *id => check_workspace(open, hash, taken_at),
-            _ => check_workspace(&self.load(id)?.0, hash, taken_at),
+            _ => check_workspace(&self.find(id)?, hash, taken_at),
         }
     }
 
@@ -509,7 +509,7 @@ impl AppState {
 
         progress(ImportPhase::Checking);
         let other = match &request.target {
-            TargetChoice::Existing { id } if !self.is_open(id)? => Some(self.load(id)?.0),
+            TargetChoice::Existing { id } if !self.is_open(id)? => Some(self.find(id)?),
             _ => None,
         };
         if let Some(snapshot_id) = request.replace {
@@ -535,6 +535,8 @@ impl AppState {
         let stored = before_store().map_err(CommandError::from).and_then(|()| {
             self.store_draft(
                 &mut workspace,
+                // The workspace that was open had the damage of its views reported then.
+                !matches!(origin, Origin::Open),
                 &request.taken_at,
                 request.date_edited,
                 request.replace,
@@ -585,10 +587,12 @@ impl AppState {
         }
     }
 
-    /// Imports the reviewed draft into `workspace` and describes the workspace afterwards.
+    /// Imports the reviewed draft into `workspace` and describes the workspace afterwards, with the
+    /// damage of its saved views when `report_views` (a workspace that was not the open one).
     fn store_draft(
         &self,
         workspace: &mut Workspace,
+        report_views: bool,
         taken_at: &NaiveDateTime,
         date_edited: bool,
         replace: Option<i64>,
@@ -621,7 +625,11 @@ impl AppState {
             },
             &options,
         )?;
-        let open = describe(workspace)?;
+        let open = if report_views {
+            describe_with_warning(workspace)?
+        } else {
+            describe(workspace)?
+        };
         Ok((snapshot, open))
     }
 
