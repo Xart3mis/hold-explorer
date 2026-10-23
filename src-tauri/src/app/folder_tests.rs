@@ -692,11 +692,53 @@ fn the_default_folder_written_another_way_is_saved_as_the_default() {
         .set_workspace_folder(Some(&text(&elsewhere(&fx, "new"))), false)
         .unwrap();
     fs::create_dir_all(fx.workspaces()).unwrap();
+    // A link to the default folder on Unix, which a comparison of the paths as written misses.
+    #[cfg(unix)]
+    let other_way = {
+        let link = elsewhere(&fx, "link");
+        std::os::unix::fs::symlink(fx.workspaces(), &link).unwrap();
+        link
+    };
+    #[cfg(not(unix))]
+    let other_way = fx.workspaces().join(".");
 
     let result = state
-        .set_workspace_folder(Some(&text(&fx.workspaces().join("."))), false)
+        .set_workspace_folder(Some(&text(&other_way)), false)
         .unwrap();
 
     assert_eq!(result.start.settings.workspace_dir, None);
     assert_eq!(load_settings(&fx.config()).workspace_dir, None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_removal_after_which_the_original_cannot_be_looked_at_keeps_the_copy() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = Fixture::new();
+    let old = elsewhere(&fx, "old");
+    let file = file_in(&old, "a.holdx-ws", "content");
+    let to = elsewhere(&fx, "new");
+    fs::create_dir_all(&to).unwrap();
+
+    // The removal fails, and then the old folder may not even be looked into: whether the
+    // original is still there cannot be known.
+    let result = move_file(&file, &to, &verified, &|_: &Path| {
+        fs::set_permissions(&old, fs::Permissions::from_mode(0o000)).unwrap();
+        Err(std::io::Error::other("held by another program"))
+    });
+    let unknowable = file.symlink_metadata().is_err();
+    fs::set_permissions(&old, fs::Permissions::from_mode(0o755)).unwrap();
+    if !unknowable {
+        // Running as a user whom permissions do not stop (root); nothing to test.
+        return;
+    }
+
+    let error = result.unwrap_err();
+    assert_eq!(error.kind, ErrorKind::MoveRemove);
+    assert!(error.message.contains("both folders"), "{}", error.message);
+    assert_eq!(
+        fs::read_to_string(to.join("a.holdx-ws")).unwrap(),
+        "content"
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), "content");
 }

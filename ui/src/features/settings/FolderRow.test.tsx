@@ -22,9 +22,12 @@ const checked: FolderCheck = {
   count: 3,
 };
 
-/** The region of the row that holds this element and takes the focus: the progress or a notice. */
-function regionOf(element: HTMLElement): Element | null {
-  return element.closest('[tabindex="-1"]');
+/**
+ * The region of the row that holds this element and takes the focus: the progress or a notice. It
+ * is a group named by the label of the progress or the title of the notice.
+ */
+function regionOf(element: HTMLElement): HTMLElement | null {
+  return element.closest('[role="group"][tabindex="-1"]');
 }
 
 /** The answer of a change to `NEW`: the start the Rust side has then, and what moved. */
@@ -128,6 +131,8 @@ describe("The workspaces folder in Settings", () => {
       await waitFor(() => {
         expect(regionOf(progress)).toHaveFocus();
       });
+      expect(regionOf(progress)).toHaveAccessibleName(`Moving the workspaces to ${NEW}`);
+      expect(progress).toHaveAccessibleName(`Moving the workspaces to ${NEW}`);
       expect(screen.getByText(en.settings.folderWaiting)).toBeInTheDocument();
       const theme = screen.getByRole("button", { name: new RegExp(en.settings.theme) });
       expect(theme.closest("[inert]")).not.toBeNull();
@@ -142,6 +147,13 @@ describe("The workspaces folder in Settings", () => {
       await waitFor(() => {
         expect(regionOf(title)).toHaveFocus();
       });
+      const region = regionOf(title);
+      expect(region).toHaveAccessibleName(`Moved 2 workspace files to ${NEW}`);
+      // The title is written once: the region is named by it, and the notice inside names nothing.
+      expect(
+        within(region ?? document.body).getAllByText(`Moved 2 workspace files to ${NEW}`),
+      ).toHaveLength(1);
+      expect(within(region ?? document.body).getByRole("status")).not.toHaveAccessibleName();
       const moved = screen.getByRole("list", { name: en.settings.folderMovedList });
       expect(
         within(moved)

@@ -27,6 +27,9 @@ export function FolderRow({ start, folder }: FolderRowProps) {
   const { isBusy } = useStart();
   const [showError, setShowError] = useState<AppError | null>(null);
   const labelId = useId();
+  // The progress and the result take the focus as regions named by their own label or title.
+  const progressLabelId = useId();
+  const resultTitleId = useId();
   const path = start.list.folder;
   const isDefault = start.settings.workspace_dir === null;
   const checking = change?.step === "checking";
@@ -141,8 +144,15 @@ export function FolderRow({ start, folder }: FolderRowProps) {
         />
       ) : null}
       {change?.step === "moving" ? (
-        <div ref={progress} tabIndex={-1} className={styles.progress}>
+        <div
+          ref={progress}
+          tabIndex={-1}
+          role="group"
+          aria-labelledby={progressLabelId}
+          className={styles.progress}
+        >
           <Progress
+            labelId={progressLabelId}
             label={
               !change.choice.moveFiles
                 ? t("settings.folderSwitching")
@@ -155,14 +165,27 @@ export function FolderRow({ start, folder }: FolderRowProps) {
         </div>
       ) : null}
       {change?.step === "done" ? (
-        <div ref={result} tabIndex={-1} className={styles.result}>
-          <Moved moved={change.moved} onDismiss={putAway} />
+        <div
+          ref={result}
+          tabIndex={-1}
+          role="group"
+          aria-labelledby={resultTitleId}
+          className={styles.result}
+        >
+          <Moved moved={change.moved} titleId={resultTitleId} onDismiss={putAway} />
         </div>
       ) : null}
       {change?.step === "failed" ? (
-        <div ref={result} tabIndex={-1} className={styles.result}>
+        <div
+          ref={result}
+          tabIndex={-1}
+          role="group"
+          aria-labelledby={resultTitleId}
+          className={styles.result}
+        >
           <Notice
             tone="danger"
+            titleId={resultTitleId}
             title={
               change.error.kind === "Dialog"
                 ? t("settings.folderDialogError")
@@ -249,8 +272,15 @@ function Offer({ from, to, isDefault, count, onMove, onCancel }: OfferProps) {
   );
 }
 
+interface MovedProps {
+  moved: FolderMoved;
+  /** The id the title is given, so the region around the notice is named by it. */
+  titleId: string;
+  onDismiss: () => void;
+}
+
 /** What a change did: the files moved, and each file left where it was with the reason. */
-function Moved({ moved, onDismiss }: { moved: FolderMoved; onDismiss: () => void }) {
+function Moved({ moved, titleId, onDismiss }: MovedProps) {
   const to = moved.start.list.folder;
   const title =
     moved.moved.length > 0
@@ -262,6 +292,7 @@ function Moved({ moved, onDismiss }: { moved: FolderMoved; onDismiss: () => void
     <Notice
       tone={moved.left.length === 0 ? "success" : "warning"}
       title={title}
+      titleId={titleId}
       onDismiss={onDismiss}
     >
       <span className={styles.offer}>

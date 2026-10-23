@@ -372,11 +372,10 @@ pub(super) fn move_file(
     }
     // The copy is made as the system's temporary files are, readable by its owner only.
     #[cfg(unix)]
-    {
-        let permissions = source.metadata().map_err(|e| not_copied(&e))?.permissions();
-        copy.as_file()
-            .set_permissions(permissions)
-            .map_err(|e| not_copied(&e))?;
+    if let Ok(metadata) = source.metadata() {
+        // Best effort: a drive without file modes (FAT) refuses the change, and the file moves
+        // all the same, with the mode that drive gives every file.
+        let _ = copy.as_file().set_permissions(metadata.permissions());
     }
     copy.as_file().sync_all().map_err(|e| not_copied(&e))?;
     drop(source);
@@ -436,9 +435,19 @@ pub(super) fn move_file(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => error,
     };
-    // Only while the original is still there may the copy go; otherwise it is the last one.
-    if file.symlink_metadata().is_err() {
-        return Ok(());
+    // Only while the original is known to be there may the copy go. When it is known to be gone
+    // the copy is the last one; when that cannot be known, both stay.
+    match file.symlink_metadata() {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => {
+            return Err(CommandError::new(
+                ErrorKind::MoveRemove,
+                format!(
+                    "{name} could not be removed from {from} ({error}), and Hold Explorer cannot tell whether it is still there ({e}). Its copy in {place} was kept. The file may now be in both folders. Check {from}, and delete the file there once the workspace opens from {place}."
+                ),
+            ));
+        }
     }
     let message = match std::fs::remove_file(&target) {
         Ok(()) => format!(

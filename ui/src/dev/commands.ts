@@ -72,6 +72,10 @@ export const DEV_STATES = [
   "warning",
   // The settings file could not be understood at start and was set aside.
   "settings-problem",
+  // A move of the workspaces folder (Change folder in Settings) where the new folder already holds
+  // a file of every name, so no file moves and the result says why for each:
+  //   dev.html?state=folder-taken#/settings
+  "folder-taken",
   // The Rust side has moved on to the snapshot before the newest and the interface was not told:
   // the Overview is refused, asks what is open, and the shell says that it was brought in step.
   "view-resynced",
@@ -508,6 +512,18 @@ function world(state: DevState, theme: Theme, density: Density): World {
     }
     case "first-run":
       break;
+    case "folder-taken":
+      start.list.workspaces = [unit573];
+      start.list.unreadable = [
+        {
+          file_name: "d4e5f60718293041.holdx-ws",
+          path: `${FOLDER}/d4e5f60718293041.holdx-ws`,
+          kind: "NewerSchema",
+          message:
+            "This workspace was written by a newer version of Hold Explorer (schema 9; this version reads up to schema 3). Update Hold Explorer to open it.",
+        },
+      ];
+      break;
     case "workspaces":
     case "workspaces-pending":
       start.list.workspaces = all;
@@ -751,8 +767,8 @@ export function installDevCommands(
       start.settings = { ...start.settings, author_name: name };
       return start.settings;
     },
-    // A folder is checked at once; the folder in use is refused. A move takes a second and a half,
-    // moves every readable workspace, and leaves every unreadable file with the reason.
+    // A folder is checked at once; the folder in use is refused. A move takes a second and a half
+    // and moves every listed file, unless the state says their names are taken.
     check_workspace_folder: (payload) => {
       const path = text(payload, "path") || FOLDER;
       if (path === start.list.folder) {
@@ -771,20 +787,26 @@ export function installDevCommands(
       const { path, moveFiles } = payload as { path: string | null; moveFiles: boolean };
       const to = path ?? FOLDER;
       return later(1500, () => {
-        const moved = moveFiles
-          ? start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`).sort()
-          : [];
-        const left = moveFiles
-          ? start.list.unreadable.map((file) => ({
-              ...file,
-              kind: "MoveCheck" as const,
-              message: `The copy of ${file.file_name} in ${to} is not a workspace this version can open (${file.message}), so the copy was removed and the file was left whole in ${start.list.folder}.`,
-            }))
-          : [];
+        const files = [
+          ...start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`),
+          ...start.list.unreadable.map((file) => file.file_name),
+        ].sort();
+        // In `folder-taken` the new folder already holds a file of every name.
+        const taken = state === "folder-taken";
+        const moved = moveFiles && !taken ? files : [];
+        const left =
+          moveFiles && taken
+            ? files.map((file) => ({
+                file_name: file,
+                path: `${start.list.folder}/${file}`,
+                kind: "NameTaken" as const,
+                message: `${file} was left in ${start.list.folder}, because a file of that name is already in ${to}. Rename or remove one of the two, then move the file there by hand.`,
+              }))
+            : [];
         start.settings = { ...start.settings, workspace_dir: path };
         start.list = {
-          workspaces: moveFiles ? start.list.workspaces : [],
-          unreadable: [],
+          workspaces: moved.length > 0 ? start.list.workspaces : [],
+          unreadable: moved.length > 0 ? start.list.unreadable : [],
           folder: to,
         };
         return { start: structuredClone(start), moved, left };

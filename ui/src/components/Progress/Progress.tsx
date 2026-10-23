@@ -11,6 +11,8 @@ export interface ProgressProps {
   label: string;
   /** How far, from 0 to 1. Leave it out while no total is known. */
   value?: number;
+  /** The id of the label, for a region around the bar that is named by it. */
+  labelId?: string | undefined;
   className?: string | undefined;
 }
 
@@ -19,7 +21,7 @@ export interface ProgressProps {
  * Without one, a segment travels along the track. It never rests at 100 percent: when the work is
  * done, the screen replaces it.
  */
-export function Progress({ label, value, className }: ProgressProps) {
+export function Progress({ label, value, labelId, className }: ProgressProps) {
   const fraction = value === undefined ? undefined : Math.min(1, Math.max(0, value));
   // The percentage is written by the app's own formatter, for the eye and for assistive technology.
   const share = fraction === undefined ? undefined : formatPercent(fraction);
@@ -34,7 +36,9 @@ export function Progress({ label, value, className }: ProgressProps) {
       {() => (
         <>
           <div className={styles.header}>
-            <Label className={cx(styles.label)}>{label}</Label>
+            <Label id={labelId} className={cx(styles.label)}>
+              {label}
+            </Label>
             {share === undefined ? null : <span className={styles.value}>{share}</span>}
           </div>
           <div className={styles.track}>
