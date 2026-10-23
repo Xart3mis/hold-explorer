@@ -10,7 +10,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use chrono::NaiveDateTime;
 use hx_core::detail::{BlockerDetail, HoldRef, LineDetail};
@@ -30,7 +30,7 @@ use crate::app::{
     CopyFormat, Density, ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck,
     FolderMoved, GroupDetail, HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase,
     ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice,
-    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView, Writes,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
@@ -537,20 +537,24 @@ where
     R: Runtime,
     W: Fn(&Path, &[u8]) -> Result<(), ExportError> + Send + 'static,
 {
+    // The whole save is counted, the file written with the state free included: a close of the
+    // window waits until the file is whole and recorded.
+    let writes = app.try_state::<Arc<Writes>>().map(|writes| Arc::clone(&writes)).ok_or_else(|| {
+        CommandError::internal(
+            "The count of the writes in progress is not available. Restart Hold Explorer; if it keeps happening, report it.",
+        )
+    })?;
+    let _write = writes.begin();
     // A name of another kind is refused before anything is read.
     check_extension(&format, &path)?;
     // A phase that cannot be sent only costs the interface a progress step.
     let _ = on_progress.send(ExportPhase::Reading);
     let text = request.text.clone();
     let asked = format.clone();
-    let (content, writes) = blocking(app.clone(), move |state| {
-        let content = state.export_content(&request, &asked, &view)?;
-        Ok((content, state.writes()))
+    let content = blocking(app.clone(), move |state| {
+        state.export_content(&request, &asked, &view)
     })
     .await?;
-    // The file is written with the state free, so the write is counted here: a close of the
-    // window waits until the file is whole and recorded.
-    let _write = writes.begin();
     let _ = on_progress.send(ExportPhase::Writing);
     let target = path.clone();
     let saved = unlocked(move || save(content, &format, &target, &text, fonts(), &write)).await?;
@@ -709,7 +713,9 @@ mod tests {
                 dir.path().join("data"),
                 dir.path().join("local"),
             );
+            let writes = state.writes();
             let app = mock_builder()
+                .manage(writes)
                 .manage(Mutex::new(state))
                 .manage(crate::app::SessionClipboard::default())
                 .invoke_handler(crate::handler())
@@ -1281,6 +1287,42 @@ mod tests {
         .unwrap();
         assert_eq!(*seen.lock().unwrap(), Some(true));
         assert!(!writes.busy(), "the write ends with the save");
+        assert!(path.is_file());
+    }
+
+    #[test]
+    fn an_export_save_counts_as_a_write_while_it_gathers_the_content() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("lines.csv");
+        let state = harness.app.state::<Mutex<AppState>>();
+        let writes = state.lock().unwrap().writes();
+        // The state is held, so the save waits in its gather, after it said it is reading.
+        let held = state.lock().unwrap();
+        let (reading, read) = std::sync::mpsc::channel();
+        let channel = tauri::ipc::Channel::new(move |_| {
+            let _ = reading.send(());
+            Ok(())
+        });
+        let handle = harness.app.handle().clone();
+        let target = path.clone();
+        let saving = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(super::save_with(
+                handle,
+                request,
+                crate::app::SaveFormat::Csv,
+                target,
+                view,
+                channel,
+                hx_export::write_file,
+            ))
+        });
+        read.recv().unwrap();
+        assert!(writes.busy(), "the gather runs while a write is counted");
+        drop(held);
+        saving.join().unwrap().unwrap();
+        assert!(!writes.busy());
         assert!(path.is_file());
     }
 

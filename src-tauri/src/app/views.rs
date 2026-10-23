@@ -160,6 +160,7 @@ impl AppState {
         filters: FilterSpec,
     ) -> Result<Vec<SavedView>, CommandError> {
         let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(name)?;
         check_address(address)?;
@@ -184,6 +185,7 @@ impl AppState {
         name: &str,
     ) -> Result<Vec<SavedView>, CommandError> {
         let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(name)?;
         let mut views = list_for_write(workspace)?;
@@ -201,6 +203,7 @@ impl AppState {
         id: i64,
     ) -> Result<Vec<SavedView>, CommandError> {
         let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let mut views = list_for_write(workspace)?;
         views.remove(position(&views, id)?);
@@ -217,6 +220,7 @@ impl AppState {
         index: usize,
     ) -> Result<Vec<SavedView>, CommandError> {
         let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(&view.name)?;
         check_address(&view.address)?;
@@ -247,6 +251,7 @@ impl AppState {
         index: usize,
     ) -> Result<Vec<SavedView>, CommandError> {
         let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let mut views = list_for_write(workspace)?;
         let view = views.remove(position(&views, id)?);
@@ -256,14 +261,17 @@ impl AppState {
     }
 }
 
-/// Stores the list of saved views, the one write of each of the five operations, counted in
-/// `writes` while it runs.
+/// Stores the list of saved views: the one write of each of the five operations, which counts
+/// itself in `writes` from its start.
 fn store(
     workspace: &mut Workspace,
     views: &[SavedView],
     writes: &Writes,
 ) -> Result<(), CommandError> {
-    let _write = writes.begin();
+    debug_assert!(
+        writes.busy(),
+        "saved views are stored only while a write is counted"
+    );
     #[cfg(test)]
     STORED_WHILE_BUSY.with_borrow_mut(|seen| seen.push(writes.busy()));
     workspace.set_saved_views(views)?;

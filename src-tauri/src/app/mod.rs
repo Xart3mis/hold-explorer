@@ -40,7 +40,7 @@ pub use import::{
 pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
-pub use writes::{CloseRequest, Writes, CLOSING_HELD};
+pub use writes::{CloseRequest, Writes, CLOSING_HELD, CLOSING_RESUMED};
 
 use settings::{load_settings_checked, save_settings, settings_file, LoadedSettings};
 

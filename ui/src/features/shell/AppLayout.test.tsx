@@ -1173,6 +1173,22 @@ describe("a close of the window that waits for a write", () => {
     await expectAccessible(document.body, { page: true });
   });
 
+  it("goes when the close could not be carried out and the window stays", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    act(() => {
+      closingHeld.send();
+    });
+    expect(await screen.findByText(en.shell.closingHeld)).toBeInTheDocument();
+    act(() => {
+      closingHeld.resume();
+    });
+    expect(screen.queryByText(en.shell.closingHeld)).not.toBeInTheDocument();
+  });
+
   it("stops listening when the shell goes", async () => {
     const { unmount } = renderApp({ start: openStart(), path: "/overview" });
     await sidebar();

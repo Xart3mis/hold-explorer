@@ -8,6 +8,10 @@ use std::sync::OnceLock;
 /// The event the interface hears when a close of the window is held back until the writes end.
 pub const CLOSING_HELD: &str = "closing-held";
 
+/// The event the interface hears when a close that was held back could not be carried out once
+/// the writes ended: the window stays open, and the user can close it again.
+pub const CLOSING_RESUMED: &str = "closing-resumed";
+
 /// The bit of the count that says a close of the window waits for the writes to end. The writes
 /// in progress are the other bits: far more than will ever run at once.
 const HELD: usize = 1 << (usize::BITS - 1);
@@ -127,6 +131,13 @@ mod tests {
             window.contains(&format!(
                 "const CLOSING_HELD = \"{}\";",
                 super::CLOSING_HELD
+            )),
+            "ui/src/api/window.ts listens for another event"
+        );
+        assert!(
+            window.contains(&format!(
+                "const CLOSING_RESUMED = \"{}\";",
+                super::CLOSING_RESUMED
             )),
             "ui/src/api/window.ts listens for another event"
         );

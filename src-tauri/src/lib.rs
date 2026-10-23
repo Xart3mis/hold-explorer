@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use tauri::window::Color;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WindowEvent};
 
-use app::{AppState, CloseRequest, SessionClipboard, Theme, Writes, CLOSING_HELD};
+use app::{AppState, CloseRequest, SessionClipboard, Theme, Writes, CLOSING_HELD, CLOSING_RESUMED};
 
 /// The first frame of the window in the dark theme: the design token `--color-surface-app` of
 /// the dark theme in `DESIGN.md`, as `node tools/design/check-tokens.mjs --hex dark
@@ -166,28 +166,43 @@ fn fail_start(local_data: &Path, failure: &StartFailure, app: Option<&tauri::App
 /// which a write holds. When the last write ends after a close was held back, the window is
 /// closed from the main thread; that close destroys it, so it is not held back again.
 fn hold_close<R: Runtime>(app: &AppHandle<R>, writes: Arc<Writes>) {
+    hold_close_with(app, writes, |app, close| app.run_on_main_thread(close));
+}
+
+/// How a close is handed to the main thread.
+type Dispatch<R> = fn(&AppHandle<R>, Box<dyn FnOnce() + Send>) -> tauri::Result<()>;
+
+/// [`hold_close`] with the function that hands the close to the main thread. When it cannot,
+/// the window stays open and the interface hears [`CLOSING_RESUMED`], so the notice that the
+/// window closes goes, and the user can close it again.
+fn hold_close_with<R: Runtime>(app: &AppHandle<R>, writes: Arc<Writes>, dispatch: Dispatch<R>) {
     let handle = app.clone();
     writes.closes_with(move || {
         let main = handle.clone();
-        // A window that cannot be closed from here stays open, and the user closes it again.
-        let _ = handle.run_on_main_thread(move || {
+        let close = Box::new(move || {
             if let Some(window) = main.get_webview_window("main") {
+                // A window that cannot be destroyed stays open, and the user closes it again.
                 let _ = window.destroy();
             }
         });
+        if dispatch(&handle, close).is_err() {
+            // Nothing more can be done for the window than to let the user try again.
+            let _ = handle.emit(CLOSING_RESUMED, ());
+        }
     });
     app.manage(writes);
 }
 
-/// What the app does with an event of its loop. A request to close a window while a write is in
-/// progress is held back, and the interface hears [`CLOSING_HELD`] the first time. When the app
-/// exits, the clipboard is let go.
+/// What the app does with an event of its loop. A request to close the main window while a
+/// write is in progress is held back, and the interface hears [`CLOSING_HELD`] the first time.
+/// When the app exits, the clipboard is let go.
 fn on_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
     match event {
         RunEvent::WindowEvent {
+            label,
             event: WindowEvent::CloseRequested { api, .. },
             ..
-        } => {
+        } if label == "main" => {
             let Some(writes) = app.try_state::<Arc<Writes>>() else {
                 return;
             };
@@ -424,19 +439,19 @@ mod tests {
         let heard = Arc::new(AtomicUsize::new(0));
         let (told, notice) = mpsc::channel();
         let counted = heard.clone();
-        let listener = app.listen_any(crate::app::CLOSING_HELD, move |_| {
+        app.listen_any(crate::app::CLOSING_HELD, move |_| {
             counted.fetch_add(1, Ordering::SeqCst);
             let _ = told.send(());
         });
-        let handle = app.handle().clone();
         let (started, write_started) = mpsc::channel();
         let writer = {
             let writes = writes.clone();
             std::thread::spawn(move || {
                 let _write = writes.begin();
                 started.send(()).unwrap();
-                // Also ends when the listener is let go without having heard anything.
-                let _ = notice.recv();
+                // A close that is not held back ends the loop at once and nothing is heard: the
+                // write ends after a while all the same, and the assertions below fail.
+                let _ = notice.recv_timeout(std::time::Duration::from_secs(10));
             })
         };
         write_started.recv().unwrap();
@@ -459,16 +474,93 @@ mod tests {
             }
             super::on_event(app, &event);
         });
-        handle.unlisten(listener);
         writer.join().unwrap();
 
         assert_eq!(
             requests.load(Ordering::SeqCst),
             2,
-            "both requests were held back"
+            "the window was still open for the second request"
         );
         assert_eq!(heard.load(Ordering::SeqCst), 1, "the notice is sent once");
         assert!(!writes.busy());
+    }
+
+    #[test]
+    fn a_close_that_cannot_be_handed_to_the_main_thread_takes_the_notice_back() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let writes = Arc::new(crate::app::Writes::default());
+        super::hold_close_with(app.handle(), writes.clone(), |_, _| {
+            Err(tauri::Error::WindowNotFound)
+        });
+        let resumed = Arc::new(AtomicUsize::new(0));
+        let counted = resumed.clone();
+        app.listen_any(crate::app::CLOSING_RESUMED, move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+
+        let write = writes.begin();
+        assert_eq!(writes.close_requested(), crate::app::CloseRequest::Held);
+        assert_eq!(resumed.load(Ordering::SeqCst), 0);
+        drop(write);
+        assert_eq!(
+            resumed.load(Ordering::SeqCst),
+            1,
+            "the notice is taken back"
+        );
+        // The close is forgotten: the next request closes the window.
+        assert_eq!(writes.close_requested(), crate::app::CloseRequest::Close);
+    }
+
+    #[test]
+    fn only_the_main_window_waits_for_a_write() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use tauri::{Listener, Manager};
+
+        let app = tauri::test::mock_app();
+        tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("the mock runtime makes a window");
+        let other = tauri::WebviewWindowBuilder::new(&app, "other", Default::default())
+            .build()
+            .expect("the mock runtime makes a second window");
+        let writes = Arc::new(crate::app::Writes::default());
+        super::hold_close(app.handle(), writes.clone());
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counted = heard.clone();
+        app.listen_any(crate::app::CLOSING_HELD, move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+        let write = writes.begin();
+        app.run(move |app, event| {
+            if let tauri::RunEvent::Ready = event {
+                other.close().unwrap();
+            }
+            let asked = matches!(
+                event,
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::CloseRequested { .. },
+                    ..
+                }
+            );
+            super::on_event(app, &event);
+            if asked {
+                // Every window goes, so the loop ends whatever was decided.
+                for window in app.webview_windows().into_values() {
+                    window.destroy().unwrap();
+                }
+            }
+        });
+        drop(write);
+        assert_eq!(
+            heard.load(Ordering::SeqCst),
+            0,
+            "the other window was not held back"
+        );
     }
 
     #[test]

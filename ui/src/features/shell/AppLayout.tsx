@@ -223,13 +223,12 @@ function LoadedShell({ start, destinations }: ShellProps) {
     [navigate, pathname, state, home],
   );
 
-  // A close of the window held back by a write is said until the window goes.
+  // A close of the window held back by a write is said until the window goes, or until Rust says
+  // the close could not be carried out and the window stays.
   useEffect(() => {
     let stop: (() => void) | null = null;
     let gone = false;
-    onClosingHeld(() => {
-      setClosing(true);
-    }).then(
+    onClosingHeld(setClosing).then(
       (unlisten) => {
         if (gone) unlisten();
         else stop = unlisten;

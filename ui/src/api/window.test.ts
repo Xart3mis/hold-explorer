@@ -170,19 +170,19 @@ describe("onFileDrag", () => {
 });
 
 describe("onClosingHeld", () => {
-  it("hears the event Rust sends when a close waits for a write, until it stops listening", async () => {
+  it("hears that a close waits for a write and that it was given up, until it stops listening", async () => {
     plugins({});
-    let heard = 0;
-    const stop = await real.onClosingHeld(() => {
-      heard += 1;
-    });
+    const heard: boolean[] = [];
+    const stop = await real.onClosingHeld((held) => heard.push(held));
 
     await emit("closing-held", null);
-    expect(heard).toBe(1);
+    await emit("closing-resumed", null);
+    expect(heard).toEqual([true, false]);
 
     stop();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await emit("closing-held", null);
-    expect(heard).toBe(1);
+    await emit("closing-resumed", null);
+    expect(heard).toHaveLength(2);
   });
 });
