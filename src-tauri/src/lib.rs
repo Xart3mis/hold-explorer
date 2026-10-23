@@ -4,6 +4,8 @@
 
 mod app;
 mod commands;
+pub mod crash;
+pub mod native;
 
 use std::sync::Mutex;
 
@@ -81,8 +83,28 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
     ]
 }
 
+/// The identifier of the app in `tauri.conf.json`: Tauri names the app's folders after it.
+const IDENTIFIER: &str = "io.github.xart3mis.holdexplorer";
+
+/// The version of the app: the configuration has none of its own, so Tauri reports this one.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Builds and runs the application. Returns when the last window is closed.
+///
+/// The crash log hook comes first, so a panic while the app is built or set up leaves a log. A
+/// start that fails writes a log, says so in a native message, and ends the process with code 1.
 pub fn run() {
+    let local_data = crash::local_data_folder(IDENTIFIER);
+    crash::install(local_data.clone(), VERSION);
+    // Without WebView2 the window cannot be created: say what to install, then stop.
+    #[cfg(windows)]
+    if tauri::webview_version().is_err() {
+        native::error_message(
+            native::WEBVIEW2_MISSING_TITLE,
+            &native::webview2_missing_text(),
+        );
+        std::process::exit(1);
+    }
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
@@ -115,7 +137,17 @@ pub fn run() {
     let app = match result {
         Ok(app) => app,
         Err(error) => {
-            eprintln!("Hold Explorer could not start: {error}");
+            let report = crash::CrashReport::now(
+                VERSION,
+                tauri::webview_version().ok(),
+                format!("Hold Explorer could not start: {error}"),
+                None,
+            );
+            let log = crash::write_log(&crash::logs_dir(&local_data), &report).ok();
+            native::error_message(
+                native::STARTUP_FAILURE_TITLE,
+                &native::startup_failure_text(&error.to_string(), log.as_deref()),
+            );
             std::process::exit(1);
         }
     };
@@ -137,7 +169,7 @@ mod tests {
 
     use tauri::window::Color;
 
-    use super::{window_background, SURFACE_APP_DARK, SURFACE_APP_LIGHT};
+    use super::{window_background, IDENTIFIER, SURFACE_APP_DARK, SURFACE_APP_LIGHT};
     use crate::app::Theme;
 
     /// The repository root: the folder above this crate.
@@ -183,6 +215,27 @@ mod tests {
             .replace("\r\n", "\n");
         assert!(design.contains("| `--layout-window-min-width` | `1024px` |"));
         assert!(design.contains("| `--layout-window-min-height` | `640px` |"));
+    }
+
+    #[test]
+    fn the_identifier_is_the_one_of_the_configuration() {
+        assert_eq!(config()["identifier"], IDENTIFIER);
+    }
+
+    #[test]
+    fn the_crash_log_folder_is_the_local_data_folder_tauri_resolves() {
+        // The hook is installed before the app exists, so it finds the folder on its own; it must
+        // find the one Tauri's `app_local_data_dir` gives for this identifier.
+        use tauri::Manager;
+        let app = tauri::test::mock_app();
+        let base = app
+            .path()
+            .local_data_dir()
+            .expect("the system has a local data folder");
+        assert_eq!(
+            crate::crash::local_data_folder(IDENTIFIER),
+            base.join(IDENTIFIER)
+        );
     }
 
     #[test]

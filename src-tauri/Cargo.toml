@@ -18,6 +18,9 @@ hx-core = { path = "../crates/core", features = ["ts"] }
 hx-store = { path = "../crates/store", features = ["ts"] }
 hx-export = { path = "../crates/export", features = ["ts"] }
 hx-synth = { path = "../crates/synth" }
+# The native message of a failed start. The version and features `tauri-plugin-dialog` already
+# takes, so the lock gains no crate.
+rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true

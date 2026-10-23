@@ -2012,6 +2012,7 @@ dependencies = [
  "hx-export",
  "hx-store",
  "hx-synth",
+ "rfd",
  "rusqlite",
  "rust_xlsxwriter",
  "serde",
