@@ -2,6 +2,7 @@
 //! WebView2 runtime. Their texts are Rust constants, not entries of the interface's catalog,
 //! because the interface is not running when they are shown.
 
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::Path;
 
@@ -35,13 +36,14 @@ const WEBVIEW2_AFTER: &str = "Then start Hold Explorer again. Press Ctrl+C to co
 
 /// Shows a native error message and returns when it is closed. Never panics.
 ///
-/// The text goes to standard error as well. On Linux and the BSDs the message is shown only when
-/// a display is named in `DISPLAY` or `WAYLAND_DISPLAY`: without one, GTK cannot start, and the
-/// dialog would wait for it forever.
+/// The text goes to standard error as well. No dialog is shown when `HX_NO_NATIVE_DIALOG=1` or
+/// `HX_SMOKE=1` (an automated run, which nobody would close the dialog of). On Linux and the BSDs
+/// the message is shown only when a display is named in `DISPLAY` or `WAYLAND_DISPLAY`: without
+/// one, GTK cannot start, and the dialog would wait for it forever.
 pub fn error_message(title: &str, text: &str) {
     // Standard error may be closed, as it is for the release build on Windows: ignored then.
     let _ = writeln!(std::io::stderr(), "{title}\n\n{text}");
-    if !display_available() {
+    if !dialog_wanted(|name| std::env::var_os(name)) {
         return;
     }
     // A NUL byte would make the dialog panic: GTK takes C strings.
@@ -57,14 +59,19 @@ pub fn error_message(title: &str, text: &str) {
     });
 }
 
-/// Whether a dialog can be shown: always, except on a Unix desktop without a display.
-fn display_available() -> bool {
+/// Whether a dialog is shown, in the environment `var` reads: not in a run that asks for none,
+/// and on a Unix desktop only with a display.
+fn dialog_wanted(var: impl Fn(&str) -> Option<OsString>) -> bool {
+    let set = |name: &str| var(name).is_some_and(|value| value == "1");
+    if set("HX_NO_NATIVE_DIALOG") || set("HX_SMOKE") {
+        return false;
+    }
     if cfg!(any(windows, target_os = "macos")) {
         return true;
     }
     ["DISPLAY", "WAYLAND_DISPLAY"]
         .iter()
-        .any(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
+        .any(|name| var(name).is_some_and(|value| !value.is_empty()))
 }
 
 /// The text for a failed start: what failed, and the folder of the log written for it.
@@ -84,9 +91,47 @@ pub fn webview2_missing_text() -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::path::Path;
 
-    use super::{startup_failure_text, webview2_missing_text};
+    use super::{dialog_wanted, startup_failure_text, webview2_missing_text};
+
+    /// An environment of the given variables only.
+    fn env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
+        let vars: Vec<(String, OsString)> = vars
+            .iter()
+            .map(|(name, value)| (name.to_string(), OsString::from(value)))
+            .collect();
+        move |name| {
+            vars.iter()
+                .find(|(var, _)| var == name)
+                .map(|(_, value)| value.clone())
+        }
+    }
+
+    #[test]
+    fn a_dialog_is_shown_on_a_display_unless_a_run_asks_for_none() {
+        assert!(dialog_wanted(env(&[("DISPLAY", ":0")])));
+        assert!(dialog_wanted(env(&[("DISPLAY", ":0"), ("HX_SMOKE", "0")])));
+        assert!(!dialog_wanted(env(&[("DISPLAY", ":0"), ("HX_SMOKE", "1")])));
+        assert!(!dialog_wanted(env(&[
+            ("DISPLAY", ":0"),
+            ("HX_NO_NATIVE_DIALOG", "1")
+        ])));
+        assert!(!dialog_wanted(env(&[
+            ("WAYLAND_DISPLAY", "wayland-0"),
+            ("HX_NO_NATIVE_DIALOG", "1")
+        ])));
+    }
+
+    #[test]
+    fn without_a_display_a_dialog_is_shown_only_on_windows_and_macos() {
+        // Elsewhere GTK cannot start without a display, and the dialog would wait forever.
+        let always = cfg!(any(windows, target_os = "macos"));
+        assert_eq!(dialog_wanted(env(&[])), always);
+        assert_eq!(dialog_wanted(env(&[("DISPLAY", "")])), always);
+        assert!(dialog_wanted(env(&[("WAYLAND_DISPLAY", "wayland-0")])));
+    }
 
     #[test]
     fn the_startup_failure_text_names_what_failed_and_the_log_folder() {

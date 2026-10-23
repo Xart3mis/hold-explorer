@@ -8,11 +8,16 @@ use std::cmp::Reverse;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat, Utc};
 
 /// How many crash logs are kept: writing one more deletes the oldest.
 pub const KEEP: usize = 10;
+
+/// How many crash logs one run of the app writes at most: the panics after them go to standard
+/// error only, so a storm of panics does not push out the logs of the first ones.
+pub const PER_RUN: usize = 5;
 
 /// The folder of the crash logs, under the local data folder.
 const LOGS: &str = "logs";
@@ -46,13 +51,28 @@ pub struct CrashReport {
     pub message: String,
     /// The place in the source as `file:line:column`, when known.
     pub location: Option<String>,
-    /// The backtrace of the thread, captured whatever `RUST_BACKTRACE` says.
+    /// The backtrace of the thread, captured whatever `RUST_BACKTRACE` says, with the address of
+    /// every frame. Its first line is the address of `hx_desktop::run`, which matches the
+    /// addresses to the symbols of the build whatever address the system loaded it at.
     pub backtrace: String,
 }
 
 impl CrashReport {
-    /// A report of now, on the current thread, with a backtrace captured here.
+    /// A report of now, on the current thread, with a backtrace captured here. The local time
+    /// uses the current offset of the local time zone.
     pub fn now(
+        version: &str,
+        webview: Option<String>,
+        message: String,
+        location: Option<String>,
+    ) -> Self {
+        Self::capture(*Local::now().offset(), version, webview, message, location)
+    }
+
+    /// A report of now, with the local time at `offset`: the panic hook reads the offset once,
+    /// when it is installed, and asks the time zone nothing while the app is panicking.
+    pub fn capture(
+        offset: FixedOffset,
         version: &str,
         webview: Option<String>,
         message: String,
@@ -61,18 +81,24 @@ impl CrashReport {
         let at = Utc::now();
         Self {
             at,
-            local: at.with_timezone(&Local).fixed_offset(),
+            local: at.with_timezone(&offset),
             version: version.to_string(),
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
             webview,
+            // Accepted limit: a thread that is being torn down (while its thread-locals are
+            // destroyed) can panic again here, and a second panic aborts the process.
             thread: std::thread::current()
                 .name()
                 .unwrap_or("unnamed")
                 .to_string(),
             message,
             location,
-            backtrace: std::backtrace::Backtrace::force_capture().to_string(),
+            backtrace: format!(
+                "Anchor: hx_desktop::run at {:#x}\n{:#}",
+                crate::run as fn() as usize,
+                std::backtrace::Backtrace::force_capture()
+            ),
         }
     }
 
@@ -104,53 +130,63 @@ impl CrashReport {
     }
 }
 
-/// The local data folder of the app, found the way Tauri's `app_local_data_dir` finds it, before
-/// the app exists: the user's local data folder joined with `identifier`. `LOCALAPPDATA` on
-/// Windows, `XDG_DATA_HOME` or `~/.local/share` on Linux, `~/Library/Application Support` on
-/// macOS. Without any of them, the system's temporary folder takes its place.
+/// The local data folder of the app, before the app exists: what Tauri's `app_local_data_dir`
+/// gives, `dirs::data_local_dir()` joined with `identifier`. Without a local data folder, the
+/// system's temporary folder takes its place.
 pub fn local_data_folder(identifier: &str) -> PathBuf {
-    local_data_base()
+    dirs::data_local_dir()
         .unwrap_or_else(std::env::temp_dir)
         .join(identifier)
 }
 
-/// The user's local data folder, as the `dirs` crate behind Tauri's path resolver reads it.
-fn local_data_base() -> Option<PathBuf> {
-    let absolute = |path: PathBuf| path.is_absolute().then_some(path);
-    if cfg!(windows) {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .and_then(absolute)
-    } else if cfg!(target_os = "macos") {
-        std::env::home_dir().map(|home| home.join("Library/Application Support"))
-    } else {
-        std::env::var_os("XDG_DATA_HOME")
-            .map(PathBuf::from)
-            .and_then(absolute)
-            .or_else(|| std::env::home_dir().map(|home| home.join(".local/share")))
-    }
-}
-
 /// Installs the hook that writes a crash log into `logs` under `local_data`, then calls the
 /// previous hook. Safe to call once; a failure to write the log never panics again.
+///
+/// A run writes at most `PER_RUN` logs. The home folder and the local data folder in a panic
+/// message or a backtrace are written as `~` and `<local data>`.
 pub fn install(local_data: PathBuf, version: &'static str) {
     let dir = logs_dir(&local_data);
-    // Read once here: the hook asks the WebView nothing while the app is panicking.
+    // Read once here: the hook asks the WebView and the time zone nothing while the app is
+    // panicking.
     let webview = tauri::webview_version().ok();
+    let offset = *Local::now().offset();
+    let home = std::env::home_dir();
+    let written = AtomicUsize::new(0);
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let report = CrashReport::now(
-            version,
-            webview.clone(),
-            info.payload_as_str()
-                .unwrap_or("a panic without a text message")
-                .to_string(),
-            info.location().map(ToString::to_string),
-        );
-        // A log that cannot be written leaves the panic as it was: the previous hook still runs.
-        let _ = write_log(&dir, &report);
+        if written.fetch_add(1, Ordering::SeqCst) < PER_RUN {
+            let message = info
+                .payload_as_str()
+                .unwrap_or("a panic without a text message");
+            let mut report = CrashReport::capture(
+                offset,
+                version,
+                webview.clone(),
+                redact(message, home.as_deref(), &local_data),
+                info.location().map(ToString::to_string),
+            );
+            report.backtrace = redact(&report.backtrace, home.as_deref(), &local_data);
+            // A log that cannot be written leaves the panic as it was: the previous hook runs.
+            let _ = write_log(&dir, &report);
+        }
         previous(info);
     }));
+}
+
+/// `text` with the local data folder written as `<local data>` and the home folder as `~`.
+fn redact(text: &str, home: Option<&Path>, local_data: &Path) -> String {
+    let mut text = text.to_string();
+    let folders = [(Some(local_data), "<local data>"), (home, "~")];
+    for (folder, name) in folders {
+        let Some(folder) = folder else { continue };
+        let folder = folder.to_string_lossy();
+        // A root or an empty folder would replace every separator.
+        if folder.trim_matches(['/', '\\']).is_empty() {
+            continue;
+        }
+        text = text.replace(folder.as_ref(), name);
+    }
+    text
 }
 
 /// Writes one crash log and returns its path; keeps the newest `KEEP` logs. Used by the hook and
@@ -175,7 +211,7 @@ pub fn write_log(dir: &Path, report: &CrashReport) -> std::io::Result<PathBuf> {
             return Err(error);
         }
         // A log that was written stays written when the old ones cannot be deleted.
-        let _ = prune(dir);
+        let _ = prune_with(dir, &path, |old| std::fs::remove_file(old));
         return Ok(path);
     }
     Err(std::io::Error::new(
@@ -250,14 +286,25 @@ fn logs(dir: &Path) -> std::io::Result<Vec<((String, u32), PathBuf)>> {
     Ok(logs)
 }
 
-/// Deletes the oldest crash logs of `dir` until `KEEP` are left.
-fn prune(dir: &Path) -> std::io::Result<()> {
-    let mut logs = logs(dir)?;
-    logs.sort_by_key(|(key, _)| Reverse(key.clone()));
-    for (_, path) in logs.into_iter().skip(KEEP) {
-        std::fs::remove_file(path)?;
+/// Deletes the oldest crash logs of `dir` with `remove` until `KEEP` are left, `new` among them
+/// whatever its name says. A failed delete does not stop the others; the first error is returned.
+fn prune_with(
+    dir: &Path,
+    new: &Path,
+    mut remove: impl FnMut(&Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let mut others: Vec<_> = logs(dir)?
+        .into_iter()
+        .filter(|(_, path)| path != new)
+        .collect();
+    others.sort_by_key(|(key, _)| Reverse(key.clone()));
+    let mut first_error = None;
+    for (_, path) in others.into_iter().skip(KEEP.saturating_sub(1)) {
+        if let Err(error) = remove(&path) {
+            first_error.get_or_insert(error);
+        }
     }
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 #[cfg(test)]
@@ -268,7 +315,9 @@ mod tests {
     use chrono::{DateTime, FixedOffset, TimeZone, Utc};
     use tempfile::TempDir;
 
-    use super::{install, logs_dir, newest_log, write_log, CrashReport, KEEP};
+    use super::{
+        install, logs_dir, newest_log, prune_with, redact, write_log, CrashReport, KEEP, PER_RUN,
+    };
 
     fn report_at(at: DateTime<Utc>) -> CrashReport {
         let offset = FixedOffset::east_opt(2 * 3600).expect("two hours is a valid offset");
@@ -406,18 +455,105 @@ mod tests {
         assert_eq!(newest_log(temp.path()), None);
     }
 
-    /// Set in the child process of the panic test: the folder its hook writes into.
+    #[test]
+    fn a_new_log_survives_logs_dated_after_it() {
+        // A clock set back leaves logs that look newer than the one written now: the one written
+        // now stays, and the oldest of the others go.
+        let temp = TempDir::new().expect("a temporary folder");
+        let dir = logs_dir(temp.path());
+        std::fs::create_dir_all(&dir).expect("the logs folder is created");
+        for second in 0..(KEEP as u32 + 2) {
+            let name = format!("crash-20990101-0000{second:02}.log");
+            std::fs::write(dir.join(name), "later").expect("a later log is written");
+        }
+        let new = write_log(&dir, &report_at(at(0))).expect("the log is written");
+        assert!(new.exists(), "the log just written was deleted");
+        let left = names(&dir);
+        assert_eq!(left.len(), KEEP, "{left:?}");
+        assert!(!left.contains(&"crash-20990101-000000.log".to_string()));
+        assert!(!left.contains(&"crash-20990101-000002.log".to_string()));
+        assert!(left.contains(&"crash-20990101-000003.log".to_string()));
+    }
+
+    #[test]
+    fn pruning_goes_on_after_a_delete_fails() {
+        let temp = TempDir::new().expect("a temporary folder");
+        let dir = logs_dir(temp.path());
+        std::fs::create_dir_all(&dir).expect("the logs folder is created");
+        for second in 0..(KEEP as u32 + 3) {
+            std::fs::write(
+                dir.join(format!("crash-20261023-0915{second:02}.log")),
+                "old",
+            )
+            .expect("a log is written");
+        }
+        let new = dir.join(format!("crash-20261023-0915{:02}.log", KEEP + 2));
+        // The newest of the logs to delete: it is tried first.
+        let stuck = dir.join("crash-20261023-091502.log");
+        let result = prune_with(&dir, &new, |path| {
+            if path == stuck {
+                Err(std::io::Error::other("held open by another program"))
+            } else {
+                std::fs::remove_file(path)
+            }
+        });
+        assert!(result.is_err(), "the failed delete is reported");
+        assert!(stuck.exists());
+        assert!(!dir.join("crash-20261023-091500.log").exists());
+        assert!(!dir.join("crash-20261023-091501.log").exists());
+        assert!(dir.join("crash-20261023-091503.log").exists());
+    }
+
+    #[test]
+    fn a_message_names_neither_the_home_nor_the_local_data_folder() {
+        let temp = TempDir::new().expect("a temporary folder");
+        let home = temp.path().to_path_buf();
+        let local_data = home.join("data").join("app");
+        let text = format!(
+            "could not open {} and {}",
+            local_data.join("workspace.db").display(),
+            home.join("Documents").join("holds.xlsx").display()
+        );
+        let redacted = redact(&text, Some(&home), &local_data);
+        let separator = std::path::MAIN_SEPARATOR;
+        assert_eq!(
+            redacted,
+            format!(
+                "could not open <local data>{separator}workspace.db and \
+                 ~{separator}Documents{separator}holds.xlsx"
+            )
+        );
+        assert!(!redacted.contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn a_report_captured_with_an_offset_keeps_that_offset() {
+        let offset = FixedOffset::west_opt(5 * 3600).expect("five hours is a valid offset");
+        let report = CrashReport::capture(offset, "1.0.0", None, "m".to_string(), None);
+        assert_eq!(*report.local.offset(), offset);
+        assert_eq!(report.local, report.at.with_timezone(&offset));
+    }
+
+    /// Set in the child process of the panic tests: the folder its hook writes into.
     const CHILD_DIR: &str = "HX_CRASH_TEST_CHILD_DIR";
+    /// Set in the child process of the panic tests: how many threads panic one after another.
+    const CHILD_PANICS: &str = "HX_CRASH_TEST_CHILD_PANICS";
     /// The message the child panics with.
     const CHILD_MESSAGE: &str = "the child thread panics on purpose";
 
-    /// Run as the parent, this test starts the test executable again for itself alone, with
-    /// `CHILD_DIR` set. Run as that child, it installs the hook, which stays for the rest of the
-    /// process, and panics in a spawned thread. The hook so never sees another test's panic.
-    #[test]
-    fn a_panic_in_a_spawned_thread_with_the_hook_writes_a_log() {
-        if let Some(dir) = std::env::var_os(CHILD_DIR) {
-            install(PathBuf::from(dir), "1.2.3");
+    /// Run as a child (when `CHILD_DIR` is set): installs the hook, which stays for the rest of
+    /// the process, and panics in `CHILD_PANICS` spawned threads, one after another. Returns
+    /// whether this process is the child.
+    fn act_as_child() -> bool {
+        let Some(dir) = std::env::var_os(CHILD_DIR) else {
+            return false;
+        };
+        let panics: usize = std::env::var(CHILD_PANICS)
+            .ok()
+            .and_then(|count| count.parse().ok())
+            .unwrap_or(1);
+        install(PathBuf::from(dir), "1.2.3");
+        for _ in 0..panics {
             let joined = std::thread::Builder::new()
                 .name("crash-test-worker".to_string())
                 .spawn(|| {
@@ -427,26 +563,37 @@ mod tests {
                 .expect("the thread starts")
                 .join();
             assert!(joined.is_err(), "the thread panicked");
-            return;
         }
+        true
+    }
+
+    /// Run as the parent: starts the test executable again for the test `name` alone, as a child
+    /// that panics `panics` times. The hook so never sees another test's panic.
+    fn run_child(name: &str, panics: usize) -> (TempDir, String) {
         let temp = TempDir::new().expect("a temporary folder");
         let output = Command::new(std::env::current_exe().expect("the test executable"))
             .args([
                 "--exact",
-                "crash::tests::a_panic_in_a_spawned_thread_with_the_hook_writes_a_log",
+                &format!("crash::tests::{name}"),
                 "--nocapture",
                 "--test-threads=1",
             ])
             .env(CHILD_DIR, temp.path())
+            .env(CHILD_PANICS, panics.to_string())
             .output()
             .expect("the child process runs");
-        assert!(
-            output.status.success(),
-            "the child failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "the child failed: {stderr}");
+        (temp, stderr)
+    }
+
+    #[test]
+    fn a_panic_in_a_spawned_thread_with_the_hook_writes_a_log() {
+        if act_as_child() {
+            return;
+        }
+        let (temp, stderr) = run_child("a_panic_in_a_spawned_thread_with_the_hook_writes_a_log", 1);
         // The previous hook ran too: the default one prints the panic on standard error.
-        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains(CHILD_MESSAGE), "{stderr}");
         let log = newest_log(temp.path()).expect("the hook wrote a log");
         let text = std::fs::read_to_string(&log).expect("the log is readable");
@@ -465,6 +612,40 @@ mod tests {
             text.contains(&location),
             "{location} is missing from:\n{text}"
         );
-        assert!(text.contains("Backtrace:"), "{text}");
+        // The backtrace gives the address of every frame, and the address of one known function,
+        // so the addresses can be matched to symbols whatever the load address was.
+        let backtrace = text
+            .split("Backtrace:\n")
+            .nth(1)
+            .expect("the log has a backtrace");
+        assert!(
+            backtrace.starts_with("Anchor: hx_desktop::run at 0x"),
+            "{backtrace}"
+        );
+        let addressed = backtrace.lines().any(|line| {
+            line.trim_start()
+                .split_once(':')
+                .is_some_and(|(index, rest)| {
+                    index.parse::<u32>().is_ok() && rest.trim_start().starts_with("0x")
+                })
+        });
+        assert!(addressed, "no frame has an address:\n{backtrace}");
+    }
+
+    #[test]
+    fn a_run_writes_at_most_five_logs_and_later_panics_go_to_standard_error() {
+        if act_as_child() {
+            return;
+        }
+        let (temp, stderr) = run_child(
+            "a_run_writes_at_most_five_logs_and_later_panics_go_to_standard_error",
+            PER_RUN + 2,
+        );
+        assert_eq!(
+            stderr.matches(CHILD_MESSAGE).count(),
+            PER_RUN + 2,
+            "{stderr}"
+        );
+        assert_eq!(names(&logs_dir(temp.path())).len(), PER_RUN);
     }
 }

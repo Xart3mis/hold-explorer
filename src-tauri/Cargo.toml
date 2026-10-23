@@ -22,6 +22,9 @@ hx-synth = { path = "../crates/synth" }
 # takes, so the lock gains no crate.
 rfd = { version = "0.16", default-features = false, features = ["gtk3", "common-controls-v6"] }
 chrono.workspace = true
+# The local data folder before the app exists, read as Tauri's path resolver reads it. The
+# version already in the lock through Tauri.
+dirs = "7.0"
 serde.workspace = true
 serde_json.workspace = true
 tauri.workspace = true

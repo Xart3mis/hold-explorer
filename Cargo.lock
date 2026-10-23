@@ -2008,6 +2008,7 @@ dependencies = [
  "calamine",
  "chrono",
  "csv",
+ "dirs",
  "hx-core",
  "hx-export",
  "hx-store",

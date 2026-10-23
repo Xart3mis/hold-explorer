@@ -7,6 +7,7 @@ mod commands;
 pub mod crash;
 pub mod native;
 
+use std::path::Path;
 use std::sync::Mutex;
 
 use tauri::window::Color;
@@ -89,10 +90,82 @@ const IDENTIFIER: &str = "io.github.xart3mis.holdexplorer";
 /// The version of the app: the configuration has none of its own, so Tauri reports this one.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Why the app could not start.
+#[derive(Debug)]
+struct StartFailure {
+    /// What failed: the error returned, or the message of the panic.
+    error: String,
+    /// Whether it panicked; the panic hook has then written a log.
+    panicked: bool,
+}
+
+/// Runs one step of the start: building the app, or its setup. An error and a panic alike are a
+/// failure of the start.
+fn attempt<T, E: std::fmt::Display>(
+    step: impl FnOnce() -> Result<T, E>,
+) -> Result<T, StartFailure> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(step)) {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(StartFailure {
+            error: error.to_string(),
+            panicked: false,
+        }),
+        Err(payload) => {
+            let message = payload
+                .downcast_ref::<&str>()
+                .map(|text| (*text).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "a panic without a text message".to_string());
+            Err(StartFailure {
+                error: format!("an internal error stopped the start: {message}"),
+                panicked: true,
+            })
+        }
+    }
+}
+
+/// Ends a start that failed: writes a crash log (the panic hook has written it already for a
+/// panic), says so in a native message, and ends the process with code 1.
+fn fail_start(local_data: &Path, failure: &StartFailure) -> ! {
+    let log = if failure.panicked {
+        crash::newest_log(local_data)
+    } else {
+        let report = crash::CrashReport::now(
+            VERSION,
+            tauri::webview_version().ok(),
+            format!("Hold Explorer could not start: {}", failure.error),
+            None,
+        );
+        crash::write_log(&crash::logs_dir(local_data), &report).ok()
+    };
+    native::error_message(
+        native::STARTUP_FAILURE_TITLE,
+        &native::startup_failure_text(&failure.error, log.as_deref()),
+    );
+    std::process::exit(1);
+}
+
+/// What the app sets up once its window exists: the state, from the app's folders.
+fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
+    let config_dir = app.path().app_config_dir()?;
+    let data_dir = app.path().app_data_dir()?;
+    let state = AppState::new(config_dir, data_dir);
+    // The window exists but has drawn nothing yet: drawing starts with the event loop.
+    if let Some(window) = app.get_webview_window("main") {
+        // A failure leaves the dark frame, which the page replaces once it has loaded.
+        let _ = window.set_background_color(Some(window_background(state.settings().theme)));
+    }
+    app.manage(Mutex::new(state));
+    // Under a lock of its own: the clipboard is set while the state is free.
+    app.manage(SessionClipboard::default());
+    Ok(())
+}
+
 /// Builds and runs the application. Returns when the last window is closed.
 ///
 /// The crash log hook comes first, so a panic while the app is built or set up leaves a log. A
-/// start that fails writes a log, says so in a native message, and ends the process with code 1.
+/// start that fails, by an error or a panic, in the build or in the setup, writes a log, says so
+/// in a native message, and ends the process with code 1.
 pub fn run() {
     let local_data = crash::local_data_folder(IDENTIFIER);
     crash::install(local_data.clone(), VERSION);
@@ -105,51 +178,32 @@ pub fn run() {
         );
         std::process::exit(1);
     }
-    let result = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                // A failure to raise the window leaves the first instance as it was.
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
-        }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
-            let config_dir = app.path().app_config_dir()?;
-            let data_dir = app.path().app_data_dir()?;
-            let state = AppState::new(config_dir, data_dir);
-            // The window exists but has drawn nothing yet: drawing starts with the event loop.
-            if let Some(window) = app.get_webview_window("main") {
-                // A failure leaves the dark frame, which the page replaces once it has loaded.
-                let _ =
-                    window.set_background_color(Some(window_background(state.settings().theme)));
-            }
-            app.manage(Mutex::new(state));
-            // Under a lock of its own: the clipboard is set while the state is free.
-            app.manage(SessionClipboard::default());
-            Ok(())
-        })
-        .invoke_handler(handler())
-        .build(tauri::generate_context!());
-    let app = match result {
+    let setup_data = local_data.clone();
+    let built = attempt(|| {
+        tauri::Builder::default()
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    // A failure to raise the window leaves the first instance as it was.
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }))
+            .plugin(tauri_plugin_window_state::Builder::default().build())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_opener::init())
+            // Tauri runs the setup when the event loop starts, not in `build`, and turns its
+            // error into a panic there: a failure is handled here instead, before Tauri sees it.
+            .setup(move |app| match attempt(|| setup(app)) {
+                Ok(()) => Ok(()),
+                Err(failure) => fail_start(&setup_data, &failure),
+            })
+            .invoke_handler(handler())
+            .build(tauri::generate_context!())
+    });
+    let app = match built {
         Ok(app) => app,
-        Err(error) => {
-            let report = crash::CrashReport::now(
-                VERSION,
-                tauri::webview_version().ok(),
-                format!("Hold Explorer could not start: {error}"),
-                None,
-            );
-            let log = crash::write_log(&crash::logs_dir(&local_data), &report).ok();
-            native::error_message(
-                native::STARTUP_FAILURE_TITLE,
-                &native::startup_failure_text(&error.to_string(), log.as_deref()),
-            );
-            std::process::exit(1);
-        }
+        Err(failure) => fail_start(&local_data, &failure),
     };
     app.run(|app, event| {
         // The event loop ends the process without dropping what the app manages, and the system's
@@ -215,6 +269,39 @@ mod tests {
             .replace("\r\n", "\n");
         assert!(design.contains("| `--layout-window-min-width` | `1024px` |"));
         assert!(design.contains("| `--layout-window-min-height` | `640px` |"));
+    }
+
+    #[test]
+    fn a_panic_while_starting_is_a_start_failure() {
+        let failure =
+            super::attempt(|| -> Result<(), String> { panic!("the setup panics on purpose") })
+                .expect_err("the start failed");
+        assert!(failure.panicked);
+        assert!(
+            failure.error.contains("the setup panics on purpose"),
+            "{}",
+            failure.error
+        );
+        let text = crate::native::startup_failure_text(&failure.error, None);
+        assert!(text.contains("the setup panics on purpose"), "{text}");
+    }
+
+    #[test]
+    fn an_error_while_starting_is_a_start_failure() {
+        let failure = super::attempt(|| -> Result<(), String> {
+            Err("the setup fails on purpose".to_string())
+        })
+        .expect_err("the start failed");
+        assert!(!failure.panicked);
+        assert_eq!(failure.error, "the setup fails on purpose");
+    }
+
+    #[test]
+    fn a_build_that_works_is_no_failure() {
+        let built = super::attempt(|| {
+            tauri::test::mock_builder().build(tauri::test::mock_context(tauri::test::noop_assets()))
+        });
+        assert!(built.is_ok());
     }
 
     #[test]
