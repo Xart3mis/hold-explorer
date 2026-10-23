@@ -19,8 +19,6 @@ export const keys = {
   selectingSnapshot: ["app", "workspace", "switching", "snapshot"] as const,
   /** The others: a new workspace, another name, the demo. */
   changing: ["app", "workspace", "changing"] as const,
-  /** The actions on the saved views of the open workspace: save, rename, delete, restore, move. */
-  savedViews: ["views", "change"] as const,
   /**
    * Where the change of the workspaces folder is: checked, offered, moving, done, or failed. Kept
    * here and not in a page, so that the page that comes back after a press of the sidebar shows it.

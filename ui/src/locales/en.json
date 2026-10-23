@@ -262,6 +262,7 @@
     }
   },
   "views": {
+    "damagedTitle": "The saved views of this workspace could not be read",
     "title": "Saved views",
     "empty": "Save the filters and screen you use often from the filter bar.",
     "actions": "Actions for {{name}}",
@@ -414,9 +415,15 @@
     "folderLeftTitle_one": "{{count, number}} file was left where it was:",
     "folderLeftTitle_other": "{{count, number}} files were left where they were:",
     "folderLeftList": "Workspace files left where they were",
+    "folderStaysOpen": "{{name}} stays open from {{from}}. It is not in the list of {{to}} until its file is moved there.",
     "folderNotChanged": "The workspaces folder was not changed",
     "folderDialogError": "The folder dialog could not be opened",
-    "version": "Version"
+    "version": "Version",
+    "about": "About",
+    "settingsFile": "Settings file",
+    "settingsFileHelp": "Your settings are kept in this file.",
+    "settingsFileShow": "Show in folder: settings file",
+    "settingsFileError": "The settings file could not be shown"
   },
   "import": {
     "title": "Import",
@@ -499,6 +506,7 @@
       "usedBy": "Used for {{field}}",
       "moved": "The column {{column}} now supplies {{field}}. {{previous}} has no column now.",
       "savedTitle": "The saved mapping of this workspace was applied",
+      "savedUnreadableTitle": "The saved mapping of this workspace could not be read",
       "savedText": "The last import into this workspace saved which header supplies which field, and this file was mapped the same way. Reset to automatic to map it by its headers alone.",
       "sentBackTitle": "The file cannot be reviewed until every required field has a column",
       "reset": "Reset to automatic",

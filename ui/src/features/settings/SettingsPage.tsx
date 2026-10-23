@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { asCommandError } from "../../api/error";
 import { useAuthorNameSetting } from "../../app/actions/authorName";
 import { useDensitySetting } from "../../app/actions/density";
@@ -8,9 +8,10 @@ import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import type { Density } from "../../bindings/Density";
 import type { Theme } from "../../bindings/Theme";
-import { Notice, Select, TextField, type SelectOption } from "../../components";
+import { Notice, SectionTitle, Select, TextField, type SelectOption } from "../../components";
 import { t } from "../../text/i18n";
 import { FolderRow } from "./FolderRow";
+import { SettingsFileRow } from "./SettingsFileRow";
 import styles from "./SettingsPage.module.css";
 
 const THEMES: readonly Theme[] = ["Dark", "Light", "System"];
@@ -27,9 +28,10 @@ function isDensity(value: string): value is Density {
 
 /**
  * Settings: the theme and the density, applied at once and saved; the name notes are signed
- * with, saved when the field is left or Enter is pressed; the folder the workspaces are kept in,
- * with a way to show it and to change it; and the version of the app. While the folder changes,
- * the other settings are inert, and the folder row says so.
+ * with, saved when the field is left or Enter is pressed; then About: the version of the app, the
+ * folder the workspaces are kept in, with a way to show it and to change it, and the settings
+ * file, with a way to show it. While the folder changes, the other settings are inert, and the
+ * folder row says so.
  */
 export function SettingsPage() {
   const { start } = useShell();
@@ -37,6 +39,7 @@ export function SettingsPage() {
   const { setDensity } = useDensitySetting();
   const { setAuthorName } = useAuthorNameSetting();
   const folder = useWorkspaceFolder();
+  const aboutId = useId();
   // The other settings wait while the workspaces folder changes.
   const waiting = folder.change?.step === "moving";
 
@@ -47,6 +50,20 @@ export function SettingsPage() {
   const [draft, setDraft] = useState(savedName);
   const asked = useRef<string | null>(savedName);
   const focused = useRef(false);
+  // What is typed, for the save when the page goes while the field has the focus: a Ctrl
+  // shortcut leaves the page from the field, and a field that is removed may get no blur.
+  const typed = useRef(draft);
+  useEffect(() => {
+    typed.current = draft;
+  });
+  const { mutate: sendName } = setAuthorName;
+  useEffect(
+    () => () => {
+      const name = typed.current.trim();
+      if (name !== asked.current) sendName(name);
+    },
+    [sendName],
+  );
   useEffect(() => {
     asked.current = savedName;
     if (!focused.current) setDraft(savedName);
@@ -146,14 +163,21 @@ export function SettingsPage() {
           />
         </div>
 
-        <FolderRow start={start} folder={folder} />
-
-        <div className={styles.row}>
-          <div className={styles.value}>
-            <span className={styles.label}>{t("settings.version")}</span>
-            <span className={styles.version}>{start.version}</span>
+        <section aria-labelledby={aboutId} className={[styles.row, styles.about].join(" ")}>
+          <SectionTitle level={2} id={aboutId}>
+            {t("settings.about")}
+          </SectionTitle>
+          <div className={styles.row}>
+            <div className={styles.value}>
+              <span className={styles.label}>{t("settings.version")}</span>
+              <span className={styles.version}>{start.version}</span>
+            </div>
           </div>
-        </div>
+
+          <FolderRow start={start} folder={folder} />
+
+          <SettingsFileRow path={start.settings_file} />
+        </section>
       </div>
     </Page>
   );

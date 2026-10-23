@@ -173,6 +173,46 @@ describe("SettingsPage", () => {
     expect(alert).toHaveTextContent("The folder does not exist yet.");
   });
 
+  it("has an About group with the version, the workspaces folder, and the settings file", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    expect(within(about).getByRole("heading", { level: 2, name: en.settings.about })).toBeVisible();
+    expect(within(about).getByText(en.settings.version)).toBeInTheDocument();
+    expect(within(about).getByText("0.1.0")).toBeInTheDocument();
+    expect(within(about).getByText(en.settings.folder)).toBeInTheDocument();
+    expect(
+      within(about).getByText("/home/ada/.local/share/hold-explorer/workspaces"),
+    ).toBeInTheDocument();
+    expect(within(about).getByText(en.settings.settingsFile)).toBeInTheDocument();
+    expect(
+      within(about).getByText("/home/ada/.config/hold-explorer/settings.json"),
+    ).toBeInTheDocument();
+
+    // Each path has Show in folder.
+    await user.click(within(about).getByRole("button", { name: en.common.showInFolder }));
+    expect(windowApi.showInFolder).toHaveBeenLastCalledWith(
+      "/home/ada/.local/share/hold-explorer/workspaces",
+    );
+    const showFile = within(about).getByRole("button", { name: en.settings.settingsFileShow });
+    expect(showFile).toHaveTextContent(en.common.showInFolder);
+    await user.click(showFile);
+    expect(windowApi.showInFolder).toHaveBeenLastCalledWith(
+      "/home/ada/.config/hold-explorer/settings.json",
+    );
+  });
+
+  it("says why the settings file could not be shown", async () => {
+    windowApi.showInFolder.mockRejectedValue(new Error("The file does not exist yet."));
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    await user.click(within(about).getByRole("button", { name: en.settings.settingsFileShow }));
+    const alert = await within(about).findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.settingsFileError);
+    expect(alert).toHaveTextContent("The file does not exist yet.");
+  });
+
   it("works without a workspace", async () => {
     renderApp({ start: startState(), path: "/settings" });
     const main = await page();
@@ -364,7 +404,26 @@ describe("the author name", () => {
     });
   });
 
-  it("says inline why a name could not be saved and keeps the text", async () => {
+  it("saves the name when a Ctrl shortcut leaves the page from the field", async () => {
+    const setName = vi.fn(({ name }: { name: string }) => withSettings({ author_name: name }));
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_author_name: setName },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace");
+    expect(nameField()).toHaveFocus();
+    // Ctrl+1 opens Overview while the field still has the focus.
+    await user.keyboard("{Control>}1{/Control}");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await waitFor(() => {
+      expect(setName).toHaveBeenCalledWith({ name: "Ada Lovelace" });
+    });
+    expect(setName).toHaveBeenCalledTimes(1);
+  });
+
+  it("says inline why a name could not be saved and keeps the text", SLOW, async () => {
     const { user } = renderApp({
       start: openStart(),
       path: "/settings",

@@ -20,7 +20,6 @@ import {
   Text,
   TextField,
 } from "react-aria-components";
-import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { useDensitySetting } from "../../app/actions/density";
 import { useWorkspaceFolder } from "../../app/actions/folder";
@@ -29,17 +28,15 @@ import { useThemeSetting } from "../../app/actions/theme";
 import type { Destination } from "../../app/destinations";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
-import { useSnapshotQuery } from "../../app/view";
 import type { SearchHit } from "../../bindings/SearchHit";
-import type { SearchResults } from "../../bindings/SearchResults";
 import { Icon, Skeleton, Tag, VisuallyHidden } from "../../components";
 import { cx } from "../../components/cx";
 import { formatCount, formatList } from "../../text/format";
 import { t, type MessageKey } from "../../text/i18n";
 import { startImport } from "../import/start";
+import { isSearchable, useSearchAnswer } from "../search/answer";
 import { useSearchChoice } from "../search/choose";
 import { MatchedText } from "../search/results";
-import { MIN_QUERY_LENGTH, SEND_AFTER_MS } from "../search/SearchField";
 import type { ShellProblem } from "../shell/problem";
 import { KeyCaps } from "../shell/KeyCaps";
 import { ariaKeyShortcuts, MODAL_ATTRIBUTE } from "../shell/shortcuts";
@@ -92,10 +89,6 @@ const HEADING_KEYS: Record<PaletteGroup | "recent", MessageKey> = {
   recent: "palette.group.recent",
 };
 
-function isSearchable(text: string): boolean {
-  return text.trim().length >= MIN_QUERY_LENGTH;
-}
-
 /** The item of a line the search found. */
 function lineItem(hit: SearchHit, open: (hit: SearchHit) => void): PaletteItem {
   return {
@@ -110,39 +103,18 @@ function lineItem(hit: SearchHit, open: (hit: SearchHit) => void): PaletteItem {
 }
 
 /**
- * The line IDs the search command finds for what is typed, read as the search field reads them:
- * once typing has stopped for a moment, from 2 characters, for the snapshot in view. An answer
- * is matched to the text it was asked for; the one of before stands in, dimmed, until the next.
+ * The line IDs the search command finds for what is typed, read as the search field reads them
+ * (`useSearchAnswer`): once typing has stopped for a moment, from 2 characters, for the snapshot
+ * in view. The answer of before stands in, dimmed, until the next.
  */
 function useLines(text: string) {
-  const [asked, setAsked] = useState(text);
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAsked(text);
-    }, SEND_AFTER_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [text]);
   const { start } = useShell();
   const hasSnapshot = start.open?.selected != null;
-  const query = useSnapshotQuery({
-    name: "search",
-    params: [asked],
-    read: (view, typed) => api.search(view, typed),
-    enabled: hasSnapshot && isSearchable(asked),
+  const { shown, isWaiting, isStale, error, retry } = useSearchAnswer(text, {
+    enabled: hasSnapshot,
   });
-  const answer: SearchResults | undefined = query.data;
-  const fresh =
-    answer !== undefined && !query.isPlaceholderData && answer.query === text ? answer : null;
-  const [kept, setKept] = useState<SearchResults | null>(null);
-  if (fresh !== null && kept !== fresh) setKept(fresh);
-  if (!isSearchable(text) && kept !== null) setKept(null);
-  const shown = fresh ?? kept;
-  const searchable = hasSnapshot && isSearchable(text);
-  const failed = searchable && query.isError && fresh === null && asked === text;
   const hits =
-    !searchable || failed
+    !hasSnapshot || !isSearchable(text) || error !== null
       ? []
       : (shown?.groups.find((group) => group.kind === "Lines")?.hits ?? [])
           .filter((hit) => hit.kind === "Line")
@@ -150,11 +122,11 @@ function useLines(text: string) {
   return {
     hits,
     /** Waiting for the first answer for what is typed, with nothing to show meanwhile. */
-    isWaiting: searchable && !failed && shown === null,
+    isWaiting: isWaiting && !isStale,
     /** What is shown is the answer for an earlier text. */
-    isStale: searchable && !failed && fresh === null && shown !== null,
-    error: failed ? asCommandError(query.error).message : null,
-    retry: () => void query.refetch(),
+    isStale,
+    error,
+    retry: () => void retry(),
   };
 }
 

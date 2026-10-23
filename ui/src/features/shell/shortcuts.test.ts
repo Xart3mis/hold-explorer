@@ -436,7 +436,7 @@ describe("SHORTCUTS", () => {
     expect(listed("tables")).toEqual(TABLE_KEYS.map((tableKey) => tableKey.shortcut));
   });
 
-  it("has a key of TABLE_KEYS for each way DESIGN.md Table names, and no other", () => {
+  it('has in TABLE_KEYS exactly the keys DESIGN.md "Table" names, each in its words', () => {
     const design = readFileSync(join(__dirname, "../../../../DESIGN.md"), "utf8");
     const start = design.indexOf("\n### Table\n");
     const end = design.indexOf("\n### ", start + 1);

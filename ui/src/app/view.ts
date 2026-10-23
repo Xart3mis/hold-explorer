@@ -122,6 +122,7 @@ import type { ErrorKind } from "../bindings/ErrorKind";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
+import type { FolderChange } from "./actions/folder";
 import { keepNewerViews, listed, viewsAnswered } from "./actions/start";
 import { useShell, type ShellNotice } from "./shell/context";
 
@@ -305,6 +306,7 @@ export type ReadingName =
   | "overview"
   | "filterOptions"
   | "filterValues"
+  | "filterLabels"
   | "lines"
   | "holds"
   | "lineDetail"
@@ -632,6 +634,8 @@ export interface ActionSent {
  * enabled meanwhile; the dropping of the snapshot queries that are in flight when the action is
  * asked for, whose answers the Rust side may give for either view; and the saved views a view
  * command answered after the action was sent, which its answer, read earlier, must not replace.
+ * It also puts away the answer of a change of the workspaces folder that is done or failed: that
+ * record belongs to the action before.
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
@@ -642,6 +646,11 @@ export function workspaceAction<Variables = void, Data = unknown>(
     scope: WORKSPACE_SCOPE,
     mutationFn,
     onMutate: async (variables: Variables) => {
+      // The answer of a change of the workspaces folder is of the action before: put away.
+      const folder = client.getQueryData<FolderChange>(keys.folderChange);
+      if (folder?.step === "done" || folder?.step === "failed") {
+        client.removeQueries({ queryKey: keys.folderChange, exact: true });
+      }
       onAsk?.(variables);
       // Taken when the action is asked for: a list of views answered after this is newer than
       // the one the action answers with.

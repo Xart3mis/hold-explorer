@@ -16,6 +16,11 @@
   border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
 }
 
+/* About: its title, then its rows, a form row's gap apart as the rows of the page are. */
+.about {
+  gap: var(--space-6);
+}
+
 /*
  * The theme and the density have a few short options, so their box is no wider than they need.
  * The helper line under it keeps the width of a line of text.
@@ -88,15 +93,6 @@
   flex-direction: column;
   gap: var(--space-1);
   max-inline-size: var(--layout-prose-max-width);
-}
-
-/*
- * The progress and the result of a change of the folder take the focus when they appear, so the
- * keyboard follows the change; they are read, not used, so they show no focus ring of their own.
- */
-.progress:focus,
-.result:focus {
-  outline: none;
 }
 
 /* The text of a notice of the folder row, then its choices or its lists, a line apart. */

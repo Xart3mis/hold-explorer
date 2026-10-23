@@ -76,7 +76,7 @@ export function viewHandlers(
   const check = (workspace: string) => {
     const shown = open();
     if (shown === null) throw commandFailure("NoWorkspace", "No workspace is open.");
-    if (shown.workspace.id !== workspace) throw commandFailure("WorkspaceNotFound", NOT_OPEN);
+    if (shown.workspace.id !== workspace) throw commandFailure("ViewChanged", NOT_OPEN);
     if (held !== null) {
       lists.set(held, list);
       nexts.set(held, next);

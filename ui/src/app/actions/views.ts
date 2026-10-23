@@ -1,6 +1,6 @@
 /**
  * The actions on the saved views of the open workspace: save, rename, delete, restore, and move.
- * Each command names the workspace it is meant for and refuses another (`WorkspaceNotFound`), and
+ * Each command names the workspace it is meant for and refuses another (`ViewChanged`), and
  * answers the whole list in sidebar order, which is written into the cached start as the views
  * of that workspace. See ui/src/app/actions/start.ts.
  *
@@ -12,7 +12,6 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/commands";
-import { keys } from "../../api/keys";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { SavedView } from "../../bindings/SavedView";
@@ -56,7 +55,6 @@ export function useSavedViews() {
   const options = <Variables extends { workspace: string }>(
     mutationFn: (variables: Variables) => Promise<SavedView[]>,
   ) => ({
-    mutationKey: keys.savedViews,
     scope: VIEWS_SCOPE,
     mutationFn,
     onSuccess: (views: SavedView[], { workspace }: Variables) => {

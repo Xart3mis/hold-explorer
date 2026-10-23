@@ -4,6 +4,7 @@ import { asCommandError } from "../../api/error";
 import { exportColumn } from "../../api/plantim";
 import { keys } from "../../api/keys";
 import { useStart } from "../../app/actions/start";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import type { Field } from "../../bindings/Field";
@@ -56,7 +57,9 @@ const CLOSED: Picker = {
  * which no hold is released is said to have none; only the open holds are then offered.
  */
 export function FilterBar() {
-  const { filters, update, clear } = useFilters();
+  const { update, clear } = useFilters();
+  // The filters with every value under the label its chip shows.
+  const filters = useLabelledFilters();
   const { isBusy } = useStart();
   // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
   // workspace makes the bar wait for the workspace, also when a selection waits beside it.

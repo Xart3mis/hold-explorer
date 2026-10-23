@@ -15,6 +15,7 @@ import { queryClient, startQuery } from "./query";
 function start(theme: Theme, density: Density = "Comfortable"): AppStart {
   return {
     version: "0.1.0",
+    settings_file: "/home/ada/.config/hold-explorer/settings.json",
     settings: { theme, density, author_name: "", workspace_dir: null, last_workspace: null },
     list: { workspaces: [], unreadable: [], folder: "workspaces" },
     list_error: null,

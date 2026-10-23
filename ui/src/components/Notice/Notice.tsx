@@ -19,7 +19,11 @@ export interface NoticeProps {
   tone: NoticeTone;
   /** A short statement of what happened. */
   title?: string;
-  /** The id of the title, for a region around the notice that is named by it. */
+  /**
+   * The id of the title, for a region around the notice that is named by it. The title can then
+   * take the focus (`tabIndex` -1), so the keyboard can be moved to the notice and its ring sits
+   * on the title.
+   */
   titleId?: string | undefined;
   /** The message: why, and what to do. */
   children: ReactNode;
@@ -53,7 +57,11 @@ export function Notice({
       <Icon icon={icons[tone]} className={styles.icon} />
       <div className={styles.body}>
         {title === undefined ? null : (
-          <strong id={titleId} className={styles.title}>
+          <strong
+            id={titleId}
+            tabIndex={titleId === undefined ? undefined : -1}
+            className={styles.title}
+          >
             {title}
           </strong>
         )}

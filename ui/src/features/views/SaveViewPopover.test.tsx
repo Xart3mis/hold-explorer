@@ -152,6 +152,24 @@ describe("Save view", () => {
     },
   );
 
+  it("proposes the label of a value the snapshot names, not its key", async () => {
+    const key = "HOLD PENDING 573-PR-1450";
+    const { user } = await renderAt("/lines", {
+      filters: {
+        ...defaultFilters,
+        fields: [{ dim: "Remark", values: [{ key, label: key }], negate: false }],
+      },
+      handlers: {
+        filter_labels: () => [{ dim: "Remark", key, label: "Hold pending 573-PR-1450" }],
+      },
+    });
+    await screen.findByRole("button", { name: /Hold remark Hold pending 573-PR-1450/ });
+    const dialog = await openPopover(user);
+    expect(within(dialog).getByRole("textbox", { name: text.name })).toHaveValue(
+      "Lines · Hold pending 573-PR-1450",
+    );
+  });
+
   it("proposes the destination alone without a chip, and leaves Breakdown's open groups out", async () => {
     const save = vi.fn<NonNullable<Handlers["save_view"]>>(({ name, address, filters }) => [
       { id: 1, name, address, filters },

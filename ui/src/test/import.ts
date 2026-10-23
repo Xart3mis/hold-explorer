@@ -132,6 +132,7 @@ export function exportDraft(overrides: Partial<ImportDraft> = {}): ImportDraft {
     required: ["LineId", "Remark", "HoldType"],
     missing_required: [],
     used_saved_mapping: false,
+    saved_mapping_problem: null,
     ...overrides,
   };
 }
@@ -168,6 +169,7 @@ export function unmappedDraft(overrides: Partial<ImportDraft> = {}): ImportDraft
     required: ["LineId", "Remark", "HoldType"],
     missing_required: ["LineId", "Remark", "HoldType"],
     used_saved_mapping: false,
+    saved_mapping_problem: null,
     ...overrides,
   };
 }

@@ -1,13 +1,21 @@
+import type { ErrorKind } from "../../bindings/ErrorKind";
 import { t } from "../../text/i18n";
 import { Button } from "../Button/Button";
 import { Notice } from "../Notice/Notice";
+
+/**
+ * The kinds of the errors a screen shows: those a command answers with, and the interface's own
+ * (`InterfaceKind` of ui/src/api/error.ts, which a component may not import; the type test of
+ * this component checks that the two lists are the same).
+ */
+export type ShownErrorKind = ErrorKind | "Dialog" | "ViewUnsettled" | "WorkspaceChanged";
 
 export interface ErrorStateProps {
   /**
    * What the failed command returned, or a failure the interface made in its shape. Its message
    * says what happened, why, and how to fix it.
    */
-  error: { kind: string; message: string };
+  error: { kind: ShownErrorKind; message: string };
   /** What failed, in the words of the screen. A general heading is used otherwise. */
   title?: string;
   /** Shows a retry button that calls this. */

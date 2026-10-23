@@ -26,16 +26,16 @@ import { Button, ErrorState, Notice, Skeleton, VisuallyHidden } from "../../comp
 import { formatDateTime } from "../../text/format";
 import { t } from "../../text/i18n";
 import { DetailPanel } from "../detail/DetailPanel";
-import { ViewActionsProvider } from "../views/actions";
 import { createDetailFocus, DetailFocusContext, useSelection } from "../detail/selection";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
 import { CommandPalette } from "../palette/CommandPalette";
-import type { ShellProblem } from "./problem";
 import { focusSearchField } from "../search/SearchField";
-import { shortcutBindings, usePageShortcuts, usePaletteShortcut, useShortcuts } from "./shortcuts";
+import { ViewActionsProvider } from "../views/actions";
 import { useModalFocusReturn } from "./modalFocus";
+import type { ShellProblem } from "./problem";
 import { ShortcutSheet } from "./ShortcutSheet";
 import styles from "./Shell.module.css";
+import { shortcutBindings, usePageShortcuts, usePaletteShortcut, useShortcuts } from "./shortcuts";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { TopBarSlotProvider } from "./topBarSlot";
@@ -414,7 +414,13 @@ function LoadedShell({ start, destinations }: ShellProps) {
                     {warning === null ? null : (
                       <Notice
                         tone="warning"
-                        title={t("workspaces.warningTitle")}
+                        // Damaged saved views alone have their own title; the settings' title
+                        // stays when the settings could not be saved, alone or with them.
+                        title={t(
+                          warning.kind === "Corrupt"
+                            ? "views.damagedTitle"
+                            : "workspaces.warningTitle",
+                        )}
                         onDismiss={() => {
                           setDismissedWarning(warning.message);
                         }}

@@ -10,7 +10,7 @@ import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { breakdownGroups, foldedMatrix, groupDetail } from "./breakdown";
 import { blockerDetail, solveView } from "./blockers";
-import { filterOptions, valuePage } from "./filters";
+import { filterLabels, filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { commandFailure, mockCommands, type Handlers } from "./ipc";
 import { holdRef, holdsView, lineDetail, linePage } from "./lines";
@@ -40,7 +40,8 @@ export interface RenderAppOptions {
  * Renders the whole app, with its providers, on a router that keeps its history in memory. The
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`,
  * `overview` with the overview of the snapshot the mock holds, `filter_options` with the
- * options of the default filter, `filter_values` with three values whatever the dimension, and
+ * options of the default filter, `filter_values` with three values whatever the dimension,
+ * `filter_labels` with each value of the filter labelled by its key (ui/src/test/filters.ts), and
  * `lines` and `holds` with the three lines and the three holds of a small snapshot, and
  * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, `breakdown`
  * with three groups whatever the dimension, `group_detail` with three lines of the group asked
@@ -113,6 +114,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     overview: inView(() => overviewOf(heldOpen)),
     filter_options: inView(() => filterOptions()),
     filter_values: inView(() => valuePage()),
+    filter_labels: inView(({ spec }) => filterLabels(spec)),
     lines: inView(() => linePage()),
     holds: inView(() => holdsView()),
     line_detail: inView(({ lineId }) => lineDetail(lineId)),

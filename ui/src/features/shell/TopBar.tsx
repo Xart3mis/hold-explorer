@@ -73,7 +73,10 @@ export function TopBar({ start, destinations, renameErrorId, onProblem }: TopBar
           />
         )}
       </div>
-      {start.open?.selected == null ? null : <SearchField />}
+      {start.open?.selected == null ? null : (
+        // Drawn anew for each view, so nothing typed or found for the snapshot before stays.
+        <SearchField key={`${start.open.workspace.id}:${String(start.open.selected)}`} />
+      )}
       <div className={styles.topbarEnd}>
         {start.open === null ? null : <SnapshotSelector open={start.open} onProblem={onProblem} />}
         <TopBarExportSlot fallback={<ExportMenuInert description={t("export.menu.notHere")} />} />

@@ -27,7 +27,8 @@ export function FolderRow({ start, folder }: FolderRowProps) {
   const { isBusy } = useStart();
   const [showError, setShowError] = useState<AppError | null>(null);
   const labelId = useId();
-  // The progress and the result take the focus as regions named by their own label or title.
+  // The progress and the result are regions named by their own label or title, which takes the
+  // focus when the region appears, so the ring sits on a heading.
   const progressLabelId = useId();
   const resultTitleId = useId();
   const path = start.list.folder;
@@ -42,6 +43,9 @@ export function FolderRow({ start, folder }: FolderRowProps) {
   const buttons = useRef<HTMLDivElement>(null);
   const progress = useRef<HTMLDivElement>(null);
   const result = useRef<HTMLDivElement>(null);
+  /** The label or the title that names a region, which takes the focus for it. */
+  const titleOf = (region: HTMLDivElement | null, id: string) =>
+    region?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`) ?? null;
   const focusChange = () => {
     buttons.current?.querySelector("button")?.focus();
   };
@@ -50,13 +54,14 @@ export function FolderRow({ start, folder }: FolderRowProps) {
   useEffect(() => {
     const was = before.current;
     before.current = step;
-    if (step === "moving" && was === "offer") progress.current?.focus();
+    if (step === "moving" && was === "offer") titleOf(progress.current, progressLabelId)?.focus();
     // A quick answer may come before a render showed the progress: from the offer straight on.
     if ((step === "done" || step === "failed") && was !== undefined && was !== step) {
-      if (result.current) result.current.focus();
+      const title = titleOf(result.current, resultTitleId);
+      if (title) title.focus();
       else focusChange();
     }
-  }, [step]);
+  }, [step, progressLabelId, resultTitleId]);
   const putAway = () => {
     dismiss();
     focusChange();
@@ -146,7 +151,6 @@ export function FolderRow({ start, folder }: FolderRowProps) {
       {change?.step === "moving" ? (
         <div
           ref={progress}
-          tabIndex={-1}
           role="group"
           aria-labelledby={progressLabelId}
           className={styles.progress}
@@ -165,24 +169,17 @@ export function FolderRow({ start, folder }: FolderRowProps) {
         </div>
       ) : null}
       {change?.step === "done" ? (
-        <div
-          ref={result}
-          tabIndex={-1}
-          role="group"
-          aria-labelledby={resultTitleId}
-          className={styles.result}
-        >
-          <Moved moved={change.moved} titleId={resultTitleId} onDismiss={putAway} />
+        <div ref={result} role="group" aria-labelledby={resultTitleId}>
+          <Moved
+            moved={change.moved}
+            from={change.from}
+            titleId={resultTitleId}
+            onDismiss={putAway}
+          />
         </div>
       ) : null}
       {change?.step === "failed" ? (
-        <div
-          ref={result}
-          tabIndex={-1}
-          role="group"
-          aria-labelledby={resultTitleId}
-          className={styles.result}
-        >
+        <div ref={result} role="group" aria-labelledby={resultTitleId}>
           <Notice
             tone="danger"
             titleId={resultTitleId}
@@ -274,14 +271,23 @@ function Offer({ from, to, isDefault, count, onMove, onCancel }: OfferProps) {
 
 interface MovedProps {
   moved: FolderMoved;
+  /** The folder the change started from. */
+  from: string;
   /** The id the title is given, so the region around the notice is named by it. */
   titleId: string;
   onDismiss: () => void;
 }
 
-/** What a change did: the files moved, and each file left where it was with the reason. */
-function Moved({ moved, titleId, onDismiss }: MovedProps) {
+/**
+ * What a change did: the files moved, and each file left where it was with the reason. When the
+ * open workspace stayed open from the folder before (its file was left there), it says so: the
+ * workspace is in no list until its file is moved.
+ */
+function Moved({ moved, from, titleId, onDismiss }: MovedProps) {
   const to = moved.start.list.folder;
+  const open = moved.start.open?.workspace;
+  const staysBehind =
+    open !== undefined && !moved.start.list.workspaces.some((listed) => listed.id === open.id);
   const title =
     moved.moved.length > 0
       ? t("settings.folderMovedTitle", { count: moved.moved.length, to })
@@ -318,6 +324,9 @@ function Moved({ moved, titleId, onDismiss }: MovedProps) {
             </span>
           </>
         )}
+        {staysBehind ? (
+          <span>{t("settings.folderStaysOpen", { name: open.name, from, to })}</span>
+        ) : null}
       </span>
     </Notice>
   );

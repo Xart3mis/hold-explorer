@@ -77,6 +77,7 @@ export const unreadable: UnreadableView = {
 export function startState(overrides: Partial<AppStart> = {}): AppStart {
   return {
     version: "0.1.0",
+    settings_file: "/home/ada/.config/hold-explorer/settings.json",
     settings: {
       theme: "Dark",
       density: "Comfortable",
@@ -126,6 +127,7 @@ export function draft(overrides: Partial<ImportDraft> = {}): ImportDraft {
     required: ["LineId", "Remark", "HoldType"],
     missing_required: [],
     used_saved_mapping: false,
+    saved_mapping_problem: null,
     ...overrides,
   };
 }

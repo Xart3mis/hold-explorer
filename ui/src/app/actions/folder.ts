@@ -3,6 +3,7 @@ import { api } from "../../api/commands";
 import { asCommandError, type AppError } from "../../api/error";
 import { keys } from "../../api/keys";
 import { workspaceApi } from "../../api/workspace-commands";
+import type { AppStart } from "../../bindings/AppStart";
 import type { FolderCheck } from "../../bindings/FolderCheck";
 import type { FolderMoved } from "../../bindings/FolderMoved";
 import { useCached } from "../query";
@@ -20,13 +21,14 @@ export interface FolderChoice {
 /**
  * Where the change of the workspaces folder is: a folder being checked (`path` is `null` for the
  * default one); a checked folder offered, with the files a move would take; the change running;
- * its answer; or a failure of the dialog, of the check, or of the change.
+ * its answer; or a failure of the dialog, of the check, or of the change. A change that runs or
+ * has answered keeps the folder it started from (`from`).
  */
 export type FolderChange =
   | { step: "checking"; path: string | null }
   | { step: "offer"; path: string | null; check: FolderCheck }
-  | { step: "moving"; choice: FolderChoice }
-  | { step: "done"; choice: FolderChoice; moved: FolderMoved }
+  | { step: "moving"; choice: FolderChoice; from: string }
+  | { step: "done"; choice: FolderChoice; moved: FolderMoved; from: string }
   | { step: "failed"; error: AppError };
 
 /**
@@ -67,13 +69,16 @@ export function useWorkspaceFolder() {
       kind: "changing",
       onAsk: (choice: FolderChoice) => {
         leave.forWorkspace();
-        put({ step: "moving", choice });
+        const from = client.getQueryData<AppStart>(keys.start)?.list.folder ?? "";
+        put({ step: "moving", choice, from });
       },
       mutationFn: ({ path, moveFiles }: FolderChoice) =>
         workspaceApi.setWorkspaceFolder(path, moveFiles),
       onSuccess: (moved: FolderMoved, choice: FolderChoice) => {
+        const was = client.getQueryData<FolderChange>(keys.folderChange);
+        const from = was?.step === "moving" ? was.from : "";
         changeStart(client, () => moved.start);
-        put({ step: "done", choice, moved });
+        put({ step: "done", choice, moved, from });
       },
     }),
     onError: (error) => {

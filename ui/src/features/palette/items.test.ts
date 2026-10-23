@@ -62,8 +62,8 @@ describe("the items offered", () => {
       "destination:follow-up",
       "destination:rules",
       "destination:settings",
-      "view:4",
-      "snapshot:1",
+      `view:${workspace().id}:4`,
+      `snapshot:${workspace().id}:1`,
       `workspace:${otherWorkspace.id}`,
     ]);
   });
@@ -82,8 +82,8 @@ describe("the items offered", () => {
     expect(byId.get("destination:settings")).toMatchObject({ shortcut: "Ctrl+," });
     expect(byId.get("destination:rules")).toMatchObject({ tag: en.destinations.soon });
     expect(byId.get("destination:rules")?.shortcut).toBeUndefined();
-    expect(byId.get("view:4")?.label).toBe("Piping lines");
-    expect(byId.get("snapshot:1")?.detail).toBe("9,120 holds");
+    expect(byId.get(`view:${workspace().id}:4`)?.label).toBe("Piping lines");
+    expect(byId.get(`snapshot:${workspace().id}:1`)?.detail).toBe("9,120 holds");
     expect(byId.get(`workspace:${otherWorkspace.id}`)).toMatchObject({
       label: "Tank farm",
       detail: "5 snapshots",
@@ -113,7 +113,7 @@ describe("the items offered", () => {
     const offered = ids(dataScreen({ open: empty, actions: actions({ saveView: vi.fn() }) }));
     expect(offered).not.toContain("action:clear-filters");
     expect(offered).not.toContain("action:save-view");
-    expect(offered).not.toContain("view:4");
+    expect(offered).not.toContain(`view:${workspace().id}:4`);
     expect(offered.filter((id) => id.startsWith("snapshot:"))).toEqual([]);
     expect(offered.filter((id) => id.startsWith("destination:"))).toHaveLength(9);
     expect(offered).toContain(`workspace:${otherWorkspace.id}`);
@@ -186,9 +186,9 @@ describe("the items offered", () => {
     expect(given.saveView).toHaveBeenCalledTimes(1);
     run("destination:blockers");
     expect(given.openDestination).toHaveBeenCalledWith("/blockers");
-    run("view:4");
+    run(`view:${workspace().id}:4`);
     expect(given.applyView).toHaveBeenCalledWith(expect.objectContaining({ id: 4 }));
-    run("snapshot:1");
+    run(`snapshot:${workspace().id}:1`);
     expect(given.selectSnapshot).toHaveBeenCalledWith(1);
     run(`workspace:${otherWorkspace.id}`);
     expect(given.openWorkspace).toHaveBeenCalledWith(otherWorkspace.id);

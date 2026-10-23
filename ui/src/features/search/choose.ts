@@ -170,9 +170,9 @@ export function effectOf(choice: SearchChoice, place: ChoicePlace): ChoiceEffect
     };
   }
   const dim = DIM_OF_KIND[hit.kind];
-  // The value is the key the filter of its field takes (crates/core/src/search.rs); a remark's
-  // shown text may be cut around the match, so the value names it in the chip as well.
-  const value = { key: hit.value, label: hit.value };
+  // The value is the key the filter of its field takes, and the label the one its picker gives it
+  // (crates/core/src/search.rs): a remark's whole text as written, never the cut one shown.
+  const value = { key: hit.value, label: hit.label };
   return {
     address: linesAddress(DEFAULT_HOLDS_STATE),
     // The value takes the place of what the field was filtered by.

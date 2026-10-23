@@ -205,7 +205,9 @@ function viewItems({ open, isBusy, actions }: PaletteContext): PaletteItem[] {
   // A saved view shows the snapshot in view; its control waits while an action on the workspace runs.
   if (open?.selected == null || isBusy) return [];
   return open.views.map((view) => ({
-    id: `view:${String(view.id)}`,
+    // Ids start at 1 in every workspace: the workspace is part of the item's id, so Recent never
+    // offers another workspace's view under it.
+    id: `view:${open.workspace.id}:${String(view.id)}`,
     group: "views",
     label: view.name,
     keywords: keywordsOf("palette.keywords.view"),
@@ -223,7 +225,7 @@ function snapshotItems({ open, isBusy, actions }: PaletteContext): PaletteItem[]
     .reverse()
     .filter((snapshot) => snapshot.id !== open.selected)
     .map((snapshot) => ({
-      id: `snapshot:${String(snapshot.id)}`,
+      id: `snapshot:${open.workspace.id}:${String(snapshot.id)}`,
       group: "snapshots",
       label: formatDateTime(snapshot.taken_at),
       keywords: keywordsOf("palette.keywords.snapshot"),

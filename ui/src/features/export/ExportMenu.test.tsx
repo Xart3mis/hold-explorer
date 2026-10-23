@@ -277,7 +277,7 @@ describe("each item exports the screen as it is", () => {
     }
   });
 
-  it("takes the columns and rows remembered for the screen", async () => {
+  it("takes the columns and rows remembered for the screen", SLOW, async () => {
     // Under the filters' status: another status writes every row (see the panel's tests).
     const choice: ExportChoice = {
       columns: ["holds", "line"],

@@ -4,8 +4,12 @@ import type { AppStart } from "../../bindings/AppStart";
 import type { Settings } from "../../bindings/Settings";
 import { changeStart } from "./start";
 
-/** Changes of the settings are sent one after another as well, so the last one asked for is the last one saved. */
-const SETTINGS_SCOPE = { id: "settings" };
+/**
+ * Changes of the settings are sent one after another as well, so the last one asked for is the
+ * last one saved. Every action that saves a setting (the theme, the density, the author name)
+ * runs in this scope.
+ */
+export const SETTINGS_SCOPE = { id: "settings" };
 
 /** The settings that are applied at once, before they are saved. */
 export type OptimisticField = "theme" | "density";

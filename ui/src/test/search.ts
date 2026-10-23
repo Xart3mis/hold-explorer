@@ -21,6 +21,9 @@ export function searchHit(
   return {
     kind,
     value,
+    // As the command labels it: the whole text shown (a blocker's `<discipline> / <item>`, a
+    // remark as written), unless the test says otherwise.
+    label: shown.split("|").join(""),
     parts: partsOf(shown),
     detail: "",
     holds: 1,

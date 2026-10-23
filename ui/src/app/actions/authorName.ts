@@ -4,6 +4,7 @@ import { api } from "../../api/commands";
 import { asCommandError } from "../../api/error";
 import { useToast } from "../../components/ToastRegion/ToastRegion";
 import { t } from "../../text/i18n";
+import { SETTINGS_SCOPE } from "./optimistic";
 import { changeStart } from "./start";
 
 /**
@@ -27,7 +28,7 @@ export function useAuthorNameSetting() {
   }, []);
 
   const setAuthorName = useMutation({
-    scope: { id: "settings" },
+    scope: SETTINGS_SCOPE,
     mutationFn: (name: string) => api.setAuthorName(name),
     onSuccess: (settings) => {
       changeStart(client, (state) => ({

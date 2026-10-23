@@ -1,15 +1,18 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AppStart } from "../../bindings/AppStart";
 import type { FolderCheck } from "../../bindings/FolderCheck";
 import type { FolderMoved } from "../../bindings/FolderMoved";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
-import { renderApp } from "../../test/app";
+import { must, renderApp } from "../../test/app";
 import { openStart, opened } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
 import { windowApi } from "../../test/window";
+import { formatDate } from "../../text/format";
 
 const OLD = "/home/ada/.local/share/hold-explorer/workspaces";
 const NEW = "/mnt/projects/5359/hold-explorer";
@@ -23,11 +26,12 @@ const checked: FolderCheck = {
 };
 
 /**
- * The region of the row that holds this element and takes the focus: the progress or a notice. It
- * is a group named by the label of the progress or the title of the notice.
+ * The region of the row that holds this element: the progress or a notice. It is a group named
+ * by the label of the progress or the title of the notice, and that label or title takes the
+ * focus, so the ring sits on a heading.
  */
 function regionOf(element: HTMLElement): HTMLElement | null {
-  return element.closest('[role="group"][tabindex="-1"]');
+  return element.closest('[role="group"]');
 }
 
 /** The answer of a change to `NEW`: the start the Rust side has then, and what moved. */
@@ -70,6 +74,13 @@ function later<T>() {
 }
 
 describe("The workspaces folder in Settings", () => {
+  it("leaves the focus ring of the app on what takes the focus", () => {
+    // The label of the progress and the title of the result take the focus, and the global
+    // :focus-visible ring of app.css shows on them: the stylesheet of the row takes no ring away.
+    const css = readFileSync(join(import.meta.dirname, "SettingsPage.module.css"), "utf8");
+    expect(css).not.toMatch(/outline:\s*none/);
+  });
+
   it("shows the folder with Change folder and Show in folder, and the default only when another is in use", async () => {
     const { unmount } = renderApp({ start: openStart(), path: "/settings" });
     const main = await page();
@@ -127,9 +138,11 @@ describe("The workspaces folder in Settings", () => {
       const progress = await screen.findByRole("progressbar", {
         name: `Moving the workspaces to ${NEW}`,
       });
-      // The keyboard follows the change: to the progress, which takes the place of the choice.
+      // The keyboard follows the change: to the label of the progress, which takes the place of
+      // the choice.
+      const label = screen.getByText(`Moving the workspaces to ${NEW}`);
       await waitFor(() => {
-        expect(regionOf(progress)).toHaveFocus();
+        expect(label).toHaveFocus();
       });
       expect(regionOf(progress)).toHaveAccessibleName(`Moving the workspaces to ${NEW}`);
       expect(progress).toHaveAccessibleName(`Moving the workspaces to ${NEW}`);
@@ -143,9 +156,9 @@ describe("The workspaces folder in Settings", () => {
 
       answer.settle(movedTo(start, true));
       const title = await screen.findByText(`Moved 2 workspace files to ${NEW}`);
-      // Then to the result.
+      // Then to the title of the result.
       await waitFor(() => {
-        expect(regionOf(title)).toHaveFocus();
+        expect(title).toHaveFocus();
       });
       const region = regionOf(title);
       expect(region).toHaveAccessibleName(`Moved 2 workspace files to ${NEW}`);
@@ -177,6 +190,84 @@ describe("The workspaces folder in Settings", () => {
     },
   );
 
+  it("says that the open workspace stays open from the folder before when its file stayed there", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const left = movedTo(start, false);
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => checked,
+        set_workspace_folder: () => ({
+          ...left,
+          start: { ...left.start, list: { ...left.start.list, workspaces: [] } },
+        }),
+      },
+    });
+    await page();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    await user.click(await screen.findByRole("button", { name: en.settings.folderLeaveThem }));
+    const title = await screen.findByText(`The workspaces are now kept in ${NEW}`);
+    const region = must(regionOf(title), "the result");
+    expect(
+      within(region).getByText(
+        en.settings.folderStaysOpen
+          .replace("{{name}}", "Unit 573 piping")
+          .replace("{{from}}", OLD)
+          .replace("{{to}}", NEW),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing of the open workspace when it is in the new folder's list", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => checked,
+        set_workspace_folder: () => movedTo(start, true),
+      },
+    });
+    await page();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    await user.click(await screen.findByRole("button", { name: en.settings.folderMoveThem }));
+    await screen.findByText(`Moved 2 workspace files to ${NEW}`);
+    expect(screen.queryByText(/stays open from/)).not.toBeInTheDocument();
+  });
+
+  it("puts the result away when the next action on the workspace starts", async () => {
+    windowApi.chooseFolder.mockResolvedValue(NEW);
+    const start = openStart();
+    const { user } = renderApp({
+      start,
+      path: "/settings",
+      handlers: {
+        check_workspace_folder: () => checked,
+        set_workspace_folder: () => movedTo(start, true),
+        snapshot_select: ({ id }) => opened({ selected: id }),
+      },
+    });
+    await page();
+    await user.click(screen.getByRole("button", { name: en.settings.folderChange }));
+    await user.click(await screen.findByRole("button", { name: en.settings.folderMoveThem }));
+    const title = `Moved 2 workspace files to ${NEW}`;
+    expect(await screen.findByText(title)).toBeInTheDocument();
+    // Another snapshot is selected: the record of the change is put away with it.
+    await user.click(
+      screen.getByRole("button", {
+        name: en.snapshots.trigger.replace("{{date}}", formatDate("2026-10-07T08:00:00")),
+      }),
+    );
+    const menu = await screen.findByRole("menu", { name: en.snapshots.menu });
+    await user.click(within(menu).getAllByRole("menuitemradio")[1] ?? menu);
+    await waitFor(() => {
+      expect(screen.queryByText(title)).not.toBeInTheDocument();
+    });
+  });
+
   it("leaves the files where they are when asked to", async () => {
     windowApi.chooseFolder.mockResolvedValue(NEW);
     const setFolder = vi.fn(() => movedTo(start, false));
@@ -192,7 +283,7 @@ describe("The workspaces folder in Settings", () => {
     expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: false });
     const title = await screen.findByText(`The workspaces are now kept in ${NEW}`);
     await waitFor(() => {
-      expect(regionOf(title)).toHaveFocus();
+      expect(title).toHaveFocus();
     });
   });
 
@@ -216,7 +307,7 @@ describe("The workspaces folder in Settings", () => {
     expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: false });
     const title = await screen.findByText(`The workspaces are now kept in ${NEW}`);
     await waitFor(() => {
-      expect(regionOf(title)).toHaveFocus();
+      expect(title).toHaveFocus();
     });
   });
 

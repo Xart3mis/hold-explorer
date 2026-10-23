@@ -35,21 +35,24 @@ describe("effectOf", () => {
     ["HoldType", "HoldType"],
     ["Discipline", "Discipline"],
     ["StressCalc", "StressCalc"],
-  ] as const)("filters by a %s on its field, %s, and opens the holds", (kind, dim) => {
-    const effect = effectOf(
-      { kind: "hit", hit: searchHit(kind, "KEY", "the |shown| text") },
-      at("/overview"),
-    );
-    expect(effect.address).toBe("/lines?rows=holds");
-    expect(effect.focus).toBe("table");
-    const before = {
-      ...defaultFilters,
-      fields: [{ dim, values: [{ key: "Old", label: "Old" }], negate: true }],
-    };
-    expect(effect.filters?.(before).fields).toEqual([
-      { dim, values: [{ key: "KEY", label: "KEY" }], negate: false },
-    ]);
-  });
+  ] as const)(
+    "filters by a %s on its field, %s, under its label, and opens the holds",
+    (kind, dim) => {
+      const effect = effectOf(
+        { kind: "hit", hit: searchHit(kind, "KEY", "the |shown| text", { label: "The label" }) },
+        at("/overview"),
+      );
+      expect(effect.address).toBe("/lines?rows=holds");
+      expect(effect.focus).toBe("table");
+      const before = {
+        ...defaultFilters,
+        fields: [{ dim, values: [{ key: "Old", label: "Old" }], negate: true }],
+      };
+      expect(effect.filters?.(before).fields).toEqual([
+        { dim, values: [{ key: "KEY", label: "The label" }], negate: false },
+      ]);
+    },
+  );
 
   it("sets the text filter of a data screen in place, and of Lines from elsewhere", () => {
     for (const path of ["/overview", "/breakdown", "/lines", "/blockers"]) {

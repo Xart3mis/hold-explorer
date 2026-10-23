@@ -5,6 +5,7 @@ import { asCommandError } from "../../api/error";
 import { useStart } from "../../app/actions/start";
 import { viewsOf } from "../../app/actions/views";
 import { destinations } from "../../app/destinations";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilters } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import type { SavedView } from "../../bindings/SavedView";
@@ -34,7 +35,9 @@ function proposedName(pathname: string, chip: string | undefined): string {
 /** What the popover holds: the name, and Save. */
 function SaveViewForm({ close }: { close: () => void }) {
   const { start } = useShell();
-  const { filters, spec } = useFilters();
+  const { spec } = useFilters();
+  // The proposed name reads the first chip as the bar shows it, under its label.
+  const filters = useLabelledFilters();
   const location = useLocation();
   const { saveView, remove, done } = useViewActions();
   const remember = useRememberFilters();

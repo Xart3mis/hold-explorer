@@ -75,6 +75,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   overview: () => api.overview(fixture.overview.spec, fixture.overview.view),
   demo_create: () => workspaceApi.demoCreate(),
   filter_options: () => api.filterOptions(fixture.filter_options.spec, fixture.filter_options.view),
+  filter_labels: () => api.filterLabels(fixture.filter_labels.spec, fixture.filter_labels.view),
   filter_values: () =>
     api.filterValues(
       fixture.filter_values.spec,

@@ -15,6 +15,7 @@ import { group, valuePage } from "../../test/filters";
 import { holdsView } from "../../test/lines";
 import { searchGroups, searchHit, searchResults } from "../../test/search";
 import { SLOW } from "../../test/slow";
+import { formatDate } from "../../text/format";
 import { focusSearchField } from "./SearchField";
 
 const words = en.search;
@@ -209,7 +210,7 @@ describe("what is typed is sent", () => {
     });
     const list = await results();
     // The first wait: one skeleton line, the list busy.
-    expect(list.closest("[aria-busy='true']")).not.toBeNull();
+    expect(list).toHaveAttribute("aria-busy", "true");
     const old = {
       query: "57",
       groups: [
@@ -244,10 +245,10 @@ describe("what is typed is sent", () => {
       );
       const { list } = await typeAndOpen(user, "573");
       await user.keyboard("4");
-      const busy = await waitFor(() =>
-        must(list.closest<HTMLElement>("[aria-busy='true']"), "a busy list"),
-      );
-      expect(busy).toHaveAttribute("data-stale");
+      await waitFor(() => {
+        expect(list).toHaveAttribute("aria-busy", "true");
+      });
+      expect(must(list.closest<HTMLElement>("[data-stale]"), "the dimmed results")).toBeVisible();
       expect(
         within(list).getByRole("option", { name: "78B04-573-00004-PR-004" }),
       ).toBeInTheDocument();
@@ -294,6 +295,34 @@ describe("what is typed is sent", () => {
       await within(await results()).findByRole("option", { name: "78B04-573-00004-PR-004" }),
     ).toBeInTheDocument();
   });
+});
+
+describe("another view", () => {
+  it(
+    "starts the field afresh, so no result of the snapshot before can be chosen",
+    SLOW,
+    async () => {
+      const app = renderApp({
+        start: openStart(),
+        path: "/overview",
+        handlers: { snapshot_select: ({ id }: { id: number }) => opened({ selected: id }) },
+      });
+      const { input } = await typeAndOpen(app.user, "573");
+      expect(input).toHaveValue("573");
+      await app.user.keyboard("{Escape}");
+      await app.user.click(
+        screen.getByRole("button", {
+          name: en.snapshots.trigger.replace("{{date}}", formatDate("2026-10-07T08:00:00")),
+        }),
+      );
+      const menu = await screen.findByRole("menu", { name: en.snapshots.menu });
+      await app.user.click(must(within(menu).getAllByRole("menuitemradio")[1], "the older one"));
+      await waitFor(() => {
+        expect(screen.getByRole("combobox", { name: words.label })).toHaveValue("");
+      });
+      expect(screen.queryByRole("listbox", { name: words.results })).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("choosing a result", () => {
@@ -609,11 +638,52 @@ describe("a remark chosen", () => {
       // The key is the one the values of the field are listed under.
       const listed = valuePage({ values: [group("Hold pending 573-PR-1450", 4, key)] });
       expect(listed.values.map((value) => value.key)).toContain(specs.at(-1)?.fields[0]?.values[0]);
+      // The chip names the remark as written, as the command labels the hit.
       expect(filtersNow()?.fields).toEqual([
-        { dim: "Remark", values: [{ key, label: key }], negate: false },
+        { dim: "Remark", values: [{ key, label: "Hold pending 573-PR-1450" }], negate: false },
       ]);
+      expect(
+        await screen.findByRole("button", { name: /Hold remark Hold pending 573-PR-1450/ }),
+      ).toBeInTheDocument();
     },
   );
+
+  it("gives a remark cut around the match its whole text in the chip", SLOW, async () => {
+    const key = "WAITING FOR THE VENDOR DRAWING OF 573-PR-1450 BEFORE THE STRESS CHECK";
+    const written = "Waiting for the vendor drawing of 573-PR-1450 before the stress check";
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/overview",
+      handlers: {
+        search: ({ query }) => ({
+          query,
+          groups: [
+            {
+              kind: "Lines",
+              total: 1,
+              hits: [searchHit("Line", "78B04-573-00004-PR-004", "78B04-|573|-00004-PR-004")],
+            },
+            {
+              kind: "Remarks",
+              total: 1,
+              hits: [
+                searchHit("Remark", key, "…drawing of |573|-PR-1450 before…", {
+                  label: written,
+                }),
+              ],
+            },
+          ],
+        }),
+      },
+    });
+    const { list } = await typeAndOpen(user, "573");
+    await user.click(within(list).getByRole("option", { name: /drawing of 573-PR-1450/ }));
+    await waitFor(() => {
+      expect(filtersNow()?.fields).toEqual([
+        { dim: "Remark", values: [{ key, label: written }], negate: false },
+      ]);
+    });
+  });
 });
 
 describe("what is typed is sent, by the clock", () => {

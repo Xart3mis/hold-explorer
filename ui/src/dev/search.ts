@@ -22,7 +22,10 @@ function hit(
   detail = "",
   released = false,
 ): SearchHit {
-  return { kind, value, parts: partsOf(shown), detail, holds, released };
+  // The label is the whole text shown: the blocker's `<discipline> / <item>`, the remark as
+  // written, or the value itself.
+  const label = shown.split("|").join("");
+  return { kind, value, label, parts: partsOf(shown), detail, holds, released };
 }
 
 /** The fixed answer, with `query` as asked. */

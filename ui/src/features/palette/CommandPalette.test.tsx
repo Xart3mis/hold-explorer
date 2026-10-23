@@ -684,6 +684,29 @@ describe("recent items", () => {
   });
 });
 
+describe("recent views and snapshots", () => {
+  it("are not offered as another workspace's item of the same id", SLOW, async () => {
+    const tank = opened({
+      workspace: otherWorkspace,
+      views: [savedView({ id: 4, name: "Tank lines" })],
+    });
+    const { user } = renderPalette("/overview", {
+      start: openStart({ open: opened({ views: [savedView({ id: 4, name: "Piping lines" })] }) }),
+      handlers: { workspace_open: () => tank },
+    });
+    await choose(user, "Piping lines");
+    await openAndType(user);
+    expect(await itemsOf(groups.recent)).toEqual(["Piping lines"]);
+    await user.keyboard("{Escape}");
+    await choose(user, "Tank farm");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Tank farm/ })).not.toHaveAttribute("aria-busy");
+    });
+    await openAndType(user);
+    expect(await itemsOf(groups.recent)).not.toContain("Tank lines");
+  });
+});
+
 describe("recent lines", () => {
   it("are offered again only for the snapshot they were chosen in", SLOW, async () => {
     const { user } = renderPalette("/lines", {

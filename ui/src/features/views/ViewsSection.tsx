@@ -369,7 +369,9 @@ export function ViewsSection({ isRail, onRestart }: ViewsSectionProps) {
         <ul aria-labelledby={titleId} className={styles.list}>
           {views.map((view, index) => (
             <ViewItem
-              key={view.id}
+              // Ids start at 1 in every workspace: an item, and a rename open in it, belongs to
+              // the view of one workspace only.
+              key={`${workspace}:${String(view.id)}`}
               view={view}
               index={index}
               count={views.length}

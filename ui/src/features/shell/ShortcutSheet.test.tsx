@@ -2,12 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { t } from "../../text/i18n";
 import en from "../../locales/en.json";
 import { renderApp } from "../../test/app";
-import { startState } from "../../test/fixtures";
 import { expectAccessible } from "../../test/axe";
-import { openStart } from "../../test/fixtures";
+import { openStart, startState } from "../../test/fixtures";
+import { t } from "../../text/i18n";
 import { SHORTCUTS } from "./shortcuts";
 
 const words = en.shortcuts;

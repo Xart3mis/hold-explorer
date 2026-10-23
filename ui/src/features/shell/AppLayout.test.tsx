@@ -407,6 +407,36 @@ describe("a problem with the settings file", () => {
   });
 });
 
+describe("the warning of a workspace that was opened", () => {
+  const damaged =
+    "The saved views of this workspace could not be read (the stored list is not valid JSON), so none are listed. The damaged list stays in the file until you save a view, which replaces it. Save your views again.";
+  const notice = async (message: string) =>
+    must(
+      (await screen.findByText(message)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+
+  it("says the saved views could not be read under a title of its own", async () => {
+    renderApp({
+      start: openStart({ open: opened({ warning: { kind: "Corrupt", message: damaged } }) }),
+      path: "/overview",
+    });
+    const shown = await notice(damaged);
+    expect(within(shown).getByText(en.views.damagedTitle)).toBeInTheDocument();
+    expect(within(shown).queryByText(en.workspaces.warningTitle)).not.toBeInTheDocument();
+  });
+
+  it("keeps the title that the workspace will not be reopened for a settings warning", async () => {
+    const message = `The workspace is open, but Hold Explorer could not remember it for the next start. Disk full. ${damaged}`;
+    renderApp({
+      start: openStart({ open: opened({ warning: { kind: "Settings", message } }) }),
+      path: "/overview",
+    });
+    const shown = await notice(message);
+    expect(within(shown).getByText(en.workspaces.warningTitle)).toBeInTheDocument();
+  });
+});
+
 describe("what a page reports to the shell", () => {
   const failed = {
     title: "The import of Holds_2026-10-14.xlsx did not complete",

@@ -15,6 +15,7 @@ import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
 import type { FilterPart } from "../bindings/FilterPart";
 import type { Inactive } from "../bindings/Inactive";
+import type { FilterLabel } from "../bindings/FilterLabel";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FolderMoved } from "../bindings/FolderMoved";
@@ -200,6 +201,8 @@ export function isDevState(value: string): value is DevState {
 }
 
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
+/** Where the development page says the settings file is. */
+const SETTINGS_FILE = "/home/ada/.config/hold-explorer/settings.json";
 
 /** What a reading answers when the workspace file is locked. */
 const LOCKED =
@@ -509,6 +512,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
   ]);
   const start: AppStart = {
     version: "0.1.0",
+    settings_file: SETTINGS_FILE,
     settings: {
       theme,
       density,
@@ -763,7 +767,7 @@ export function installDevCommands(
     if (!start.open) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
     if (start.open.workspace.id !== workspace) {
       throw failure(
-        "WorkspaceNotFound",
+        "ViewChanged",
         "That workspace is not the one that is open, so its saved views were not changed. Open the workspace, then try again.",
       );
     }
@@ -1347,6 +1351,20 @@ export function installDevCommands(
         selected === undefined || ranked === null
           ? { rows: [], lines_on_hold: 0, steps_to_most: 0 }
           : devSolveOrder(selected, ranked),
+      );
+    },
+    // A value is labelled as the picker of its dimension lists it, and with its key otherwise.
+    filter_labels: (payload): Promise<FilterLabel[]> => {
+      const { spec, selected } = inView(payload);
+      return later(100, () =>
+        spec.fields.flatMap((field) => {
+          const listed = devValues(selected, spec, field.dim, "", true).values;
+          return field.values.map((key) => ({
+            dim: field.dim,
+            key,
+            label: listed.find((group) => group.key === key)?.label ?? key,
+          }));
+        }),
       );
     },
     filter_values: (payload): Promise<ValuePage> => {

@@ -265,6 +265,46 @@ describe("applying a saved view", () => {
     expect(scrollArea().scrollTop).toBe(0);
   });
 
+  it("labels a Remark and a Blocker value from the snapshot, with nothing kept this session", async () => {
+    const remark = "HOLD PENDING 573-PR-1450";
+    const blocker = "Process|573-PR-1450";
+    const pending = savedView({
+      id: 5,
+      name: "Pending",
+      address: "/lines",
+      filters: {
+        ...disciplineFilter(),
+        fields: [
+          { dim: "Remark", values: [remark], negate: false },
+          { dim: "Blocker", values: [blocker], negate: false },
+        ],
+      },
+    });
+    const asked: string[][] = [];
+    const { user } = renderWith([pending], {
+      handlers: {
+        filter_labels: ({ spec }) => {
+          asked.push(spec.fields.flatMap((field) => field.values));
+          return [
+            { dim: "Remark", key: remark, label: "Hold pending 573-PR-1450" },
+            { dim: "Blocker", key: blocker, label: "Process / 573-PR-1450" },
+          ];
+        },
+      },
+    });
+    await viewList();
+    await user.click(viewLink("Pending"));
+    expect(
+      await screen.findByRole("button", { name: /Hold remark Hold pending 573-PR-1450/ }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Blocker Process \/ 573-PR-1450/ }),
+    ).toBeInTheDocument();
+    expect(asked.at(-1)).toEqual([remark, blocker]);
+    // The view keeps its keys: the labels are not written into its filters.
+    expect(now().spec.fields).toEqual(pending.filters.fields);
+  });
+
   it("applies a view whose filter is on a field the snapshot may lack", async () => {
     const area = savedView({
       id: 4,
@@ -358,6 +398,36 @@ describe("the menu of a saved view", () => {
     });
     expect(screen.queryByRole("textbox", { name: text.nameLabel })).not.toBeInTheDocument();
   });
+
+  it(
+    "leaves a refused rename behind when another workspace with a view of that id opens",
+    SLOW,
+    async () => {
+      const tank = savedView({ id: 1, name: "Tank views", address: "/blockers" });
+      const { user } = renderWith([civil, blockers], {
+        handlers: {
+          workspace_open: () => opened({ workspace: otherWorkspace, views: [tank] }),
+        },
+      });
+      await viewList();
+      await user.click(
+        within(await openMenu(user, "Civil holds")).getByRole("menuitem", { name: text.rename }),
+      );
+      await user.keyboard("all BLOCKERS{Enter}");
+      await screen.findByText(/already exists/);
+      expect(screen.getByRole("textbox", { name: text.nameLabel })).toBeInTheDocument();
+
+      act(() => {
+        now().open(otherWorkspace.id);
+      });
+      await waitFor(() => {
+        expect(viewLink("Tank views")).toBeInTheDocument();
+      });
+      // View 1 of the other workspace is not renamed with what was typed for this one.
+      expect(screen.queryByRole("textbox", { name: text.nameLabel })).not.toBeInTheDocument();
+      expect(screen.queryByText(/already exists/)).not.toBeInTheDocument();
+    },
+  );
 
   it("moves a view up and down, and cannot move the first up nor the last down", SLOW, async () => {
     const { user } = renderWith([civil, blockers, piping]);

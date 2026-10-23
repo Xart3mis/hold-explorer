@@ -17,14 +17,11 @@ import {
   Popover,
   Text,
 } from "react-aria-components";
-import { api } from "../../api/commands";
-import { asCommandError } from "../../api/error";
-import { useSnapshotQuery } from "../../app/view";
-import type { SearchResults } from "../../bindings/SearchResults";
 import { Icon, Skeleton, VisuallyHidden } from "../../components";
 import { cx } from "../../components/cx";
 import { lengthToken } from "../../design/token-values";
 import { t } from "../../text/i18n";
+import { isSearchable, useSearchAnswer } from "./answer";
 import { useSearchChoice } from "./choose";
 import {
   ResultSectionView,
@@ -35,11 +32,7 @@ import {
 } from "./results";
 import styles from "./SearchField.module.css";
 
-/** How long typing must have stopped before what is typed is sent. */
-export const SEND_AFTER_MS = 150;
-
-/** The fewest characters, white space at the ends left out, that can find anything. */
-export const MIN_QUERY_LENGTH = 2;
+export { MIN_QUERY_LENGTH, SEND_AFTER_MS } from "./answer";
 
 /** The key that focuses the field from the page; the shortcuts register it (Task 13). */
 export const SEARCH_SHORTCUT = "/";
@@ -65,40 +58,6 @@ export function focusSearchField(): boolean {
   return true;
 }
 
-function isSearchable(text: string): boolean {
-  return text.trim().length >= MIN_QUERY_LENGTH;
-}
-
-/**
- * The answer the list shows, and how: the answer for what is typed now, or the one shown before
- * standing in for it, dimmed, until the new one is there. An answer is matched to the text it
- * was asked for by the query it returns, so the answer for an older text is never taken for the
- * answer of the new one. Without either, the list waits for its first answer.
- */
-function useShownAnswer(text: string, asked: string) {
-  const query = useSnapshotQuery({
-    name: "search",
-    params: [asked],
-    read: (view, typed) => api.search(view, typed),
-    enabled: isSearchable(asked),
-  });
-  const answer: SearchResults | undefined = query.data;
-  const fresh =
-    answer !== undefined && !query.isPlaceholderData && answer.query === text ? answer : null;
-  // The answer of before stands in only while the list stays open: once the text is too short to
-  // find anything, the list closes, and the next one starts afresh.
-  const [kept, setKept] = useState<SearchResults | null>(null);
-  if (fresh !== null && kept !== fresh) setKept(fresh);
-  if (!isSearchable(text) && kept !== null) setKept(null);
-  const failed = query.isError && fresh === null && asked === text;
-  return {
-    fresh,
-    shown: fresh ?? kept,
-    error: failed ? asCommandError(query.error).message : null,
-    retry: () => query.refetch(),
-  };
-}
-
 /** The state of the combobox, kept where the field can reach it outside a render. */
 type ComboBoxState = NonNullable<ContextType<typeof ComboBoxStateContext>>;
 
@@ -122,20 +81,10 @@ function StateOf({ heldRef }: { heldRef: RefObject<ComboBoxState | null> }) {
  */
 export function SearchField() {
   const [text, setText] = useState("");
-  const [asked, setAsked] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const comboBox = useRef<ComboBoxState | null>(null);
   const choose = useSearchChoice();
   const offset = lengthToken("--space-1");
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAsked(text);
-    }, SEND_AFTER_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [text]);
 
   useEffect(() => {
     const take = () => {
@@ -147,7 +96,7 @@ export function SearchField() {
     };
   }, []);
 
-  const { fresh, shown, error, retry } = useShownAnswer(text, asked);
+  const { fresh, shown, isWaiting, error, retry, forget } = useSearchAnswer(text);
   // Choosing an item closes the list; after a retry it opens again with the answer.
   const tryAgain = () => {
     void retry().then(() => {
@@ -155,13 +104,12 @@ export function SearchField() {
     });
   };
   const searchable = isSearchable(text);
-  const isWaiting = searchable && fresh === null && error === null;
   const sections: ResultSection[] =
     !searchable || error !== null ? [] : sectionsOf(shown?.groups ?? []);
 
   const clear = () => {
     setText("");
-    setAsked("");
+    forget();
   };
   const pick = (picked: Picked) => {
     const query = text;
@@ -228,11 +176,7 @@ export function SearchField() {
         >
           {/* In the popover: while it is open, what is outside is hidden from assistive technology. */}
           <VisuallyHidden role="status">{status}</VisuallyHidden>
-          <div
-            aria-busy={isWaiting ? "true" : undefined}
-            data-stale={isWaiting && shown !== null ? "" : undefined}
-            className={styles.results}
-          >
+          <div data-stale={isWaiting && shown !== null ? "" : undefined} className={styles.results}>
             {error === null ? null : (
               <p className={styles.error}>
                 <Icon icon={OctagonAlert} />
@@ -242,6 +186,9 @@ export function SearchField() {
             <ListBox
               aria-label={t("search.results")}
               className={cx(styles.list)}
+              // The component library passes no `aria-busy` through, so the element is given it:
+              // the list itself is busy while the answer for what is typed is on its way.
+              render={(props) => <div {...props} aria-busy={isWaiting ? "true" : undefined} />}
               renderEmptyState={() =>
                 shown === null ? (
                   <span className={styles.waiting}>

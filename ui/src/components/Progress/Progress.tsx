@@ -11,7 +11,11 @@ export interface ProgressProps {
   label: string;
   /** How far, from 0 to 1. Leave it out while no total is known. */
   value?: number;
-  /** The id of the label, for a region around the bar that is named by it. */
+  /**
+   * The id of the label, for a region around the bar that is named by it. The label can then take
+   * the focus (`tabIndex` -1), so the keyboard can be moved to the bar and its ring sits on the
+   * label.
+   */
   labelId?: string | undefined;
   className?: string | undefined;
 }
@@ -36,7 +40,11 @@ export function Progress({ label, value, labelId, className }: ProgressProps) {
       {() => (
         <>
           <div className={styles.header}>
-            <Label id={labelId} className={cx(styles.label)}>
+            <Label
+              id={labelId}
+              tabIndex={labelId === undefined ? undefined : -1}
+              className={cx(styles.label)}
+            >
               {label}
             </Label>
             {share === undefined ? null : <span className={styles.value}>{share}</span>}
