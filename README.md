@@ -21,7 +21,7 @@ Status: early development. The design is in `docs/superpowers/specs/`.
 - Search: one box in the top bar (`/` reaches it) finds lines, blockers, people and roles, remarks, and hold values in the snapshot in view, open and released, grouped and with the match marked. It forgives a misspelling and accepts a wildcard in a line ID, as in `78B01-573-*`. Choosing a result opens the line or the blocker, or filters Lines by the value; Enter applies the text as a filter.
 - Saved views: "Save view" in the filter bar keeps the destination, mode, grouping, sort, and filters under a name. The views are kept in the workspace file and listed in the sidebar; one press applies one, and a deleted view can be brought back with Undo.
 - Command palette and shortcuts: `Ctrl+K` opens a palette to jump to a destination, a saved view, a snapshot, a workspace, or a line, or to run an action (import, export, clear filters, theme, density). `?` lists every shortcut.
-- Settings: theme, density (comfortable or compact), author name, and the workspace folder, which can be changed with the option of moving the workspace files to the new folder. About shows the version and where the files are.
+- Settings: theme, density (comfortable or compact), author name, and the workspaces folder, which can be changed with the option of moving the workspace files to the new folder. About shows the version.
 
 History, People, Follow-up, and Rules are listed in the sidebar and say "Soon".
 
