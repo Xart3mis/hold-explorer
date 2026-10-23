@@ -1,15 +1,26 @@
 // Keyboard shortcuts are registered here and nowhere else. The shortcuts of the destinations
-// come from the destination list; the two shortcuts that are not a destination's are named below.
+// come from the destination list; the shortcuts that are not a destination's are named below.
 import { useEffect, useMemo, useRef } from "react";
 import { needsWorkspace, type Destination } from "../../app/destinations";
 import { IN_PAGE_ATTRIBUTE } from "../../components";
 import { t } from "../../text/i18n";
+import { useOfferExport } from "./topBarSlot";
 
 /** Starts an import. */
 export const IMPORT_SHORTCUT = "Ctrl+I";
 
 /** Saves the view of a data screen as an Excel file: the first item of its Export menu. */
 export const EXPORT_SHORTCUT = "Ctrl+E";
+
+/** Opens the command palette, and closes it. */
+export const PALETTE_SHORTCUT = "Ctrl+K";
+
+/**
+ * The mark of a modal: the command palette, the shortcut sheet. While an element that carries it
+ * is in the document, its keys are its own, and only a shortcut that fires from anywhere
+ * (`isAnywhere`) does.
+ */
+export const MODAL_ATTRIBUTE = "data-modal";
 
 export interface ShortcutBinding {
   /** Modifiers, then the key, joined by `+`: `Ctrl+1`, `Ctrl+,`, `/`. */
@@ -21,6 +32,11 @@ export interface ShortcutBinding {
    * popover included.
    */
   isPageOnly?: boolean;
+  /**
+   * The shortcut fires from anywhere: in a text field, while a menu, a list, or a popover is
+   * open, and while a modal is, which is how the shortcut that opens a modal also closes it.
+   */
+  isAnywhere?: boolean;
 }
 
 interface Parsed {
@@ -88,25 +104,37 @@ function isOverlayOpen(): boolean {
   return isListOpen() || document.querySelector('[role="dialog"]') !== null;
 }
 
+/** Whether a modal is open (`MODAL_ATTRIBUTE`). */
+function isModalOpen(): boolean {
+  return document.querySelector(`[${MODAL_ATTRIBUTE}]`) !== null;
+}
+
+/** Whether a binding may fire for a key press now, its key aside. */
+function mayFire(binding: ShortcutBinding, typing: boolean): boolean {
+  if (binding.isAnywhere === true) return true;
+  if (isListOpen() || isModalOpen()) return false;
+  if (typing && (binding.isPageOnly === true || !parse(binding.shortcut).ctrl)) return false;
+  return !(binding.isPageOnly === true && isOverlayOpen());
+}
+
 /**
  * Runs the binding a key press matches and keeps the key from the page. A shortcut does not fire
  * while a text field has focus, unless it has Ctrl: a plain key there is text. Nor does any
- * shortcut fire while a menu or a list is open: the page behind it does not change under it. A
- * shortcut of the page (`isPageOnly`) holds back in a text field whatever its modifiers, and
- * while a popover is open as well. A key that is held down, or that something else has handled,
- * is left alone. Returns whether a binding ran.
+ * shortcut fire while a menu, a list, or a modal is open: the page behind it does not change
+ * under it. A shortcut of the page (`isPageOnly`) holds back in a text field whatever its
+ * modifiers, and while a popover is open as well. A shortcut that fires from anywhere
+ * (`isAnywhere`) holds back for none of these. A key that is held down, or that something else
+ * has handled, is left alone. Returns whether a binding ran.
  */
 export function handleShortcut(
   event: KeyboardEvent,
   bindings: readonly ShortcutBinding[],
 ): boolean {
   if (event.defaultPrevented || event.repeat || event.isComposing) return false;
-  if (isListOpen()) return false;
   const typing = isTextEntry(event.target);
   for (const binding of bindings) {
     if (!matchesShortcut(event, binding.shortcut)) continue;
-    if (typing && (binding.isPageOnly === true || !parse(binding.shortcut).ctrl)) continue;
-    if (binding.isPageOnly === true && isOverlayOpen()) continue;
+    if (!mayFire(binding, typing)) continue;
     event.preventDefault();
     binding.run();
     return true;
@@ -154,7 +182,9 @@ export function useShortcuts(bindings: readonly ShortcutBinding[]): void {
 /**
  * Listens for `EXPORT_SHORTCUT` while the component that calls it is shown, and runs `run` for it;
  * `null` while there is nothing to export, or while an export runs. It belongs to the page: it
- * fires also while the focus is in a table, and never in a text field or under an overlay.
+ * fires also while the focus is in a table, and never in a text field or under an overlay. The
+ * command palette offers "Export this view" exactly while it listens, and runs the same `run`
+ * (`usePageExport`).
  */
 export function useExportShortcut(run: (() => void) | null): void {
   const latest = useRef(run);
@@ -162,6 +192,7 @@ export function useExportShortcut(run: (() => void) | null): void {
     latest.current = run;
   });
   const isOn = run !== null;
+  useOfferExport(isOn, latest);
   const bindings = useMemo(
     (): ShortcutBinding[] =>
       isOn
@@ -176,6 +207,30 @@ export function useExportShortcut(run: (() => void) | null): void {
           ]
         : [],
     [isOn],
+  );
+  useShortcuts(bindings);
+}
+
+/**
+ * Listens for `PALETTE_SHORTCUT` while the component that calls it is shown, and runs `toggle`
+ * for it, from anywhere: in a text field, over a menu or a list, and over the palette itself.
+ */
+export function usePaletteShortcut(toggle: () => void): void {
+  const latest = useRef(toggle);
+  useEffect(() => {
+    latest.current = toggle;
+  });
+  const bindings = useMemo(
+    (): ShortcutBinding[] => [
+      {
+        shortcut: PALETTE_SHORTCUT,
+        isAnywhere: true,
+        run: () => {
+          latest.current();
+        },
+      },
+    ],
+    [],
   );
   useShortcuts(bindings);
 }

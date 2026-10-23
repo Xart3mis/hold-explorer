@@ -15,13 +15,37 @@ export interface SnapshotSelectorProps {
 }
 
 /**
+ * The way the snapshot selector selects a snapshot, for it and for the command palette: the
+ * action on the workspace, with its failure said by `onProblem` and taken back once a selection
+ * works. `isPending` is true while a selection asked for through this hook runs.
+ */
+export function useSelectSnapshot(onProblem: (problem: ShellProblem | null) => void) {
+  const { selectSnapshot } = useSnapshotActions();
+  const select = (id: number) => {
+    selectSnapshot.mutate(id, {
+      onSuccess: () => {
+        onProblem(null);
+      },
+      onError: (error) => {
+        onProblem({
+          kind: "action",
+          title: t("snapshots.selectError"),
+          message: asCommandError(error).message,
+        });
+      },
+    });
+  };
+  return { select, isPending: selectSnapshot.isPending };
+}
+
+/**
  * The snapshot selector of the top bar: the date of the snapshot in view, and a menu of every
  * snapshot, newest first, with its date, time, and number of holds, and whether it is a limited
  * one. The one in view is marked. It shows the spinner while a snapshot chosen here is being
  * selected; while another control's action on the workspace runs, it waits without one.
  */
 export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
-  const { selectSnapshot } = useSnapshotActions();
+  const { select, isPending } = useSelectSnapshot(onProblem);
   const { isBusy } = useStart();
   const selected = open.snapshots.find((snapshot) => snapshot.id === open.selected);
   // The command lists the snapshots oldest first; the menu starts with the newest.
@@ -32,7 +56,7 @@ export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
     <MenuButton
       label={t("snapshots.trigger", { date: formatDate(selected.taken_at) })}
       menuLabel={t("snapshots.menu")}
-      isPending={selectSnapshot.isPending}
+      isPending={isPending}
       isInert={isBusy}
       align="end"
     >
@@ -40,18 +64,7 @@ export function SnapshotSelector({ open, onProblem }: SnapshotSelectorProps) {
         title={t("snapshots.list")}
         selectedKey={String(selected.id)}
         onSelectionChange={(id) => {
-          selectSnapshot.mutate(Number(id), {
-            onSuccess: () => {
-              onProblem(null);
-            },
-            onError: (error) => {
-              onProblem({
-                kind: "action",
-                title: t("snapshots.selectError"),
-                message: asCommandError(error).message,
-              });
-            },
-          });
+          select(Number(id));
         }}
       >
         {newestFirst.map((snapshot) => (

@@ -104,6 +104,40 @@ function RenameField({ name, isPending, failed, errorId, onSave, onCancel }: Ren
   );
 }
 
+/**
+ * The way the switcher opens another workspace, for it and for the command palette: the action
+ * on the workspace, then Overview when the page shown is not a destination, which belongs to what
+ * was open; its failure is said by `onProblem`, and taken back once an opening works.
+ * `isPending` is true while an opening asked for through this hook runs.
+ */
+export function useOpenWorkspace(
+  destinations: readonly Destination[],
+  onProblem: (problem: ShellProblem | null) => void,
+) {
+  const { openWorkspace } = useWorkspaceActions();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const open = (other: string) => {
+    openWorkspace.mutate(other, {
+      onSuccess: () => {
+        onProblem(null);
+        // Another workspace has the same destinations. Any other page belongs to what was open.
+        if (!destinations.some((destination) => destination.path === pathname)) {
+          void navigate(OVERVIEW_PATH);
+        }
+      },
+      onError: (error) => {
+        onProblem({
+          kind: "action",
+          title: t("workspaces.openError"),
+          message: asCommandError(error).message,
+        });
+      },
+    });
+  };
+  return { open, isPending: openWorkspace.isPending };
+}
+
 export interface WorkspaceSwitcherProps {
   /** The workspace that is open. */
   open: WorkspaceOpen;
@@ -134,10 +168,10 @@ export function WorkspaceSwitcher({
   renameErrorId,
   onProblem,
 }: WorkspaceSwitcherProps) {
-  const { openWorkspace, renameWorkspace } = useWorkspaceActions();
+  const { renameWorkspace } = useWorkspaceActions();
+  const { open: openOther, isPending: isOpening } = useOpenWorkspace(destinations, onProblem);
   const { isBusy } = useStart();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
   const toast = useToast();
   const trigger = useRef<HTMLButtonElement>(null);
 
@@ -254,31 +288,12 @@ export function WorkspaceSwitcher({
     );
   }
 
-  const openOther = (other: string) => {
-    openWorkspace.mutate(other, {
-      onSuccess: () => {
-        onProblem(null);
-        // Another workspace has the same destinations. Any other page belongs to what was open.
-        if (!destinations.some((destination) => destination.path === pathname)) {
-          void navigate(OVERVIEW_PATH);
-        }
-      },
-      onError: (error) => {
-        onProblem({
-          kind: "action",
-          title: t("workspaces.openError"),
-          message: asCommandError(error).message,
-        });
-      },
-    });
-  };
-
   return (
     <MenuButton
       label={name}
       aria-label={t("workspaces.switcherName", { name })}
       menuLabel={t("workspaces.switcher")}
-      isPending={openWorkspace.isPending}
+      isPending={isOpening}
       isInert={isBusy}
       triggerRef={trigger}
       className={styles.trigger}

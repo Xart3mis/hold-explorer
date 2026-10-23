@@ -186,6 +186,39 @@
     "nothing": "Nothing matches “{{query}}”. Press Enter to filter by this text.",
     "error": "The search could not be read: {{message}}"
   },
+  "palette": {
+    "name": "Command palette",
+    "placeholder": "Type a command, a page, or a line ID",
+    "items": "Commands",
+    "group": {
+      "actions": "Actions",
+      "destinations": "Destinations",
+      "views": "Saved views",
+      "snapshots": "Snapshots",
+      "workspaces": "Workspaces",
+      "lines": "Lines",
+      "recent": "Recent"
+    },
+    "import": "Import",
+    "export": "Export this view",
+    "clearFilters": "Clear all filters",
+    "theme": "Theme: {{value}}",
+    "density": "Density: {{value}}",
+    "saveView": "Save view",
+    "nothing": "No command matches “{{query}}”",
+    "linesError": "The line IDs could not be read: {{message}}",
+    "keywords": {
+      "import": "file workbook",
+      "export": "excel file",
+      "clearFilters": "reset",
+      "theme": "appearance colors",
+      "density": "rows spacing",
+      "saveView": "bookmark",
+      "view": "view",
+      "snapshot": "snapshot",
+      "workspace": "workspace open"
+    }
+  },
   "views": {
     "title": "Saved views",
     "empty": "Save the filters and screen you use often from the filter bar.",

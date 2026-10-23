@@ -85,6 +85,9 @@
   --size-tooltip-max-width: 280px;
   --size-popover-width: 320px;
   --size-option-list-rows: 8;
+  --size-palette-width: 560px;
+  --size-palette-max-height: 440px;
+  --size-palette-offset: 80px;
   --size-pixel: 1px;
   --opacity-stale: 0.6;
   --duration-fast: 150ms;

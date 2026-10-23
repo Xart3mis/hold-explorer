@@ -1,5 +1,5 @@
 import { BookmarkPlus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation } from "react-router";
 import { asCommandError } from "../../api/error";
 import { useStart } from "../../app/actions/start";
@@ -138,16 +138,64 @@ function SaveViewForm({ close }: { close: () => void }) {
   );
 }
 
+/** How the popover of the filter bar that is shown opens; `null` while no filter bar is shown. */
+let openShown: (() => void) | null = null;
+const watchers = new Set<() => void>();
+
+function putOpener(open: (() => void) | null): void {
+  openShown = open;
+  for (const watcher of watchers) watcher();
+}
+
+function watchOpener(watcher: () => void): () => void {
+  watchers.add(watcher);
+  return () => {
+    watchers.delete(watcher);
+  };
+}
+
+/**
+ * Opens the Save view popover of the filter bar that is shown, as a press on "Save view" does: the
+ * focus is on "Save view" first, so it goes back there when the popover closes. Returns whether
+ * there was one: a page without a filter bar has none. The command palette's "Save view" calls it.
+ */
+export function openSaveView(): boolean {
+  if (openShown === null) return false;
+  openShown();
+  return true;
+}
+
+/** Whether a filter bar with "Save view" is shown, so that `openSaveView` opens its popover. */
+export function useHasSaveView(): boolean {
+  return useSyncExternalStore(
+    watchOpener,
+    () => openShown !== null,
+    () => false,
+  );
+}
+
 /**
  * "Save view" at the trailing end of the filter bar, and the popover it opens (DESIGN.md, "Save
  * view popover"): the screen shown, its selection left out, and the filters, saved in the open
- * workspace under a name. It is inert while an action on the workspace runs.
+ * workspace under a name. It is inert while an action on the workspace runs. `openSaveView` opens
+ * it from elsewhere.
  */
 export function SaveViewPopover() {
   const { isBusy } = useStart();
   const [isOpen, setOpen] = useState(false);
+  const triggerId = useId();
   // Nothing can be saved while the workspace may change, so the popover closes for as long.
   if (isBusy && isOpen) setOpen(false);
+  useEffect(() => {
+    const open = () => {
+      document.getElementById(triggerId)?.focus();
+      setOpen(true);
+    };
+    putOpener(open);
+    return () => {
+      if (openShown === open) putOpener(null);
+    };
+  }, [triggerId]);
   return (
     <Popover
       aria-label={t("views.saveTitle")}
@@ -157,7 +205,13 @@ export function SaveViewPopover() {
         setOpen(open && !isBusy);
       }}
       trigger={
-        <Button variant="quiet" icon={BookmarkPlus} isInert={isBusy} data-part="save-view">
+        <Button
+          id={triggerId}
+          variant="quiet"
+          icon={BookmarkPlus}
+          isInert={isBusy}
+          data-part="save-view"
+        >
           {t("views.save")}
         </Button>
       }

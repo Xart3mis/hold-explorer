@@ -8,6 +8,8 @@ import {
   EXPORT_SHORTCUT,
   IMPORT_SHORTCUT,
   matchesShortcut,
+  MODAL_ATTRIBUTE,
+  PALETTE_SHORTCUT,
   shortcutBindings,
 } from "./shortcuts";
 
@@ -229,6 +231,74 @@ describe("a shortcut that belongs to the page", () => {
     } finally {
       popover.remove();
     }
+  });
+});
+
+describe("a shortcut that fires from anywhere", () => {
+  it("is Ctrl+K for the command palette", () => {
+    expect(PALETTE_SHORTCUT).toBe("Ctrl+K");
+  });
+
+  it("fires in a text field", () => {
+    const run = vi.fn();
+    const field = document.createElement("input");
+    const event = key({ key: "k", ctrlKey: true }, field);
+    expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+      true,
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it.each(["menu", "listbox", "dialog"])("fires while a %s is open", (role) => {
+    const run = vi.fn();
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", role);
+    document.body.append(overlay);
+    try {
+      const event = key({ key: "k", ctrlKey: true });
+      expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+        true,
+      );
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      overlay.remove();
+    }
+  });
+
+  it("is the only one that fires while a modal is open", () => {
+    const toggle = vi.fn();
+    const other = vi.fn();
+    const modal = document.createElement("div");
+    modal.setAttribute(MODAL_ATTRIBUTE, "");
+    document.body.append(modal);
+    const bindings = [
+      { shortcut: "Ctrl+I", run: other },
+      { shortcut: "Ctrl+E", run: other, isPageOnly: true },
+      { shortcut: PALETTE_SHORTCUT, run: toggle, isAnywhere: true },
+    ];
+    try {
+      const blocked = key({ key: "i", ctrlKey: true });
+      expect(handleShortcut(blocked, bindings)).toBe(false);
+      expect(blocked.defaultPrevented).toBe(false);
+      expect(handleShortcut(key({ key: "e", ctrlKey: true }), bindings)).toBe(false);
+      expect(other).not.toHaveBeenCalled();
+      expect(handleShortcut(key({ key: "k", ctrlKey: true }), bindings)).toBe(true);
+      expect(toggle).toHaveBeenCalledTimes(1);
+    } finally {
+      modal.remove();
+    }
+    expect(handleShortcut(key({ key: "i", ctrlKey: true }), bindings)).toBe(true);
+    expect(other).toHaveBeenCalledTimes(1);
+  });
+
+  it("is still left alone when held down", () => {
+    const run = vi.fn();
+    const event = key({ key: "k", ctrlKey: true, repeat: true });
+    expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+      false,
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 });
 

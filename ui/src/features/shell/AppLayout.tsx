@@ -29,8 +29,9 @@ import { DetailPanel } from "../detail/DetailPanel";
 import { ViewActionsProvider } from "../views/actions";
 import { createDetailFocus, DetailFocusContext, useSelection } from "../detail/selection";
 import { connectImportStart, readImportLocation, startImport } from "../import/start";
+import { CommandPalette } from "../palette/CommandPalette";
 import type { ShellProblem } from "./problem";
-import { shortcutBindings, useShortcuts } from "./shortcuts";
+import { shortcutBindings, usePaletteShortcut, useShortcuts } from "./shortcuts";
 import styles from "./Shell.module.css";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -254,23 +255,37 @@ function LoadedShell({ start, destinations }: ShellProps) {
     };
   }, []);
 
+  // A destination opens where it was left, and the one shown is drawn anew at its own address,
+  // as its sidebar item does: for the shortcuts and the command palette.
+  const openDestination = useCallback(
+    (path: string) => {
+      if (path !== pathname) {
+        void navigate(addressOf(path));
+        return;
+      }
+      restart();
+      void navigate(path);
+    },
+    [navigate, addressOf, pathname, restart],
+  );
   const bindings = useMemo(
     () =>
       shortcutBindings(destinations, {
-        open: (path) => {
-          if (path !== pathname) {
-            void navigate(addressOf(path));
-            return;
-          }
-          restart();
-          void navigate(path);
-        },
+        open: openDestination,
         startImport: () => void startImport(),
         hasWorkspace: hasSidebar,
       }),
-    [destinations, navigate, addressOf, hasSidebar, pathname, restart],
+    [destinations, openDestination, hasSidebar],
   );
   useShortcuts(bindings);
+
+  // The command palette: Ctrl+K opens it from anywhere, and closes it.
+  const [isPaletteOpen, setPaletteOpen] = useState(false);
+  usePaletteShortcut(
+    useCallback(() => {
+      setPaletteOpen((isOpen) => !isOpen);
+    }, []),
+  );
 
   // The detail panel shows while the address of a data destination selects a line, a hold, or a
   // blocker, and there is a snapshot to read it from.
@@ -440,6 +455,14 @@ function LoadedShell({ start, destinations }: ShellProps) {
                 <DetailPanel selection={detail} className={styles.detail} />
               )}
             </div>
+            <CommandPalette
+              isOpen={isPaletteOpen}
+              onOpenChange={setPaletteOpen}
+              destinations={destinations}
+              openDestination={openDestination}
+              onRestart={restart}
+              onProblem={setProblem}
+            />
           </TopBarSlotProvider>
         </DetailFocusContext>
       </ViewActionsProvider>
