@@ -25,6 +25,7 @@ import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { LineQuery } from "../bindings/LineQuery";
+import type { SearchResults } from "../bindings/SearchResults";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
 import type { ValuePage } from "../bindings/ValuePage";
@@ -54,6 +55,7 @@ import {
   devSolveOrder,
 } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
+import { devSearch } from "./search";
 import { devValues } from "./values";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
@@ -1125,6 +1127,10 @@ export function installDevCommands(
       const { dim, search } = payload as { dim: Dim; search: string };
       const isPicker = state === "filters-picker";
       return later(isPicker ? 1200 : 150, () => devValues(selected, spec, dim, search, isPicker));
+    },
+    search: (payload): Promise<SearchResults> => {
+      inView(payload);
+      return later(150, () => devSearch(text(payload, "query")));
     },
     // An export is saved where the dialog says, after a moment of reading and one of writing; it
     // says how many rows the request names, or the snapshot's open holds for every row.

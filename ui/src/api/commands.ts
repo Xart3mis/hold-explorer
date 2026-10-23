@@ -30,6 +30,7 @@ import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SaveFormat } from "../bindings/SaveFormat";
+import type { SearchResults } from "../bindings/SearchResults";
 import type { Settings } from "../bindings/Settings";
 import type { SolveView } from "../bindings/SolveView";
 import type { TargetCheck } from "../bindings/TargetCheck";
@@ -76,6 +77,7 @@ interface CommandMap {
     args: { spec: FilterSpec; dim: Dim; search: string; view: ViewRef };
     result: ValuePage;
   };
+  search: { args: { view: ViewRef; query: string }; result: SearchResults };
   lines: {
     args: { spec: FilterSpec; query: LineQuery; offset: number; view: ViewRef };
     result: LinePage;
@@ -181,6 +183,11 @@ export const api = {
   /** The values of one dimension a picker offers, at most 200, whose label contains `search`. */
   filterValues: (spec: FilterSpec, dim: Dim, search: string, view: ViewRef) =>
     call("filter_values", { spec, dim, search, view }),
+  /**
+   * What `query` finds among every hold of the snapshot, open and released, whatever the filter:
+   * at most 8 hits in each group, the groups in the order Lines, Blockers, People, Remarks, Holds.
+   */
+  search: (view: ViewRef, query: string) => call("search", { view, query }),
   /** At most 200 Lines from `offset`. */
   lines: (spec: FilterSpec, query: LineQuery, offset: number, view: ViewRef) =>
     call("lines", { spec, query, offset, view }),

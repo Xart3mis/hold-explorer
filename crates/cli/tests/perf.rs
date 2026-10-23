@@ -13,6 +13,7 @@ use hx_core::query::{
     HoldSort, LineQuery,
 };
 use hx_core::rules::RuleSet;
+use hx_core::search::search;
 use hx_core::solve::{solve_plan, solve_view};
 use hx_export::fonts::Fonts;
 use hx_export::{
@@ -319,4 +320,58 @@ fn the_export_files_of_ten_thousand_holds_meet_their_budgets() {
         "perf: status report of 10,000 holds {report:?} ({} KB)",
         pdf.len() / 1024
     );
+}
+
+/// The dataset of a synthetic workbook of `holds` holds on `lines` lines.
+fn synthetic(lines: usize, holds: usize) -> Dataset {
+    let cfg = SynthConfig::new(4, lines, holds);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("holds.xlsx");
+    write_workbook(&generate(&cfg), &cfg, &path).unwrap();
+    let loaded = load_file(&path).unwrap();
+    Dataset::build(
+        loaded.parsed.holds,
+        RuleSet::builtin(),
+        loaded.snapshot.unwrap().at,
+    )
+}
+
+/// The best of three runs of a search, and how many groups it found.
+fn best_of_three(ds: &Dataset, query: &str) -> (Duration, usize) {
+    let mut runs = Vec::new();
+    let mut groups = 0;
+    for _ in 0..3 {
+        let started = Instant::now();
+        let found = search(ds, query, 8);
+        runs.push(started.elapsed());
+        groups = found.groups.len();
+    }
+    (runs.into_iter().min().unwrap(), groups)
+}
+
+#[test]
+#[ignore = "run in a release build"]
+fn a_search_of_thirty_thousand_holds_takes_under_100_ms() {
+    // A short substring found in several groups, a longer one, a typo that only the edit
+    // distance finds (so every value of the snapshot is compared word by word), and a line-ID
+    // pattern. At 30,000 holds each is held to 100 ms, the best of three runs; at 10,000 it is
+    // recorded.
+    let queries = ["pr", "pending", "pendnig civl", "*-5*-00*"];
+    for (lines, holds) in [(3600, 10_000), (10_800, 30_000)] {
+        let ds = synthetic(lines, holds);
+        assert_eq!(ds.rows.len(), holds);
+        let mut times = Vec::new();
+        for query in queries {
+            let (best, groups) = best_of_three(&ds, query);
+            assert!(groups > 0, "\"{query}\" found nothing in {holds} holds");
+            if holds == 30_000 {
+                assert!(
+                    best < Duration::from_millis(100),
+                    "searching {holds} holds for \"{query}\" took {best:?}"
+                );
+            }
+            times.push(format!("\"{query}\" {best:?} ({groups} groups)"));
+        }
+        eprintln!("perf: search of {holds} holds: {}", times.join(", "));
+    }
 }

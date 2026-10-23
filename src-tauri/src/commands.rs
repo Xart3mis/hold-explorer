@@ -17,6 +17,7 @@ use hx_core::detail::{BlockerDetail, HoldRef, LineDetail};
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
 use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::search::SearchResults;
 use hx_core::solve::SolveView;
 use hx_export::{write_file, ExportError, ExportRequest, ExportText};
 use tauri::ipc::Channel;
@@ -303,6 +304,16 @@ pub async fn filter_values<R: Runtime>(
         state.filter_values(&spec, &dim, &search, &view)
     })
     .await
+}
+
+/// What `query` finds in the snapshot in view, when `view` is the view in the state.
+#[tauri::command]
+pub async fn search<R: Runtime>(
+    app: AppHandle<R>,
+    view: ViewRef,
+    query: String,
+) -> Result<SearchResults, CommandError> {
+    blocking(app, move |state| state.search(&query, &view)).await
 }
 
 /// A page of Lines, when `view` is the view in the state.
@@ -688,6 +699,7 @@ mod tests {
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
                 ("overview", "ViewChanged"),
+                ("search", "ViewChanged"),
                 // The folder of the fixture is not a full path.
                 ("set_workspace_folder", "FolderNotAbsolute"),
                 ("settings_set_author_name", "Ok"),

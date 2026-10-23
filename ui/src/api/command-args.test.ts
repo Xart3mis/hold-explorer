@@ -64,6 +64,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
       fixture.filter_values.search,
       fixture.filter_values.view,
     ),
+  search: () => api.search(fixture.search.view, fixture.search.query),
   lines: () =>
     api.lines(fixture.lines.spec, fixture.lines.query, fixture.lines.offset, fixture.lines.view),
   holds: () => api.holds(fixture.holds.spec, fixture.holds.query, fixture.holds.view),

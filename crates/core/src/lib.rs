@@ -43,6 +43,7 @@ pub mod normalize;
 pub mod query;
 mod reader;
 pub mod rules;
+pub mod search;
 pub mod snapshot_date;
 pub mod solve;
 pub mod table;

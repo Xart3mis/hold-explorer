@@ -7,6 +7,7 @@ mod error;
 mod export;
 mod folder;
 mod import;
+mod search;
 mod settings;
 mod snapshots;
 mod workspaces;
@@ -43,6 +44,8 @@ pub const PAGE_ROWS: usize = 200;
 pub const PICKER_VALUES: usize = 200;
 /// Most rows and most columns of a matrix before the rest is folded into "Other".
 pub const MATRIX_SIDE: usize = 30;
+/// Most hits `search` lists in each group.
+pub const SEARCH_HITS: usize = 8;
 /// Most Lines `group_detail` lists for one group.
 pub const GROUP_LINES: usize = 200;
 /// Most entries of the Overview's top blockers and top lines: the export's, so a file lists what
