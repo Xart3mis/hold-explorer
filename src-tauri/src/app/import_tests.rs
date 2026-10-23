@@ -1218,3 +1218,71 @@ fn recover_reopens_a_workspace_taken_out_for_an_import_that_panicked() {
         ErrorKind::NoDraft
     );
 }
+
+/// Replaces the saved mapping of the workspace file at `path` with a value that cannot be read.
+fn damage_saved_mapping(path: &Path) {
+    rusqlite::Connection::open(path)
+        .unwrap()
+        .execute(
+            "INSERT OR REPLACE INTO setting (key, value_json) VALUES ('saved_mapping', '{not json')",
+            [],
+        )
+        .unwrap();
+}
+
+#[test]
+fn a_damaged_saved_mapping_gives_the_automatic_one_and_says_so_and_an_import_replaces_it() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.create_workspace("A").unwrap();
+    let path = state.open.as_ref().unwrap().path().to_path_buf();
+    damage_saved_mapping(&path);
+
+    let draft = state
+        .import_open(&fx.text("kinds.csv", KIND_LINE_WHY))
+        .unwrap();
+    assert_eq!(draft.proposed, draft.file.auto_map);
+    assert!(!draft.used_saved_mapping);
+    let problem = draft.saved_mapping_problem.expect("the damage is said");
+    assert_eq!(problem.kind, ErrorKind::Corrupt);
+    assert!(problem.message.contains("mapping"), "{}", problem.message);
+
+    state.import_review(Some(kind_line_why())).unwrap();
+    state
+        .import_commit(
+            commit(existing(&state.open_id()), "2026-10-07 00:00:00"),
+            &no_progress,
+        )
+        .unwrap();
+    // The import's mapping replaced the damaged one.
+    let saved = state.open.as_ref().unwrap().saved_mapping().unwrap();
+    assert!(saved.is_some());
+    let next = state
+        .import_open(&fx.text("kinds2.csv", KIND_LINE_WHY))
+        .unwrap();
+    assert!(next.saved_mapping_problem.is_none());
+    assert!(next.used_saved_mapping);
+}
+
+#[test]
+fn an_import_into_another_workspace_replaces_its_damaged_saved_mapping() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = state.create_workspace("A").unwrap().workspace.id;
+    let path = state.open.as_ref().unwrap().path().to_path_buf();
+    damage_saved_mapping(&path);
+    state.create_workspace("B").unwrap();
+
+    state
+        .import_open(&fx.text("kinds.csv", KIND_LINE_WHY))
+        .unwrap();
+    state.import_review(Some(kind_line_why())).unwrap();
+    state
+        .import_commit(commit(existing(&id), "2026-10-07 00:00:00"), &no_progress)
+        .unwrap();
+    assert!(Workspace::open(&path)
+        .unwrap()
+        .saved_mapping()
+        .unwrap()
+        .is_some());
+}

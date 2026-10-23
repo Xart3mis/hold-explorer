@@ -38,6 +38,7 @@ fn outcomes(state: &mut AppState, view: &ViewRef) -> Vec<String> {
     };
     vec![
         kind(state.filter_options(&spec, view).map(drop)),
+        kind(state.filter_labels(&spec, view).map(drop)),
         kind(
             state
                 .filter_values(&spec, &Dim::Discipline, "", view)
@@ -69,7 +70,7 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     let mut state = fx.state();
     // Nothing is open.
     let none = view_of("0123456789abcdef", None);
-    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 11]);
+    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 12]);
 
     let mut state = small(&fx);
     let (workspace, snapshot) = (state.open_id(), state.selected_snapshot().unwrap());
@@ -80,12 +81,12 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     ] {
         assert_eq!(
             outcomes(&mut state, &stale),
-            ["ViewChanged"; 11],
+            ["ViewChanged"; 12],
             "{stale:?}"
         );
     }
     let view = shown(&state);
-    assert_eq!(outcomes(&mut state, &view), ["Ok"; 11]);
+    assert_eq!(outcomes(&mut state, &view), ["Ok"; 12]);
 }
 
 #[test]
@@ -207,6 +208,56 @@ fn filter_values_never_return_more_than_the_picker_shows_and_report_the_true_tot
         .filter_values(&spec, &Dim::LineId, "no such line anywhere", &view)
         .unwrap();
     assert_eq!((narrow.total, narrow.values.len(), narrow.more), (0, 0, 0));
+}
+
+#[test]
+fn filter_labels_give_each_value_the_label_of_the_picker() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let open = FilterSpec::default();
+    for dim in [Dim::Remark, Dim::Blocker, Dim::Discipline] {
+        let page = state.filter_values(&open, &dim, "", &view).unwrap();
+        let groups = &page.values[..3];
+        let spec = FilterSpec {
+            fields: vec![FieldFilter {
+                dim: dim.clone(),
+                values: groups.iter().map(|g| g.key.clone()).collect(),
+                negate: false,
+            }],
+            ..FilterSpec::default()
+        };
+        let labels = state.filter_labels(&spec, &view).unwrap();
+        let got: Vec<(Dim, String, String)> = labels
+            .into_iter()
+            .map(|l| (l.dim, l.key, l.label))
+            .collect();
+        let expected: Vec<(Dim, String, String)> = groups
+            .iter()
+            .map(|g| (dim.clone(), g.key.clone(), g.label.clone()))
+            .collect();
+        assert_eq!(got, expected, "{dim:?}");
+        if dim != Dim::Discipline {
+            assert!(got.iter().any(|(_, key, label)| key != label), "{got:?}");
+        }
+    }
+
+    // A key the snapshot lacks answers the key itself; so does every key without a snapshot.
+    let spec = FilterSpec {
+        fields: vec![FieldFilter {
+            dim: Dim::Blocker,
+            values: vec!["Piping|NO-SUCH-ITEM".into()],
+            negate: false,
+        }],
+        ..FilterSpec::default()
+    };
+    let labels = state.filter_labels(&spec, &view).unwrap();
+    assert_eq!(labels[0].label, "Piping|NO-SUCH-ITEM");
+    let mut empty = fx.state();
+    empty.create_workspace("Empty").unwrap();
+    let view = shown(&empty);
+    let labels = empty.filter_labels(&spec, &view).unwrap();
+    assert_eq!(labels[0].label, "Piping|NO-SUCH-ITEM");
 }
 
 #[test]

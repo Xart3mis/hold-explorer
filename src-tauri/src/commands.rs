@@ -16,7 +16,7 @@ use chrono::NaiveDateTime;
 use hx_core::detail::{BlockerDetail, HoldRef, LineDetail};
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
-use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::query::{FilterLabel, FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
 use hx_core::search::SearchResults;
 use hx_core::solve::SolveView;
 use hx_export::{write_file, ExportError, ExportRequest, ExportText};
@@ -352,6 +352,17 @@ pub async fn filter_options<R: Runtime>(
     view: ViewRef,
 ) -> Result<FilterOptions, CommandError> {
     blocking(app, move |state| state.filter_options(&spec, &view)).await
+}
+
+/// The label of every value of `spec`'s field entries, as the picker labels it, when `view` is
+/// the view in the state.
+#[tauri::command]
+pub async fn filter_labels<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    view: ViewRef,
+) -> Result<Vec<FilterLabel>, CommandError> {
+    blocking(app, move |state| state.filter_labels(&spec, &view)).await
 }
 
 /// The values of one dimension a picker offers, when `view` is the view in the state.
@@ -746,6 +757,7 @@ mod tests {
                 // The app wrote no file yet.
                 ("export_open", "NotWritten"),
                 ("export_save", "ViewChanged"),
+                ("filter_labels", "ViewChanged"),
                 ("filter_options", "ViewChanged"),
                 ("filter_values", "ViewChanged"),
                 ("group_detail", "ViewChanged"),
@@ -764,11 +776,11 @@ mod tests {
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
                 // The workspace of the fixture is not the open one.
-                ("move_view", "WorkspaceNotFound"),
+                ("move_view", "ViewChanged"),
                 ("overview", "ViewChanged"),
-                ("rename_view", "WorkspaceNotFound"),
-                ("restore_view", "WorkspaceNotFound"),
-                ("save_view", "WorkspaceNotFound"),
+                ("rename_view", "ViewChanged"),
+                ("restore_view", "ViewChanged"),
+                ("save_view", "ViewChanged"),
                 ("search", "ViewChanged"),
                 // The folder of the fixture is not a full path.
                 ("set_workspace_folder", "FolderNotAbsolute"),

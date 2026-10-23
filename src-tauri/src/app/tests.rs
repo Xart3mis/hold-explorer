@@ -123,6 +123,19 @@ fn an_author_name_of_eighty_characters_is_kept_and_one_more_is_refused() {
 }
 
 #[test]
+fn an_author_name_in_the_settings_file_is_trimmed_and_cut_to_eighty_characters_on_load() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    let long = format!("  {}  ", "é".repeat(90));
+    let text = serde_json::json!({ "author_name": long }).to_string();
+    std::fs::write(fx.config().join("settings.json"), text).unwrap();
+    assert_eq!(load_settings(&fx.config()).author_name, "é".repeat(80));
+    let text = serde_json::json!({ "author_name": "\t Ada  " }).to_string();
+    std::fs::write(fx.config().join("settings.json"), text).unwrap();
+    assert_eq!(fx.state().settings().author_name, "Ada");
+}
+
+#[test]
 fn settings_are_written_through_a_temporary_file_that_is_gone_afterwards() {
     let fx = Fixture::new();
     let settings = Settings {
@@ -370,6 +383,10 @@ fn start_reopens_the_last_workspace() {
     };
     let started = fx.state().start();
     assert_eq!(started.version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        started.settings_file,
+        fx.config().join("settings.json").to_string_lossy()
+    );
     assert_eq!(started.list.workspaces.len(), 2);
     assert_eq!(started.open.map(|o| o.workspace.id), Some(id.clone()));
     assert_eq!(started.settings.last_workspace, Some(id));

@@ -89,6 +89,18 @@
     },
     "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
   },
+  "filter_labels": {
+    "spec": {
+      "status": "Open",
+      "fields": [{ "dim": "Blocker", "values": ["Piping|573-PR-1450"], "negate": false }],
+      "text": "",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    },
+    "view": { "workspace_id": "a1b2c3d4e5f60718", "snapshot_id": 2 }
+  },
   "filter_values": {
     "spec": {
       "status": "Open",

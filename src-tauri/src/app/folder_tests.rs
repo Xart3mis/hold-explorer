@@ -367,6 +367,10 @@ fn the_open_workspace_is_reopened_from_its_new_place() {
     assert_eq!(result.start.list.workspaces.len(), 2);
     assert_eq!(result.start.settings.workspace_dir, Some(text(&new)));
     assert!(result.start.settings_problem.is_none());
+    assert_eq!(
+        result.start.settings_file,
+        text(&fx.config().join("settings.json"))
+    );
     assert!(names(&fx.workspaces()).is_empty());
     // The next start lists the new folder.
     assert_eq!(fx.state().list_workspaces().unwrap().folder, text(&new));
@@ -741,4 +745,68 @@ fn a_removal_after_which_the_original_cannot_be_looked_at_keeps_the_copy() {
         "content"
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "content");
+}
+
+#[test]
+fn a_file_with_a_pending_journal_is_left_where_it_is() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let files = create(&mut state, &["Readable"]);
+    let damaged = fx.workspaces().join("damaged.holdx-ws");
+    fs::write(&damaged, "not a database\n".repeat(20)).unwrap();
+    let journal = fx.workspaces().join("damaged.holdx-ws-journal");
+    fs::write(&journal, "a rollback journal").unwrap();
+    let new = elsewhere(&fx, "new");
+
+    let result = state.set_workspace_folder(Some(&text(&new)), true).unwrap();
+
+    assert_eq!(result.moved, vec![name_of(&files[0])]);
+    assert_eq!(result.left.len(), 1, "{:?}", result.left);
+    let left = &result.left[0];
+    assert_eq!(left.file_name, "damaged.holdx-ws");
+    assert_eq!(left.kind, ErrorKind::MoveCheck);
+    assert!(
+        left.message.contains("an interrupted write is pending"),
+        "{}",
+        left.message
+    );
+    assert!(
+        left.message
+            .contains("open it with the version that wrote it first"),
+        "{}",
+        left.message
+    );
+    assert!(damaged.exists() && journal.exists());
+    assert_eq!(names(&new), vec![name_of(&files[0])]);
+}
+
+#[test]
+fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    // A file where the folder in use should be: it cannot be listed, so a move is refused after
+    // the new folder was made.
+    fs::create_dir_all(fx.data()).unwrap();
+    fs::write(fx.workspaces(), "in the way").unwrap();
+    let new = elsewhere(&fx, "new");
+    let error = state
+        .set_workspace_folder(Some(&text(&new)), true)
+        .unwrap_err();
+    assert_ne!(error.kind, ErrorKind::FolderUnusable);
+    assert!(!new.exists());
+
+    // A folder that was there before stays, and so does what is in it.
+    let kept = elsewhere(&fx, "kept");
+    fs::create_dir_all(&kept).unwrap();
+    fs::write(kept.join("note.txt"), "mine").unwrap();
+    state
+        .set_workspace_folder(Some(&text(&kept)), true)
+        .unwrap_err();
+    assert_eq!(names(&kept), vec!["note.txt".to_string()]);
+    let empty = elsewhere(&fx, "empty");
+    fs::create_dir_all(&empty).unwrap();
+    state
+        .set_workspace_folder(Some(&text(&empty)), true)
+        .unwrap_err();
+    assert!(empty.is_dir());
 }

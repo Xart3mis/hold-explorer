@@ -10,6 +10,7 @@ import type { ExportPhase } from "../bindings/ExportPhase";
 import type { ExportRequest } from "../bindings/ExportRequest";
 import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
+import type { FilterLabel } from "../bindings/FilterLabel";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FoldedMatrix } from "../bindings/FoldedMatrix";
@@ -88,6 +89,7 @@ interface CommandMap {
   overview: { args: { spec: FilterSpec; view: ViewRef }; result: OverviewView | null };
   demo_create: { args: Record<string, never>; result: WorkspaceOpen };
   filter_options: { args: { spec: FilterSpec; view: ViewRef }; result: FilterOptions };
+  filter_labels: { args: { spec: FilterSpec; view: ViewRef }; result: FilterLabel[] };
   filter_values: {
     args: { spec: FilterSpec; dim: Dim; search: string; view: ViewRef };
     result: ValuePage;
@@ -174,7 +176,7 @@ export const api = {
   workspaceList: () => call("workspace_list", {}),
   /**
    * The saved-view commands act on the workspace with this id and reject with the kind
-   * `WorkspaceNotFound` for another. Each answers the whole list, in sidebar order. Saves the
+   * `ViewChanged` for another. Each answers the whole list, in sidebar order. Saves the
    * screen's address (its path and query without a selection) with its filters, last in the list.
    */
   saveView: (workspace: string, name: string, address: string, filters: FilterSpec) =>
@@ -211,6 +213,11 @@ export const api = {
    * the count of the kept holds, the facet counts, the extra columns, and the absent fields.
    */
   filterOptions: (spec: FilterSpec, view: ViewRef) => call("filter_options", { spec, view }),
+  /**
+   * The label of every value of every field entry of `spec`, as the picker labels it in the
+   * snapshot in view; a value the snapshot lacks is labelled with itself.
+   */
+  filterLabels: (spec: FilterSpec, view: ViewRef) => call("filter_labels", { spec, view }),
   /** The values of one dimension a picker offers, at most 200, whose label contains `search`. */
   filterValues: (spec: FilterSpec, dim: Dim, search: string, view: ViewRef) =>
     call("filter_values", { spec, dim, search, view }),

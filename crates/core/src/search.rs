@@ -91,6 +91,10 @@ pub struct SearchHit {
     pub kind: SearchKind,
     /// The value: a line ID, a blocker key, a name, a remark...; what choosing it acts on.
     pub value: String,
+    /// The value as the filter picker labels it: for a remark, the whole remark as its first hold
+    /// writes it (never the cut text of `parts`); for a blocker, `<discipline> / <item>`; for any
+    /// other value, the value itself.
+    pub label: String,
     /// The text shown, split into matched and unmatched parts.
     pub parts: Vec<TextPart>,
     /// A second line: the role of a person; empty when none (a blocker's label already names its
@@ -209,6 +213,8 @@ pub fn search(dataset: &Dataset, query: &str, per_group: usize) -> SearchResults
 struct Candidate<'a> {
     kind: SearchKind,
     value: String,
+    /// The value as the filter picker labels it.
+    label: String,
     /// The text the query is matched against.
     text: &'a str,
     /// What the shown text has before `text`: `<discipline> / ` for a blocker.
@@ -253,6 +259,7 @@ impl Candidate<'_> {
         SearchHit {
             kind: self.kind,
             value: self.value,
+            label: self.label,
             parts: parts(&text, ranges),
             detail: self.detail,
             holds: self.holds,
@@ -381,6 +388,7 @@ impl<'a> Candidates<'a> {
         let plain = |kind: SearchKind, value: &'a str, tally: &Tally| Candidate {
             kind,
             value: value.to_string(),
+            label: value.to_string(),
             text: value,
             prefix: String::new(),
             detail: String::new(),
@@ -399,6 +407,7 @@ impl<'a> Candidates<'a> {
             Candidate {
                 kind: SearchKind::Blocker,
                 value: format!("{discipline}|{item}"),
+                label,
                 text: item,
                 prefix,
                 // The label carries the discipline.
@@ -424,10 +433,14 @@ impl<'a> Candidates<'a> {
                 .iter()
                 .map(|(value, tally)| plain(SearchKind::Role, value, tally)),
         );
-        list.extend(self.remarks.iter().map(|(key, tally)| Candidate {
+        list.extend(self.remarks.iter().map(|(key, tally)| {
             // The remark as the first of its holds writes it, as the Breakdown labels it.
-            text: &dataset.rows[tally.first].hold.remark,
-            ..plain(SearchKind::Remark, key, tally)
+            let text = &dataset.rows[tally.first].hold.remark;
+            Candidate {
+                text,
+                label: text.clone(),
+                ..plain(SearchKind::Remark, key, tally)
+            }
         }));
         for (kind, map) in [
             (SearchKind::HoldType, &self.hold_types),
@@ -1207,6 +1220,39 @@ mod tests {
             values(&search(&ds, "piping", 8), SearchGroupKind::Holds),
             ["Piping"]
         );
+    }
+
+    #[test]
+    fn a_hit_labels_its_value_as_the_filter_picker_does() {
+        let filler = "lorem ipsum ".repeat(20);
+        let long = format!("{filler}Needle here{filler}");
+        let mut h = hold(
+            "PIPE-1",
+            "Mechanical",
+            "VENDOR DATA",
+            "Pending 538-PR-100",
+            1,
+        );
+        h.name = "Zoë Quill".into();
+        let ds = build(vec![h, with_remark("PIPE-2", &long)]);
+
+        // A blocker is labelled `<discipline> / <item>`, a remark as its first hold writes it.
+        let r = search(&ds, "538-pr", 8);
+        let blocker = only_hit(&r, SearchGroupKind::Blockers);
+        assert_eq!(blocker.label, "Mechanical / 538-PR-100");
+        let remark = only_hit(&r, SearchGroupKind::Remarks);
+        assert_eq!(remark.label, "Pending 538-PR-100");
+
+        // A long remark is labelled whole, never by the cut window it shows.
+        let hit = only_hit(&search(&ds, "needle", 8), SearchGroupKind::Remarks);
+        assert!(shown(&hit).starts_with('…'));
+        assert_eq!(hit.label, long);
+
+        // Any other value is its own label.
+        let person = only_hit(&search(&ds, "quill", 8), SearchGroupKind::People);
+        assert_eq!(person.label, "Zoë Quill");
+        let line = only_hit(&search(&ds, "pipe-1", 8), SearchGroupKind::Lines);
+        assert_eq!(line.label, "PIPE-1");
     }
 
     #[test]

@@ -61,6 +61,7 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::snapshot_select,
         commands::overview,
         commands::filter_options,
+        commands::filter_labels,
         commands::filter_values,
         commands::search,
         commands::lines,

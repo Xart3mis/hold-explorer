@@ -7,8 +7,8 @@ use hx_core::detail::{blocker_detail, line_detail, BlockerDetail, HoldRef, LineD
 use hx_core::filter::{default_age_bands, AgeBand, Dim, FieldFilter, FilterSpec, Inactive};
 use hx_core::mapping::Field;
 use hx_core::query::{
-    facet_counts, group_by, holds, line_page, matrix_top, summary, value_page, FacetCounts,
-    FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage,
+    facet_counts, filter_labels, group_by, holds, line_page, matrix_top, summary, value_page,
+    FacetCounts, FilterLabel, FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage,
 };
 use hx_core::rules::RuleSet;
 use hx_core::solve::{solve_view, SolvePlan, SolveView};
@@ -160,6 +160,17 @@ impl AppState {
         self.in_view(view, spec, |v| {
             value_page(v.dataset, &v.spec, dim, search, PICKER_VALUES)
         })
+    }
+
+    /// The label of every value of every field entry of `spec`, as the picker labels it in the
+    /// snapshot in view; a value the snapshot lacks, or any value without a snapshot, is labelled
+    /// with itself. The whole filter is labelled, the entries the snapshot cannot apply included.
+    pub fn filter_labels(
+        &mut self,
+        spec: &FilterSpec,
+        view: &ViewRef,
+    ) -> Result<Vec<FilterLabel>, CommandError> {
+        self.in_view(view, spec, |v| filter_labels(v.dataset, spec))
     }
 
     /// A page of Lines from `offset`, at most [`PAGE_ROWS`].

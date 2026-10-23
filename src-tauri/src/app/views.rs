@@ -123,7 +123,8 @@ fn check_address(address: &str) -> Result<(), CommandError> {
 
 impl AppState {
     /// The open workspace when `workspace` is its id: `NoWorkspace` when none is open,
-    /// `WorkspaceNotFound` for another id.
+    /// `ViewChanged` for another id (the page holds a workspace that is no longer the one in
+    /// view).
     fn views_workspace(&mut self, workspace: &str) -> Result<&mut Workspace, CommandError> {
         let open_id = self
             .open_id
@@ -131,7 +132,7 @@ impl AppState {
             .ok_or_else(CommandError::no_workspace)?;
         if open_id != workspace {
             return Err(CommandError::new(
-                ErrorKind::WorkspaceNotFound,
+                ErrorKind::ViewChanged,
                 "That workspace is not the one that is open, so its saved views were not changed. Open the workspace, then try again.",
             ));
         }

@@ -22,6 +22,7 @@ impl AppState {
 mod tests {
     use hx_core::search::{SearchGroupKind, SearchKind};
 
+    use super::super::error::ErrorKind;
     use super::super::test_support::{shown, small, view_of, Fixture};
     use super::super::SEARCH_HITS;
 
@@ -31,8 +32,8 @@ mod tests {
         let mut state = fx.state();
         let none = view_of("0123456789abcdef", None);
         assert_eq!(
-            format!("{:?}", state.search("pending", &none).unwrap_err().kind),
-            "NoWorkspace"
+            state.search("pending", &none).unwrap_err().kind,
+            ErrorKind::NoWorkspace
         );
 
         let mut state = small(&fx);
@@ -43,8 +44,8 @@ mod tests {
             view_of(&workspace, None),
         ] {
             assert_eq!(
-                format!("{:?}", state.search("pending", &stale).unwrap_err().kind),
-                "ViewChanged",
+                state.search("pending", &stale).unwrap_err().kind,
+                ErrorKind::ViewChanged,
                 "{stale:?}"
             );
         }

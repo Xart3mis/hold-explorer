@@ -37,7 +37,7 @@ pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
 
-use settings::{load_settings_checked, save_settings, LoadedSettings};
+use settings::{load_settings_checked, save_settings, settings_file, LoadedSettings};
 
 /// Most rows a data command returns in one answer.
 pub const PAGE_ROWS: usize = 200;
@@ -178,8 +178,6 @@ impl AppState {
         };
         let mut open = describe(workspace)?;
         open.selected = self.selected;
-        // The damage of the saved views was reported when the workspace was opened.
-        open.warning = None;
         Ok(Some(open))
     }
 
@@ -231,6 +229,7 @@ impl AppState {
             });
         AppStart {
             version: env!("CARGO_PKG_VERSION").to_string(),
+            settings_file: settings_file(&self.config_dir),
             settings: self.settings.clone(),
             list: workspaces::list_view(raw, &folder),
             list_error,
@@ -389,17 +388,31 @@ impl AppState {
             }
         };
         let workspace = Workspace::open(&path)?;
-        let open = describe(&workspace)?;
+        let mut open = describe(&workspace)?;
+        // Opened here: the damage of its saved views is reported now.
+        open.warning = views::read_views(&workspace)?.1;
         Ok((workspace, open))
     }
 
     /// Makes the workspace the open one, then saves its id as the last workspace. A failed save
-    /// never fails the open: it is returned as the warning.
+    /// never fails the open: it is returned as the warning. The damage of the saved views is
+    /// reported with it: as `open` carries it (from `load_from`), or read here for a workspace
+    /// that was not the open one; one that was open already had it reported when it was opened.
     fn install_and_remember(
         &mut self,
         workspace: Workspace,
         mut open: WorkspaceOpen,
     ) -> WorkspaceOpen {
+        let views = if open.warning.is_some()
+            || self.open_id.as_deref() == Some(open.workspace.id.as_str())
+        {
+            open.warning.take()
+        } else {
+            match views::read_views(&workspace) {
+                Ok((_, warning)) => warning,
+                Err(error) => Some(error),
+            }
+        };
         self.install(workspace, &open);
         // Kept in memory even when it cannot be saved, so the next successful save writes it.
         self.settings.last_workspace = Some(open.workspace.id.clone());
@@ -413,7 +426,7 @@ impl AppState {
             )
         });
         // Both are kept when both are set: the settings' kind, then what the views say.
-        open.warning = match (not_remembered, open.warning.take()) {
+        open.warning = match (not_remembered, views) {
             (Some(settings), Some(views)) => Some(CommandError::new(
                 settings.kind,
                 format!("{} {}", settings.message, views.message),
@@ -449,18 +462,20 @@ fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
     }
 }
 
-/// What the interface receives about a workspace that was just opened. Its warning says that the
-/// saved views could not be read, when they could not.
+/// What the interface receives about a workspace, with the newest snapshot selected and no
+/// warning. Damaged saved views read as none; the paths that open a workspace (`load_from`,
+/// `install_and_remember`, and through `load_from` the start) report the damage themselves, so
+/// nothing else repeats it.
 fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     let snapshots = workspace.snapshots()?;
     let selected = snapshots.last().map(|snapshot| snapshot.id);
-    let (views, warning) = views::read_views(workspace)?;
+    let (views, _) = views::read_views(workspace)?;
     Ok(WorkspaceOpen {
         workspace: workspace.info()?.into(),
         snapshots,
         selected,
         views,
-        warning,
+        warning: None,
     })
 }
 

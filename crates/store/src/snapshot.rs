@@ -388,9 +388,11 @@ impl Workspace {
         }
 
         if let Some(mapping) = &options.save_mapping {
-            let merged = match read_saved_mapping(&tx)? {
-                Some(saved) => saved.merged(mapping, &loaded.headers),
-                None => mapping.clone(),
+            // A saved mapping that cannot be read counts as none: the import's replaces it.
+            let merged = match read_saved_mapping(&tx) {
+                Ok(Some(saved)) => saved.merged(mapping, &loaded.headers),
+                Ok(None) | Err(StoreError::Corrupt { .. }) => mapping.clone(),
+                Err(error) => return Err(error),
             };
             store_saved_mapping(&tx, &merged)?;
         }

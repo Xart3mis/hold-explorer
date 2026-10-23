@@ -50,7 +50,7 @@ impl AppState {
     /// absolute, other than the folder in use, and writable; a missing folder passes when the
     /// nearest folder above it that exists is writable. Nothing is created and nothing changes.
     pub fn check_workspace_folder(&self, path: Option<&str>) -> Result<FolderCheck, CommandError> {
-        let folder = self.usable_folder(path, false)?;
+        let (folder, _) = self.usable_folder(path, false)?;
         let movable: Vec<String> = workspace_files(&self.folder())?
             .iter()
             .map(|(file, _)| file_name(file))
@@ -89,10 +89,15 @@ impl AppState {
         move_files: bool,
         check: CopyCheck,
     ) -> Result<FolderMoved, CommandError> {
-        let to = self.usable_folder(path, true)?;
+        let (to, created) = self.usable_folder(path, true)?;
         let from = self.folder();
         let files = if move_files {
-            workspace_files(&from)?
+            workspace_files(&from).inspect_err(|_| {
+                // Refused after the folder was made for it: it goes again, when it is empty.
+                if created {
+                    let _ = std::fs::remove_dir(&to);
+                }
+            })?
         } else {
             Vec::new()
         };
@@ -109,6 +114,10 @@ impl AppState {
         let mut left = Vec::new();
         for (file, readable) in files {
             let name = file_name(&file);
+            if let Some(pending) = pending_journal(&file) {
+                left.push(pending);
+                continue;
+            }
             let removal = |path: &Path| std::fs::remove_file(path);
             let verified = if readable {
                 move_file(
@@ -157,8 +166,6 @@ impl AppState {
             .and_then(|path| Workspace::open(&path).ok())
             .and_then(|workspace| describe(&workspace).ok().map(|open| (workspace, open)))
             .map(|(workspace, mut open)| {
-                // The damage of the saved views was reported when the workspace was opened.
-                open.warning = None;
                 // The snapshot that was selected stays selected while the workspace has it.
                 if let Some(id) =
                     was_selected.filter(|id| open.snapshots.iter().any(|s| s.id == *id))
@@ -182,6 +189,7 @@ impl AppState {
         Ok(FolderMoved {
             start: AppStart {
                 version: env!("CARGO_PKG_VERSION").to_string(),
+                settings_file: super::settings::settings_file(&self.config_dir),
                 settings: self.settings.clone(),
                 list: list_view(raw, &to),
                 list_error,
@@ -196,8 +204,13 @@ impl AppState {
     /// The folder `path`, or the default folder for `None`, once it is absolute, other than the
     /// folder in use, and shown to be writable by a file made in it and removed again. With
     /// `create` a missing folder is made first; without, nothing is created, and a missing folder
-    /// is shown writable by the nearest folder above it that exists.
-    fn usable_folder(&self, path: Option<&str>, create: bool) -> Result<PathBuf, CommandError> {
+    /// is shown writable by the nearest folder above it that exists. Also says whether the folder
+    /// was made here; a folder made here and then refused is removed again when it is empty.
+    fn usable_folder(
+        &self,
+        path: Option<&str>,
+        create: bool,
+    ) -> Result<(PathBuf, bool), CommandError> {
         let folder = match path {
             Some(path) => PathBuf::from(path),
             None => self.default_folder(),
@@ -227,27 +240,59 @@ impl AppState {
                 ),
             )
         };
+        let existed = folder.symlink_metadata().is_ok();
         let probed = if create {
             std::fs::create_dir_all(&folder).map_err(|e| unusable("could not be created", &e))?;
             folder.clone()
         } else {
             nearest_existing(&folder)
         };
+        // A folder made here for a change that is then refused goes again, when nothing is in it.
+        let refused = |error: CommandError| {
+            if create && !existed {
+                let _ = std::fs::remove_dir(&folder);
+            }
+            error
+        };
         if !probed.is_dir() {
-            return Err(unusable(
+            return Err(refused(unusable(
                 "could not be created",
                 &format!("{} is not a folder", probed.display()),
-            ));
+            )));
         }
         let probe = tempfile::Builder::new()
             .prefix(".hold-explorer-")
             .tempfile_in(&probed)
-            .map_err(|e| unusable("cannot be written to", &e))?;
+            .map_err(|e| refused(unusable("cannot be written to", &e)))?;
         probe
             .close()
-            .map_err(|e| unusable("does not let a file be removed", &e))?;
-        Ok(folder)
+            .map_err(|e| refused(unusable("does not let a file be removed", &e)))?;
+        Ok((folder, create && !existed))
     }
+}
+
+/// The reason `file` stays where it is when a rollback journal of an interrupted write is
+/// beside it (`<file>-journal`): moved without it, the file would lose the write's undo, and the
+/// journal left behind could be applied to another file of that name later.
+fn pending_journal(file: &Path) -> Option<UnreadableView> {
+    let mut journal = file.as_os_str().to_owned();
+    journal.push("-journal");
+    if Path::new(&journal).symlink_metadata().is_err() {
+        return None;
+    }
+    let name = file_name(file);
+    let from = file
+        .parent()
+        .map(|parent| parent.display().to_string())
+        .unwrap_or_default();
+    Some(UnreadableView {
+        file_name: name.clone(),
+        path: file.to_string_lossy().into_owned(),
+        kind: ErrorKind::MoveCheck,
+        message: format!(
+            "{name} was left in {from}, because an interrupted write is pending; open it with the version that wrote it first, then move it by hand."
+        ),
+    })
 }
 
 /// Whether two folders are one: the same path once both are resolved, as far as they exist.

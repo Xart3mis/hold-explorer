@@ -53,6 +53,9 @@ pub struct ImportDraft {
     pub missing_required: Vec<Field>,
     /// True when the workspace's saved mapping changed the automatic one.
     pub used_saved_mapping: bool,
+    /// Set when the open workspace's saved mapping could not be read: the automatic mapping is
+    /// proposed instead, and the next import's mapping replaces the damaged one.
+    pub saved_mapping_problem: Option<CommandError>,
 }
 
 /// The warnings of one kind.
@@ -323,13 +326,23 @@ impl AppState {
     }
 
     fn set_draft(&mut self, path: PathBuf, opened: Opened) -> Result<ImportDraft, CommandError> {
-        let (proposed, used_saved_mapping) = match self
-            .open
-            .as_ref()
-            .map(Workspace::saved_mapping)
-            .transpose()?
-            .flatten()
+        let (saved, saved_mapping_problem) = match self.open.as_ref().map(Workspace::saved_mapping)
         {
+            None | Some(Ok(None)) => (None, None),
+            Some(Ok(Some(saved))) => (Some(saved), None),
+            Some(Err(StoreError::Corrupt { detail })) => (
+                None,
+                Some(CommandError::new(
+                    ErrorKind::Corrupt,
+                    format!(
+                        "The column mapping saved in this workspace could not be read ({}), so the columns are matched as for a workspace without one. Check the mapping below; this import's mapping replaces the damaged one.",
+                        detail.trim_end_matches('.')
+                    ),
+                )),
+            ),
+            Some(Err(error)) => return Err(error.into()),
+        };
+        let (proposed, used_saved_mapping) = match saved {
             Some(saved) => {
                 let map = ColumnMap::auto_with(&opened.table.headers, &saved);
                 let changed = map != opened.auto_map;
@@ -343,6 +356,7 @@ impl AppState {
             required: Field::REQUIRED.to_vec(),
             missing_required: proposed.missing_required(),
             used_saved_mapping,
+            saved_mapping_problem,
         };
         self.draft = Some(Draft {
             path,
@@ -607,9 +621,7 @@ impl AppState {
             },
             &options,
         )?;
-        let mut open = describe(workspace)?;
-        // The damage of the saved views is reported when the workspace is opened.
-        open.warning = None;
+        let open = describe(workspace)?;
         Ok((snapshot, open))
     }
 

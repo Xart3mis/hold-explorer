@@ -13,6 +13,10 @@ export type AppStart = {
  */
 version: string, 
 /**
+ * The absolute path of the settings file, `settings.json`, whether or not it exists yet.
+ */
+settings_file: string, 
+/**
  * The user's settings.
  */
 settings: Settings, 

@@ -49,6 +49,7 @@ pub struct Settings {
     /// How tightly rows and controls are packed.
     pub density: Density,
     /// The name notes are signed with (from M4); trimmed, at most 80 characters; empty is none.
+    /// A file that holds a longer or untrimmed name is read trimmed and cut to 80 characters.
     pub author_name: String,
     /// Where workspaces are kept; `None` means the default folder.
     pub workspace_dir: Option<String>,
@@ -66,6 +67,11 @@ pub struct LoadedSettings {
     pub blocked: Option<CommandError>,
     /// Set when the file could not be understood and was moved to `settings.json.unreadable`.
     pub set_aside: Option<CommandError>,
+}
+
+/// The path of the settings file in `config_dir`, as text.
+pub(super) fn settings_file(config_dir: &Path) -> String {
+    config_dir.join(FILE_NAME).to_string_lossy().into_owned()
 }
 
 /// The settings alone, as [`load_settings_checked`] reads them, for tests that save nothing.
@@ -89,7 +95,7 @@ pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
         blocked,
         set_aside,
     };
-    let parsed = match std::fs::read(&path) {
+    let parsed: Option<Settings> = match std::fs::read(&path) {
         Ok(text) => serde_json::from_slice(&text).ok(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return defaults(None, None);
@@ -109,7 +115,8 @@ pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
             );
         }
     };
-    if let Some(settings) = parsed {
+    if let Some(mut settings) = parsed {
+        settings.author_name = clean_author_name(&settings.author_name);
         return LoadedSettings {
             settings,
             blocked: None,
@@ -138,6 +145,13 @@ pub fn load_settings_checked(config_dir: &Path) -> LoadedSettings {
             None,
         ),
     }
+}
+
+/// An author name as a file may hold it, made one the settings accept: trimmed, and cut to
+/// [`AUTHOR_NAME_LIMIT`] characters (trimmed again after the cut).
+fn clean_author_name(name: &str) -> String {
+    let cut: String = name.trim().chars().take(AUTHOR_NAME_LIMIT).collect();
+    cut.trim_end().to_string()
 }
 
 /// Writes the settings to a temporary file beside the target, flushes it to disk, and renames it

@@ -77,6 +77,8 @@ pub struct WorkspaceOpen {
 pub struct AppStart {
     /// The version of the application.
     pub version: String,
+    /// The absolute path of the settings file, `settings.json`, whether or not it exists yet.
+    pub settings_file: String,
     /// The user's settings.
     pub settings: Settings,
     /// The workspaces in the folder in use.

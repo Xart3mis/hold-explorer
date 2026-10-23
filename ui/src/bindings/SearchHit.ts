@@ -15,6 +15,12 @@ kind: SearchKind,
  */
 value: string, 
 /**
+ * The value as the filter picker labels it: for a remark, the whole remark as its first hold
+ * writes it (never the cut text of `parts`); for a blocker, `<discipline> / <item>`; for any
+ * other value, the value itself.
+ */
+label: string, 
+/**
  * The text shown, split into matched and unmatched parts.
  */
 parts: Array<TextPart>, 

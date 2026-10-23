@@ -294,7 +294,8 @@ fn another_workspace_id_is_refused_and_nothing_changes() {
         state.restore_view(other, view.clone(), 0).unwrap_err(),
         state.move_view(other, view.id, 0).unwrap_err(),
     ] {
-        assert_eq!(error.kind, ErrorKind::WorkspaceNotFound);
+        assert_eq!(error.kind, ErrorKind::ViewChanged);
+        assert!(error.message.contains("saved views"), "{}", error.message);
     }
     assert_eq!(listed(&state), views);
 }
@@ -469,4 +470,56 @@ fn an_import_does_not_repeat_the_warning_about_damaged_views() {
         .unwrap();
     assert!(done.open.warning.is_none());
     assert!(done.open.views.is_empty());
+}
+
+#[test]
+fn an_import_into_a_workspace_that_is_not_open_reports_its_damaged_views() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    store_raw(&state, "{not json");
+    let id = state.open_id();
+    // Another workspace is open when the file is imported into the damaged one.
+    state.create_workspace("Other").unwrap();
+    state.import_open(&fx.synth("b.xlsx", 2)).unwrap();
+    let done = state
+        .import_commit(
+            super::ImportCommit {
+                target: super::TargetChoice::Existing { id: id.clone() },
+                taken_at: super::test_support::at("2026-10-06 00:00:00"),
+                date_edited: false,
+                replace: None,
+            },
+            &super::test_support::no_progress,
+        )
+        .unwrap();
+    assert_eq!(done.open.workspace.id, id);
+    let warning = done
+        .open
+        .warning
+        .expect("the damage is reported on opening");
+    assert_eq!(warning.kind, ErrorKind::Corrupt);
+    assert!(
+        warning.message.contains("saved views"),
+        "{}",
+        warning.message
+    );
+    // Once reported, the state's description of the workspace repeats nothing.
+    assert!(state.current().unwrap().unwrap().warning.is_none());
+}
+
+#[test]
+fn opening_and_starting_report_damaged_views_and_nothing_else_repeats_it() {
+    let fx = Fixture::new();
+    let state = small(&fx);
+    store_raw(&state, "{not json");
+    let id = state.open_id();
+    let started = fx.state().start();
+    let open = started.open.expect("the last workspace is reopened");
+    assert_eq!(open.warning.map(|w| w.kind), Some(ErrorKind::Corrupt));
+    let mut again = fx.state();
+    let open = again.open_workspace(&id).unwrap();
+    assert_eq!(open.warning.map(|w| w.kind), Some(ErrorKind::Corrupt));
+    let snapshot = open.selected.unwrap();
+    assert!(again.select_snapshot(snapshot).unwrap().warning.is_none());
+    assert!(again.current().unwrap().unwrap().warning.is_none());
 }

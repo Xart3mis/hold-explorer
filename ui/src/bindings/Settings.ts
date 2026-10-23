@@ -16,6 +16,7 @@ theme: Theme,
 density: Density, 
 /**
  * The name notes are signed with (from M4); trimmed, at most 80 characters; empty is none.
+ * A file that holds a longer or untrimmed name is read trimmed and cut to 80 characters.
  */
 author_name: string, 
 /**
