@@ -57,7 +57,8 @@ export function SettingsPage() {
     typed.current = draft;
   });
   // The name last refused while the page was there: its reason is shown under the field, so
-  // leaving does not send it again (and no toast repeats the reason). Any other text is sent.
+  // leaving does not send it again (and no toast repeats the reason). Any other text is sent. It
+  // is forgotten once a name is saved or the text is edited.
   const refused = useRef<string | null>(null);
   const { mutate: sendName } = setAuthorName;
   useEffect(
@@ -79,6 +80,7 @@ export function SettingsPage() {
     asked.current = name;
     setAuthorName.mutate(name, {
       onSuccess: (settings) => {
+        refused.current = null;
         // The text shows the name as it was saved (trimmed), unless more was typed meanwhile.
         setDraft((typed) => (typed.trim() === settings.author_name ? settings.author_name : typed));
       },
@@ -150,7 +152,10 @@ export function SettingsPage() {
             isPending={setAuthorName.isPending}
             autoComplete="off"
             value={draft}
-            onChange={setDraft}
+            onChange={(text) => {
+              refused.current = null;
+              setDraft(text);
+            }}
             onFocus={() => {
               focused.current = true;
             }}

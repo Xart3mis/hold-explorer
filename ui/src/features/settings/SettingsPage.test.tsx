@@ -442,6 +442,37 @@ describe("the author name", () => {
     expect(screen.queryByRole("status", { name: /Ada Lovelace/ })).not.toBeInTheDocument();
   });
 
+  it("sends on leaving a refused name typed again after another name was saved", async () => {
+    const setName = vi.fn(({ name }: { name: string }) => {
+      if (name === "Ada Lovelace") throw commandFailure("Settings", TOO_LONG);
+      return withSettings({ author_name: name });
+    });
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_author_name: setName },
+    });
+    await page();
+    await user.type(nameField(), "Ada Lovelace{Enter}");
+    expect(await screen.findByText(TOO_LONG)).toBeInTheDocument();
+    await user.clear(nameField());
+    await user.type(nameField(), "Grace Hopper{Enter}");
+    await waitFor(() => {
+      expect(setName).toHaveBeenLastCalledWith({ name: "Grace Hopper" });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText(TOO_LONG)).not.toBeInTheDocument();
+    });
+    await user.clear(nameField());
+    await user.type(nameField(), "Ada Lovelace");
+    await user.keyboard("{Control>}1{/Control}");
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await waitFor(() => {
+      expect(setName).toHaveBeenCalledTimes(3);
+    });
+    expect(setName).toHaveBeenLastCalledWith({ name: "Ada Lovelace" });
+  });
+
   it("sends on leaving a name changed after a refusal", async () => {
     let refuse = true;
     const setName = vi.fn(({ name }: { name: string }) => {
