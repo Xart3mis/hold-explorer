@@ -96,7 +96,7 @@ impl CrashReport {
             location,
             backtrace: format!(
                 "Anchor: hx_desktop::run at {:#x}\n{:#}",
-                crate::run as fn() as usize,
+                crate::run as *const () as usize,
                 std::backtrace::Backtrace::force_capture()
             ),
         }

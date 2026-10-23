@@ -48,10 +48,7 @@ zip = { version = "8.6", default-features = false, features = ["deflate"] }
 codegen-units = 1
 lto = true
 opt-level = "s"
-# Debug information is stripped and the symbol table kept, so the backtrace of a crash log names
-# its functions on Linux and macOS. On Windows (MSVC) rustc ignores `strip`: every link writes a
-# separate `hx_desktop.pdb` that holds the names, and the exe holds only that file's name.
-strip = "debuginfo"
+strip = true
 
 # The release build is optimized for size, except where the time of an import and of a query is
 # spent: the engine, the store, and SQLite are optimized for speed. The limits these protect are
