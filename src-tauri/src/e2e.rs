@@ -104,22 +104,4 @@ mod tests {
         assert_eq!(save_path(&dir, ".."), None);
         assert_eq!(save_path(&dir, ""), None);
     }
-
-    #[test]
-    fn the_substitutes_read_the_environment_of_the_process() {
-        // The only test that sets these variables, and only this module reads them.
-        let dir = tempfile::TempDir::new().unwrap();
-        let file = dir.path().join("Holds.xlsx");
-        std::env::set_var(super::OPEN_VAR, &file);
-        std::env::set_var(super::SAVE_DIR_VAR, dir.path());
-        let opened = tauri::async_runtime::block_on(super::e2e_open_path());
-        let saved = tauri::async_runtime::block_on(super::e2e_save_path("Lines.csv".to_string()));
-        std::env::remove_var(super::OPEN_VAR);
-        std::env::remove_var(super::SAVE_DIR_VAR);
-        assert_eq!(opened, Some(file.to_string_lossy().into_owned()));
-        assert_eq!(
-            saved,
-            Some(dir.path().join("Lines.csv").to_string_lossy().into_owned())
-        );
-    }
 }

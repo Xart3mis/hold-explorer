@@ -33,9 +33,16 @@ pub fn update_check_off(var: impl Fn(&str) -> Option<OsString>) -> bool {
     cfg!(feature = "e2e") || smoke_mode(var)
 }
 
-/// The line a smoke run prints once the page has rendered.
+/// The line a smoke run prints once the page has rendered. The sample comes from the page, so
+/// a control character in it is printed escaped: the line stays one line, and the check that
+/// reads it sees what was sent.
 fn ready_line(sample: &str) -> String {
-    format!("ready {sample}")
+    format!("ready {}", sample.escape_debug())
+}
+
+/// Whether the environment `var` reads asks for the timeout of a smoke run: in the smoke mode only.
+fn timeout_wanted(var: impl Fn(&str) -> Option<OsString>) -> bool {
+    smoke_mode(var)
 }
 
 /// Called by the page once its first screen has rendered, with `sample`, the format module's
@@ -60,8 +67,14 @@ pub async fn smoke_ready<R: Runtime>(
 /// In the smoke mode, exits the app with code 1 when [`smoke_ready`] has not ended it within
 /// [`SMOKE_TIMEOUT`]. Does nothing otherwise.
 pub fn arm_timeout<R: Runtime>(app: &AppHandle<R>) {
-    if !in_smoke_mode() {
-        return;
+    arm_timeout_when(app, timeout_wanted(|name| std::env::var_os(name)));
+}
+
+/// [`arm_timeout`] with the decision made: starts the timeout only when `wanted`, and says
+/// whether it did.
+fn arm_timeout_when<R: Runtime>(app: &AppHandle<R>, wanted: bool) -> bool {
+    if !wanted {
+        return false;
     }
     let app = app.clone();
     std::thread::spawn(move || {
@@ -72,13 +85,16 @@ pub fn arm_timeout<R: Runtime>(app: &AppHandle<R>) {
         );
         app.exit(1);
     });
+    true
 }
 
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use super::{ready_line, smoke_mode, update_check_off, SMOKE_TIMEOUT};
+    use super::{
+        arm_timeout_when, ready_line, smoke_mode, timeout_wanted, update_check_off, SMOKE_TIMEOUT,
+    };
 
     /// An environment that holds `vars` and nothing else.
     fn env(vars: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
@@ -105,6 +121,25 @@ mod tests {
     #[test]
     fn the_ready_line_is_ready_and_the_sample() {
         assert_eq!(ready_line("30 Sept 2026"), "ready 30 Sept 2026");
+    }
+
+    #[test]
+    fn the_ready_line_prints_a_control_character_of_the_sample_escaped() {
+        let line = ready_line("30 Sept 2026\nready 1 Jan 2000\r\u{1b}[2J");
+        assert_eq!(line, "ready 30 Sept 2026\\nready 1 Jan 2000\\r\\u{1b}[2J");
+        assert!(!line.chars().any(char::is_control), "{line:?}");
+        // A sample of letters, digits, spaces, and a full stop is printed as it is.
+        assert_eq!(ready_line("30 sept. 2026"), "ready 30 sept. 2026");
+    }
+
+    #[test]
+    fn the_timeout_is_armed_only_in_the_smoke_mode() {
+        assert!(timeout_wanted(env(&[("HX_SMOKE", "1")])));
+        assert!(!timeout_wanted(env(&[])));
+        assert!(!timeout_wanted(env(&[("HX_SMOKE", "0")])));
+        // Without HX_SMOKE nothing is started: no thread waits to end the process.
+        let app = tauri::test::mock_app();
+        assert!(!arm_timeout_when(app.handle(), timeout_wanted(env(&[]))));
     }
 
     #[test]

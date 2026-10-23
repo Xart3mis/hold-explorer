@@ -1386,13 +1386,14 @@ mod tests {
                     assert!(!message.contains("Restart"), "{command}: {message}");
                 }
             }
-            // The commands that never read the state leave its lock alone; the next one puts
-            // it right.
-            if STATELESS.contains(&command.as_str()) {
-                continue;
-            }
             let state = harness.app.state::<Mutex<AppState>>();
-            assert!(!state.is_poisoned(), "{command} left the lock poisoned");
+            if STATELESS.contains(&command.as_str()) {
+                // It never touched the lock, so the lock is as the panic left it; the next
+                // command that takes the state puts it right.
+                assert!(state.is_poisoned(), "{command} took the state lock");
+            } else {
+                assert!(!state.is_poisoned(), "{command} left the lock poisoned");
+            }
         }
     }
 
