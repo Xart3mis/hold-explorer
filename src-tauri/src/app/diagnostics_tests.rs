@@ -53,7 +53,10 @@ fn the_text_has_every_line_of_the_decision() {
         fx.config().join("settings.json").display()
     )));
     // The local data folder is written shortened.
-    assert!(text.contains("Logs folder: <local data>/logs\n"));
+    assert!(text.contains(&format!(
+        "Logs folder: <local data>{}logs\n",
+        std::path::MAIN_SEPARATOR
+    )));
     assert!(text.contains("Workspaces: 0\n"));
     assert!(text.contains("Unreadable files: 0\n"));
     assert!(text.contains("Settings problem: none\n"));
@@ -202,7 +205,13 @@ fn the_text_shortens_the_home_and_local_data_folders_and_no_other() {
     write_log(&logs_dir(&local), &report).unwrap();
     let state = fx.state();
     let text = diagnostics_at(&state, &local, None, Some(home.path()));
-    assert!(text.contains("Logs folder: <local data>/logs\n"), "{text}");
+    assert!(
+        text.contains(&format!(
+            "Logs folder: <local data>{}logs\n",
+            std::path::MAIN_SEPARATOR
+        )),
+        "{text}"
+    );
     assert!(
         text.contains("read ~/x and <local data>/y and /elsewhere/z"),
         "{text}"
