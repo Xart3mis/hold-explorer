@@ -107,6 +107,7 @@
   --layout-form-max-width: 720px;
   --layout-prose-max-width: 34rem;
   --layout-search-max-width: 30rem;
+  --layout-search-min-width: 16rem;
   --layout-breakpoint-wide: 1280px;
   --layout-breakpoint-roomy: 1440px;
   --layout-window-min-width: 1024px;

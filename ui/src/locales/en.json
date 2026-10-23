@@ -167,6 +167,25 @@
     "viewResyncedText": "This window showed another workspace or snapshot than the one Hold Explorer has open. It now shows the one that is open. If your last action seems to be missing, do it again.",
     "viewResyncedNoneText": "This window showed a workspace that Hold Explorer no longer has open. No workspace is open now. If your last action seems to be missing, do it again."
   },
+  "search": {
+    "label": "Search",
+    "placeholder": "Search lines, blockers, people, remarks",
+    "results": "Search results",
+    "group": {
+      "Lines": "Lines",
+      "Blockers": "Blockers",
+      "People": "People",
+      "Remarks": "Remarks",
+      "Holds": "Holds"
+    },
+    "heading": "{{name}} · {{total}}",
+    "more": "{{count, number}} more in {{place}}",
+    "holds_one": "{{count, number}} hold",
+    "holds_other": "{{count, number}} holds",
+    "released": "Released",
+    "nothing": "Nothing matches “{{query}}”. Press Enter to filter by this text.",
+    "error": "The search could not be read: {{message}}"
+  },
   "destinations": {
     "label": "Destinations",
     "soon": "Soon",

@@ -309,7 +309,8 @@ export type ReadingName =
   | "matrix"
   | "solveOrder"
   | "blockerDetail"
-  | "groupDetail";
+  | "groupDetail"
+  | "search";
 
 /**
  * What both hooks start from: the key of a reading for the view on screen, built by `keyOf`,

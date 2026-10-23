@@ -6,6 +6,7 @@ import { Button, Tooltip } from "../../components";
 import { t } from "../../text/i18n";
 import { ExportMenuInert } from "../export/ExportMenu";
 import { startImport } from "../import/start";
+import { SearchField } from "../search/SearchField";
 import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
 import { NavItem } from "./NavItem";
 import type { ShellProblem } from "./problem";
@@ -23,8 +24,9 @@ export interface TopBarProps {
 }
 
 /**
- * The top bar, left to right: the name of the app, the workspace switcher, the snapshot selector,
- * Export, and Import. The Export menu is the one the page in view puts in the slot
+ * The top bar, left to right: the name of the app, the workspace switcher, the search field, the
+ * snapshot selector, Export, and Import. The search field is there while a snapshot is in view:
+ * without one there is nothing to find. The Export menu is the one the page in view puts in the slot
  * (`TopBarExport`); a page with nothing to export leaves the unavailable button there. While no
  * workspace is open there is nothing to switch and no sidebar, so the two pages that exist then,
  * Workspaces and Settings, are listed where the switcher would be.
@@ -71,6 +73,7 @@ export function TopBar({ start, destinations, renameErrorId, onProblem }: TopBar
           />
         )}
       </div>
+      {start.open?.selected == null ? null : <SearchField />}
       <div className={styles.topbarEnd}>
         {start.open === null ? null : <SnapshotSelector open={start.open} onProblem={onProblem} />}
         <TopBarExportSlot fallback={<ExportMenuInert description={t("export.menu.notHere")} />} />

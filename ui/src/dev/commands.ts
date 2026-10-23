@@ -180,6 +180,13 @@ export const DEV_STATES = [
   "import-sheet",
   "import-committing",
   "import-failed",
+  // The search field of the top bar answers every state from a fixed result (ui/src/dev/search.ts).
+  // These add a search that finds nothing, one whose answers take three seconds (type, wait for
+  // the results, then type another character to see them dimmed), and one that fails:
+  //   dev.html?state=search-none#/overview
+  "search-none",
+  "search-slow",
+  "search-error",
 ] as const;
 export type DevState = (typeof DEV_STATES)[number];
 
@@ -580,6 +587,9 @@ function world(state: DevState, theme: Theme, density: Density): World {
     case "import-sheet":
     case "import-committing":
     case "import-failed":
+    case "search-none":
+    case "search-slow":
+    case "search-error":
       start.list.workspaces = all;
       start.open = opened(4, null);
       break;
@@ -1130,7 +1140,11 @@ export function installDevCommands(
     },
     search: (payload): Promise<SearchResults> => {
       inView(payload);
-      return later(150, () => devSearch(text(payload, "query")));
+      const query = text(payload, "query");
+      return later(state === "search-slow" ? 3000 : 150, () => {
+        if (state === "search-error") throw failure("Internal", LOCKED);
+        return state === "search-none" ? { query, groups: [] } : devSearch(query);
+      });
     },
     // An export is saved where the dialog says, after a moment of reading and one of writing; it
     // says how many rows the request names, or the snapshot's open holds for every row.

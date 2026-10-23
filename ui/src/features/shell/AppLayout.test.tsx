@@ -115,8 +115,10 @@ describe("the sidebar", () => {
   it("shows the shortcut of a destination in its tooltip", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
-    // From the top of the document: the switcher, the selector, Export, Import, Overview, Breakdown.
+    // From the top of the document: the switcher, the search field, the selector, Export, Import,
+    // Overview, Breakdown.
     (document.activeElement as HTMLElement | null)?.blur();
+    await user.tab();
     await user.tab();
     await user.tab();
     await user.tab();
@@ -1232,6 +1234,7 @@ describe("the keyboard", () => {
 
     const expected = [
       screen.getByRole("button", { name: switcher }),
+      screen.getByRole("combobox", { name: en.search.label }),
       screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
       screen.getByRole("button", { name: en.export.menu.label }),
       screen.getByRole("button", { name: en.shell.import }),
@@ -1239,7 +1242,7 @@ describe("the keyboard", () => {
       within(nav).getByRole("button", { name: en.destinations.collapse }),
       screen.getByRole("button", { name: en.comingSoon.action }),
     ];
-    expect(expected).toHaveLength(15);
+    expect(expected).toHaveLength(16);
     for (const element of expected) {
       await user.tab();
       expect(element).toHaveFocus();

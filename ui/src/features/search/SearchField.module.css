@@ -1,0 +1,303 @@
+/*
+ * The search field of the top bar and the list of its results; DESIGN.md, "Search field". The
+ * field grows up to its widest and gives way down to its narrowest; below that the name of the
+ * workspace before it gives way.
+ */
+.search {
+  display: flex;
+  flex: 1 0 var(--layout-search-min-width);
+  min-inline-size: var(--layout-search-min-width);
+  max-inline-size: var(--layout-search-max-width);
+}
+
+.combobox {
+  display: flex;
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.control {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-inline-size: 0;
+}
+
+/* The box of a text field, with room for the icon before the text and the key after it. */
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--density-control-height);
+  padding-inline: calc(var(--space-2) + var(--size-icon) + var(--space-1-5))
+    calc(var(--space-2) + var(--size-tag-height) + var(--space-1-5));
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+/* The control is cut at the end when the field is narrow, never wrapped. */
+.input::placeholder,
+.input {
+  text-overflow: ellipsis;
+}
+
+.input[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.input[data-focused] {
+  border-color: var(--color-accent-text);
+}
+
+.input[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.icon {
+  position: absolute;
+  inset-inline-start: var(--space-2);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+/* The key that focuses the field, while it is empty and has not the focus. */
+.key {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--size-tag-height);
+  block-size: var(--size-tag-height);
+  padding: 0 var(--space-1);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-xs);
+  color: var(--color-text-muted);
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  pointer-events: none;
+}
+
+.input:not(:placeholder-shown) ~ .key,
+.input[data-focused] ~ .key {
+  display: none;
+}
+
+/* The results: the surface of a menu, as wide as the widest field whatever this one's width. */
+.popover {
+  display: flex;
+  flex-direction: column;
+  inline-size: var(--layout-search-max-width);
+  max-inline-size: calc(100vw - 2 * var(--space-2));
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text-primary);
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--duration-base) var(--ease-out);
+}
+
+/* It arrives with a short move toward its place, and leaves by a fade alone. */
+.popover[data-entering] {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--space-1)));
+}
+
+.popover[data-placement="top"][data-entering] {
+  transform: translateY(var(--space-1));
+}
+
+.popover[data-exiting] {
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* What is shown is the answer of before, until the answer for what is typed now is there. */
+.results[data-stale] {
+  opacity: var(--opacity-stale);
+}
+
+/* The list scrolls inside the popover, which is never taller than the room under the field. */
+.list {
+  min-block-size: 0;
+  padding: var(--space-1);
+  overflow: auto;
+}
+
+/* The focus stays in the field; the list draws no ring of its own. */
+.list:focus-visible {
+  outline-color: transparent;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The heading of a group: a caption as tall as an item, lined up with the text of the results. */
+.heading {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/*
+ * A result: its text, and at its trailing edge the tag and the number of its holds, beside the
+ * first line; its detail under the text. The room above and below the text is what one line has
+ * in a row, so a result of one line is exactly as tall as a row.
+ */
+.item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-2);
+  align-items: baseline;
+  min-block-size: var(--density-row-height);
+  padding-block: calc((var(--density-row-height) - var(--line-height-body)) / 2);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  cursor: default;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+/* Highlighted by the pointer or by the arrow keys. */
+.item[data-hovered],
+.item[data-focused] {
+  background-color: var(--color-surface-overlay-hover);
+}
+
+/* The ring, inset, on the item the keyboard is on; an item the pointer is on shows the fill only. */
+.item:focus-visible:not([data-focus-visible]) {
+  outline-color: transparent;
+}
+
+.item[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* A text that does not fit wraps: two remarks often differ only at the end. */
+.text {
+  grid-column: 1;
+  overflow-wrap: anywhere;
+}
+
+.text[data-identifier] {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  line-height: var(--line-height-body);
+}
+
+/* What matched: the strong weight and the primary ink together, never a color alone. */
+.matched {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.end {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1;
+  gap: var(--space-2);
+  align-items: center;
+  align-self: start;
+  block-size: var(--line-height-body);
+}
+
+/* The number of holds: a column, right-aligned, on tabular figures. */
+.count {
+  color: var(--color-text-secondary);
+  font: var(--text-table);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  text-align: end;
+}
+
+.detail {
+  grid-column: 1;
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The last item of a group that has more, and the retry after a failure. */
+.more {
+  grid-column: 1 / -1;
+  color: var(--color-text-secondary);
+}
+
+/* A first wait: one skeleton line where the results will be. */
+.waiting {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+}
+
+.nothing {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  padding: 0 var(--space-2);
+  color: var(--color-text-secondary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.error {
+  display: flex;
+  gap: var(--space-1-5);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--space-2) var(--space-3) 0;
+  color: var(--color-danger-text);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The results appear in place: they fade, and nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    transition: opacity var(--duration-fast) var(--ease-out);
+  }
+
+  .popover[data-entering],
+  .popover[data-placement="top"][data-entering] {
+    transform: none;
+  }
+}

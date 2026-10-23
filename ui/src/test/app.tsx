@@ -15,6 +15,7 @@ import { startState } from "./fixtures";
 import { commandFailure, mockCommands, type Handlers } from "./ipc";
 import { holdRef, holdsView, lineDetail, linePage } from "./lines";
 import { overviewOf } from "./overview";
+import { searchResults } from "./search";
 
 /** The view a workspace that is open shows: the one a data command must be sent. */
 function viewOf(open: WorkspaceOpen | null): ViewRef | null {
@@ -43,8 +44,9 @@ export interface RenderAppOptions {
  * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, `breakdown`
  * with three groups whatever the dimension, `group_detail` with three lines of the group asked
  * for, `matrix` with three rows and two columns and Other on both sides whatever the
- * dimensions, `solve_order` with a solve order of four steps, and `blocker_detail` with the
- * detail of the blocker asked for, unless the test gives its own. Those answers are for the view
+ * dimensions, `solve_order` with a solve order of four steps, `blocker_detail` with the
+ * detail of the blocker asked for, and `search` with a result of every kind for a query of two
+ * characters or more (ui/src/test/search.ts), unless the test gives its own. Those answers are for the view
  * the mocked Rust side holds, which is the one `start` opens and then the one the test's own
  * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`,
  * `import_commit`, or `set_workspace_folder` answered with: for any other view they fail with the kind `ViewChanged`, as
@@ -116,6 +118,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     matrix: inView(() => foldedMatrix()),
     solve_order: inView(() => solveView()),
     blocker_detail: inView(({ key }) => blockerDetail(key)),
+    search: inView(({ query }) => searchResults(query)),
     ...given,
     ...tracked,
   });
