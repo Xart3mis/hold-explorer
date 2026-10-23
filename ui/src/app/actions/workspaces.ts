@@ -1,15 +1,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { AppError, InterfaceKind } from "../../api/error";
 import { keys } from "../../api/keys";
 import { workspaceApi } from "../../api/workspace-commands";
 import type { AppStart } from "../../bindings/AppStart";
-import type { CommandError } from "../../bindings/CommandError";
 import { t } from "../../text/i18n";
 import { workspaceAction } from "../view";
 import { useLeaveSelection } from "./selection";
 import { changeStart, listed, readList, showOpened } from "./start";
 
 /** The kind of the error a rename fails with when its workspace is no longer the open one. */
-export const WORKSPACE_CHANGED = "WorkspaceChanged";
+export const WORKSPACE_CHANGED: InterfaceKind = "WorkspaceChanged";
 
 /** A rename: the workspace it is meant for, and the name to give it. */
 export interface Rename {
@@ -21,8 +21,10 @@ export interface Rename {
 /**
  * The actions on the workspaces: open one, create one, rename the open one, and read the
  * workspaces folder again. See ui/src/app/actions/start.ts for what every action does.
+ * `origin` names the control an opening belongs to (see `WorkspaceAction`), whichever control
+ * asks for it.
  */
-export function useWorkspaceActions() {
+export function useWorkspaceActions(origin?: string) {
   const client = useQueryClient();
   // Neither a line nor a hold of one workspace names anything in another.
   const leave = useLeaveSelection();
@@ -30,6 +32,7 @@ export function useWorkspaceActions() {
   const openWorkspace = useMutation(
     workspaceAction(client, {
       kind: "switching",
+      ...(origin === undefined ? {} : { origin }),
       onAsk: () => {
         leave.forWorkspace();
       },
@@ -62,7 +65,7 @@ export function useWorkspaceActions() {
       mutationFn: ({ id, name }: Rename) => {
         const open = client.getQueryData<AppStart>(keys.start)?.open;
         if (open?.workspace.id !== id) {
-          const gone: Error & CommandError = Object.assign(new Error(t("workspaces.renameGone")), {
+          const gone: Error & AppError = Object.assign(new Error(t("workspaces.renameGone")), {
             kind: WORKSPACE_CHANGED,
           });
           return Promise.reject(gone);

@@ -4,12 +4,14 @@ import { asCommandError } from "../../api/error";
 import { exportColumn } from "../../api/plantim";
 import { keys } from "../../api/keys";
 import { useStart } from "../../app/actions/start";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import type { Field } from "../../bindings/Field";
 import { AddFilterChip, Button, ErrorState, FilterChip, Skeleton } from "../../components";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
+import { SaveViewPopover } from "../views/SaveViewPopover";
 import { chipsOf, type Chip, type FilterField } from "./chips";
 import styles from "./FilterBar.module.css";
 import { FilterPicker } from "./FilterPicker";
@@ -41,9 +43,9 @@ const CLOSED: Picker = {
 
 /**
  * The filter bar of a data screen: the status, one chip per active filter, the way to add one,
- * the way to clear them, and the number of holds the filters keep. It reads the filters every
- * data screen shares (`useFilters`) and the options of the snapshot in view for them, so it takes
- * no props; a page places it under its header (`bar` of `Page`).
+ * the way to clear them, the number of holds the filters keep, and "Save view". It reads the
+ * filters every data screen shares (`useFilters`) and the options of the snapshot in view for
+ * them, so it takes no props; a page places it under its header (`bar` of `Page`).
  *
  * A chip and "Add filter" open the one picker of the bar. It stands under the place its control
  * had when it opened and keeps that place: what is ticked in it widens a chip, adds one, or
@@ -55,7 +57,9 @@ const CLOSED: Picker = {
  * which no hold is released is said to have none; only the open holds are then offered.
  */
 export function FilterBar() {
-  const { filters, update, clear } = useFilters();
+  const { update, clear } = useFilters();
+  // The filters with every value under the label its chip shows.
+  const filters = useLabelledFilters();
   const { isBusy } = useStart();
   // Another snapshot is on its way, and nothing else: an action that opens, creates, or changes a
   // workspace makes the bar wait for the workspace, also when a selection waits beside it.
@@ -247,6 +251,9 @@ export function FilterBar() {
               )}
             </p>
           )}
+        </div>
+        <div data-part="filter-save" className={styles.save}>
+          <SaveViewPopover />
         </div>
       </div>
       {noReleased || missing.length > 0 || hasInactive || isUnknown ? (

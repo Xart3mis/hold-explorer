@@ -3,11 +3,11 @@
 use std::path::Path;
 
 use chrono::NaiveDateTime;
-use hx_store::{SnapshotInfo, UnreadableWorkspace, WorkspaceInfo, WorkspaceList};
+use hx_store::{SavedView, SnapshotInfo, UnreadableWorkspace, WorkspaceInfo, WorkspaceList};
 use serde::Serialize;
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::settings::Settings;
 
 /// A workspace as the interface shows it.
@@ -36,8 +36,8 @@ pub struct UnreadableView {
     pub file_name: String,
     /// The file's full path, as text.
     pub path: String,
-    /// The store error's variant name.
-    pub kind: String,
+    /// The kind of the store error.
+    pub kind: ErrorKind,
     /// The store error's text.
     pub message: String,
 }
@@ -64,7 +64,10 @@ pub struct WorkspaceOpen {
     pub snapshots: Vec<SnapshotInfo>,
     /// The selected snapshot: the newest, or `None` when there is none.
     pub selected: Option<i64>,
-    /// Set when the workspace is open but the app could not remember it for the next start.
+    /// Its saved views, in sidebar order.
+    pub views: Vec<SavedView>,
+    /// Set when the workspace is open but the app could not remember it for the next start, or
+    /// when its saved views could not be read.
     pub warning: Option<CommandError>,
 }
 
@@ -74,6 +77,8 @@ pub struct WorkspaceOpen {
 pub struct AppStart {
     /// The version of the application.
     pub version: String,
+    /// The absolute path of the settings file, `settings.json`, whether or not it exists yet.
+    pub settings_file: String,
     /// The user's settings.
     pub settings: Settings,
     /// The workspaces in the folder in use.
@@ -82,6 +87,9 @@ pub struct AppStart {
     pub list_error: Option<CommandError>,
     /// The workspace that was reopened, when there was one to reopen.
     pub open: Option<WorkspaceOpen>,
+    /// What went wrong with the settings file at start, when anything did: set aside
+    /// (`SettingsSetAside`), or left in place and saving refused (`Settings`).
+    pub settings_problem: Option<CommandError>,
 }
 
 impl From<WorkspaceInfo> for WorkspaceView {

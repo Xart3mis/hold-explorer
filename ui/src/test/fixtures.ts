@@ -51,6 +51,7 @@ export function opened(overrides: Partial<WorkspaceOpen> = {}): WorkspaceOpen {
     workspace: workspace(),
     snapshots: twoSnapshots,
     selected: 2,
+    views: [],
     warning: null,
     ...overrides,
   };
@@ -76,7 +77,14 @@ export const unreadable: UnreadableView = {
 export function startState(overrides: Partial<AppStart> = {}): AppStart {
   return {
     version: "0.1.0",
-    settings: { theme: "Dark", workspace_dir: null, last_workspace: null },
+    settings_file: "/home/ada/.config/hold-explorer/settings.json",
+    settings: {
+      theme: "Dark",
+      density: "Comfortable",
+      author_name: "",
+      workspace_dir: null,
+      last_workspace: null,
+    },
     list: {
       workspaces: [],
       unreadable: [],
@@ -84,6 +92,7 @@ export function startState(overrides: Partial<AppStart> = {}): AppStart {
     },
     list_error: null,
     open: null,
+    settings_problem: null,
     ...overrides,
   };
 }
@@ -118,6 +127,7 @@ export function draft(overrides: Partial<ImportDraft> = {}): ImportDraft {
     required: ["LineId", "Remark", "HoldType"],
     missing_required: [],
     used_saved_mapping: false,
+    saved_mapping_problem: null,
     ...overrides,
   };
 }

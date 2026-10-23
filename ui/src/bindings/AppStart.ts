@@ -13,6 +13,10 @@ export type AppStart = {
  */
 version: string, 
 /**
+ * The absolute path of the settings file, `settings.json`, whether or not it exists yet.
+ */
+settings_file: string, 
+/**
  * The user's settings.
  */
 settings: Settings, 
@@ -27,4 +31,9 @@ list_error: CommandError | null,
 /**
  * The workspace that was reopened, when there was one to reopen.
  */
-open: WorkspaceOpen | null, };
+open: WorkspaceOpen | null, 
+/**
+ * What went wrong with the settings file at start, when anything did: set aside
+ * (`SettingsSetAside`), or left in place and saving refused (`Settings`).
+ */
+settings_problem: CommandError | null, };

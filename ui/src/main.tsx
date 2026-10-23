@@ -5,10 +5,12 @@ import "./text/i18n";
 import "./design/fonts.css";
 import "./design/tokens.css";
 import "./app.css";
+import { applyStoredDensity } from "./design/density";
 import { applyStoredTheme } from "./design/theme";
 
-// The first frame is painted in the theme of the last run; the application start confirms it.
+// The first frame is painted in the theme and density of the last run; the application start confirms it.
 applyStoredTheme();
+applyStoredDensity();
 
 const container = document.getElementById("root");
 if (!container) {

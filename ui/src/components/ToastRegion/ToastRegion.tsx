@@ -1,4 +1,4 @@
-import { CircleCheck, Info, X, type LucideIcon } from "lucide-react";
+import { CircleCheck, Info, OctagonAlert, X, type LucideIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -17,10 +17,17 @@ import { Icon } from "../Icon/Icon";
 import styles from "./ToastRegion.module.css";
 
 /**
- * The most toasts shown at once. A newer toast pushes out the oldest one that offers no undo. One
- * that carries an undo is never pushed out, so for a moment there can be more.
+ * The most toasts shown at once. A newer toast pushes out the oldest one that offers no undo and
+ * says of no failure. One that carries an undo, or says that something failed, is never pushed
+ * out, so for a moment there can be more.
  */
 const MAX_TOASTS = 3;
+
+/**
+ * The most failures shown at once. A failure is never pushed out by a toast of another kind, and
+ * stays until it is closed; a newer failure takes the place of the oldest once two show.
+ */
+const MAX_FAILURES = 2;
 
 /** How a toast is found on the page: by this part name, and by the id of its item. */
 const TOAST = '[data-part="toast"]';
@@ -51,8 +58,12 @@ export interface ToastOptions {
    * file". `Ctrl+Z` never runs it. Given only with `action`.
    */
   secondaryAction?: ToastAction;
-  /** An icon that says how it went. A failure that needs reading is a notice, not a toast. */
-  tone?: "info" | "success";
+  /**
+   * An icon that says how it went. `danger` says that something failed: such a toast stays until
+   * it is closed, and is never pushed out by a toast of another kind; at most two show, a newer
+   * one taking the place of the oldest. A failure that needs more than a sentence is a notice.
+   */
+  tone?: "info" | "success" | "danger";
 }
 
 export interface ToastApi {
@@ -84,7 +95,13 @@ export function useToast(): ToastApi {
 const icons: Record<NonNullable<ToastOptions["tone"]>, LucideIcon> = {
   info: Info,
   success: CircleCheck,
+  danger: OctagonAlert,
 };
+
+/** Whether a toast keeps its place for a newer one: it offers an undo, or says what failed. */
+function isKept(item: ToastOptions): boolean {
+  return item.action?.isUndo === true || item.tone === "danger";
+}
 
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -218,8 +235,10 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
   const [held, setHeld] = useState(false);
   const remaining = useRef<number | null>(null);
 
+  // A failure stays until it is closed: it has no timer.
+  const isTimed = item.tone !== "danger";
   useEffect(() => {
-    if (held || item.leaving) return;
+    if (held || item.leaving || !isTimed) return;
     remaining.current ??= durationToken("--timeout-toast");
     // Without the token stylesheet there is no timeout to keep, and the toast stays until closed.
     if (remaining.current === null) return;
@@ -233,7 +252,7 @@ function TimedToast({ item, onAction, onDismiss, onLeft }: TimedToastProps) {
         remaining.current = Math.max(0, remaining.current - (Date.now() - started));
       }
     };
-  }, [held, item.leaving, id, onDismiss]);
+  }, [held, item.leaving, isTimed, id, onDismiss]);
 
   const left = useCallback(() => {
     onLeft(id);
@@ -333,9 +352,16 @@ export function ToastRegion({ children }: { children: ReactNode }) {
       const staying = latest.current.filter((item) => !item.leaving);
       // The new toast needs a place: the oldest toasts without an undo give theirs up.
       const going: string[] = [];
+      // At most two failures show: a newer one takes the place of the oldest.
+      const failures = staying.filter((item) => item.tone === "danger");
+      if (options.tone === "danger" && failures.length >= MAX_FAILURES) {
+        for (const item of failures.slice(0, failures.length - MAX_FAILURES + 1)) {
+          going.push(item.id);
+        }
+      }
       for (const item of staying) {
         if (staying.length - going.length < MAX_TOASTS) break;
-        if (item.action?.isUndo !== true) going.push(item.id);
+        if (!isKept(item) && !going.includes(item.id)) going.push(item.id);
       }
       // A toast that was already leaving goes now as well.
       const gone = latest.current.filter((item) => item.leaving || going.includes(item.id));

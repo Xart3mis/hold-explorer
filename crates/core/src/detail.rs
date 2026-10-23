@@ -553,12 +553,15 @@ mod tests {
         let first = &view.rows[0];
         assert_eq!(
             (first.step, first.key.as_str(), first.label.as_str()),
-            (1, "Piping|—", "Piping / —")
+            (1, "Piping|—", "Piping / (blank)")
         );
         let top = crate::query::group_by(&ds, &spec, &crate::filter::Dim::Blocker);
         assert_eq!(top[0].key, "Piping|—");
+        assert_eq!(top[0].label, "Piping / (blank)");
         let plan = solve_plan(&ds, &spec, None);
         let blank = blocker_detail(&ds, &spec, &plan, "Piping|—").unwrap();
+        assert_eq!(blank.label, "Piping / (blank)");
+        assert_eq!(blank.key, "Piping|—");
         assert_eq!(blank.frees, vec!["A", "B"]);
         assert_eq!(blank.step, Some(1));
     }

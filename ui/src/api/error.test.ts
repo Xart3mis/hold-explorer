@@ -9,6 +9,20 @@ describe("asCommandError", () => {
     });
   });
 
+  it("keeps a failure of the interface's own kinds", () => {
+    expect(asCommandError({ kind: "ViewUnsettled", message: "Try again." })).toEqual({
+      kind: "ViewUnsettled",
+      message: "Try again.",
+    });
+  });
+
+  it("keeps the message of an object with an unknown kind, as an Internal error", () => {
+    expect(asCommandError({ kind: "NoWorkspce", message: "No workspace is open." })).toEqual({
+      kind: "Internal",
+      message: "No workspace is open.",
+    });
+  });
+
   it("makes a string an Internal error with that text", () => {
     expect(asCommandError("it broke")).toEqual({ kind: "Internal", message: "it broke" });
   });

@@ -13,8 +13,8 @@ use crate::filter::{AgeBand, DateRange, Dim, FieldFilter, FilterSpec, Status};
 use crate::load::{load_file, open_file, OpenedView};
 use crate::mapping::{ColumnMap, Field};
 use crate::query::{
-    facet_counts, group_by, holds, line_page, lines, matrix_top, summary, value_page, HoldQuery,
-    LineQuery,
+    facet_counts, filter_labels, group_by, holds, line_page, lines, matrix_top, summary,
+    value_page, HoldQuery, LineQuery,
 };
 use crate::rules::RuleSet;
 use crate::snapshot_date::{SnapshotDate, SnapshotSource};
@@ -95,6 +95,12 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         crate::filter::FilterPart,
         crate::filter::Inactive,
         crate::rules::Blocker,
+        crate::search::SearchKind,
+        crate::search::TextPart,
+        crate::search::SearchHit,
+        crate::search::SearchGroupKind,
+        crate::search::SearchGroup,
+        crate::search::SearchResults,
         crate::mapping::Field,
         crate::mapping::ExtraColumn,
         crate::mapping::SavedColumn,
@@ -116,6 +122,7 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         crate::query::LinePage,
         crate::query::FacetCounts,
         crate::query::ValuePage,
+        crate::query::FilterLabel,
         crate::detail::HoldRef,
         crate::detail::ChainLink,
         crate::detail::LineDetail,
@@ -176,6 +183,11 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         "Row",
         "SavedColumn",
         "SavedMapping",
+        "SearchGroup",
+        "SearchGroupKind",
+        "SearchHit",
+        "SearchKind",
+        "SearchResults",
         "SkipKind",
         "SkippedRow",
         "SnapshotDate",
@@ -186,6 +198,7 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
         "Status",
         "Step",
         "Summary",
+        "TextPart",
         "ValuePage",
         "WarningKind",
     ]
@@ -282,6 +295,15 @@ fn declarations_name_the_keys_of_the_json() {
     names_the_keys_of(&holds(&ds, &open, &HoldQuery::default()));
     names_the_keys_of(&facet_counts(&ds, &open, &default_age_bands()));
     names_the_keys_of(&value_page(&ds, &open, &Dim::HoldType, "", 10));
+    let labelled = FilterSpec {
+        fields: vec![FieldFilter {
+            dim: Dim::HoldType,
+            values: vec!["MISC.".into()],
+            negate: false,
+        }],
+        ..FilterSpec::default()
+    };
+    names_the_keys_of(&filter_labels(&ds, &labelled, &labelled)[0]);
     let detail = line_detail(&ds, &solve_plan(&ds, &open, None), "L-1").unwrap();
     names_the_keys_of(&detail);
     names_the_keys_of(&detail.open[0]);
@@ -299,4 +321,9 @@ fn declarations_name_the_keys_of_the_json() {
     let view: OpenedView = opened.view(2);
     names_the_keys_of(&view);
     names_the_keys_of(&opened.table);
+    let found = crate::search::search(&ds, "L-1", 8);
+    names_the_keys_of(&found);
+    names_the_keys_of(&found.groups[0]);
+    names_the_keys_of(&found.groups[0].hits[0]);
+    names_the_keys_of(&found.groups[0].hits[0].parts[0]);
 }

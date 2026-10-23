@@ -16,17 +16,27 @@
   border-block-start: var(--border-width-thin) solid var(--color-border-subtle);
 }
 
+/* About: its title, then its rows, a form row's gap apart as the rows of the page are. */
+.about {
+  gap: var(--space-6);
+}
+
 /*
- * The theme has three short options, so its box is no wider than they need. The helper line
- * under it keeps the width of a line of text.
+ * The theme and the density have a few short options, so their box is no wider than they need.
+ * The helper line under it keeps the width of a line of text.
  */
-.theme {
+.choice {
   align-items: flex-start;
   max-inline-size: var(--layout-prose-max-width);
 }
 
-.theme > button {
+.choice > button {
   inline-size: var(--size-bar-label-width);
+}
+
+/* The author name is a line of text, no wider than a line of prose. */
+.name {
+  max-inline-size: var(--layout-prose-max-width);
 }
 
 /* A value that is shown and not edited, in the anatomy of a field: label, value, helper line. */
@@ -68,4 +78,52 @@
   font: var(--text-caption);
   font-variant-numeric: var(--font-numeric-tabular);
   letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The buttons of the folder row, side by side, wrapping on a narrow window. */
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The change of the folder while it runs: the bar, and the line that says the rest waits. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-inline-size: var(--layout-prose-max-width);
+}
+
+/* The text of a notice of the folder row, then its choices or its lists, a line apart. */
+.offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* A file left where it was: its name, then the reason. */
+.left {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A file name is written as the system gives it. */
+.file {
+  font: var(--text-mono);
+  font-variant-numeric: var(--font-numeric-tabular);
+  letter-spacing: var(--letter-spacing-normal);
+  overflow-wrap: anywhere;
 }

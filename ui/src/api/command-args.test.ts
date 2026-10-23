@@ -34,7 +34,33 @@ function onTheWire(payload: unknown): unknown {
 const calls: Record<CommandName, () => Promise<unknown>> = {
   app_start: () => workspaceApi.appStart(),
   settings_set_theme: () => api.setTheme(fixture.settings_set_theme.theme),
+  settings_set_density: () => api.setDensity(fixture.settings_set_density.density),
+  settings_set_author_name: () => api.setAuthorName(fixture.settings_set_author_name.name),
+  check_workspace_folder: () => api.checkWorkspaceFolder(fixture.check_workspace_folder.path),
+  set_workspace_folder: () =>
+    workspaceApi.setWorkspaceFolder(
+      fixture.set_workspace_folder.path,
+      fixture.set_workspace_folder.moveFiles,
+    ),
   workspace_list: () => api.workspaceList(),
+  save_view: () =>
+    api.saveView(
+      fixture.save_view.workspace,
+      fixture.save_view.name,
+      fixture.save_view.address,
+      fixture.save_view.filters,
+    ),
+  rename_view: () =>
+    api.renameView(fixture.rename_view.workspace, fixture.rename_view.id, fixture.rename_view.name),
+  delete_view: () => api.deleteView(fixture.delete_view.workspace, fixture.delete_view.id),
+  restore_view: () =>
+    api.restoreView(
+      fixture.restore_view.workspace,
+      fixture.restore_view.view,
+      fixture.restore_view.index,
+    ),
+  move_view: () =>
+    api.moveView(fixture.move_view.workspace, fixture.move_view.id, fixture.move_view.index),
   workspace_create: () => workspaceApi.workspaceCreate(fixture.workspace_create.name),
   workspace_open: () => workspaceApi.workspaceOpen(fixture.workspace_open.id),
   workspace_rename: () => workspaceApi.workspaceRename(fixture.workspace_rename.name),
@@ -49,6 +75,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   overview: () => api.overview(fixture.overview.spec, fixture.overview.view),
   demo_create: () => workspaceApi.demoCreate(),
   filter_options: () => api.filterOptions(fixture.filter_options.spec, fixture.filter_options.view),
+  filter_labels: () => api.filterLabels(fixture.filter_labels.spec, fixture.filter_labels.view),
   filter_values: () =>
     api.filterValues(
       fixture.filter_values.spec,
@@ -56,6 +83,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
       fixture.filter_values.search,
       fixture.filter_values.view,
     ),
+  search: () => api.search(fixture.search.view, fixture.search.query),
   lines: () =>
     api.lines(fixture.lines.spec, fixture.lines.query, fixture.lines.offset, fixture.lines.view),
   holds: () => api.holds(fixture.holds.spec, fixture.holds.query, fixture.holds.view),

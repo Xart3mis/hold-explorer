@@ -4,14 +4,18 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type { AppStart } from "../bindings/AppStart";
 import type { BlockerDetail } from "../bindings/BlockerDetail";
 import type { CopyFormat } from "../bindings/CopyFormat";
+import type { Density } from "../bindings/Density";
 import type { Dim } from "../bindings/Dim";
 import type { ExportPhase } from "../bindings/ExportPhase";
 import type { ExportRequest } from "../bindings/ExportRequest";
 import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
+import type { FilterLabel } from "../bindings/FilterLabel";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
 import type { FoldedMatrix } from "../bindings/FoldedMatrix";
+import type { FolderCheck } from "../bindings/FolderCheck";
+import type { FolderMoved } from "../bindings/FolderMoved";
 import type { Group } from "../bindings/Group";
 import type { GroupDetail } from "../bindings/GroupDetail";
 import type { HoldQuery } from "../bindings/HoldQuery";
@@ -27,6 +31,8 @@ import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SaveFormat } from "../bindings/SaveFormat";
+import type { SavedView } from "../bindings/SavedView";
+import type { SearchResults } from "../bindings/SearchResults";
 import type { Settings } from "../bindings/Settings";
 import type { SolveView } from "../bindings/SolveView";
 import type { TargetCheck } from "../bindings/TargetCheck";
@@ -51,10 +57,28 @@ type ExportProgress = Channel<ExportPhase>;
 interface CommandMap {
   app_start: { args: Record<string, never>; result: AppStart };
   settings_set_theme: { args: { theme: Theme }; result: Settings };
+  settings_set_density: { args: { density: Density }; result: Settings };
+  settings_set_author_name: { args: { name: string }; result: Settings };
+  check_workspace_folder: { args: { path: string | null }; result: FolderCheck };
+  set_workspace_folder: { args: { path: string | null; moveFiles: boolean }; result: FolderMoved };
   workspace_list: { args: Record<string, never>; result: WorkspaceListView };
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
   workspace_open: { args: { id: string }; result: WorkspaceOpen };
   workspace_rename: { args: { name: string }; result: WorkspaceView };
+  save_view: {
+    args: { workspace: string; name: string; address: string; filters: FilterSpec };
+    result: SavedView[];
+  };
+  rename_view: {
+    args: { workspace: string; id: number; name: string };
+    result: SavedView[];
+  };
+  delete_view: { args: { workspace: string; id: number }; result: SavedView[] };
+  restore_view: {
+    args: { workspace: string; view: SavedView; index: number };
+    result: SavedView[];
+  };
+  move_view: { args: { workspace: string; id: number; index: number }; result: SavedView[] };
   import_open: { args: { path: string }; result: ImportDraft };
   import_choose_sheet: { args: { sheet: string }; result: ImportDraft };
   import_review: { args: { fields: Fields | null }; result: ImportReview };
@@ -65,10 +89,12 @@ interface CommandMap {
   overview: { args: { spec: FilterSpec; view: ViewRef }; result: OverviewView | null };
   demo_create: { args: Record<string, never>; result: WorkspaceOpen };
   filter_options: { args: { spec: FilterSpec; view: ViewRef }; result: FilterOptions };
+  filter_labels: { args: { spec: FilterSpec; view: ViewRef }; result: FilterLabel[] };
   filter_values: {
     args: { spec: FilterSpec; dim: Dim; search: string; view: ViewRef };
     result: ValuePage;
   };
+  search: { args: { view: ViewRef; query: string }; result: SearchResults };
   lines: {
     args: { spec: FilterSpec; query: LineQuery; offset: number; view: ViewRef };
     result: LinePage;
@@ -123,7 +149,8 @@ export type WorkspaceCommandName =
   | "workspace_rename"
   | "snapshot_select"
   | "demo_create"
-  | "import_commit";
+  | "import_commit"
+  | "set_workspace_folder";
 
 function call<K extends Exclude<CommandName, WorkspaceCommandName>>(
   name: K,
@@ -138,7 +165,31 @@ function call<K extends Exclude<CommandName, WorkspaceCommandName>>(
  */
 export const api = {
   setTheme: (theme: Theme) => call("settings_set_theme", { theme }),
+  setDensity: (density: Density) => call("settings_set_density", { density }),
+  setAuthorName: (name: string) => call("settings_set_author_name", { name }),
+  /**
+   * Checks a folder to keep the workspaces in (`null`: the default one): absolute, not the one in
+   * use, and writable, or creatable when missing; nothing is created. Names the workspace files a
+   * move to it would take.
+   */
+  checkWorkspaceFolder: (path: string | null) => call("check_workspace_folder", { path }),
   workspaceList: () => call("workspace_list", {}),
+  /**
+   * The saved-view commands act on the workspace with this id and reject with the kind
+   * `ViewChanged` for another. Each answers the whole list, in sidebar order. Saves the
+   * screen's address (its path and query without a selection) with its filters, last in the list.
+   */
+  saveView: (workspace: string, name: string, address: string, filters: FilterSpec) =>
+    call("save_view", { workspace, name, address, filters }),
+  renameView: (workspace: string, id: number, name: string) =>
+    call("rename_view", { workspace, id, name }),
+  deleteView: (workspace: string, id: number) => call("delete_view", { workspace, id }),
+  /** Puts a deleted view back with its id at `index` of the list. */
+  restoreView: (workspace: string, view: SavedView, index: number) =>
+    call("restore_view", { workspace, view, index }),
+  /** Moves a view to `index` of the list as it is after the view is taken out; past the end is last. */
+  moveView: (workspace: string, id: number, index: number) =>
+    call("move_view", { workspace, id, index }),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),
   /** Reviews the draft with the given field-to-column mapping, or with the proposed one. */
@@ -162,9 +213,19 @@ export const api = {
    * the count of the kept holds, the facet counts, the extra columns, and the absent fields.
    */
   filterOptions: (spec: FilterSpec, view: ViewRef) => call("filter_options", { spec, view }),
+  /**
+   * The label of every value of every field entry of `spec`, as the picker labels it in the
+   * snapshot in view; a value the snapshot lacks is labelled with itself.
+   */
+  filterLabels: (spec: FilterSpec, view: ViewRef) => call("filter_labels", { spec, view }),
   /** The values of one dimension a picker offers, at most 200, whose label contains `search`. */
   filterValues: (spec: FilterSpec, dim: Dim, search: string, view: ViewRef) =>
     call("filter_values", { spec, dim, search, view }),
+  /**
+   * What `query` finds among every hold of the snapshot, open and released, whatever the filter:
+   * at most 8 hits in each group, the groups in the order Lines, Blockers, People, Remarks, Holds.
+   */
+  search: (view: ViewRef, query: string) => call("search", { view, query }),
   /** At most 200 Lines from `offset`. */
   lines: (spec: FilterSpec, query: LineQuery, offset: number, view: ViewRef) =>
     call("lines", { spec, query, offset, view }),

@@ -295,6 +295,12 @@ export function ImportMappingPage() {
             </div>
           )}
 
+          {draft.saved_mapping_problem === null ? null : (
+            <Notice tone="warning" title={t("import.mapping.savedUnreadableTitle")}>
+              {draft.saved_mapping_problem.message}
+            </Notice>
+          )}
+
           {draft.used_saved_mapping ? (
             <Notice tone="info" title={t("import.mapping.savedTitle")}>
               {t("import.mapping.savedText")}

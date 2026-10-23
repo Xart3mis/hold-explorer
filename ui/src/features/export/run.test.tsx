@@ -1,4 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import type { ErrorKind } from "../../bindings/ErrorKind";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -263,7 +264,7 @@ describe("useSaveExport", () => {
     expect(within(notice).queryByRole("button", { name: en.common.retry })).not.toBeInTheDocument();
   });
 
-  it.each([
+  it.each<[ErrorKind, string]>([
     [
       "Folder",
       "Hold Explorer could not save Lines.xlsx: the folder /home/ada/gone does not exist. Choose a folder that exists, or make it, and save again.",

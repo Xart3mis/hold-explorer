@@ -16,23 +16,37 @@ use chrono::NaiveDateTime;
 use hx_core::detail::{BlockerDetail, HoldRef, LineDetail};
 use hx_core::filter::{Dim, FilterSpec};
 use hx_core::mapping::Field;
-use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::query::{FilterLabel, FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValuePage};
+use hx_core::search::SearchResults;
 use hx_core::solve::SolveView;
 use hx_export::{write_file, ExportError, ExportRequest, ExportText};
+use hx_store::SavedView;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::app::{
-    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat,
-    ExportPhase, ExportSaved, FilterOptions, GroupDetail, HoldsView, ImportCommit, ImportDone,
-    ImportDraft, ImportPhase, ImportReview, OverviewView, SaveFormat, SessionClipboard, Settings,
-    TargetCheck, TargetChoice, Theme, ViewRef, WorkspaceListView, WorkspaceOpen, WorkspaceView,
+    check_extension, fonts, save, AppStart, AppState, CommandError, Content, CopyFormat, Density,
+    ErrorKind, ExportPhase, ExportSaved, FilterOptions, FolderCheck, FolderMoved, GroupDetail,
+    HoldsView, ImportCommit, ImportDone, ImportDraft, ImportPhase, ImportReview, OverviewView,
+    SaveFormat, SessionClipboard, Settings, TargetCheck, TargetChoice, Theme, ViewRef,
+    WorkspaceListView, WorkspaceOpen, WorkspaceView,
 };
 
 /// Runs `work` on a thread of the blocking pool with the state locked, so file access never
 /// holds up the window.
 async fn blocking<R, T, F>(app: AppHandle<R>, work: F) -> Result<T, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(&mut AppState) -> Result<T, CommandError> + Send + 'static,
+{
+    locked(app, false, work).await
+}
+
+/// [`blocking`]. When `starts_over`, `work` rebuilds the state itself, so a workspace that
+/// cannot be reopened after a panic is not its answer: `work` finds out about it on its own.
+async fn locked<R, T, F>(app: AppHandle<R>, starts_over: bool, work: F) -> Result<T, CommandError>
 where
     R: Runtime,
     T: Send + 'static,
@@ -44,7 +58,20 @@ where
                 "The application state is not available. Restart Hold Explorer; if it keeps happening, report it.",
             )
         })?;
-        let mut guard = state.lock().map_err(|_| poisoned())?;
+        let mut guard = match state.lock() {
+            Ok(guard) => guard,
+            // A command panicked while it held the state: its work was cut short, so the state
+            // is put right from the workspace file before this command runs.
+            Err(poisoned) => {
+                let mut guard = poisoned.into_inner();
+                state.clear_poison();
+                let recovered = guard.recover();
+                if !starts_over {
+                    recovered?;
+                }
+                guard
+            }
+        };
         work(&mut guard)
     })
     .await
@@ -63,22 +90,19 @@ where
         .map_err(task_failed)?
 }
 
-fn task_failed(error: tauri::Error) -> CommandError {
-    CommandError::internal(format!(
-        "A background task failed: {error}. Restart Hold Explorer; if it keeps happening, report it."
-    ))
-}
-
-fn poisoned() -> CommandError {
+/// What a command answers when its work panicked or was cancelled. The next command that takes
+/// the state puts it right (see `blocking`), so no restart is needed.
+fn task_failed(_: tauri::Error) -> CommandError {
     CommandError::internal(
-        "An earlier operation failed part-way, so the application state cannot be trusted. Restart Hold Explorer.",
+        "An operation failed part-way, so what it was doing may not have been saved. Check, then try again; if it happens again, report it.",
     )
 }
 
 /// Settings, the workspace list, and the workspace that was open last.
 #[tauri::command]
 pub async fn app_start<R: Runtime>(app: AppHandle<R>) -> Result<AppStart, CommandError> {
-    blocking(app, |state| Ok(state.start())).await
+    // The start rebuilds the state, and lists a last workspace it cannot read.
+    locked(app, true, |state| Ok(state.start())).await
 }
 
 /// Sets and saves the theme.
@@ -88,6 +112,51 @@ pub async fn settings_set_theme<R: Runtime>(
     theme: Theme,
 ) -> Result<Settings, CommandError> {
     blocking(app, move |state| state.set_theme(theme)).await
+}
+
+/// Sets and saves the density.
+#[tauri::command]
+pub async fn settings_set_density<R: Runtime>(
+    app: AppHandle<R>,
+    density: Density,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_density(density)).await
+}
+
+/// Sets and saves the name notes are signed with.
+#[tauri::command]
+pub async fn settings_set_author_name<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<Settings, CommandError> {
+    blocking(app, move |state| state.set_author_name(&name)).await
+}
+
+/// Checks a folder to keep the workspaces in, and names the workspace files a move would take.
+#[tauri::command]
+pub async fn check_workspace_folder<R: Runtime>(
+    app: AppHandle<R>,
+    path: Option<String>,
+) -> Result<FolderCheck, CommandError> {
+    blocking(app, move |state| {
+        state.check_workspace_folder(path.as_deref())
+    })
+    .await
+}
+
+/// Keeps the workspaces in another folder (`None`: the default one), moving the workspace files
+/// there when asked to.
+#[tauri::command]
+pub async fn set_workspace_folder<R: Runtime>(
+    app: AppHandle<R>,
+    path: Option<String>,
+    move_files: bool,
+) -> Result<FolderMoved, CommandError> {
+    // The change closes the workspace and reopens it, so it rebuilds the state itself.
+    locked(app, true, move |state| {
+        state.set_workspace_folder(path.as_deref(), move_files)
+    })
+    .await
 }
 
 /// The workspaces in the workspace folder.
@@ -123,6 +192,68 @@ pub async fn workspace_rename<R: Runtime>(
     name: String,
 ) -> Result<WorkspaceView, CommandError> {
     blocking(app, move |state| state.rename_workspace(&name)).await
+}
+
+/// Saves the screen in view under a name, last in the list of saved views.
+#[tauri::command]
+pub async fn save_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    name: String,
+    address: String,
+    filters: FilterSpec,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| {
+        state.save_view(&workspace, &name, &address, filters)
+    })
+    .await
+}
+
+/// Renames a saved view.
+#[tauri::command]
+pub async fn rename_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+    name: String,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.rename_view(&workspace, id, &name)).await
+}
+
+/// Deletes a saved view.
+#[tauri::command]
+pub async fn delete_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.delete_view(&workspace, id)).await
+}
+
+/// Puts a deleted saved view back, with its id, at an index of the list.
+#[tauri::command]
+pub async fn restore_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    view: SavedView,
+    index: usize,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| {
+        state.restore_view(&workspace, view, index)
+    })
+    .await
+}
+
+/// Moves a saved view to an index of the list. The index counts in the list as it is after the
+/// view is taken out of it; an index past the end puts the view last.
+#[tauri::command]
+pub async fn move_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+    index: usize,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.move_view(&workspace, id, index)).await
 }
 
 /// Opens a file as the import draft.
@@ -223,6 +354,17 @@ pub async fn filter_options<R: Runtime>(
     blocking(app, move |state| state.filter_options(&spec, &view)).await
 }
 
+/// The label of every value of `spec`'s field entries, as the picker labels it, when `view` is
+/// the view in the state.
+#[tauri::command]
+pub async fn filter_labels<R: Runtime>(
+    app: AppHandle<R>,
+    spec: FilterSpec,
+    view: ViewRef,
+) -> Result<Vec<FilterLabel>, CommandError> {
+    blocking(app, move |state| state.filter_labels(&spec, &view)).await
+}
+
 /// The values of one dimension a picker offers, when `view` is the view in the state.
 #[tauri::command]
 pub async fn filter_values<R: Runtime>(
@@ -236,6 +378,16 @@ pub async fn filter_values<R: Runtime>(
         state.filter_values(&spec, &dim, &search, &view)
     })
     .await
+}
+
+/// What `query` finds in the snapshot in view, when `view` is the view in the state.
+#[tauri::command]
+pub async fn search<R: Runtime>(
+    app: AppHandle<R>,
+    view: ViewRef,
+    query: String,
+) -> Result<SearchResults, CommandError> {
+    blocking(app, move |state| state.search(&query, &view)).await
 }
 
 /// A page of Lines, when `view` is the view in the state.
@@ -468,7 +620,7 @@ fn cannot_open(path: &Path, error: &tauri_plugin_opener::Error) -> CommandError 
         |name| name.to_string_lossy().into_owned(),
     );
     CommandError::new(
-        "Open",
+        ErrorKind::Open,
         format!(
             "Hold Explorer could not open {file}: {error}. The system may have no program for this kind of file; open it from its folder."
         ),
@@ -487,7 +639,7 @@ mod tests {
     use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
     use tempfile::TempDir;
 
-    use crate::app::{AppState, ExportPhase};
+    use crate::app::{AppState, ErrorKind, ExportPhase};
 
     const COMMAND_MAP: &str = include_str!("../../ui/src/api/commands.ts");
     const LIB: &str = include_str!("lib.rs");
@@ -595,12 +747,17 @@ mod tests {
                 // Nothing is open yet.
                 ("blocker_detail", "NoWorkspace"),
                 ("breakdown", "NoWorkspace"),
+                // The folder of the fixture is not a full path.
+                ("check_workspace_folder", "FolderNotAbsolute"),
+                // Nothing is open yet.
+                ("delete_view", "NoWorkspace"),
                 ("demo_create", "Ok"),
                 // The view of the fixture is not the demo workspace.
                 ("export_copy", "ViewChanged"),
                 // The app wrote no file yet.
                 ("export_open", "NotWritten"),
                 ("export_save", "ViewChanged"),
+                ("filter_labels", "ViewChanged"),
                 ("filter_options", "ViewChanged"),
                 ("filter_values", "ViewChanged"),
                 ("group_detail", "ViewChanged"),
@@ -618,7 +775,17 @@ mod tests {
                 ("line_detail", "ViewChanged"),
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
+                // The workspace of the fixture is not the open one.
+                ("move_view", "ViewChanged"),
                 ("overview", "ViewChanged"),
+                ("rename_view", "ViewChanged"),
+                ("restore_view", "ViewChanged"),
+                ("save_view", "ViewChanged"),
+                ("search", "ViewChanged"),
+                // The folder of the fixture is not a full path.
+                ("set_workspace_folder", "FolderNotAbsolute"),
+                ("settings_set_author_name", "Ok"),
+                ("settings_set_density", "Ok"),
                 ("settings_set_theme", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),
@@ -636,6 +803,61 @@ mod tests {
         let state = harness.app.state::<Mutex<AppState>>();
         let state = state.lock().unwrap();
         assert_eq!(state.settings().theme, crate::app::Theme::Light);
+    }
+
+    #[test]
+    fn the_view_commands_read_their_arguments_and_act_on_the_open_workspace() {
+        let harness = Harness::new();
+        let args = command_args();
+        let open = harness.invoke("demo_create", &args["demo_create"]).unwrap();
+        let workspace = open["workspace"]["id"].as_str().unwrap().to_string();
+        assert_eq!(open["views"], serde_json::json!([]));
+
+        // Ids 1 and 2 are issued first, so that the fixture's id 3 is one that was.
+        for (n, name) in ["One", "Two"].into_iter().enumerate() {
+            let mut filler = args["save_view"].clone();
+            filler["workspace"] = workspace.clone().into();
+            filler["name"] = name.into();
+            let listed = harness.invoke("save_view", &filler).unwrap();
+            assert_eq!(listed[n]["id"], n + 1);
+        }
+        let mut save = args["save_view"].clone();
+        save["workspace"] = workspace.clone().into();
+        let saved = harness.invoke("save_view", &save).unwrap();
+        assert_eq!(saved[2]["id"], 3);
+        assert_eq!(saved[2]["name"], "Old valve holds");
+        assert_eq!(saved[2]["address"], "/lines?mode=holds&sort=age");
+        assert_eq!(saved[2]["filters"]["text"], "valve");
+
+        let rename = serde_json::json!({"workspace": workspace, "id": 3, "name": "Stale"});
+        let renamed = harness.invoke("rename_view", &rename).unwrap();
+        assert_eq!(renamed[2]["name"], "Stale");
+
+        let delete = serde_json::json!({"workspace": workspace, "id": 3});
+        assert_eq!(
+            harness
+                .invoke("delete_view", &delete)
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let mut restore = args["restore_view"].clone();
+        restore["workspace"] = workspace.clone().into();
+        let restored = harness.invoke("restore_view", &restore).unwrap();
+        assert_eq!(restored[1]["id"], 3);
+        let moved = harness
+            .invoke(
+                "move_view",
+                &serde_json::json!({"workspace": workspace, "id": 3, "index": 0}),
+            )
+            .unwrap();
+        assert_eq!(moved[0]["id"], 3);
+
+        // A refusal arrives with its kind.
+        let error = harness.invoke("save_view", &save).unwrap_err();
+        assert_eq!(error["kind"], "ViewNameTaken");
     }
 
     #[test]
@@ -696,40 +918,172 @@ mod tests {
         assert!(error.is_string(), "{error}");
     }
 
-    #[test]
-    fn after_a_panic_under_the_lock_every_command_answers_internal_and_none_panics() {
-        let harness = Harness::new();
-        let poisoned = {
-            let state = harness.app.state::<Mutex<AppState>>();
-            let mutex: &Mutex<AppState> = state.inner();
-            std::thread::scope(|scope| {
-                scope
-                    .spawn(|| {
-                        let _guard = mutex.lock().unwrap();
-                        panic!("a command panics while it holds the state");
-                    })
-                    .join()
-            })
-        };
-        assert!(poisoned.is_err(), "the thread panicked under the lock");
+    /// Panics on another thread while it holds the state lock, which leaves the lock poisoned.
+    fn poison(harness: &Harness) {
+        let state = harness.app.state::<Mutex<AppState>>();
+        let mutex: &Mutex<AppState> = state.inner();
+        let panicked = std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let _guard = mutex.lock().unwrap();
+                    panic!("a command panics while it holds the state");
+                })
+                .join()
+        });
+        assert!(panicked.is_err(), "the thread panicked under the lock");
+        assert!(mutex.is_poisoned());
+    }
 
+    /// The arguments of the fixture's `name`, with `view` as the view.
+    fn args_in_view(name: &str, view: &Value) -> Value {
+        let mut args = command_args()[name].clone();
+        args["view"] = view.clone();
+        args
+    }
+
+    #[test]
+    fn after_a_panic_under_the_lock_no_command_panics_or_asks_for_a_restart() {
+        let harness = Harness::new();
         for (command, args) in command_args() {
-            let error = harness
-                .invoke(&command, &args)
-                .expect_err("no command answers from a state that cannot be trusted");
-            assert_eq!(error["kind"], "Internal", "{command}: {error}");
-            // The words only the handling of a poisoned lock uses: the answer for a state that
-            // is missing, and the one for a task that died, say to restart as well.
-            let message = error["message"].as_str().unwrap_or_default();
-            assert!(
-                message.starts_with("An earlier operation failed part-way"),
-                "{command}: {message}"
-            );
-            assert!(
-                message.contains("Restart Hold Explorer"),
-                "{command}: {message}"
-            );
+            poison(&harness);
+            match harness.invoke(&command, &args) {
+                Ok(_) => {}
+                Err(error) => {
+                    let message = error["message"]
+                        .as_str()
+                        .unwrap_or_else(|| panic!("{command} failed with {error}"));
+                    assert!(error["kind"].is_string(), "{command}: {error}");
+                    assert!(!message.contains("Restart"), "{command}: {message}");
+                }
+            }
+            let state = harness.app.state::<Mutex<AppState>>();
+            assert!(!state.is_poisoned(), "{command} left the lock poisoned");
         }
+    }
+
+    #[test]
+    fn a_command_whose_work_panics_answers_internal_and_the_next_needs_no_restart() {
+        let harness = Harness::new();
+        demo_view(&harness);
+        let error = tauri::async_runtime::block_on(super::blocking(
+            harness.app.handle().clone(),
+            |_| -> Result<(), crate::app::CommandError> {
+                panic!("the work of a command panics");
+            },
+        ))
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Internal);
+        assert_eq!(
+            error.message,
+            "An operation failed part-way, so what it was doing may not have been saved. Check, then try again; if it happens again, report it."
+        );
+        assert!(harness.app.state::<Mutex<AppState>>().is_poisoned());
+
+        let start = harness
+            .invoke("app_start", &serde_json::json!({}))
+            .expect("the page starts again without a restart");
+        let view = serde_json::json!({
+            "workspace_id": start["open"]["workspace"]["id"],
+            "snapshot_id": start["open"]["selected"],
+        });
+        assert!(view["workspace_id"].is_string(), "{start}");
+        harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .expect("the data of the reopened workspace is read");
+    }
+
+    #[test]
+    fn after_a_panic_the_workspace_is_reopened_and_the_draft_dropped() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let config = hx_synth::SynthConfig::new(7, 10, 60);
+        let file = harness._dir.path().join("holds.xlsx");
+        hx_synth::write_workbook(&hx_synth::generate(&config), &config, &file).unwrap();
+        harness
+            .invoke("import_open", &serde_json::json!({ "path": file }))
+            .expect("the file opens as the draft");
+        poison(&harness);
+
+        // The view the page holds is still the one in the state.
+        harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .expect("the data of the reopened workspace is read");
+        let current = harness
+            .invoke("workspace_current", &serde_json::json!({}))
+            .unwrap();
+        assert_eq!(current["workspace"]["id"], view["workspace_id"]);
+        assert_eq!(current["selected"], view["snapshot_id"]);
+        assert_eq!(
+            harness.outcome("import_review", &serde_json::json!({ "fields": null })),
+            "NoDraft"
+        );
+    }
+
+    #[test]
+    fn a_reopen_that_fails_after_a_panic_is_the_answer_and_leaves_no_workspace_open() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let list = harness
+            .invoke("workspace_list", &serde_json::json!({}))
+            .unwrap();
+        let folder = std::path::PathBuf::from(list["folder"].as_str().unwrap());
+        let id = view["workspace_id"].as_str().unwrap();
+        let file = folder.join(format!("{id}.holdx-ws"));
+        assert!(file.is_file());
+        std::fs::write(&file, "not a workspace").unwrap();
+        poison(&harness);
+
+        let error = harness
+            .invoke("overview", &args_in_view("overview", &view))
+            .unwrap_err();
+        assert_eq!(error["kind"], "NotAWorkspace", "{error}");
+        let message = error["message"].as_str().unwrap_or_default();
+        assert!(
+            message.starts_with(
+                "After an operation failed part-way, the workspace could not be reopened: "
+            ),
+            "{message}"
+        );
+        assert!(message.contains(&format!("{id}.holdx-ws")), "{message}");
+        // The lock is whole again, and nothing is open.
+        assert_eq!(
+            harness
+                .invoke("workspace_current", &serde_json::json!({}))
+                .unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            harness.outcome("overview", &args_in_view("overview", &view)),
+            "NoWorkspace"
+        );
+    }
+
+    #[test]
+    fn app_start_after_a_panic_starts_over_when_the_workspace_cannot_be_reopened() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let list = harness
+            .invoke("workspace_list", &serde_json::json!({}))
+            .unwrap();
+        let folder = std::path::PathBuf::from(list["folder"].as_str().unwrap());
+        let id = view["workspace_id"].as_str().unwrap();
+        // A newer schema: a file the listing still names, as one it cannot read.
+        rusqlite::Connection::open(folder.join(format!("{id}.holdx-ws")))
+            .unwrap()
+            .execute_batch("PRAGMA user_version = 99")
+            .unwrap();
+        poison(&harness);
+
+        // The start rebuilds the state itself: the failed reopen is not its answer, and the
+        // workspace that cannot be read is listed as such.
+        let start = harness
+            .invoke("app_start", &serde_json::json!({}))
+            .expect("the page starts although the workspace cannot be reopened");
+        assert_eq!(start["open"], Value::Null, "{start}");
+        let unreadable = start["list"]["unreadable"].as_array().unwrap();
+        assert_eq!(unreadable.len(), 1, "{start}");
+        assert_eq!(unreadable[0]["kind"], "NewerSchema");
+        assert!(!harness.app.state::<Mutex<AppState>>().is_poisoned());
     }
 
     /// Opens the demo workspace and returns the view the interface then shows, as JSON.
@@ -820,7 +1174,7 @@ mod tests {
             hx_export::write_file,
         ))
         .unwrap_err();
-        assert_eq!(error.kind, "Extension");
+        assert_eq!(error.kind, ErrorKind::Extension);
         assert!(heard.lock().unwrap().is_empty());
         assert!(!path.exists());
     }
@@ -842,7 +1196,7 @@ mod tests {
             hx_export::write_file,
         ))
         .unwrap_err();
-        assert_eq!(error.kind, "Folder");
+        assert_eq!(error.kind, ErrorKind::Folder);
         let state = harness.app.state::<Mutex<AppState>>();
         assert!(!state.lock().unwrap().has_written(&path));
     }

@@ -727,14 +727,19 @@ fn blockers_have_the_steps_of_the_solve_order() {
         &request(Screen::Blockers, &[], RowScope::All, spec.clone()),
     );
     assert_eq!(ids(&sheet), BLOCKER_COLUMNS.to_vec());
+    // The blocker names the rows and comes first; the step is an ordinary column after it.
+    assert_eq!(sheet.columns[0].id, "blocker");
+    assert_eq!(sheet.columns[0].header, "file.column.blockers.blocker");
+    assert_eq!(sheet.columns[1].id, "step");
+    assert_eq!(sheet.columns[1].header, "file.column.blockers.step");
     let view = solve_view(&plan_of(ds, &spec).unwrap());
     let want: Vec<Vec<Cell>> = view
         .rows
         .iter()
         .map(|r| {
             vec![
-                Cell::Count(r.step),
                 Cell::Text(r.label.clone()),
+                Cell::Count(r.step),
                 Cell::Text(r.kind.clone()),
                 Cell::Text(r.discipline.clone()),
                 Cell::Count(r.holds),
@@ -744,6 +749,11 @@ fn blockers_have_the_steps_of_the_solve_order() {
         })
         .collect();
     assert_eq!(sheet.rows, want);
+    // A blocker of a blank remark is written "(blank)", never with the dash of the import.
+    assert!(sheet
+        .rows
+        .iter()
+        .all(|r| !matches!(&r[0], Cell::Text(t) if t.ends_with(" / —"))));
     let picked = one(
         ds,
         &request(
@@ -1626,4 +1636,25 @@ fn the_summary_names_the_age_of_a_stale_hold_from_the_threshold() {
         last.as_deref(),
         Some(format!("Holds open for {STALE_DAYS} days or more").as_str())
     );
+}
+
+#[test]
+fn a_blocker_of_a_blank_remark_is_written_blank_in_the_blockers_sheet() {
+    let hold = |line: &str, remark: &str| hx_core::model::Hold {
+        line_id: line.to_string(),
+        discipline: "Piping".to_string(),
+        remark: remark.to_string(),
+        created: Some(full().snapshot - chrono::Duration::days(5)),
+        ..Default::default()
+    };
+    let ds = Dataset::build(
+        vec![hold("A", ""), hold("B", "   ")],
+        RuleSet::builtin(),
+        full().snapshot,
+    );
+    let sheet = one(
+        &ds,
+        &request(Screen::Blockers, &[], RowScope::All, status(Status::Open)),
+    );
+    assert_eq!(sheet.rows[0][0], Cell::Text("Piping / (blank)".to_string()));
 }

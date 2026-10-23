@@ -190,4 +190,20 @@ mod tests {
         assert!(dump.contains(&info.file_name));
         assert!(!dump.contains(&info.imported_at.format("%Y-%m-%dT%H:%M:%S").to_string()));
     }
+
+    #[test]
+    fn saved_views_are_not_part_of_the_dump() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = four(dir.path());
+        let mut ws = imported(dir.path(), "views", &files, &[0, 1]);
+        let before = logical_dump(&ws).unwrap();
+        ws.set_saved_views(&[crate::SavedView {
+            id: 1,
+            name: "A".into(),
+            address: "/lines".into(),
+            filters: hx_core::filter::FilterSpec::default(),
+        }])
+        .unwrap();
+        assert_eq!(logical_dump(&ws).unwrap(), before);
+    }
 }

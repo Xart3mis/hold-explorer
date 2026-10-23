@@ -7,7 +7,15 @@ export type StoreError = { "kind": "NotAWorkspace",
 /**
  * The file that was opened.
  */
-path: string, } | { "kind": "NewerSchema", 
+path: string, } | { "kind": "NotADatabase", 
+/**
+ * The file that was opened.
+ */
+path: string, } | { "kind": "DuplicateWorkspace", 
+/**
+ * The name of the file in the same folder that is listed as the workspace.
+ */
+original: string, } | { "kind": "NewerSchema", 
 /**
  * The workspace file.
  */

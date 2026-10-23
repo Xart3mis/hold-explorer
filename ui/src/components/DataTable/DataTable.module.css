@@ -235,6 +235,28 @@
   white-space: nowrap;
 }
 
+/*
+ * The open row among two or more selected rows has a small dot at the start of its first cell, on
+ * top of its deeper tint. It is drawn over the cell's padding, centered between the cell's edge
+ * and its text, and out of the flow, so no column and no text moves. It is the accent ink and not
+ * the accent fill: the fill has too little contrast on the deeper tint in the dark theme.
+ */
+.cell:has(> .openMark) {
+  position: relative;
+}
+
+.openMark {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: calc((var(--density-cell-padding-x) - var(--size-open-mark)) / 2);
+  inline-size: var(--size-open-mark);
+  block-size: var(--size-open-mark);
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-text);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
 .cell[data-kind="number"] {
   font-variant-numeric: var(--font-numeric-tabular);
   text-align: end;

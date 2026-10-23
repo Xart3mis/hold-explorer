@@ -34,6 +34,17 @@
   margin-inline-start: calc(-1 * (var(--menu-trigger-lead) + var(--border-width-thin)));
 }
 
+/* Secondary: an outline, like a secondary button, and the text of one. */
+.trigger[data-variant="secondary"] {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.trigger[data-variant="secondary"][data-unavailable] {
+  border-color: var(--color-border-default);
+  color: var(--color-text-muted);
+}
+
 /* A long value is cut at the end; the button never grows past the room it is given. */
 .triggerLabel {
   min-inline-size: 0;

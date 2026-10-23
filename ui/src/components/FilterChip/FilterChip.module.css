@@ -111,25 +111,28 @@
 }
 
 /*
- * A filter that is kept but not applied, for the snapshot in view lacks its column: the muted
- * look of a disabled chip, still pressable and removable, with a small icon before the field.
+ * A filter that is kept but not applied, for the snapshot in view lacks its column: the look of a
+ * disabled chip in its fill, but with the full ink of an active one so it reads, and a dashed
+ * outline in the strong border of a control that says it is not applied. Still pressable and
+ * removable, with a small icon before the field.
  */
 .chip[data-inactive] {
-  border-color: var(--color-border-default);
+  border-style: dashed;
+  border-color: var(--color-border-strong);
   background-color: var(--color-surface-disabled);
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 
 .chip[data-inactive] .field,
 .chip[data-inactive] .remove {
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 
 .inactive {
   display: inline-flex;
   flex: none;
   margin-inline-end: var(--space-1);
-  color: var(--color-text-muted);
+  color: var(--color-text-primary);
 }
 
 /* A mark of an answer for the filters or the view of before, as the total is while it is read. */

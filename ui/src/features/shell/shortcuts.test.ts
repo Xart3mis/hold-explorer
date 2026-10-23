@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
-import { IN_PAGE_ATTRIBUTE } from "../../components";
+import { IN_PAGE_ATTRIBUTE, TABLE_KEYS } from "../../components";
 import {
   ariaKeyShortcuts,
   formatShortcut,
@@ -8,6 +10,14 @@ import {
   EXPORT_SHORTCUT,
   IMPORT_SHORTCUT,
   matchesShortcut,
+  MODAL_ATTRIBUTE,
+  PALETTE_SHORTCUT,
+  exportShortcutBindings,
+  pageShortcutBindings,
+  paletteShortcutBindings,
+  SEARCH_SHORTCUT,
+  SHEET_SHORTCUT,
+  SHORTCUTS,
   shortcutBindings,
 } from "./shortcuts";
 
@@ -232,6 +242,74 @@ describe("a shortcut that belongs to the page", () => {
   });
 });
 
+describe("a shortcut that fires from anywhere", () => {
+  it("is Ctrl+K for the command palette", () => {
+    expect(PALETTE_SHORTCUT).toBe("Ctrl+K");
+  });
+
+  it("fires in a text field", () => {
+    const run = vi.fn();
+    const field = document.createElement("input");
+    const event = key({ key: "k", ctrlKey: true }, field);
+    expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+      true,
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it.each(["menu", "listbox", "dialog"])("fires while a %s is open", (role) => {
+    const run = vi.fn();
+    const overlay = document.createElement("div");
+    overlay.setAttribute("role", role);
+    document.body.append(overlay);
+    try {
+      const event = key({ key: "k", ctrlKey: true });
+      expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+        true,
+      );
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      overlay.remove();
+    }
+  });
+
+  it("is the only one that fires while a modal is open", () => {
+    const toggle = vi.fn();
+    const other = vi.fn();
+    const modal = document.createElement("div");
+    modal.setAttribute(MODAL_ATTRIBUTE, "");
+    document.body.append(modal);
+    const bindings = [
+      { shortcut: "Ctrl+I", run: other },
+      { shortcut: "Ctrl+E", run: other, isPageOnly: true },
+      { shortcut: PALETTE_SHORTCUT, run: toggle, isAnywhere: true },
+    ];
+    try {
+      const blocked = key({ key: "i", ctrlKey: true });
+      expect(handleShortcut(blocked, bindings)).toBe(false);
+      expect(blocked.defaultPrevented).toBe(false);
+      expect(handleShortcut(key({ key: "e", ctrlKey: true }), bindings)).toBe(false);
+      expect(other).not.toHaveBeenCalled();
+      expect(handleShortcut(key({ key: "k", ctrlKey: true }), bindings)).toBe(true);
+      expect(toggle).toHaveBeenCalledTimes(1);
+    } finally {
+      modal.remove();
+    }
+    expect(handleShortcut(key({ key: "i", ctrlKey: true }), bindings)).toBe(true);
+    expect(other).toHaveBeenCalledTimes(1);
+  });
+
+  it("is still left alone when held down", () => {
+    const run = vi.fn();
+    const event = key({ key: "k", ctrlKey: true, repeat: true });
+    expect(handleShortcut(event, [{ shortcut: PALETTE_SHORTCUT, run, isAnywhere: true }])).toBe(
+      false,
+    );
+    expect(run).not.toHaveBeenCalled();
+  });
+});
+
 describe("how a shortcut is written", () => {
   it("is shown with the key names of the text catalog", () => {
     expect(formatShortcut("Ctrl+1")).toBe("Ctrl+1");
@@ -243,5 +321,159 @@ describe("how a shortcut is written", () => {
     expect(ariaKeyShortcuts("Ctrl+1")).toBe("Control+1");
     expect(ariaKeyShortcuts("Ctrl+I")).toBe("Control+I");
     expect(ariaKeyShortcuts("Ctrl+,")).toBe("Control+,");
+  });
+});
+
+describe("the character ?", () => {
+  it("is matched by the character typed, with Shift as a US layout types it", () => {
+    expect(matchesShortcut(key({ key: "?", shiftKey: true }), SHEET_SHORTCUT)).toBe(true);
+    // A layout that types the question mark without Shift, or a test that omits it.
+    expect(matchesShortcut(key({ key: "?" }), SHEET_SHORTCUT)).toBe(true);
+    // The key of the slash without Shift types the slash: it is the search shortcut's.
+    expect(matchesShortcut(key({ key: "/" }), SHEET_SHORTCUT)).toBe(false);
+    expect(matchesShortcut(key({ key: "?", shiftKey: true }), SEARCH_SHORTCUT)).toBe(false);
+    expect(matchesShortcut(key({ key: "?", shiftKey: true, ctrlKey: true }), SHEET_SHORTCUT)).toBe(
+      false,
+    );
+  });
+});
+
+describe("the character /", () => {
+  it("is matched by the character typed, with Shift as a layout that types it with Shift does", () => {
+    expect(matchesShortcut(key({ key: "/" }), SEARCH_SHORTCUT)).toBe(true);
+    expect(matchesShortcut(key({ key: "/", shiftKey: true }), SEARCH_SHORTCUT)).toBe(true);
+    expect(matchesShortcut(key({ key: "/", ctrlKey: true }), SEARCH_SHORTCUT)).toBe(false);
+  });
+});
+
+describe("a binding that does not act", () => {
+  it("leaves the key to the page when it says so", () => {
+    const run = vi.fn(() => false);
+    const event = key({ key: "/" });
+    handleShortcut(event, [{ shortcut: "/", isPageOnly: true, run }]);
+    expect(run).toHaveBeenCalledOnce();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("keeps the key from the page when it acts", () => {
+    const event = key({ key: "/" });
+    handleShortcut(event, [{ shortcut: "/", isPageOnly: true, run: () => true }]);
+    expect(event.defaultPrevented).toBe(true);
+  });
+});
+
+describe("the shortcuts of the page, under an overlay", () => {
+  const bindings = pageShortcutBindings({ focusSearch: () => true, openSheet: vi.fn() });
+
+  it("hold back under a menu", () => {
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.append(menu);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }), bindings)).toBe(false);
+      expect(handleShortcut(key({ key: "/" }), bindings)).toBe(false);
+    } finally {
+      menu.remove();
+    }
+  });
+
+  it("hold back under a modal", () => {
+    const modal = document.createElement("div");
+    modal.setAttribute(MODAL_ATTRIBUTE, "");
+    document.body.append(modal);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }), bindings)).toBe(false);
+      expect(handleShortcut(key({ key: "/" }), bindings)).toBe(false);
+    } finally {
+      modal.remove();
+    }
+  });
+
+  it("hold back in a text field", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }, input), bindings)).toBe(false);
+    } finally {
+      input.remove();
+    }
+  });
+
+  it("fire on the page", () => {
+    const openSheet = vi.fn();
+    const page = pageShortcutBindings({ focusSearch: () => true, openSheet });
+    expect(handleShortcut(key({ key: "?", shiftKey: true }), page)).toBe(true);
+    expect(openSheet).toHaveBeenCalledOnce();
+  });
+});
+
+describe("SHORTCUTS", () => {
+  const listed = (group: string) =>
+    SHORTCUTS.filter((entry) => entry.group === group).map((entry) => entry.shortcut);
+
+  /** Every binding the shell registers, from the functions that build each hook's list. */
+  const registered = [
+    ...shortcutBindings(destinations, { open: vi.fn(), startImport: vi.fn(), hasWorkspace: true }),
+    ...exportShortcutBindings(true, vi.fn()),
+    ...paletteShortcutBindings(vi.fn()),
+    ...pageShortcutBindings({ focusSearch: () => true, openSheet: vi.fn() }),
+  ].map((binding) => binding.shortcut);
+
+  it("has an entry for every binding the shell registers", () => {
+    expect(registered.length).toBeGreaterThan(10);
+    const all = SHORTCUTS.map((entry) => entry.shortcut);
+    for (const shortcut of registered) expect(all).toContain(shortcut);
+  });
+
+  it("has a binding for every entry outside Tables and Esc", () => {
+    for (const entry of SHORTCUTS) {
+      if (entry.group === "tables" || entry.shortcut === "Esc") continue;
+      expect(registered, entry.shortcut).toContain(entry.shortcut);
+    }
+  });
+
+  it("lists exactly the keys of TABLE_KEYS in the Tables group", () => {
+    expect(listed("tables")).toEqual(TABLE_KEYS.map((tableKey) => tableKey.shortcut));
+  });
+
+  it('has in TABLE_KEYS exactly the keys DESIGN.md "Table" names, each in its words', () => {
+    const design = readFileSync(join(__dirname, "../../../../DESIGN.md"), "utf8");
+    const start = design.indexOf("\n### Table\n");
+    const end = design.indexOf("\n### ", start + 1);
+    const table = design.slice(start, end);
+    // What the section says for each key, as the words of the section have it.
+    const named: Record<string, RegExp> = {
+      Up: /Arrow keys move/,
+      Down: /Arrow keys move/,
+      Left: /Left collapses/,
+      Right: /Right expands/,
+      "Page Up": /Page Up and Page Down/,
+      "Page Down": /Page Up and Page Down/,
+      Home: /Home and End/,
+      End: /Home and End/,
+      Enter: /Enter opens the focused row/,
+      "Ctrl+Enter": /Ctrl\+Enter and Shift\+Enter/,
+      "Shift+Enter": /Ctrl\+Enter and Shift\+Enter/,
+      Esc: /Esc clears the selection/,
+      "Ctrl+Click": /Ctrl and a press adds the row/,
+      "Shift+Click": /Shift and a press selects/,
+      "Shift+Up": /Shift\+Up and Shift\+Down/,
+      "Shift+Down": /Shift\+Up and Shift\+Down/,
+      "Ctrl+A": /Ctrl\+A selects every row/,
+      "Ctrl+Space": /Ctrl\+Space adds/,
+      "Shift+Space": /Shift\+Space selects/,
+    };
+    expect(TABLE_KEYS.map((tableKey) => tableKey.shortcut).sort()).toEqual(
+      Object.keys(named).sort(),
+    );
+    for (const [shortcut, words] of Object.entries(named)) {
+      expect(table, shortcut).toMatch(words);
+    }
+  });
+
+  it("names a group for every entry", () => {
+    const groups = new Set(["go", "actions", "tables", "panel"]);
+    for (const entry of SHORTCUTS) expect(groups.has(entry.group)).toBe(true);
+    expect(listed("panel")).toContain("Esc");
   });
 });

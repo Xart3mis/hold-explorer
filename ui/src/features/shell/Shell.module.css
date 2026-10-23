@@ -73,6 +73,11 @@
   margin-inline-start: auto;
 }
 
+/* The slot a page puts its Export menu in; the menu lays out as a control of the bar itself. */
+.exportSlot {
+  display: contents;
+}
+
 .topNav {
   display: flex;
   gap: var(--space-0-5);

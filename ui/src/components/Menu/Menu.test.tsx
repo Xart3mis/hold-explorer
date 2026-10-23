@@ -3,7 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
 import { SLOW } from "../../test/slow";
-import { MenuButton, MenuItem, MenuSection, MenuSeparator, MenuSubmenu } from "./Menu";
+import { Ellipsis } from "lucide-react";
+import {
+  IconMenuButton,
+  MenuButton,
+  MenuItem,
+  MenuSection,
+  MenuSeparator,
+  MenuSubmenu,
+} from "./Menu";
 
 function Sample({
   onAction = () => undefined,
@@ -370,4 +378,69 @@ describe("MenuSubmenu", () => {
     await screen.findByRole("menu", { name: "Chart as PNG" });
     await expectAccessible();
   });
+});
+
+describe("IconMenuButton", () => {
+  function renderIconMenu(onAction: (id: string) => void, onOpenChange = vi.fn()) {
+    render(
+      <IconMenuButton icon={Ellipsis} label="Actions for Civil holds" onOpenChange={onOpenChange}>
+        <MenuItem
+          id="rename"
+          onAction={() => {
+            onAction("rename");
+          }}
+        >
+          Rename
+        </MenuItem>
+        <MenuItem
+          id="delete"
+          onAction={() => {
+            onAction("delete");
+          }}
+        >
+          Delete
+        </MenuItem>
+      </IconMenuButton>,
+    );
+    return onOpenChange;
+  }
+
+  it("is an icon-only button named by its label, with the label as its tooltip on focus", async () => {
+    const user = userEvent.setup();
+    renderIconMenu(() => undefined);
+    const button = screen.getByRole("button", { name: "Actions for Civil holds" });
+    expect(button).toHaveAttribute("aria-haspopup", "true");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(button.textContent).toBe("");
+    await user.tab();
+    expect(button).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Actions for Civil holds");
+  });
+
+  it(
+    "opens its menu by the keyboard, chooses with Enter, and gives the focus back",
+    SLOW,
+    async () => {
+      const user = userEvent.setup();
+      const chosen = vi.fn();
+      const onOpenChange = renderIconMenu(chosen);
+      await user.tab();
+      await user.keyboard("{Enter}");
+      const menu = await screen.findByRole("menu", { name: "Actions for Civil holds" });
+      expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      expect(
+        screen.getByRole("button", { name: "Actions for Civil holds", hidden: true }),
+      ).toHaveAttribute("aria-expanded", "true");
+      await waitFor(() => {
+        expect(within(menu).getByRole("menuitem", { name: "Rename" })).toHaveFocus();
+      });
+      await expectAccessible();
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(chosen).toHaveBeenCalledWith("delete");
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Actions for Civil holds" })).toHaveFocus();
+      });
+    },
+  );
 });

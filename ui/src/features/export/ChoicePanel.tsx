@@ -49,7 +49,10 @@ export function screenName(screen: ExportScreen): string {
   return t(SCREEN_NAMES[screen]);
 }
 
-/** The column that names the rows of a screen: the row header of its table, first in its file. */
+/**
+ * The column that names the rows of a screen, first in its file: the row header of its table,
+ * but on Blockers the Blocker, while the row header of that table is the Step.
+ */
 export function rowNameColumn(screen: ExportScreen): string | undefined {
   return FILE_COLUMNS[screen][0];
 }

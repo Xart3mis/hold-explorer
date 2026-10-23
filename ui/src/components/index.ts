@@ -24,6 +24,7 @@ export { ChoiceGroup, type Choice, type ChoiceGroupProps } from "./ChoiceGroup/C
 export {
   childKeyOfRow,
   DataTable,
+  TABLE_KEYS,
   textChars,
   type ColumnSize,
   type DataTableChildColumn,
@@ -33,6 +34,7 @@ export {
   type DataTableProps,
   type DataTableSort,
   type LeavingColumn,
+  type TableKey,
 } from "./DataTable/DataTable";
 export {
   Disclosure,
@@ -56,11 +58,13 @@ export {
 export { Icon, type IconProps } from "./Icon/Icon";
 export { IN_PAGE_ATTRIBUTE } from "./inPage";
 export {
+  IconMenuButton,
   MenuButton,
   MenuItem,
   MenuSection,
   MenuSeparator,
   MenuSubmenu,
+  type IconMenuButtonProps,
   type MenuButtonProps,
   type MenuItemProps,
   type MenuSectionProps,

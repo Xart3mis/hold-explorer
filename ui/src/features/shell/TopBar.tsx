@@ -4,13 +4,16 @@ import { WELCOME_PATH, type Destination } from "../../app/destinations";
 import type { AppStart } from "../../bindings/AppStart";
 import { Button, Tooltip } from "../../components";
 import { t } from "../../text/i18n";
+import { ExportMenuInert } from "../export/ExportMenu";
 import { startImport } from "../import/start";
+import { SearchField } from "../search/SearchField";
 import { WorkspaceSwitcher } from "../workspaces/WorkspaceSwitcher";
 import { NavItem } from "./NavItem";
 import type { ShellProblem } from "./problem";
 import { formatShortcut, IMPORT_SHORTCUT } from "./shortcuts";
 import styles from "./Shell.module.css";
 import { SnapshotSelector } from "./SnapshotSelector";
+import { TopBarExportSlot } from "./topBarSlot";
 
 export interface TopBarProps {
   start: AppStart;
@@ -21,9 +24,12 @@ export interface TopBarProps {
 }
 
 /**
- * The top bar, left to right: the name of the app, the workspace switcher, the snapshot selector,
- * and Import. While no workspace is open there is nothing to switch and no sidebar, so the two
- * pages that exist then, Workspaces and Settings, are listed where the switcher would be.
+ * The top bar, left to right: the name of the app, the workspace switcher, the search field, the
+ * snapshot selector, Export, and Import. The search field is there while a snapshot is in view:
+ * without one there is nothing to find. The Export menu is the one the page in view puts in the slot
+ * (`TopBarExport`); a page with nothing to export leaves the unavailable button there. While no
+ * workspace is open there is nothing to switch and no sidebar, so the two pages that exist then,
+ * Workspaces and Settings, are listed where the switcher would be.
  */
 export function TopBar({ start, destinations, renameErrorId, onProblem }: TopBarProps) {
   const { pathname } = useLocation();
@@ -67,8 +73,13 @@ export function TopBar({ start, destinations, renameErrorId, onProblem }: TopBar
           />
         )}
       </div>
+      {start.open?.selected == null ? null : (
+        // Drawn anew for each view, so nothing typed or found for the snapshot before stays.
+        <SearchField key={`${start.open.workspace.id}:${String(start.open.selected)}`} />
+      )}
       <div className={styles.topbarEnd}>
         {start.open === null ? null : <SnapshotSelector open={start.open} onProblem={onProblem} />}
+        <TopBarExportSlot fallback={<ExportMenuInert description={t("export.menu.notHere")} />} />
         <Tooltip text={t("shell.import")} shortcut={formatShortcut(IMPORT_SHORTCUT)}>
           <Button
             variant="primary"

@@ -115,24 +115,25 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/commands";
-import { isCommandError } from "../api/error";
+import { isCommandError, type AppError, type InterfaceKind } from "../api/error";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
-import type { CommandError } from "../bindings/CommandError";
+import type { ErrorKind } from "../bindings/ErrorKind";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { t } from "../text/i18n";
-import { listed } from "./actions/start";
+import type { FolderChange } from "./actions/folder";
+import { keepNewerViews, listed, viewsAnswered } from "./actions/start";
 import { useShell, type ShellNotice } from "./shell/context";
 
 /** The kind of the error a data command answers with when it is asked for a view the Rust side does not hold. */
-export const VIEW_CHANGED = "ViewChanged";
+export const VIEW_CHANGED: ErrorKind = "ViewChanged";
 
 /**
  * The kind of the error a screen is given when a view was refused again after the Rust side had
  * said that it holds that view. Its message is from the text catalog.
  */
-export const VIEW_UNSETTLED = "ViewUnsettled";
+export const VIEW_UNSETTLED: InterfaceKind = "ViewUnsettled";
 
 /**
  * The actions that change the open workspace or its selection share one scope: they run one after
@@ -195,7 +196,7 @@ function isViewChanged(error: unknown): boolean {
 }
 
 /** What a screen is told when the view stays refused: what happened, why, and what to do. */
-function unsettled(): Error & CommandError {
+function unsettled(): Error & AppError {
   return Object.assign(new Error(t("errors.viewUnsettled")), { kind: VIEW_UNSETTLED });
 }
 
@@ -256,6 +257,9 @@ async function readForView<Data>(
       // which workspace and snapshot are open, which changes nothing there. When that cannot be
       // had, the cached start stays as it is, untouched and not failed.
       const asked = lastAction(client);
+      // A list of saved views a view command answers after this is newer than the one this
+      // answer holds, which the Rust side may have read before it.
+      const views = viewsAnswered();
       let held: WorkspaceOpen | null;
       try {
         held = await api.workspaceCurrent();
@@ -277,6 +281,7 @@ async function readForView<Data>(
             ? { ...start, open: null }
             : listed({ ...start, open: held }, held.workspace),
       );
+      keepNewerViews(client, views);
       if (moved) {
         notify({
           title: t("shell.viewResyncedTitle"),
@@ -301,6 +306,7 @@ export type ReadingName =
   | "overview"
   | "filterOptions"
   | "filterValues"
+  | "filterLabels"
   | "lines"
   | "holds"
   | "lineDetail"
@@ -309,7 +315,8 @@ export type ReadingName =
   | "matrix"
   | "solveOrder"
   | "blockerDetail"
-  | "groupDetail";
+  | "groupDetail"
+  | "search";
 
 /**
  * What both hooks start from: the key of a reading for the view on screen, built by `keyOf`,
@@ -592,6 +599,30 @@ export interface WorkspaceAction<Variables, Data> {
   mutationFn: (variables: Variables) => Promise<Data>;
   /** Writes what the command returned into the cached start. The action lasts until it is done. */
   onSuccess?: (data: Data, variables: Variables) => unknown;
+  /**
+   * The control the action belongs to, whichever control asked for it: the snapshot selector for
+   * a snapshot chosen in the command palette. It ends the key (`actionKey`), so that control
+   * shows the spinner while the action runs.
+   */
+  origin?: string;
+}
+
+/**
+ * The key of an action on the workspace of a kind, and of the control it belongs to when it has
+ * one. It starts with the key of its kind, so every reader of the kind still sees it.
+ */
+export function actionKey(
+  kind: WorkspaceAction<unknown, unknown>["kind"],
+  origin?: string,
+): readonly unknown[] {
+  const base = kind === "selecting" ? keys.selectingSnapshot : keys[kind];
+  return origin === undefined ? base : [...base, origin];
+}
+
+/** What an action on the workspace notes when it is sent. */
+export interface ActionSent {
+  /** How many lists of saved views the view commands had answered (`viewsAnswered`). */
+  views: number;
 }
 
 /**
@@ -600,23 +631,37 @@ export interface WorkspaceAction<Variables, Data> {
  *
  * It fixes what such an action must not be without: the scope, so the actions run one after
  * another; the key, so every reader of `useStart().isBusy` sees it and no snapshot query is
- * enabled meanwhile; and the dropping of the snapshot queries that are in flight when the action
- * is asked for, whose answers the Rust side may give for either view.
+ * enabled meanwhile; the dropping of the snapshot queries that are in flight when the action is
+ * asked for, whose answers the Rust side may give for either view; and the saved views a view
+ * command answered after the action was sent, which its answer, read earlier, must not replace.
+ * It also puts away the answer of a change of the workspaces folder that is done or failed: that
+ * record belongs to the action before.
  */
 export function workspaceAction<Variables = void, Data = unknown>(
   client: QueryClient,
-  { kind, onAsk, mutationFn, onSuccess }: WorkspaceAction<Variables, Data>,
-): UseMutationOptions<Data, Error, Variables> {
+  { kind, onAsk, mutationFn, onSuccess, origin }: WorkspaceAction<Variables, Data>,
+): UseMutationOptions<Data, Error, Variables, ActionSent> {
   return {
-    mutationKey: kind === "selecting" ? keys.selectingSnapshot : keys[kind],
+    mutationKey: actionKey(kind, origin),
     scope: WORKSPACE_SCOPE,
     mutationFn,
-    onMutate: (variables: Variables) => {
+    onMutate: async (variables: Variables) => {
+      // The answer of a change of the workspaces folder is of the action before: put away.
+      const folder = client.getQueryData<FolderChange>(keys.folderChange);
+      if (folder?.step === "done" || folder?.step === "failed") {
+        client.removeQueries({ queryKey: keys.folderChange, exact: true });
+      }
       onAsk?.(variables);
-      return client.cancelQueries({ queryKey: keys.snapshots });
+      // Taken when the action is asked for: a list of views answered after this is newer than
+      // the one the action answers with.
+      const views = viewsAnswered();
+      await client.cancelQueries({ queryKey: keys.snapshots });
+      return { views };
     },
-    ...(onSuccess === undefined
-      ? {}
-      : { onSuccess: (data: Data, variables: Variables) => onSuccess(data, variables) }),
+    onSuccess: (data: Data, variables: Variables, sent: ActionSent) => {
+      const done = onSuccess?.(data, variables);
+      keepNewerViews(client, sent.views);
+      return done;
+    },
   };
 }

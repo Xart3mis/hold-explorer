@@ -7,15 +7,10 @@ use hx_core::query::{self, ages_known, HoldQuery, HoldSort, LineQuery, LineSort}
 use hx_synth::{generate, write_workbook, SynthConfig};
 
 use super::data::FilterOptions;
-use super::snapshot_tests::{import, open_holds, view_of, Fixture};
+use super::test_support::{import, open_holds, shown, small, view_of, Fixture};
 use super::{
     AppState, ViewRef, GROUP_LINES, MATRIX_SIDE, PAGE_ROWS, PICKER_VALUES, STALE_DAYS, TOP_ITEMS,
 };
-
-/// The view the interface shows when it shows what the state holds.
-fn shown(state: &AppState) -> ViewRef {
-    view_of(&state.open_id(), state.selected_snapshot())
-}
 
 /// A file with more open holds and lines than two pages hold.
 fn big_file(fx: &Fixture) -> PathBuf {
@@ -25,26 +20,6 @@ fn big_file(fx: &Fixture) -> PathBuf {
     let path = dir.join("big.xlsx");
     write_workbook(&generate(&cfg), &cfg, &path).unwrap();
     path
-}
-
-fn csv(fx: &Fixture, name: &str, content: &str) -> PathBuf {
-    let dir = fx.dir.path().join("input");
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join(name);
-    std::fs::write(&path, content).unwrap();
-    path
-}
-
-/// A state with one workspace holding the small synthetic file.
-fn small(fx: &Fixture) -> AppState {
-    let mut state = fx.state();
-    import(
-        &mut state,
-        &fx.synth("a.xlsx", 1),
-        "2026-09-29 00:00:00",
-        true,
-    );
-    state
 }
 
 /// A state with one workspace holding the big synthetic file.
@@ -59,10 +34,11 @@ fn outcomes(state: &mut AppState, view: &ViewRef) -> Vec<String> {
     let spec = open_holds();
     let kind = |error: Result<(), super::CommandError>| match error {
         Ok(()) => "Ok".to_string(),
-        Err(error) => error.kind,
+        Err(error) => format!("{:?}", error.kind),
     };
     vec![
         kind(state.filter_options(&spec, view).map(drop)),
+        kind(state.filter_labels(&spec, view).map(drop)),
         kind(
             state
                 .filter_values(&spec, &Dim::Discipline, "", view)
@@ -94,7 +70,7 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     let mut state = fx.state();
     // Nothing is open.
     let none = view_of("0123456789abcdef", None);
-    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 11]);
+    assert_eq!(outcomes(&mut state, &none), ["NoWorkspace"; 12]);
 
     let mut state = small(&fx);
     let (workspace, snapshot) = (state.open_id(), state.selected_snapshot().unwrap());
@@ -105,12 +81,12 @@ fn every_data_command_refuses_a_view_that_is_not_in_the_state() {
     ] {
         assert_eq!(
             outcomes(&mut state, &stale),
-            ["ViewChanged"; 11],
+            ["ViewChanged"; 12],
             "{stale:?}"
         );
     }
     let view = shown(&state);
-    assert_eq!(outcomes(&mut state, &view), ["Ok"; 11]);
+    assert_eq!(outcomes(&mut state, &view), ["Ok"; 12]);
 }
 
 #[test]
@@ -188,8 +164,7 @@ fn filter_options_count_the_kept_holds_and_name_extra_columns_and_absent_fields(
 
     // Two extra columns.
     let mut state = fx.state();
-    let path = csv(
-        &fx,
+    let path = fx.text(
         "extra.csv",
         "id,line_id,hold_remark,hold_type,Zone,Area\n1,L-1,a,MISC.,Z1,A1\n2,L-2,b,MISC.,Z2,A2\n",
     );
@@ -200,8 +175,7 @@ fn filter_options_count_the_kept_holds_and_name_extra_columns_and_absent_fields(
 
     // No released and no size columns.
     let mut state = fx.state();
-    let path = csv(
-        &fx,
+    let path = fx.text(
         "limited.csv",
         "line_id,hold_remark,hold_type\nL-1,a,MISC.\nL-2,b,MISC.\n",
     );
@@ -234,6 +208,56 @@ fn filter_values_never_return_more_than_the_picker_shows_and_report_the_true_tot
         .filter_values(&spec, &Dim::LineId, "no such line anywhere", &view)
         .unwrap();
     assert_eq!((narrow.total, narrow.values.len(), narrow.more), (0, 0, 0));
+}
+
+#[test]
+fn filter_labels_give_each_value_the_label_of_the_picker() {
+    let fx = Fixture::new();
+    let mut state = big(&fx);
+    let view = shown(&state);
+    let open = FilterSpec::default();
+    for dim in [Dim::Remark, Dim::Blocker, Dim::Discipline] {
+        let page = state.filter_values(&open, &dim, "", &view).unwrap();
+        let groups = &page.values[..3];
+        let spec = FilterSpec {
+            fields: vec![FieldFilter {
+                dim: dim.clone(),
+                values: groups.iter().map(|g| g.key.clone()).collect(),
+                negate: false,
+            }],
+            ..FilterSpec::default()
+        };
+        let labels = state.filter_labels(&spec, &view).unwrap();
+        let got: Vec<(Dim, String, String)> = labels
+            .into_iter()
+            .map(|l| (l.dim, l.key, l.label))
+            .collect();
+        let expected: Vec<(Dim, String, String)> = groups
+            .iter()
+            .map(|g| (dim.clone(), g.key.clone(), g.label.clone()))
+            .collect();
+        assert_eq!(got, expected, "{dim:?}");
+        if dim != Dim::Discipline {
+            assert!(got.iter().any(|(_, key, label)| key != label), "{got:?}");
+        }
+    }
+
+    // A key the snapshot lacks answers the key itself; so does every key without a snapshot.
+    let spec = FilterSpec {
+        fields: vec![FieldFilter {
+            dim: Dim::Blocker,
+            values: vec!["Piping|NO-SUCH-ITEM".into()],
+            negate: false,
+        }],
+        ..FilterSpec::default()
+    };
+    let labels = state.filter_labels(&spec, &view).unwrap();
+    assert_eq!(labels[0].label, "Piping|NO-SUCH-ITEM");
+    let mut empty = fx.state();
+    empty.create_workspace("Empty").unwrap();
+    let view = shown(&empty);
+    let labels = empty.filter_labels(&spec, &view).unwrap();
+    assert_eq!(labels[0].label, "Piping|NO-SUCH-ITEM");
 }
 
 #[test]
@@ -279,9 +303,7 @@ fn the_extra_columns_and_absent_fields_are_found_once_per_snapshot() {
 
 /// A file with an extra column `Zone` and no discipline, role, name, dates, release, or sizes.
 fn zoned(fx: &Fixture) -> PathBuf {
-    csv(
-        fx,
-        "zoned.csv",
+    fx.text("zoned.csv",
         "line_id,hold_remark,hold_type,Zone\nL-1,Pending 538-PR-100,MISC.,Z1\nL-2,b,P&ID,Z2\nL-2,c,MISC.,Z1\n",
     )
 }

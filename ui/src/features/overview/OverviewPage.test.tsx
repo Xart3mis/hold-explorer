@@ -184,14 +184,17 @@ describe("the Overview with a snapshot", () => {
       "The snapshot of 7 Oct 2026, 08:00 has 9,300 holds, 5,042 of them open.",
     );
     expect(tile(text.openHolds)).toHaveTextContent("5,042");
-    // A destination has no breadcrumb, and the one action of this page is its Export menu.
+    // A destination has no breadcrumb, and the one action of this page, its Export menu, is in
+    // the top bar beside Import.
     expect(screen.queryByRole("navigation", { name: en.breadcrumb.label })).not.toBeInTheDocument();
     const header = must(main.querySelector("header"), "the page header");
+    expect(within(header).queryAllByRole("button")).toEqual([]);
     expect(
-      within(header)
-        .getAllByRole("button")
-        .map((button) => button.textContent),
-    ).toEqual([en.export.menu.label]);
+      within(must(document.querySelector<HTMLElement>("header"), "the top bar")).getByRole(
+        "button",
+        { name: en.export.menu.label },
+      ),
+    ).toBeInTheDocument();
     expect(document.title).toBe(
       en.app.documentTitle.replace("{{page}}", en.destinations.name.overview),
     );
@@ -860,13 +863,14 @@ describe("the Overview of a workspace without snapshots", () => {
     expect(within(main).getByText(text.emptyText)).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: text.figures })).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: text.byDiscipline })).not.toBeInTheDocument();
-    // The Export button, unavailable, and the one action; nothing else, and nothing being read.
+    // The Export button, in the top bar and unavailable, and the one action; nothing else, and
+    // nothing being read.
     expect(
       within(main)
         .getAllByRole("button")
         .map((button) => button.textContent),
-    ).toEqual(expect.arrayContaining([en.export.menu.label, text.emptyAction]));
-    expect(within(main).getByRole("button", { name: en.export.menu.label })).toHaveAttribute(
+    ).toEqual(expect.arrayContaining([text.emptyAction]));
+    expect(screen.getByRole("button", { name: en.export.menu.label })).toHaveAttribute(
       "aria-disabled",
       "true",
     );

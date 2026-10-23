@@ -1,0 +1,122 @@
+/*
+ * The shortcut sheet; DESIGN.md, "Shortcut sheet". A modal over the scrim, as the command palette
+ * is: centered across the window near its top, the title fixed and the groups scrolling inside it.
+ */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--size-palette-offset) var(--space-2) var(--space-2);
+  background-color: var(--color-scrim);
+  transition: opacity var(--duration-slow) var(--ease-out);
+}
+
+/* It arrives by a fade; it leaves at once, so the focus is where it is given back. */
+.scrim[data-entering] {
+  opacity: 0;
+}
+
+.modal {
+  display: flex;
+  inline-size: var(--size-palette-width);
+  max-inline-size: 100%;
+  max-block-size: min(var(--size-palette-max-height), 100%);
+  border: var(--border-width-thin) solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface-overlay);
+  box-shadow: var(--shadow-modal);
+  color: var(--color-text-primary);
+  transition:
+    opacity var(--duration-slow) var(--ease-out),
+    transform var(--duration-slow) var(--ease-out);
+}
+
+.modal[data-entering] {
+  opacity: 0;
+  transform: translateY(calc(-1 * var(--space-2)));
+}
+
+.dialog {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  outline: none;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--color-border-default);
+}
+
+.title {
+  margin: 0;
+  padding-inline-start: var(--space-2);
+  color: var(--color-text-primary);
+  font: var(--text-section-title);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  padding: var(--space-1);
+  overflow: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A line of caption, as tall as a row, lined up with the labels. */
+.heading {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--density-row-height);
+  margin: 0;
+  padding-inline: var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-block-size: var(--density-row-height);
+  padding-inline: var(--space-2);
+}
+
+.label {
+  min-inline-size: 0;
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* The sheet appears in place: it fades, and nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-entering] {
+    transform: none;
+  }
+}

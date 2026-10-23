@@ -16,9 +16,9 @@ use hx_store::{
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::workspaces::{list_view, WorkspaceOpen, WorkspaceView};
-use super::{describe, AppState};
+use super::{describe, describe_with_warning, AppState};
 
 /// How many rows of the file the draft previews.
 const PREVIEW_ROWS: usize = 20;
@@ -53,6 +53,9 @@ pub struct ImportDraft {
     pub missing_required: Vec<Field>,
     /// True when the workspace's saved mapping changed the automatic one.
     pub used_saved_mapping: bool,
+    /// Set when the open workspace's saved mapping could not be read: the automatic mapping is
+    /// proposed instead, and the next import's mapping replaces the damaged one.
+    pub saved_mapping_problem: Option<CommandError>,
 }
 
 /// The warnings of one kind.
@@ -184,7 +187,7 @@ pub struct ImportDone {
 
 fn no_draft() -> CommandError {
     CommandError::new(
-        "NoDraft",
+        ErrorKind::NoDraft,
         "No file is open for import. Choose a file to import, and try again.",
     )
 }
@@ -235,7 +238,7 @@ fn replace_not_offered(snapshot_id: i64, target: &TargetChoice) -> CommandError 
         TargetChoice::New { .. } => "a new workspace has no snapshot to replace",
     };
     CommandError::new(
-        "ReplaceNotOffered",
+        ErrorKind::ReplaceNotOffered,
         format!(
             "The import asked to replace snapshot {snapshot_id}, but the review did not offer that snapshot: {why}. Nothing was replaced and nothing was imported. Review the import again, then import."
         ),
@@ -272,7 +275,7 @@ fn check_year(at: NaiveDateTime) -> Result<(), CommandError> {
         return Ok(());
     }
     Err(CommandError::new(
-        "SnapshotDateOutOfRange",
+        ErrorKind::SnapshotDateOutOfRange,
         format!(
             "The snapshot date {at} is outside the years {MIN_SNAPSHOT_YEAR} to {MAX_SNAPSHOT_YEAR}. Dates outside that range are almost always a typing mistake. Enter a date between the years {MIN_SNAPSHOT_YEAR} and {MAX_SNAPSHOT_YEAR}, for example 2026-10-07."
         ),
@@ -323,13 +326,23 @@ impl AppState {
     }
 
     fn set_draft(&mut self, path: PathBuf, opened: Opened) -> Result<ImportDraft, CommandError> {
-        let (proposed, used_saved_mapping) = match self
-            .open
-            .as_ref()
-            .map(Workspace::saved_mapping)
-            .transpose()?
-            .flatten()
+        let (saved, saved_mapping_problem) = match self.open.as_ref().map(Workspace::saved_mapping)
         {
+            None | Some(Ok(None)) => (None, None),
+            Some(Ok(Some(saved))) => (Some(saved), None),
+            Some(Err(StoreError::Corrupt { detail })) => (
+                None,
+                Some(CommandError::new(
+                    ErrorKind::Corrupt,
+                    format!(
+                        "The column mapping saved in this workspace could not be read ({}), so the columns are matched as for a workspace without one. Check the mapping below; this import's mapping replaces the damaged one.",
+                        detail.trim_end_matches('.')
+                    ),
+                )),
+            ),
+            Some(Err(error)) => return Err(error.into()),
+        };
+        let (proposed, used_saved_mapping) = match saved {
             Some(saved) => {
                 let map = ColumnMap::auto_with(&opened.table.headers, &saved);
                 let changed = map != opened.auto_map;
@@ -343,6 +356,7 @@ impl AppState {
             required: Field::REQUIRED.to_vec(),
             missing_required: proposed.missing_required(),
             used_saved_mapping,
+            saved_mapping_problem,
         };
         self.draft = Some(Draft {
             path,
@@ -454,7 +468,7 @@ impl AppState {
         let hash = &draft.opened.content_hash;
         match &self.open {
             Some(open) if open.info()?.id == *id => check_workspace(open, hash, taken_at),
-            _ => check_workspace(&self.load(id)?.0, hash, taken_at),
+            _ => check_workspace(&self.find(id)?, hash, taken_at),
         }
     }
 
@@ -495,7 +509,7 @@ impl AppState {
 
         progress(ImportPhase::Checking);
         let other = match &request.target {
-            TargetChoice::Existing { id } if !self.is_open(id)? => Some(self.load(id)?.0),
+            TargetChoice::Existing { id } if !self.is_open(id)? => Some(self.find(id)?),
             _ => None,
         };
         if let Some(snapshot_id) = request.replace {
@@ -521,6 +535,8 @@ impl AppState {
         let stored = before_store().map_err(CommandError::from).and_then(|()| {
             self.store_draft(
                 &mut workspace,
+                // The workspace that was open had the damage of its views reported then.
+                !matches!(origin, Origin::Open),
                 &request.taken_at,
                 request.date_edited,
                 request.replace,
@@ -571,10 +587,12 @@ impl AppState {
         }
     }
 
-    /// Imports the reviewed draft into `workspace` and describes the workspace afterwards.
+    /// Imports the reviewed draft into `workspace` and describes the workspace afterwards, with the
+    /// damage of its saved views when `report_views` (a workspace that was not the open one).
     fn store_draft(
         &self,
         workspace: &mut Workspace,
+        report_views: bool,
         taken_at: &NaiveDateTime,
         date_edited: bool,
         replace: Option<i64>,
@@ -607,7 +625,12 @@ impl AppState {
             },
             &options,
         )?;
-        Ok((snapshot, describe(workspace)?))
+        let open = if report_views {
+            describe_with_warning(workspace)?
+        } else {
+            describe(workspace)?
+        };
+        Ok((snapshot, open))
     }
 
     /// Undoes what a failed commit did to the workspaces. Returns a sentence for the user when a

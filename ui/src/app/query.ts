@@ -63,9 +63,14 @@ queryClient.setQueryDefaults(keys.importDraft, { staleTime: Infinity, gcTime: In
 // way: both belong to the draft and go when it goes.
 queryClient.setQueryDefaults(keys.importReview, { staleTime: Infinity, gcTime: Infinity });
 queryClient.setQueryDefaults(keys.importChoices, { staleTime: Infinity, gcTime: Infinity });
+// The change of the workspaces folder is the interface's own record of where it is, written by
+// its actions, so nothing asks for it and it stays until it is put away.
+queryClient.setQueryDefaults(keys.folderChange, { staleTime: Infinity, gcTime: Infinity });
 // The filters the user has set are kept by workspace for the session. Nothing reads them from
 // anywhere else, so they are never stale and never dropped while the app runs.
 queryClient.setQueryDefaults(keys.filters, { staleTime: Infinity, gcTime: Infinity });
+// The same holds for the filters each saved view was saved or applied with, labels and all.
+queryClient.setQueryDefaults(keys.viewFilters, { staleTime: Infinity, gcTime: Infinity });
 
 /**
  * What a reader finds in the cache, read again whenever the cache changes. The cache also changes

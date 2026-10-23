@@ -14,6 +14,7 @@ import {
   Text,
 } from "react-aria-components";
 import { lengthToken } from "../../design/token-values";
+import { IconButton } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Spinner } from "../Spinner/Spinner";
@@ -52,6 +53,11 @@ export interface MenuButtonProps {
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
   /**
+   * How the button looks: `quiet` (the default) has no border; `secondary` is outlined like a
+   * secondary button, for a menu button that stands among buttons in the top bar.
+   */
+  variant?: "quiet" | "secondary";
+  /**
    * The button starts a row of content: it is moved out by its own leading padding and border,
    * so its label starts on the line of what stands above and below it.
    */
@@ -82,6 +88,7 @@ export function MenuButton({
   isUnavailable = false,
   description,
   align = "start",
+  variant = "quiet",
   isFlush = false,
   triggerRef,
   isExpanded = false,
@@ -89,7 +96,6 @@ export function MenuButton({
   className,
   ...props
 }: MenuButtonProps) {
-  const offset = lengthToken("--space-1");
   const inert = !isPending && isInert;
   const unavailable = !isPending && !inert && isUnavailable;
   // Busy means an action runs: not so for a button that is unavailable.
@@ -106,6 +112,7 @@ export function MenuButton({
         data-inert={inert ? "" : undefined}
         data-unavailable={unavailable ? "" : undefined}
         data-flush={isFlush ? "" : undefined}
+        data-variant={variant}
         className={cx(styles.trigger, className)}
         render={(domProps) => (
           <button
@@ -121,23 +128,51 @@ export function MenuButton({
         {isPending ? <Spinner /> : <Icon icon={ChevronDown} className={styles.chevron} />}
       </RacButton>
       {described ? <VisuallyHidden id={descriptionId}>{description}</VisuallyHidden> : null}
-      <Popover
+      <MenuOverlay
         placement={align === "end" ? "bottom end" : "bottom start"}
-        className={cx(styles.popover)}
-        style={{ zIndex: "var(--z-dropdown)" }}
-        {...(offset === null ? {} : { offset })}
+        label={menuLabel}
+        // The menu carries its own name. Left alone it would take the text of its button, which
+        // is a value ("Unit 573 piping") and does not say what the menu holds.
+        isNamedApart
       >
-        <RacMenu
-          aria-label={menuLabel}
-          className={cx(styles.menu)}
-          // The menu carries its own name. Left alone it would take the text of its button, which
-          // is a value ("Unit 573 piping") and does not say what the menu holds.
-          render={(domProps) => <div {...domProps} aria-labelledby={undefined} />}
-        >
-          {children}
-        </RacMenu>
-      </Popover>
+        {children}
+      </MenuOverlay>
     </MenuTrigger>
+  );
+}
+
+interface MenuOverlayProps {
+  placement: "bottom start" | "bottom end" | "end top";
+  /** The name of the menu. */
+  label: string;
+  /**
+   * The menu is named by `label` alone, not by its button: a button that shows a value would
+   * otherwise name it.
+   */
+  isNamedApart?: boolean;
+  children?: ReactNode;
+}
+
+/** The overlay of a menu button: the popover, `--space-1` from its button, and the menu in it. */
+function MenuOverlay({ placement, label, isNamedApart = false, children }: MenuOverlayProps) {
+  const offset = lengthToken("--space-1");
+  return (
+    <Popover
+      placement={placement}
+      className={cx(styles.popover)}
+      style={{ zIndex: "var(--z-dropdown)" }}
+      {...(offset === null ? {} : { offset })}
+    >
+      <RacMenu
+        aria-label={label}
+        className={cx(styles.menu)}
+        {...(isNamedApart
+          ? { render: (domProps) => <div {...domProps} aria-labelledby={undefined} /> }
+          : {})}
+      >
+        {children}
+      </RacMenu>
+    </Popover>
   );
 }
 
@@ -291,5 +326,46 @@ export function MenuSubmenu({ id, label, children }: MenuSubmenuProps) {
         </RacMenu>
       </Popover>
     </SubmenuTrigger>
+  );
+}
+
+export interface IconMenuButtonProps {
+  /** The icon that stands for what the menu holds. */
+  icon: LucideIcon;
+  /** The name of the button, its tooltip, and the name of its menu. */
+  label: string;
+  /**
+   * Where the menu opens while there is room: under the button, lined up with one of its edges,
+   * or beside it on the trailing side, its first item level with the button.
+   */
+  placement?: "bottom start" | "bottom end" | "end top";
+  /** Called when the menu opens or closes. */
+  onOpenChange?: (isOpen: boolean) => void;
+  /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. */
+  children: ReactNode;
+  className?: string | undefined;
+}
+
+/**
+ * A quiet icon-only button that opens a menu: the menu of an item of a list, where a labelled
+ * button has no room. It has the name and the tooltip of an icon button, and the menu is that of
+ * `MenuButton`, with the same keys.
+ */
+export function IconMenuButton({
+  icon,
+  label,
+  placement = "bottom start",
+  onOpenChange,
+  children,
+  className,
+}: IconMenuButtonProps) {
+  return (
+    <MenuTrigger {...(onOpenChange === undefined ? {} : { onOpenChange })}>
+      <IconButton icon={icon} label={label} className={className} />
+      {/* The menu is named by its button, whose name is the label. */}
+      <MenuOverlay placement={placement} label={label}>
+        {children}
+      </MenuOverlay>
+    </MenuTrigger>
   );
 }

@@ -196,6 +196,33 @@ describe("the list of fields", () => {
     expect(names.slice(-3)).toEqual(["Text", "Area", "Contractor"]);
   });
 
+  it("says a Remark or a Blocker known by its key alone under the label the snapshot gives it", async () => {
+    const remark = "HOLD PENDING 573-PR-1450";
+    const blocker = "Process|573-PR-1450";
+    const { user } = renderBar(() => valuePage(), {
+      filter_labels: () => [
+        { dim: "Remark", key: remark, label: "Hold pending 573-PR-1450" },
+        { dim: "Blocker", key: blocker, label: "Process / 573-PR-1450" },
+      ],
+    });
+    const region = await bar();
+    // As a saved view applied with nothing kept this session sets them: labelled by their keys.
+    set({
+      fields: [
+        { dim: "Remark", values: [value(remark)], negate: false },
+        { dim: "Blocker", values: [value(blocker)], negate: false },
+      ],
+    });
+    await within(region).findByRole("button", { name: /Hold pending 573-PR-1450/ });
+    const fields = await openFields(user, region);
+    expect(
+      within(fields).getByRole("menuitem", { name: "Hold remark" }),
+    ).toHaveAccessibleDescription("Hold pending 573-PR-1450");
+    expect(within(fields).getByRole("menuitem", { name: "Blocker" })).toHaveAccessibleDescription(
+      "Process / 573-PR-1450",
+    );
+  });
+
   it("says what a field is filtered to, and opens its editor with those values ticked", async () => {
     const { user } = renderBar();
     const region = await bar();

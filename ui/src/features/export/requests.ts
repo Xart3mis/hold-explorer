@@ -17,7 +17,8 @@ import { exportText } from "./text";
 export type ExportScreen = "overview" | "lines" | "holds" | "breakdown" | "matrix" | "blockers";
 
 /**
- * The columns each screen's file can hold, in table order, as `ui/src/api/file-columns.json`
+ * The columns each screen's file can hold, in the file's order (that of the table, but on Blockers,
+ * whose file leads with the Blocker while the row header of its table is the Step), as `ui/src/api/file-columns.json`
  * lists them for both sides. The Overview and the matrix write every column of their sheets and
  * have no choice of columns.
  */

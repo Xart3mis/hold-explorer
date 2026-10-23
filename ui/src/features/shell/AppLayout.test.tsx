@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
+import { useFilters } from "../../app/filters/state";
 import { destinationPages } from "../../app/router";
+import { useSelectedRows } from "../../app/selectedRows";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import { VIEW_CHANGED } from "../../app/view";
@@ -112,8 +115,11 @@ describe("the sidebar", () => {
   it("shows the shortcut of a destination in its tooltip", async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
-    // From the top of the document: the switcher, the selector, Import, Overview, Breakdown.
+    // From the top of the document: the switcher, the search field, the selector, Export, Import,
+    // Overview, Breakdown.
     (document.activeElement as HTMLElement | null)?.blur();
+    await user.tab();
+    await user.tab();
     await user.tab();
     await user.tab();
     await user.tab();
@@ -306,7 +312,7 @@ describe("the size of the window", () => {
 });
 
 describe("the top bar", () => {
-  it("holds the workspace switcher, the snapshot selector, and Import, in that order", async () => {
+  it("holds the workspace switcher, the snapshot selector, Export, and Import, in that order", async () => {
     renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
     const bar = topBar();
@@ -314,7 +320,7 @@ describe("the top bar", () => {
     const buttons = within(bar).getAllByRole("button");
     expect(
       buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual([switcher, "Snapshot 7 Oct 2026", en.shell.import]);
+    ).toEqual([switcher, "Snapshot 7 Oct 2026", en.export.menu.label, en.shell.import]);
     // The page title is not repeated in the top bar: the page header carries it.
     expect(within(bar).queryByText(names.overview)).not.toBeInTheDocument();
   });
@@ -363,11 +369,79 @@ describe("the top bar", () => {
   });
 });
 
+describe("a problem with the settings file", () => {
+  const setAside =
+    "Your settings file could not be read, so it was set aside as settings.json.unreadable and the defaults are in use. Choose your settings again in Settings; the old file is kept in /home/ada/.config/hold-explorer.";
+
+  it("is a warning under the top bar that stays on every page until it is dismissed", async () => {
+    const { user } = renderApp({
+      start: openStart({ settings_problem: { kind: "SettingsSetAside", message: setAside } }),
+      path: "/overview",
+    });
+    const notice = must(
+      (await screen.findByText(setAside)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(within(notice).getByText(en.shell.settingsProblem)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: names.overview })).toBeInTheDocument();
+
+    await user.click(within(await sidebar()).getByRole("link", { name: names.settings }));
+    expect(await screen.findByText(setAside)).toBeInTheDocument();
+
+    await user.click(within(notice).getByRole("button", { name: en.common.dismiss }));
+    expect(screen.queryByText(setAside)).not.toBeInTheDocument();
+  });
+
+  it("is shown when no workspace is open", async () => {
+    const message =
+      "The settings file /home/ada/.config/hold-explorer/settings.json could not be read (permission denied), so it was left where it is and the defaults are in use.";
+    renderApp({ start: startState({ settings_problem: { kind: "Settings", message } }) });
+    expect(await screen.findByText(message)).toBeInTheDocument();
+  });
+
+  it("is not shown when there is none", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await screen.findByRole("heading", { level: 1, name: names.overview });
+    expect(screen.queryByText(en.shell.settingsProblem)).not.toBeInTheDocument();
+  });
+});
+
+describe("the warning of a workspace that was opened", () => {
+  const damaged =
+    "The saved views of this workspace could not be read (the stored list is not valid JSON), so none are listed. The damaged list stays in the file until you save a view, which replaces it. Save your views again.";
+  const notice = async (message: string) =>
+    must(
+      (await screen.findByText(message)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+
+  it("says the saved views could not be read under a title of its own", async () => {
+    renderApp({
+      start: openStart({ open: opened({ warning: { kind: "Corrupt", message: damaged } }) }),
+      path: "/overview",
+    });
+    const shown = await notice(damaged);
+    expect(within(shown).getByText(en.views.damagedTitle)).toBeInTheDocument();
+    expect(within(shown).queryByText(en.workspaces.warningTitle)).not.toBeInTheDocument();
+  });
+
+  it("keeps the title that the workspace will not be reopened for a settings warning", async () => {
+    const message = `The workspace is open, but Hold Explorer could not remember it for the next start. Disk full. ${damaged}`;
+    renderApp({
+      start: openStart({ open: opened({ warning: { kind: "Settings", message } }) }),
+      path: "/overview",
+    });
+    const shown = await notice(message);
+    expect(within(shown).getByText(en.workspaces.warningTitle)).toBeInTheDocument();
+  });
+});
+
 describe("what a page reports to the shell", () => {
   const failed = {
     title: "The import of Holds_2026-10-14.xlsx did not complete",
     error: {
-      kind: "Io",
+      kind: "Io" as const,
       message:
         "The workspace file could not be written (the disk is full). Free some space, then import again.",
     },
@@ -492,6 +566,156 @@ describe("what the shell says when the view on screen was brought back in step",
     expect(current).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(en.shell.viewResyncedTitle)).not.toBeInTheDocument();
   });
+});
+
+/** A page that holds what a reset must clear (selected rows) and what it must keep (filters). */
+function ProbePage({ name }: { name: string }) {
+  const selected = useSelectedRows("probe");
+  const { filters, update } = useFilters();
+  // A sort a table holds in its own state, as the tables of the screens that do not keep it in the address.
+  const [sortedBy, setSortedBy] = useState("none");
+  return (
+    <Page title={name}>
+      <p data-testid="sorted">{sortedBy}</p>
+      <button
+        type="button"
+        onClick={() => {
+          setSortedBy("holds");
+        }}
+      >
+        sort table
+      </button>
+      <p data-testid="selected">{[...selected.keys].join(",")}</p>
+      <p data-testid="filter">{filters.text}</p>
+      <button
+        type="button"
+        onClick={() => {
+          selected.set(new Set(["a", "b"]));
+        }}
+      >
+        select rows
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          update((current) => ({ ...current, text: "valve" }));
+        }}
+      >
+        filter text
+      </button>
+    </Page>
+  );
+}
+
+function scrollArea(): HTMLElement {
+  return must(
+    screen.getByRole("main").querySelector<HTMLElement>("[class*='scroll']"),
+    "the area the page scrolls in",
+  );
+}
+
+describe("a second press on the current destination", () => {
+  const pages = {
+    ...destinationPages,
+    lines: <ProbePage name="Lines" />,
+    blockers: <ProbePage name="Blockers" />,
+  };
+
+  async function onLines(path = "/lines?mode=list&sort=holds&dir=desc&line=L-1") {
+    const app = renderApp({ start: openStart(), path, pages });
+    const nav = await sidebar();
+    await app.user.click(await screen.findByRole("button", { name: "select rows" }));
+    await app.user.click(screen.getByRole("button", { name: "filter text" }));
+    scrollArea().scrollTop = 240;
+    expect(screen.getByTestId("selected")).toHaveTextContent("a,b");
+    return { ...app, nav };
+  }
+
+  it(
+    "returns the destination to its bare address, clears its rows and its scroll, and keeps the filters",
+    SLOW,
+    async () => {
+      const { user, router, nav } = await onLines();
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      expect(router.state.location.search).toBe("");
+      await waitFor(() => {
+        expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+      });
+      expect(scrollArea().scrollTop).toBe(0);
+      expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+      // The address it will be opened at from now on is the bare one.
+      await user.click(within(nav).getByRole("link", { name: names.blockers }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      expect(within(nav).getByRole("link", { name: names.lines })).toHaveAttribute(
+        "href",
+        "/lines",
+      );
+    },
+  );
+
+  it("returns Breakdown to its bare address and drops a sort held in the page", SLOW, async () => {
+    const { user, router } = renderApp({
+      start: openStart(),
+      path: "/breakdown?by=HoldType&open=a,b&sort=holds&dir=asc",
+      pages: { ...destinationPages, breakdown: <ProbePage name="Breakdown" /> },
+    });
+    const nav = await sidebar();
+    await user.click(await screen.findByRole("button", { name: "sort table" }));
+    expect(screen.getByTestId("sorted")).toHaveTextContent("holds");
+    await user.click(within(nav).getByRole("link", { name: names.breakdown }));
+    expect(router.state.location.pathname).toBe("/breakdown");
+    expect(router.state.location.search).toBe("");
+    const params = new URLSearchParams(router.state.location.search);
+    for (const key of ["by", "open", "sort", "dir"]) expect(params.has(key)).toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId("sorted")).toHaveTextContent("none");
+    });
+  });
+
+  it("is the same for Ctrl+3 on Lines", SLOW, async () => {
+    const { user, router } = await onLines();
+    await user.keyboard("{Control>}3{/Control}");
+    expect(router.state.location.pathname).toBe("/lines");
+    expect(router.state.location.search).toBe("");
+    await waitFor(() => {
+      expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+    });
+    expect(scrollArea().scrollTop).toBe(0);
+    expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+  });
+
+  it(
+    "resets a destination whose address is already bare: its rows and its scroll",
+    SLOW,
+    async () => {
+      const { user, nav } = await onLines("/lines");
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      await waitFor(() => {
+        expect(screen.getByTestId("selected")).toBeEmptyDOMElement();
+      });
+      expect(scrollArea().scrollTop).toBe(0);
+    },
+  );
+
+  it(
+    "opens another destination at the address it was left at, and resets nothing there",
+    SLOW,
+    async () => {
+      const { user, router, nav } = await onLines();
+      await user.click(within(nav).getByRole("link", { name: names.blockers }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/blockers");
+      });
+      await user.click(within(nav).getByRole("link", { name: names.lines }));
+      expect(router.state.location.pathname).toBe("/lines");
+      // The address it was left at, with no row opened; nothing was reset by leaving.
+      expect(router.state.location.search).toBe("?mode=list&sort=holds&dir=desc");
+      expect(screen.getByTestId("filter")).toHaveTextContent("valve");
+    },
+  );
 });
 
 describe("shortcuts", () => {
@@ -1040,13 +1264,15 @@ describe("the keyboard", () => {
 
     const expected = [
       screen.getByRole("button", { name: switcher }),
+      screen.getByRole("combobox", { name: en.search.label }),
       screen.getByRole("button", { name: "Snapshot 7 Oct 2026" }),
+      screen.getByRole("button", { name: en.export.menu.label }),
       screen.getByRole("button", { name: en.shell.import }),
       ...within(nav).getAllByRole("link"),
       within(nav).getByRole("button", { name: en.destinations.collapse }),
       screen.getByRole("button", { name: en.comingSoon.action }),
     ];
-    expect(expected).toHaveLength(14);
+    expect(expected).toHaveLength(16);
     for (const element of expected) {
       await user.tab();
       expect(element).toHaveFocus();

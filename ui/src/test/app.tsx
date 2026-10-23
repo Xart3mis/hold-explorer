@@ -10,11 +10,13 @@ import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { breakdownGroups, foldedMatrix, groupDetail } from "./breakdown";
 import { blockerDetail, solveView } from "./blockers";
-import { filterOptions, valuePage } from "./filters";
+import { filterLabels, filterOptions, valuePage } from "./filters";
 import { startState } from "./fixtures";
 import { commandFailure, mockCommands, type Handlers } from "./ipc";
 import { holdRef, holdsView, lineDetail, linePage } from "./lines";
 import { overviewOf } from "./overview";
+import { searchResults } from "./search";
+import { viewHandlers } from "./views";
 
 /** The view a workspace that is open shows: the one a data command must be sent. */
 function viewOf(open: WorkspaceOpen | null): ViewRef | null {
@@ -38,16 +40,20 @@ export interface RenderAppOptions {
  * Renders the whole app, with its providers, on a router that keeps its history in memory. The
  * commands answer from `start` and `handlers`; `workspace_list` answers with the list of `start`,
  * `overview` with the overview of the snapshot the mock holds, `filter_options` with the
- * options of the default filter, `filter_values` with three values whatever the dimension, and
+ * options of the default filter, `filter_values` with three values whatever the dimension,
+ * `filter_labels` with each value of the filter labelled by its key (ui/src/test/filters.ts), and
  * `lines` and `holds` with the three lines and the three holds of a small snapshot, and
  * `line_detail` and `hold_detail` with the detail of the line or the hold asked for, `breakdown`
  * with three groups whatever the dimension, `group_detail` with three lines of the group asked
  * for, `matrix` with three rows and two columns and Other on both sides whatever the
- * dimensions, `solve_order` with a solve order of four steps, and `blocker_detail` with the
- * detail of the blocker asked for, unless the test gives its own. Those answers are for the view
+ * dimensions, `solve_order` with a solve order of four steps, `blocker_detail` with the
+ * detail of the blocker asked for, and `search` with a result of every kind for a query of two
+ * characters or more (ui/src/test/search.ts), and the saved-view commands with a list kept as the
+ * Rust side keeps it, for the open workspace only (ui/src/test/views.ts), unless the test gives
+ * its own. Those answers are for the view
  * the mocked Rust side holds, which is the one `start` opens and then the one the test's own
- * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`, or
- * `import_commit` answered with: for any other view they fail with the kind `ViewChanged`, as
+ * `workspace_open`, `workspace_create`, `workspace_current`, `snapshot_select`, `demo_create`,
+ * `import_commit`, or `set_workspace_folder` answered with: for any other view they fail with the kind `ViewChanged`, as
  * the Rust side does.
  */
 export function renderApp(options: RenderAppOptions = {}) {
@@ -83,6 +89,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     };
   }
   const opens = (open: WorkspaceOpen | null) => open;
+  const views = viewHandlers(() => heldOpen);
   const {
     workspace_open: open,
     workspace_create: create,
@@ -90,6 +97,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     snapshot_select: select,
     demo_create: demo,
     import_commit: commit,
+    set_workspace_folder: setFolder,
   } = given;
   const tracked: Handlers = {
     ...(open && { workspace_open: follow(open, opens) }),
@@ -98,6 +106,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     ...(select && { snapshot_select: follow(select, opens) }),
     ...(demo && { demo_create: follow(demo, opens) }),
     ...(commit && { import_commit: follow(commit, (done) => done.open) }),
+    ...(setFolder && { set_workspace_folder: follow(setFolder, (moved) => moved.start.open) }),
   };
   mockCommands({
     app_start: () => start,
@@ -105,6 +114,7 @@ export function renderApp(options: RenderAppOptions = {}) {
     overview: inView(() => overviewOf(heldOpen)),
     filter_options: inView(() => filterOptions()),
     filter_values: inView(() => valuePage()),
+    filter_labels: inView(({ spec }) => filterLabels(spec)),
     lines: inView(() => linePage()),
     holds: inView(() => holdsView()),
     line_detail: inView(({ lineId }) => lineDetail(lineId)),
@@ -114,6 +124,8 @@ export function renderApp(options: RenderAppOptions = {}) {
     matrix: inView(() => foldedMatrix()),
     solve_order: inView(() => solveView()),
     blocker_detail: inView(({ key }) => blockerDetail(key)),
+    search: inView(({ query }) => searchResults(query)),
+    ...views,
     ...given,
     ...tracked,
   });

@@ -10,7 +10,8 @@ export type ImportOptions = {
  */
 replace: number | null, 
 /**
- * Stored as the workspace's saved mapping in the import's transaction.
+ * Merged into the workspace's saved mapping in the import's transaction
+ * ([`SavedMapping::merged`], with the headers of the file imported).
  */
 save_mapping: SavedMapping | null, 
 /**

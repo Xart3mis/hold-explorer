@@ -141,7 +141,7 @@ impl RuleSet {
         Blocker {
             kind: "Other".to_string(),
             item: if item.is_empty() {
-                "—".to_string()
+                crate::words::NONE.to_string()
             } else {
                 item
             },

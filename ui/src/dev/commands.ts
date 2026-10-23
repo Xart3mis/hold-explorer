@@ -6,6 +6,8 @@ import { dimNeeds, partNeeds } from "../api/filter-needs";
 import type { AppStart } from "../bindings/AppStart";
 import { defaultFilters, type Filters, type FilterValue } from "../app/filters/state";
 import type { CommandError } from "../bindings/CommandError";
+import type { ErrorKind } from "../bindings/ErrorKind";
+import type { Density } from "../bindings/Density";
 import type { Dim } from "../bindings/Dim";
 import type { ExportPhase } from "../bindings/ExportPhase";
 import type { ExportRequest } from "../bindings/ExportRequest";
@@ -13,8 +15,10 @@ import type { ExportSaved } from "../bindings/ExportSaved";
 import type { Field } from "../bindings/Field";
 import type { FilterPart } from "../bindings/FilterPart";
 import type { Inactive } from "../bindings/Inactive";
+import type { FilterLabel } from "../bindings/FilterLabel";
 import type { FilterOptions } from "../bindings/FilterOptions";
 import type { FilterSpec } from "../bindings/FilterSpec";
+import type { FolderMoved } from "../bindings/FolderMoved";
 import type { HoldQuery } from "../bindings/HoldQuery";
 import type { ImportCommit } from "../bindings/ImportCommit";
 import type { ImportDone } from "../bindings/ImportDone";
@@ -22,6 +26,8 @@ import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { LineQuery } from "../bindings/LineQuery";
+import type { SavedView } from "../bindings/SavedView";
+import type { SearchResults } from "../bindings/SearchResults";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
 import type { ValuePage } from "../bindings/ValuePage";
@@ -51,6 +57,7 @@ import {
   devSolveOrder,
 } from "./lines";
 import { devKept, devOverview, type DevOverview } from "./overview";
+import { devSearch } from "./search";
 import { devValues } from "./values";
 
 /** What `pnpm check:dist` looks for: this module must never be part of a build. */
@@ -67,6 +74,12 @@ export const DEV_STATES = [
   "older",
   "list-error",
   "warning",
+  // The settings file could not be understood at start and was set aside.
+  "settings-problem",
+  // A move of the workspaces folder (Change folder in Settings) where the new folder already holds
+  // a file of every name, so no file moves and the result says why for each:
+  //   dev.html?state=folder-taken#/settings
+  "folder-taken",
   // The Rust side has moved on to the snapshot before the newest and the interface was not told:
   // the Overview is refused, asks what is open, and the shell says that it was brought in step.
   "view-resynced",
@@ -169,6 +182,17 @@ export const DEV_STATES = [
   "import-sheet",
   "import-committing",
   "import-failed",
+  // The search field of the top bar answers every state from a fixed result (ui/src/dev/search.ts).
+  // These add a search that finds nothing, one whose answers take three seconds (type, wait for
+  // the results, then type another character to see them dimmed), and one that fails:
+  //   dev.html?state=search-none#/overview
+  "search-none",
+  "search-slow",
+  "search-error",
+  // Saved views in the sidebar: four views, one with a long name and one on a field the snapshot
+  // lacks. Apply one to see it current; Save view in the filter bar saves another.
+  //   dev.html?state=views#/lines
+  "views",
 ] as const;
 export type DevState = (typeof DEV_STATES)[number];
 
@@ -177,6 +201,8 @@ export function isDevState(value: string): value is DevState {
 }
 
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
+/** Where the development page says the settings file is. */
+const SETTINGS_FILE = "/home/ada/.config/hold-explorer/settings.json";
 
 /** What a reading answers when the workspace file is locked. */
 const LOCKED =
@@ -190,7 +216,7 @@ function openOnly(spec: FilterSpec): FilterSpec | null {
   return spec.status === "Released" ? null : { ...spec, status: "Open" };
 }
 
-function failure(kind: string, message: string): Error & CommandError {
+function failure(kind: ErrorKind, message: string): Error & CommandError {
   return Object.assign(new Error(message), { kind });
 }
 
@@ -427,6 +453,35 @@ function devReview(state: DevState, all: WorkspaceView[]): ImportReview {
   }
 }
 
+/** The saved views of the state `views`, in sidebar order. */
+const DEV_VIEWS: SavedView[] = [
+  {
+    id: 1,
+    name: "Civil holds",
+    address: "/lines?rows=holds",
+    filters: {
+      ...openHoldsFilter(),
+      fields: [{ dim: "Discipline", values: ["Civil"], negate: false }],
+    },
+  },
+  {
+    id: 2,
+    name: "Blockers, all holds",
+    address: "/blockers",
+    filters: { ...openHoldsFilter(), status: "All" },
+  },
+  {
+    id: 3,
+    name: "Stress calculations waiting on the vendor data of the north area",
+    address: "/breakdown?mode=list&by=StressCalc",
+    filters: {
+      ...openHoldsFilter(),
+      fields: [{ dim: { Custom: "Area" }, values: ["North"], negate: false }],
+    },
+  },
+  { id: 4, name: "Overview", address: "/overview", filters: openHoldsFilter() },
+];
+
 /** The shape of the overview a state shows. */
 function overviewShape(state: DevState): DevOverview {
   switch (state) {
@@ -449,7 +504,7 @@ interface World {
   folderReadable: boolean;
 }
 
-function world(state: DevState, theme: Theme): World {
+function world(state: DevState, theme: Theme, density: Density): World {
   const snapshots = new Map<string, SnapshotInfo[]>([
     [unit573.id, fourSnapshots],
     [tankFarm.id, fourSnapshots.slice(0, 2)],
@@ -457,15 +512,24 @@ function world(state: DevState, theme: Theme): World {
   ]);
   const start: AppStart = {
     version: "0.1.0",
-    settings: { theme, workspace_dir: null, last_workspace: null },
+    settings_file: SETTINGS_FILE,
+    settings: {
+      theme,
+      density,
+      author_name: "",
+      workspace_dir: null,
+      last_workspace: null,
+    },
     list: { workspaces: [], unreadable: [], folder: FOLDER },
     list_error: null,
     open: null,
+    settings_problem: null,
   };
   const opened = (selected: number, warning: CommandError | null): WorkspaceOpen => ({
     workspace: unit573,
     snapshots: fourSnapshots,
     selected,
+    views: [],
     warning,
   });
   const all = [offsites, tankFarm, unit573];
@@ -496,6 +560,18 @@ function world(state: DevState, theme: Theme): World {
     }
     case "first-run":
       break;
+    case "folder-taken":
+      start.list.workspaces = [unit573];
+      start.list.unreadable = [
+        {
+          file_name: "d4e5f60718293041.holdx-ws",
+          path: `${FOLDER}/d4e5f60718293041.holdx-ws`,
+          kind: "NewerSchema",
+          message:
+            "This workspace was written by a newer version of Hold Explorer (schema 9; this version reads up to schema 3). Update Hold Explorer to open it.",
+        },
+      ];
+      break;
     case "workspaces":
     case "workspaces-pending":
       start.list.workspaces = all;
@@ -508,6 +584,10 @@ function world(state: DevState, theme: Theme): World {
             "This workspace was written by a newer version of Hold Explorer (schema 9; this version reads up to schema 3). Update Hold Explorer to open it.",
         },
       ];
+      break;
+    case "views":
+      start.list.workspaces = all;
+      start.open = { ...opened(4, null), views: DEV_VIEWS };
       break;
     case "open":
     case "view-resynced":
@@ -550,6 +630,9 @@ function world(state: DevState, theme: Theme): World {
     case "import-sheet":
     case "import-committing":
     case "import-failed":
+    case "search-none":
+    case "search-slow":
+    case "search-error":
       start.list.workspaces = all;
       start.open = opened(4, null);
       break;
@@ -559,7 +642,13 @@ function world(state: DevState, theme: Theme): World {
       break;
     case "empty":
       start.list.workspaces = all;
-      start.open = { workspace: offsites, snapshots: [], selected: null, warning: null };
+      start.open = {
+        workspace: offsites,
+        snapshots: [],
+        selected: null,
+        views: [],
+        warning: null,
+      };
       break;
     case "warning":
       start.list.workspaces = all;
@@ -568,6 +657,15 @@ function world(state: DevState, theme: Theme): World {
         message:
           "The workspace is open, but Hold Explorer could not remember it for the next start. The settings file /home/ada/.config/hold-explorer/settings.json could not be written (permission denied). Check that you may write to that folder.",
       });
+      break;
+    case "settings-problem":
+      start.list.workspaces = all;
+      start.open = opened(4, null);
+      start.settings_problem = {
+        kind: "SettingsSetAside",
+        message:
+          "Your settings file could not be read, so it was set aside as settings.json.unreadable and the defaults are in use. Choose your settings again in Settings; the old file is kept in /home/ada/.config/hold-explorer.",
+      };
       break;
     case "list-error":
       start.list.folder = "/mnt/projects/5359/hold-explorer";
@@ -595,8 +693,12 @@ function exportedRows(request: ExportRequest, selected: SnapshotInfo | undefined
  * state. Returns the marker of the development page. A dragged file is played from the console:
  * `hxDev.enter(["/exports/Holds.xlsx"])`, `hxDev.leave()`, `hxDev.drop([...])`.
  */
-export function installDevCommands(state: DevState, theme: Theme): string {
-  const { start, snapshots, folderReadable } = world(state, theme);
+export function installDevCommands(
+  state: DevState,
+  theme: Theme,
+  density: Density = "Comfortable",
+): string {
+  const { start, snapshots, folderReadable } = world(state, theme, density);
   let nextId = 1;
   let nextSnapshot = 5;
   let overviewReadings = 0;
@@ -612,12 +714,25 @@ export function installDevCommands(state: DevState, theme: Theme): string {
     date_source: "InfoSheet",
   };
 
+  // The saved views of each workspace, in sidebar order; they last until the page is reloaded.
+  const views = new Map<string, SavedView[]>();
+  // The next id of each workspace: one more than the highest ever given.
+  const nextViews = new Map<string, number>();
+  if (start.open !== null && start.open.views.length > 0) {
+    views.set(start.open.workspace.id, start.open.views);
+    nextViews.set(
+      start.open.workspace.id,
+      Math.max(...start.open.views.map((view) => view.id)) + 1,
+    );
+  }
+
   const open = (workspace: WorkspaceView): WorkspaceOpen => {
     const held = snapshots.get(workspace.id) ?? [];
     const opened = {
       workspace,
       snapshots: held,
       selected: held.at(-1)?.id ?? null,
+      views: views.get(workspace.id) ?? [],
       warning: null,
     };
     start.open = opened;
@@ -639,6 +754,107 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1,
     );
     return open(workspace);
+  };
+
+  const idOf = (payload: unknown): number => {
+    const value = (payload as { id?: unknown } | undefined)?.id;
+    return typeof value === "number" ? value : -1;
+  };
+
+  /** The saved views of the workspace a command names; the open one only, as in Rust. */
+  const viewsOf = (payload: unknown) => {
+    const workspace = text(payload, "workspace");
+    if (!start.open) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
+    if (start.open.workspace.id !== workspace) {
+      throw failure(
+        "ViewChanged",
+        "That workspace is not the one that is open, so its saved views were not changed. Open the workspace, then try again.",
+      );
+    }
+    const list = views.get(workspace) ?? [];
+    return {
+      list,
+      find: (id: number): SavedView => {
+        const found = list.find((view) => view.id === id);
+        if (!found) {
+          throw failure(
+            "ViewNotFound",
+            "That saved view is not in the list. It may have been deleted already; the list shows the views there are.",
+          );
+        }
+        return found;
+      },
+      nextId: (): number => nextViews.get(workspace) ?? 1,
+      issue: (next: number) => nextViews.set(workspace, next),
+      keep: (next: SavedView[]): SavedView[] => {
+        views.set(workspace, next);
+        if (start.open) start.open = { ...start.open, views: next };
+        return next;
+      },
+    };
+  };
+
+  const checkRoom = (current: { list: SavedView[] }) => {
+    if (current.list.length >= 100) {
+      throw failure(
+        "TooManyViews",
+        `A workspace holds at most 100 saved views, and this one holds ${String(current.list.length)}. Delete a view you no longer use, then save again.`,
+      );
+    }
+  };
+
+  /** A data screen's path, and no selection in its query, in the words of the Rust side. */
+  const checkAddress = (address: string) => {
+    const refused = (why: string) =>
+      failure(
+        "ViewAddress",
+        `The address "${address}" cannot be saved as a view: ${why}. This is a fault of Hold Explorer; report it, and save the view again from the screen.`,
+      );
+    if (address.includes("#")) throw refused("it has a fragment");
+    const at = address.indexOf("?");
+    const path = at === -1 ? address : address.slice(0, at);
+    const query = at === -1 ? "" : address.slice(at + 1);
+    if (!["/overview", "/breakdown", "/lines", "/blockers"].includes(path)) {
+      throw refused("it is not the address of Overview, Breakdown, Lines, or Blockers");
+    }
+    for (const pair of query.split("&")) {
+      const [key = ""] = pair.split("=", 1);
+      if (key.includes("%")) throw refused("a name in its query is escaped");
+      if (["line", "hold", "blocker"].includes(key) || (path === "/breakdown" && key === "open")) {
+        throw refused(`it carries the selection "${key}"`);
+      }
+    }
+  };
+
+  /** The name trimmed, in the words of the Rust side when it is empty or too long. */
+  const clean = (raw: string): string => {
+    const name = raw.trim();
+    const length = Array.from(name).length;
+    if (length === 0) {
+      throw failure(
+        "ViewName",
+        "A saved view needs a name of at least one character. Type a name, then save again.",
+      );
+    }
+    if (length > 80) {
+      throw failure(
+        "ViewName",
+        `A saved view's name has at most 80 characters, and this one has ${String(length)}. Shorten the name, then save again.`,
+      );
+    }
+    return name;
+  };
+
+  const checkFree = (current: { list: SavedView[] }, name: string, except: number | null) => {
+    const taken = current.list.find(
+      (view) => view.id !== except && view.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (taken) {
+      throw failure(
+        "ViewNameTaken",
+        `A saved view named "${taken.name}" already exists, and names are compared without regard to case. Choose another name, or delete that view first.`,
+      );
+    }
   };
 
   const text = (payload: unknown, key: string): string => {
@@ -708,6 +924,69 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       }
       return start.settings;
     },
+    settings_set_density: (payload) => {
+      const chosen = text(payload, "density");
+      if (chosen === "Comfortable" || chosen === "Compact") {
+        start.settings = { ...start.settings, density: chosen };
+      }
+      return start.settings;
+    },
+    settings_set_author_name: (payload) => {
+      const name = text(payload, "name").trim();
+      if (Array.from(name).length > 80) {
+        throw failure(
+          "Settings",
+          "The name is longer than 80 characters, so it was not saved. Shorten it, then save it again.",
+        );
+      }
+      start.settings = { ...start.settings, author_name: name };
+      return start.settings;
+    },
+    // A folder is checked at once; the folder in use is refused. A move takes a second and a half
+    // and moves every listed file, unless the state says their names are taken.
+    check_workspace_folder: (payload) => {
+      const path = text(payload, "path") || FOLDER;
+      if (path === start.list.folder) {
+        throw failure(
+          "SameFolder",
+          `The workspaces are already kept in ${path}. Choose another folder to keep them in.`,
+        );
+      }
+      const movable = [
+        ...start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`),
+        ...start.list.unreadable.map((file) => file.file_name),
+      ].sort();
+      return later(300, () => ({ path, movable, count: movable.length }));
+    },
+    set_workspace_folder: (payload): Promise<FolderMoved> => {
+      const { path, moveFiles } = payload as { path: string | null; moveFiles: boolean };
+      const to = path ?? FOLDER;
+      return later(1500, () => {
+        const files = [
+          ...start.list.workspaces.map((workspace) => `${workspace.id}.holdx-ws`),
+          ...start.list.unreadable.map((file) => file.file_name),
+        ].sort();
+        // In `folder-taken` the new folder already holds a file of every name.
+        const taken = state === "folder-taken";
+        const moved = moveFiles && !taken ? files : [];
+        const left =
+          moveFiles && taken
+            ? files.map((file) => ({
+                file_name: file,
+                path: `${start.list.folder}/${file}`,
+                kind: "NameTaken" as const,
+                message: `${file} was left in ${start.list.folder}, because a file of that name is already in ${to}. Rename or remove one of the two, then move the file there by hand.`,
+              }))
+            : [];
+        start.settings = { ...start.settings, workspace_dir: path };
+        start.list = {
+          workspaces: moved.length > 0 ? start.list.workspaces : [],
+          unreadable: moved.length > 0 ? start.list.unreadable : [],
+          folder: to,
+        };
+        return { start: structuredClone(start), moved, left };
+      });
+    },
     workspace_list: () => {
       if (!folderReadable) throw failure("Io", start.list_error?.message ?? "");
       return start.list;
@@ -733,6 +1012,64 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       }
       if (state === "workspaces-pending") return new Promise<WorkspaceOpen>(() => undefined);
       return later(300, () => open(workspace));
+    },
+    // The saved views keep the rules of the Rust side (src-tauri/src/app/views.rs), in its order
+    // and its words: a name of 1 to 80 characters, unique without regard to case, an address of
+    // a data screen without a selection, and at most 100 views.
+    save_view: (payload) => {
+      const current = viewsOf(payload);
+      const name = clean(text(payload, "name"));
+      const address = text(payload, "address");
+      checkAddress(address);
+      checkFree(current, name, null);
+      checkRoom(current);
+      const id = current.nextId();
+      current.issue(id + 1);
+      const saved: SavedView = {
+        id,
+        name,
+        address,
+        filters: (payload as { filters: FilterSpec }).filters,
+      };
+      return current.keep([...current.list, saved]);
+    },
+    rename_view: (payload) => {
+      const current = viewsOf(payload);
+      const id = idOf(payload);
+      const name = clean(text(payload, "name"));
+      const found = current.find(id);
+      checkFree(current, name, id);
+      return current.keep(current.list.map((view) => (view === found ? { ...view, name } : view)));
+    },
+    delete_view: (payload) => {
+      const current = viewsOf(payload);
+      const found = current.find(idOf(payload));
+      return current.keep(current.list.filter((view) => view !== found));
+    },
+    restore_view: (payload) => {
+      const current = viewsOf(payload);
+      const { view, index } = payload as { view: SavedView; index: number };
+      const name = clean(view.name);
+      checkAddress(view.address);
+      if (view.id < 1 || view.id >= current.nextId()) current.find(-1);
+      if (current.list.some((other) => other.id === view.id)) {
+        throw failure(
+          "Internal",
+          "That saved view is in the list already, so it was not restored. Reload the list; if it keeps happening, report it.",
+        );
+      }
+      checkFree(current, name, null);
+      checkRoom(current);
+      const next = [...current.list];
+      next.splice(Math.min(index, next.length), 0, { ...view, name });
+      return current.keep(next);
+    },
+    move_view: (payload) => {
+      const current = viewsOf(payload);
+      const found = current.find(idOf(payload));
+      const next = current.list.filter((view) => view !== found);
+      next.splice(Math.min((payload as { index: number }).index, next.length), 0, found);
+      return current.keep(next);
     },
     workspace_rename: (payload) => {
       const name = text(payload, "name");
@@ -1016,11 +1353,33 @@ export function installDevCommands(state: DevState, theme: Theme): string {
           : devSolveOrder(selected, ranked),
       );
     },
+    // A value is labelled as the picker of its dimension lists it, and with its key otherwise.
+    filter_labels: (payload): Promise<FilterLabel[]> => {
+      const { spec, selected } = inView(payload);
+      return later(100, () =>
+        spec.fields.flatMap((field) => {
+          const listed = devValues(selected, spec, field.dim, "", true).values;
+          return field.values.map((key) => ({
+            dim: field.dim,
+            key,
+            label: listed.find((group) => group.key === key)?.label ?? key,
+          }));
+        }),
+      );
+    },
     filter_values: (payload): Promise<ValuePage> => {
       const { spec, selected } = inView(payload);
       const { dim, search } = payload as { dim: Dim; search: string };
       const isPicker = state === "filters-picker";
       return later(isPicker ? 1200 : 150, () => devValues(selected, spec, dim, search, isPicker));
+    },
+    search: (payload): Promise<SearchResults> => {
+      inView(payload);
+      const query = text(payload, "query");
+      return later(state === "search-slow" ? 3000 : 150, () => {
+        if (state === "search-error") throw failure("Internal", LOCKED);
+        return state === "search-none" ? { query, groups: [] } : devSearch(query);
+      });
     },
     // An export is saved where the dialog says, after a moment of reading and one of writing; it
     // says how many rows the request names, or the snapshot's open holds for every row.
@@ -1041,7 +1400,13 @@ export function installDevCommands(state: DevState, theme: Theme): string {
       return later(150, () => null);
     },
     export_open: () => null,
-    "plugin:dialog|open": () => "/home/ada/exports/Holds_2026-10-14.xlsx",
+    // The folder dialog picks a folder on the project drive; the file dialog an export.
+    "plugin:dialog|open": (payload) => {
+      const { options } = payload as { options: { directory?: boolean } };
+      return options.directory === true
+        ? "/mnt/projects/5359/hold-explorer"
+        : "/home/ada/exports/Holds_2026-10-14.xlsx";
+    },
     // The save dialog takes the name it offers, in the folder of the exports.
     "plugin:dialog|save": (payload) => {
       const { options } = payload as { options: { defaultPath?: string } };

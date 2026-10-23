@@ -68,6 +68,10 @@ export function Page({ width = "full", notice, views, bar, fill, children, ...he
     document.title = t("app.documentTitle", { page: header.title });
   }, [header.title]);
 
+  // The title takes the focus here, in an effect of the commit that drew the page after a
+  // navigation, and not later. The search field relies on that (ui/src/features/search/choose.ts):
+  // after a choice it moves the focus to the panel's heading or to the table on the next frame,
+  // once this has run. Moving this focus to a later moment would take the focus back from them.
   useEffect(() => {
     if (!arrivedAt(pathname)) return;
     const active = document.activeElement;

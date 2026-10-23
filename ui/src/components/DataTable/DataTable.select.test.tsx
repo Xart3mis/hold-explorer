@@ -1,8 +1,11 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { expectAccessible } from "../../test/axe";
+import { must } from "../../test/app";
 import { SLOW } from "../../test/slow";
 import {
   DataTable,
@@ -133,8 +136,88 @@ function lastSelection(seen: Seen): string[] | undefined {
   return seen.selections.at(-1);
 }
 
+/** The keys of the rows that carry the small mark of the open row among selected rows. */
+function openMarks(): string[] {
+  return dataRows()
+    .filter((each) => each.querySelector("[data-part='open-mark']") !== null)
+    .map((each) => each.dataset.key ?? "");
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("the mark of the open row among selected rows", () => {
+  it("shows on the open row alone, in its first cell, once two or more rows are selected", () => {
+    render(
+      <Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={["LINE-B", "LINE-D"]} />,
+    );
+    expect(openMarks()).toEqual(["LINE-B"]);
+    const mark = must(row("LINE-B").querySelector("[data-part='open-mark']"), "the mark");
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(mark).toBeEmptyDOMElement();
+    // In the first cell, beside what the cell shows and not inside it, so its text is as it was.
+    const first = must(mark.closest("[role='rowheader'], [role='gridcell']"), "the cell");
+    expect(first).toBe(within(row("LINE-B")).getAllByRole("rowheader")[0]);
+    expect(mark.closest("span[class*='value']")).toBeNull();
+    expect(first).toHaveTextContent("LINE-B");
+    expect(first.textContent).toBe("LINE-B");
+  });
+
+  it("is absent when the open row is alone in the selection, when nothing is selected, and when no row is open", () => {
+    const { rerender } = render(
+      <Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={["LINE-B"]} />,
+    );
+    expect(openMarks()).toEqual([]);
+    rerender(<Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={[]} />);
+    expect(openMarks()).toEqual([]);
+  });
+
+  it("is absent when rows are selected and none is open", () => {
+    render(<Harness seen={newSeen()} initialSelected={["LINE-A", "LINE-C"]} />);
+    expect(openMarks()).toEqual([]);
+  });
+
+  it("follows the selection: it appears with the second row and goes with it", SLOW, async () => {
+    const user = userEvent.setup();
+    render(<Harness seen={newSeen()} />);
+    await user.click(row("LINE-B"));
+    expect(openMarks()).toEqual([]);
+    await user.keyboard("{Control>}");
+    await user.click(row("LINE-D"));
+    expect(openMarks()).toEqual(["LINE-B"]);
+    await user.click(row("LINE-D"));
+    await user.keyboard("{/Control}");
+    expect(openMarks()).toEqual([]);
+  });
+
+  it(
+    "draws no mark on an open row that Ctrl+click took out of the selection, and keeps it open",
+    SLOW,
+    async () => {
+      const user = userEvent.setup();
+      render(
+        <Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={["LINE-B", "LINE-D"]} />,
+      );
+      expect(openMarks()).toEqual(["LINE-B"]);
+      await user.keyboard("{Control>}");
+      await user.click(row("LINE-B"));
+      await user.keyboard("{/Control}");
+      expect(marked()).toEqual(["LINE-D"]);
+      expect(row("LINE-B")).toHaveAttribute("aria-selected", "false");
+      expect(openMarked()).toEqual(["LINE-B"]);
+      expect(openMarks()).toEqual([]);
+    },
+  );
+
+  it("is a dot drawn over the cell's padding: out of the flow, so no column and no text moves", () => {
+    const css = readFileSync(join(import.meta.dirname, "DataTable.module.css"), "utf8");
+    const rule = /\.openMark\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(rule).toMatch(/position:\s*absolute/);
+    expect(rule).toMatch(/inline-size:\s*var\(--size-open-mark\)/);
+    expect(rule).toMatch(/background-color:\s*var\(--color-accent-text\)/);
+    expect(rule).toMatch(/inset-inline-start:\s*calc\(\(var\(--density-cell-padding-x\)/);
+  });
 });
 
 describe("DataTable with selected rows, by the pointer", () => {

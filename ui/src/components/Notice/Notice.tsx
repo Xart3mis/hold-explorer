@@ -19,6 +19,12 @@ export interface NoticeProps {
   tone: NoticeTone;
   /** A short statement of what happened. */
   title?: string;
+  /**
+   * The id of the title, for a region around the notice that is named by it. The title can then
+   * take the focus (`tabIndex` -1), so the keyboard can be moved to the notice and its ring sits
+   * on the title.
+   */
+  titleId?: string | undefined;
   /** The message: why, and what to do. */
   children: ReactNode;
   /** Quiet buttons or links that act on the message. */
@@ -33,7 +39,15 @@ export interface NoticeProps {
  * is carried by an icon, a tint, and the words, never by the color alone. A danger notice is
  * announced at once, the others politely.
  */
-export function Notice({ tone, title, children, actions, onDismiss, className }: NoticeProps) {
+export function Notice({
+  tone,
+  title,
+  titleId,
+  children,
+  actions,
+  onDismiss,
+  className,
+}: NoticeProps) {
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
@@ -42,7 +56,15 @@ export function Notice({ tone, title, children, actions, onDismiss, className }:
     >
       <Icon icon={icons[tone]} className={styles.icon} />
       <div className={styles.body}>
-        {title === undefined ? null : <strong className={styles.title}>{title}</strong>}
+        {title === undefined ? null : (
+          <strong
+            id={titleId}
+            tabIndex={titleId === undefined ? undefined : -1}
+            className={styles.title}
+          >
+            {title}
+          </strong>
+        )}
         <span className={styles.message}>{children}</span>
       </div>
       {actions === undefined ? null : <div className={styles.actions}>{actions}</div>}

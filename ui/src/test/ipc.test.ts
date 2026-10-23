@@ -6,7 +6,13 @@ import type { Settings } from "../bindings/Settings";
 import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import { checkUnhandledCommands, commandFailure, expectUnhandled, mockCommands } from "./ipc";
 
-const settings: Settings = { theme: "Light", workspace_dir: null, last_workspace: null };
+const settings: Settings = {
+  theme: "Light",
+  density: "Comfortable",
+  author_name: "",
+  workspace_dir: null,
+  last_workspace: null,
+};
 
 describe("mockCommands", () => {
   it("returns the typed result of a handler and passes the arguments by their command keys", async () => {
@@ -40,7 +46,7 @@ describe("mockCommands", () => {
   });
 
   it("carries a warning on an opened workspace and a list error on the start", async () => {
-    const warning = { kind: "Settings", message: "The workspace is open, but ..." };
+    const warning = { kind: "Settings" as const, message: "The workspace is open, but ..." };
     const opened: WorkspaceOpen = {
       workspace: {
         id: "0123456789abcdef",
@@ -52,16 +58,19 @@ describe("mockCommands", () => {
       },
       snapshots: [],
       selected: null,
+      views: [],
       warning,
     };
     mockCommands({
       workspace_open: () => opened,
       app_start: () => ({
         version: "0.1.0",
+        settings_file: "/c/settings.json",
         settings,
         list: { workspaces: [], unreadable: [], folder: "/w" },
         list_error: { kind: "Io", message: "Could not read /w." },
         open: null,
+        settings_problem: null,
       }),
     });
     await expect(workspaceApi.workspaceOpen("0123456789abcdef")).resolves.toEqual(opened);

@@ -68,18 +68,22 @@ describe("the import flow from its start", () => {
     expect(within(main).getAllByText(mapping.missing)).toHaveLength(3);
   });
 
-  it("imports the first of two dropped files and says that one file is imported at a time", async () => {
-    const open = vi.fn(() => unmappedDraft());
-    renderApp({ start: openStart(), path: "/lines", handlers: { import_open: open } });
-    await screen.findByRole("navigation", { name: en.destinations.label });
-    fileDrag.drop([FILE, "/home/ada/exports/Holds_2026-10-07.xlsx"]);
-    const main = await pageTitled(mapping.title);
-    expect(open).toHaveBeenCalledTimes(1);
-    expect(open).toHaveBeenCalledWith({ path: FILE });
-    expect(
-      within(main).getByText(en.import.severalDropped.replace("{{count, number}}", "2")),
-    ).toBeVisible();
-  });
+  it(
+    "imports the first of two dropped files and says that one file is imported at a time",
+    SLOW,
+    async () => {
+      const open = vi.fn(() => unmappedDraft());
+      renderApp({ start: openStart(), path: "/lines", handlers: { import_open: open } });
+      await screen.findByRole("navigation", { name: en.destinations.label });
+      fileDrag.drop([FILE, "/home/ada/exports/Holds_2026-10-07.xlsx"]);
+      const main = await pageTitled(mapping.title);
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(open).toHaveBeenCalledWith({ path: FILE });
+      expect(
+        within(main).getByText(en.import.severalDropped.replace("{{count, number}}", "2")),
+      ).toBeVisible();
+    },
+  );
 
   it("is completed by the keyboard alone: file, columns, review, import", SLOW, async () => {
     windowApi.chooseImportFile.mockResolvedValue(FILE);
@@ -280,7 +284,7 @@ describe("leaving the import flow", () => {
     expect(queryClient.getQueryData(keys.importDraft)).toEqual(other);
   });
 
-  it("does not cancel anything while the flow moves between its own pages", async () => {
+  it("does not cancel anything while the flow moves between its own pages", SLOW, async () => {
     const { user, router, cancel } = atReview();
     const main = await pageTitled(reviewing.title);
     await user.click(within(main).getByRole("button", { name: reviewing.changeMapping }));

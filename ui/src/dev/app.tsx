@@ -4,7 +4,7 @@
 //
 // The commands are answered from fixtures (ui/src/dev/commands.ts), in the state the address
 // names. `theme=light` starts in the light theme, and `density=compact` in the compact density,
-// which the app has no setting for yet. A state of the import flow starts with a file
+// as the saved settings. A state of the import flow starts with a file
 // open, so its pages can be opened by their address:
 //
 //   http://localhost:1420/dev.html?state=import-findings#/import/review
@@ -24,10 +24,13 @@ const asked = params.get("state") ?? "";
 const state = isDevState(asked) ? asked : DEV_STATES[0];
 const theme = params.get("theme") === "light" ? "Light" : "Dark";
 
-document.documentElement.dataset.page = installDevCommands(state, theme);
-// The stored theme belongs to another run of this page; the address decides here.
+const density = params.get("density") === "compact" ? "Compact" : "Comfortable";
+
+document.documentElement.dataset.page = installDevCommands(state, theme, density);
+document.documentElement.dataset.density = density.toLowerCase();
+// The stored theme and density belong to another run of this page; the address decides here.
 window.localStorage.removeItem("hold-explorer.theme");
-if (params.get("density") === "compact") document.documentElement.dataset.density = "compact";
+window.localStorage.removeItem("hold-explorer.density");
 // A state of the import flow has its file open, as the import page leaves it.
 const draft = devDraft(state);
 if (draft !== null) queryClient.setQueryData(keys.importDraft, draft);

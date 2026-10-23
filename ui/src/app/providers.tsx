@@ -2,6 +2,7 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, type ReactNode } from "react";
 import { I18nProvider } from "react-aria-components";
 import { ToastRegion } from "../components/ToastRegion/ToastRegion";
+import { applyDensity } from "../design/density";
 import { applyTheme } from "../design/theme";
 import { locale } from "../text/i18n";
 import { queryClient, startQuery } from "./query";
@@ -20,12 +21,23 @@ function SavedTheme() {
   return null;
 }
 
+/** Applies the saved density the same way: as soon as it is known, and whenever it changes. */
+function SavedDensity() {
+  const { data } = useQuery(startQuery);
+  const density = data?.settings.density;
+  useLayoutEffect(() => {
+    if (density) applyDensity(density);
+  }, [density]);
+  return null;
+}
+
 /** Everything a screen relies on: the query client, the locale of the components, and toasts. */
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <I18nProvider locale={locale}>
         <SavedTheme />
+        <SavedDensity />
         <ToastRegion>{children}</ToastRegion>
       </I18nProvider>
     </QueryClientProvider>

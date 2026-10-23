@@ -11,7 +11,7 @@ use hx_store::SnapshotInfo;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::workspaces::WorkspaceOpen;
 use super::{describe, AppState, Cache, Columns, STALE_DAYS, TOP_ITEMS};
 
@@ -93,7 +93,7 @@ impl AppState {
             return Ok(());
         }
         Err(CommandError::new(
-            "ViewChanged",
+            ErrorKind::ViewChanged,
             "The workspace or the snapshot in view changed while the request was on its way, so its answer would belong to a view that is no longer shown. Nothing is wrong and nothing was changed; the page reads it again for the view it shows now.",
         ))
     }

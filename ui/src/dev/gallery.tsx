@@ -2346,7 +2346,7 @@ function Drops() {
 
 function Errors() {
   const error = {
-    kind: "NewerSchema",
+    kind: "NewerSchema" as const,
     message:
       "This workspace was written by a newer version of Hold Explorer, so this version cannot read it. The file was not changed. Install the newer version to open it.",
   };

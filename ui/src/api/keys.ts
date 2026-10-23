@@ -19,6 +19,11 @@ export const keys = {
   selectingSnapshot: ["app", "workspace", "switching", "snapshot"] as const,
   /** The others: a new workspace, another name, the demo. */
   changing: ["app", "workspace", "changing"] as const,
+  /**
+   * Where the change of the workspaces folder is: checked, offered, moving, done, or failed. Kept
+   * here and not in a page, so that the page that comes back after a press of the sidebar shows it.
+   */
+  folderChange: ["settings", "folder"] as const,
   /** The file that is open for import: the `ImportDraft` the pages of the import flow share. */
   importDraft: ["import", "draft"] as const,
   /** What the review of that file found: the `ImportReview` of the last mapping it was read with. */
@@ -64,6 +69,15 @@ export const keys = {
    * they are kept here for the session so that every data screen shows the same ones.
    */
   workspaceFilters: (workspaceId: string) => ["filters", workspaceId] as const,
+  /**
+   * The filters, with the labels their values were picked under, that each saved view was saved
+   * or last applied with in this session: the prefix of those keys. A saved view keeps the keys
+   * of its values only; these give a chip back the label it had.
+   */
+  viewFilters: ["views", "filters"] as const,
+  /** Those of one saved view of one workspace. */
+  savedViewFilters: (workspaceId: string, viewId: number) =>
+    ["views", "filters", workspaceId, viewId] as const,
   /** One reading of a file for import. `visit` tells one arrival on the import page from the next. */
   importOpen: (path: string, visit: string) => ["import", "open", path, visit] as const,
 };

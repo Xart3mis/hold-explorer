@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { OPTIONAL_FIELDS } from "../../api/plantim";
+import { useLabelledFilters } from "../../app/filters/labels";
 import { useFilterOptions } from "../../app/filters/options";
 import { useFilters } from "../../app/filters/state";
 import { useShownView } from "../../app/view";
@@ -99,19 +100,27 @@ export interface ExportMenuProps {
 }
 
 /**
- * The Export button of a screen without a snapshot: in the header where the menu stands once there
- * is one, unavailable, and described to assistive technology by why. It opens nothing, and `Ctrl+E` does
- * nothing, as no shortcut is registered. The one exception to "a menu with nothing to offer is not
- * shown" (DESIGN.md, Menu): the action is fixed, and the page always has it.
+ * The Export button where there is nothing to export: in the top bar where the menu stands once
+ * there is something, unavailable, and described to assistive technology by why. A screen without
+ * a snapshot says to import one (`TopBarExport` carries it there); every other page says where
+ * export is found. It opens nothing, and `Ctrl+E` does nothing, as no shortcut is registered. The
+ * one exception to "a menu with nothing to offer is not shown" (DESIGN.md, Menu): the action is
+ * fixed, and the page always has it.
  */
-export function ExportMenuInert() {
+export function ExportMenuInert({
+  description = t("export.menu.noSnapshot"),
+}: {
+  /** Why nothing can be exported: no snapshot by default; the top bar says where export is found. */
+  description?: string;
+}) {
   return (
     <MenuButton
       label={t("export.menu.label")}
       menuLabel={t("export.menu.name")}
       align="end"
+      variant="secondary"
       isUnavailable
-      description={t("export.menu.noSnapshot")}
+      description={description}
     />
   );
 }
@@ -192,12 +201,12 @@ function hasPagedRows(state: ScreenState): boolean {
 }
 
 /**
- * The Export menu of a data screen, at the trailing edge of its header. Each item exports at once
- * with the columns and rows remembered for the screen; an item that saves ends in an ellipsis,
- * since the save dialog follows. What does not apply to the screen is left out: CSV and the copies
- * of the table on the Overview, whose view is several tables; the selected rows while none is
- * selected; the line IDs on the matrix. The Overview's four charts are in a submenu of each
- * action. `Ctrl+E` saves the view as Excel, as the first item does.
+ * The Export menu of a data screen, which the page puts in the top bar beside Import
+ * (`TopBarExport`). Each item exports at once with the columns and rows remembered for the screen;
+ * an item that saves ends in an ellipsis, since the save dialog follows. What does not apply to
+ * the screen is left out: CSV and the copies of the table on the Overview, whose view is several
+ * tables; the selected rows while none is selected; the line IDs on the matrix. The Overview's four
+ * charts are in a submenu of each action. `Ctrl+E` saves the view as Excel, as the first item does.
  *
  * While an export runs the button shows it (and the phase of a save in its name) and opens
  * nothing, so no second export starts; while the screen has nothing to export yet, or a workspace
@@ -220,7 +229,9 @@ export function ExportMenu({
   isEmpty,
   exports,
 }: ExportMenuProps) {
-  const { filters, spec } = useFilters();
+  const { spec } = useFilters();
+  // A file names the filters as the chips read them, each value under its label.
+  const filters = useLabelledFilters();
   const options = useFilterOptions();
   const shownView = useShownView();
   const { save, copy, isRunning } = exports;
@@ -384,6 +395,7 @@ export function ExportMenu({
         {...(phase === null ? {} : { "aria-label": phase })}
         menuLabel={t("export.menu.name")}
         align="end"
+        variant="secondary"
         isPending={isRunning}
         isInert={!ready}
         triggerRef={button}

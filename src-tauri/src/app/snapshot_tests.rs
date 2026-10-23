@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{Duration, NaiveDateTime};
 use hx_core::dataset::Dataset;
@@ -10,89 +10,11 @@ use hx_core::query::{group_by, summary};
 use hx_core::rules::RuleSet;
 use hx_core::warning::WarningKind;
 use hx_store::{delete_workspace, list_workspaces, StoreError, Workspace};
-use hx_synth::{generate, write_workbook, SynthConfig};
-use tempfile::TempDir;
 
-use super::error::CommandError;
-use super::import::{ImportCommit, ImportPhase, TargetChoice};
+use super::error::{CommandError, ErrorKind};
 use super::snapshots::{OverviewView, ViewRef};
+use super::test_support::{at, import, open_holds, view_of, Fixture};
 use super::AppState;
-
-pub(super) struct Fixture {
-    pub(super) dir: TempDir,
-}
-
-impl Fixture {
-    pub(super) fn new() -> Fixture {
-        Fixture {
-            dir: TempDir::new().unwrap(),
-        }
-    }
-
-    fn workspaces(&self) -> PathBuf {
-        self.dir.path().join("data").join("workspaces")
-    }
-
-    pub(super) fn state(&self) -> AppState {
-        AppState::new(self.dir.path().join("config"), self.dir.path().join("data"))
-    }
-
-    pub(super) fn synth(&self, name: &str, seed: u64) -> PathBuf {
-        let cfg = SynthConfig::new(seed, 10, 60);
-        let dir = self.dir.path().join("input");
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(name);
-        write_workbook(&generate(&cfg), &cfg, &path).unwrap();
-        path
-    }
-}
-
-pub(super) fn at(text: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S").unwrap()
-}
-
-fn no_progress(_: ImportPhase) {}
-
-/// Imports the file as a snapshot dated `taken_at` into a new workspace, or into the open one.
-pub(super) fn import(
-    state: &mut AppState,
-    path: &Path,
-    taken_at: &str,
-    new_workspace: bool,
-) -> i64 {
-    let target = if new_workspace {
-        TargetChoice::New { name: "W".into() }
-    } else {
-        TargetChoice::Existing {
-            id: state.open_id(),
-        }
-    };
-    state.import_open(path).unwrap();
-    state
-        .import_commit(
-            ImportCommit {
-                target,
-                taken_at: at(taken_at),
-                date_edited: false,
-                replace: None,
-            },
-            &no_progress,
-        )
-        .unwrap()
-        .snapshot
-        .id
-}
-
-pub(super) fn open_holds() -> FilterSpec {
-    FilterSpec::default()
-}
-
-pub(super) fn view_of(workspace_id: &str, snapshot_id: Option<i64>) -> ViewRef {
-    ViewRef {
-        workspace_id: workspace_id.to_string(),
-        snapshot_id,
-    }
-}
 
 /// The overview as the interface asks for it when what it shows is what the state holds.
 fn overview(state: &mut AppState, spec: &FilterSpec) -> Option<OverviewView> {
@@ -122,10 +44,13 @@ fn overview_without_a_workspace_says_so_and_without_snapshots_is_none() {
         let view = view_of("0123456789abcdef", snapshot_id);
         assert_eq!(
             state.overview(&open_holds(), &view).unwrap_err().kind,
-            "NoWorkspace"
+            ErrorKind::NoWorkspace
         );
     }
-    assert_eq!(state.select_snapshot(1).unwrap_err().kind, "NoWorkspace");
+    assert_eq!(
+        state.select_snapshot(1).unwrap_err().kind,
+        ErrorKind::NoWorkspace
+    );
     state.create_workspace("Empty").unwrap();
     assert_eq!(overview(&mut state, &open_holds()), None);
 }
@@ -190,7 +115,7 @@ fn an_unknown_snapshot_id_is_refused_and_the_selection_stays() {
     let mut state = fx.state();
     let id = import(&mut state, &path, "2026-09-29 00:00:00", true);
     let error = state.select_snapshot(id + 100).unwrap_err();
-    assert_eq!(error.kind, "SnapshotNotFound");
+    assert_eq!(error.kind, ErrorKind::SnapshotNotFound);
     assert_eq!(state.selected_snapshot(), Some(id));
 }
 
@@ -246,7 +171,7 @@ fn the_overview_answers_only_for_the_view_the_interface_shows() {
         view_of(&workspace, None),
     ] {
         let error = state.overview(&open_holds(), &stale).unwrap_err();
-        assert_eq!(error.kind, "ViewChanged", "{stale:?}");
+        assert_eq!(error.kind, ErrorKind::ViewChanged, "{stale:?}");
         assert!(
             error
                 .message
@@ -266,12 +191,12 @@ fn the_overview_answers_only_for_the_view_the_interface_shows() {
     // refused, and so is one made for the workspace that was open before another was opened.
     state.select_snapshot(older).unwrap();
     let late = state.overview(&open_holds(), &view_of(&workspace, Some(newer)));
-    assert_eq!(late.unwrap_err().kind, "ViewChanged");
+    assert_eq!(late.unwrap_err().kind, ErrorKind::ViewChanged);
     let now = overview(&mut state, &open_holds()).unwrap();
     assert_eq!(now.snapshot.id, older);
     let other = state.create_workspace("Other").unwrap().workspace.id;
     let late = state.overview(&open_holds(), &view_of(&workspace, Some(older)));
-    assert_eq!(late.unwrap_err().kind, "ViewChanged");
+    assert_eq!(late.unwrap_err().kind, ErrorKind::ViewChanged);
 
     // A workspace without snapshots answers `None` for no snapshot, and refuses a snapshot.
     assert_eq!(
@@ -283,7 +208,7 @@ fn the_overview_answers_only_for_the_view_the_interface_shows() {
     let error = state
         .overview(&open_holds(), &view_of(&other, Some(older)))
         .unwrap_err();
-    assert_eq!(error.kind, "ViewChanged");
+    assert_eq!(error.kind, ErrorKind::ViewChanged);
 }
 
 #[test]
@@ -552,7 +477,7 @@ fn a_demo_that_fails_before_any_file_removes_its_workspace_and_keeps_the_open_on
     let error = state
         .create_demo_with(&missing, &delete_workspace, &no_hook)
         .unwrap_err();
-    assert_eq!(error.kind, "Internal");
+    assert_eq!(error.kind, ErrorKind::Internal);
     assert!(error
         .message
         .starts_with("The demo workspace could not be built"));
@@ -596,4 +521,85 @@ fn a_demo_workspace_that_cannot_be_removed_is_named_in_the_error() {
         error.message
     );
     assert!(error.message.contains(".holdx-ws"), "{}", error.message);
+}
+
+#[test]
+fn recover_drops_the_draft_and_the_dataset_and_reopens_the_workspace() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    let second = import(
+        &mut state,
+        &fx.synth("b.xlsx", 2),
+        "2026-09-08 00:00:00",
+        false,
+    );
+    let view = view_of(&state.open_id(), Some(second));
+    let before = state.overview(&open_holds(), &view).unwrap();
+    assert_eq!(state.dataset_builds(), 1);
+    state.import_open(&fx.synth("c.xlsx", 3)).unwrap();
+
+    state.recover().unwrap();
+
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
+    // The same workspace and snapshot are in view, read again from the file.
+    assert_eq!(state.open_id(), view.workspace_id);
+    assert_eq!(state.selected_snapshot(), Some(second));
+    assert_eq!(state.overview(&open_holds(), &view).unwrap(), before);
+    assert_eq!(state.dataset_builds(), 2, "the dataset was built again");
+}
+
+#[test]
+fn recover_without_a_workspace_open_leaves_none_open() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    state.import_open(&fx.synth("a.xlsx", 1)).unwrap();
+    state.recover().unwrap();
+    assert_eq!(state.current().unwrap(), None);
+    assert_eq!(
+        state.import_review(None).unwrap_err().kind,
+        ErrorKind::NoDraft
+    );
+}
+
+#[test]
+fn a_recover_whose_reopen_fails_leaves_no_workspace_open_and_says_why() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let id = import(
+        &mut state,
+        &fx.synth("a.xlsx", 1),
+        "2026-09-01 00:00:00",
+        true,
+    );
+    let view = view_of(&state.open_id(), Some(id));
+    let file = fx
+        .workspaces()
+        .join(format!("{}.holdx-ws", state.open_id()));
+    assert!(file.is_file());
+    std::fs::write(&file, "not a workspace").unwrap();
+
+    let error = state.recover().unwrap_err();
+    assert_eq!(error.kind, ErrorKind::NotAWorkspace);
+    assert!(
+        error.message.starts_with(
+            "After an operation failed part-way, the workspace could not be reopened: The file "
+        ),
+        "{}",
+        error.message
+    );
+    assert!(error.message.contains("holdx-ws"), "{}", error.message);
+    assert_eq!(state.current().unwrap(), None);
+    assert_eq!(
+        state.overview(&open_holds(), &view).unwrap_err().kind,
+        ErrorKind::NoWorkspace
+    );
 }

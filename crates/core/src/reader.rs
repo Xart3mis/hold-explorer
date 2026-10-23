@@ -42,8 +42,8 @@ fn unreadable(path: &Path, detail: impl ToString) -> ImportError {
 /// The largest file that is read, in bytes.
 pub(crate) const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 
-/// Refuses what is not a regular file, or is larger than [`MAX_FILE_BYTES`], before anything is
-/// read: a device or a named pipe could block or never end.
+/// Refuses what is not a regular file before it is opened: a device or a named pipe could block
+/// or never end.
 fn check_plain_file(path: &Path) -> Result<(), ImportError> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -55,45 +55,88 @@ fn check_plain_file(path: &Path) -> Result<(), ImportError> {
         Err(e) => return Err(unreadable(path, e)),
     };
     if !metadata.is_file() {
-        return Err(unreadable(
-            path,
-            "it is not a regular file (it is a folder, a device, or a pipe); choose an Excel workbook or a CSV file",
-        ));
-    }
-    if metadata.len() > MAX_FILE_BYTES {
-        let megabytes = |bytes: u64| bytes.div_ceil(1024 * 1024);
-        return Err(unreadable(
-            path,
-            format!(
-                "the file is {} MB, which is over the limit of {} MB; split the export into smaller files",
-                megabytes(metadata.len()),
-                megabytes(MAX_FILE_BYTES)
-            ),
-        ));
+        return Err(not_a_regular_file(path));
     }
     Ok(())
 }
 
-/// The bytes of a file and its modified time. The file is opened and read once. A missing file
-/// is `NotFound`, an empty one is `EmptyFile`, one that is not a regular file or is larger than
-/// [`MAX_FILE_BYTES`] is `Unreadable`, and any other I/O error is `Unreadable`.
+fn not_a_regular_file(path: &Path) -> ImportError {
+    unreadable(
+        path,
+        "it is not a regular file (it is a folder, a device, or a pipe); choose an Excel workbook or a CSV file",
+    )
+}
+
+/// The file is `size` bytes, larger than `limit`.
+fn too_large(path: &Path, size: u64, limit: u64) -> ImportError {
+    let megabytes = |bytes: u64| bytes.div_ceil(1024 * 1024);
+    unreadable(
+        path,
+        format!(
+            "the file is {} MB, which is over the limit of {} MB; split the export into smaller files",
+            megabytes(size),
+            megabytes(limit)
+        ),
+    )
+}
+
+/// Reads the open file `file`, whose size the check through its handle found to be `size`,
+/// refusing it when it is larger than `limit`. At most `limit` + 1 bytes are read, so a file
+/// that grew after the check is refused as too large, never read whole.
+fn read_within(
+    path: &Path,
+    file: &mut impl Read,
+    size: u64,
+    limit: u64,
+) -> Result<Vec<u8>, ImportError> {
+    if size > limit {
+        return Err(too_large(path, size, limit));
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| read_error(path, e))?;
+    if bytes.len() as u64 > limit {
+        // Only that it is over the limit is known: the rest was not read.
+        return Err(unreadable(
+            path,
+            format!(
+                "the file grew while it was read and is larger than the {} MB limit; split the export into smaller files",
+                limit.div_ceil(1024 * 1024)
+            ),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_error(path: &Path, error: std::io::Error) -> ImportError {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        ImportError::NotFound {
+            path: path.display().to_string(),
+        }
+    } else {
+        unreadable(path, error)
+    }
+}
+
+/// The bytes of a file and its modified time. The file is opened once, its size is checked
+/// through that handle, and at most [`MAX_FILE_BYTES`] + 1 bytes are read through it. A missing
+/// file is `NotFound`, an empty one is `EmptyFile`, one that is not a regular file or is larger
+/// than [`MAX_FILE_BYTES`] (when checked, or by the time it is read) is `Unreadable`, and any
+/// other I/O error is `Unreadable`.
 pub(crate) fn read_file_bytes(path: &Path) -> Result<(Vec<u8>, Option<SystemTime>), ImportError> {
     check_plain_file(path)?;
-    let read = || -> std::io::Result<(Vec<u8>, Option<SystemTime>)> {
-        let mut file = std::fs::File::open(path)?;
-        let modified = file.metadata().and_then(|m| m.modified()).ok();
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
-        Ok((bytes, modified))
-    };
-    match read() {
-        Ok((bytes, _)) if bytes.is_empty() => Err(empty_file(path)),
-        Ok(read) => Ok(read),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(ImportError::NotFound {
-            path: path.display().to_string(),
-        }),
-        Err(e) => Err(unreadable(path, e)),
+    let mut file = std::fs::File::open(path).map_err(|e| read_error(path, e))?;
+    let metadata = file.metadata().map_err(|e| read_error(path, e))?;
+    if !metadata.is_file() {
+        return Err(not_a_regular_file(path));
     }
+    let modified = metadata.modified().ok();
+    let bytes = read_within(path, &mut file, metadata.len(), MAX_FILE_BYTES)?;
+    if bytes.is_empty() {
+        return Err(empty_file(path));
+    }
+    Ok((bytes, modified))
 }
 
 fn empty_file(path: &Path) -> ImportError {
@@ -723,6 +766,43 @@ mod tests {
         assert!(detail.contains("257 MB"), "{detail}");
         assert!(detail.contains("256 MB"), "{detail}");
         assert!(detail.contains("limit"), "{detail}");
+    }
+
+    /// A file that the size check saw at `seen` bytes and that has grown since: every read gives
+    /// as many bytes as it is asked for, without end. Counts what was read.
+    struct Growing {
+        read: u64,
+    }
+
+    impl Read for Growing {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            buf.fill(b'x');
+            self.read += buf.len() as u64;
+            Ok(buf.len())
+        }
+    }
+
+    #[test]
+    fn a_file_that_grows_after_the_size_check_is_refused_without_being_read_whole() {
+        let path = Path::new("growing.csv");
+        let mut file = Growing { read: 0 };
+        let err = read_within(path, &mut file, 4, 1024 * 1024).unwrap_err();
+        let ImportError::Unreadable { detail, .. } = &err else {
+            panic!("{err:?}");
+        };
+        assert!(detail.contains("larger than the 1 MB limit"), "{detail}");
+        assert!(!detail.contains("2 MB"), "{detail}");
+        assert!(
+            detail.contains("split the export into smaller files"),
+            "{detail}"
+        );
+        assert_eq!(file.read, 1024 * 1024 + 1);
+    }
+
+    #[test]
+    fn a_file_within_the_limit_is_read_whole_through_the_handle() {
+        let bytes = read_within(Path::new("a.csv"), &mut &b"abc"[..], 3, 3).unwrap();
+        assert_eq!(bytes, b"abc");
     }
 
     #[test]

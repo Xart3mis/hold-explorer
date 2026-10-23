@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
 import { expectAccessible } from "../../test/axe";
@@ -31,7 +33,46 @@ function setup(
   return { onPress, onRemove, user };
 }
 
+const CHIP_CSS = readFileSync(join(import.meta.dirname, "FilterChip.module.css"), "utf8");
+
+/** The declarations of the rule of a stylesheet whose selector is exactly `selector`. */
+function declarationsOf(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`(?:^|\\}|\\*/)\\s*${escaped}\\s*\\{([^}]*)\\}`, "m").exec(css);
+  return match?.[1] ?? "";
+}
+
 describe("FilterChip", () => {
+  it("ends the name and the tooltip of a chip that is not in this snapshot with the catalog's words", async () => {
+    const { user } = setup({ isInactive: true });
+    expect(en.filterChip.notInSnapshot).toBe(", not in this snapshot");
+    screen.getByRole("button", { name: "Discipline Civil, not in this snapshot" });
+    // On keyboard focus a tooltip shows at once.
+    await user.tab();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Discipline Civil, not in this snapshot",
+    );
+  });
+
+  it("has no tooltip of its own while its filter applies", async () => {
+    const { user } = setup();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Discipline Civil" })).toHaveFocus();
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("draws a chip that is not in this snapshot with full-contrast text and a dashed outline", () => {
+    const rule = declarationsOf(CHIP_CSS, ".chip[data-inactive]");
+    expect(rule).toMatch(/border-style:\s*dashed/);
+    expect(rule).toMatch(/border-color:\s*var\(--color-border-strong\)/);
+    expect(rule).toMatch(/color:\s*var\(--color-text-primary\)/);
+    // No ink of the chip is muted: not the field name, and not the icon.
+    const inks = [".chip[data-inactive] .field", ".chip[data-inactive] .remove", ".inactive"].map(
+      (selector) => declarationsOf(CHIP_CSS, selector),
+    );
+    for (const ink of inks) expect(ink).not.toContain("--color-text-muted");
+  });
+
   it("is a button named by its field and its value, with a button that removes it", () => {
     setup();
     expect(screen.getByRole("button", { name: "Discipline Civil" })).toBeInTheDocument();
@@ -41,7 +82,7 @@ describe("FilterChip", () => {
 
   it("says in its name that its filter is not in this snapshot, shows its field and value, and can still be opened and removed", async () => {
     const { onPress, onRemove, user } = setup({ isInactive: true });
-    const name = `Discipline Civil ${en.filterChip.notInSnapshot}`;
+    const name = `Discipline Civil${en.filterChip.notInSnapshot}`;
     const body = screen.getByRole("button", { name });
     const pill = body.closest<HTMLElement>("[data-part='filter-chip']");
     if (pill === null) throw new Error("The chip holds its button.");

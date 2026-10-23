@@ -4,7 +4,7 @@
 pub const UNSPECIFIED: &str = "Unspecified";
 
 /// Shown when a hold has no name, role, or hold type.
-pub const DASH: &str = "—";
+pub const DASH: &str = crate::words::NONE;
 
 /// The characters JavaScript's `\s` matches. Rust's `char::is_whitespace` differs: it includes
 /// U+0085 and excludes U+FEFF.

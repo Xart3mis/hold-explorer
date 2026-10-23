@@ -23,6 +23,12 @@ export const workspaceApi = {
   workspaceRename: (name: string) => call("workspace_rename", { name }),
   snapshotSelect: (id: number) => call("snapshot_select", { id }),
   demoCreate: () => call("demo_create", {}),
+  /**
+   * Keeps the workspaces in `path` from now on (`null`: the default folder), moving the workspace
+   * files there with `moveFiles`. The open workspace is closed and reopened from where it is then.
+   */
+  setWorkspaceFolder: (path: string | null, moveFiles: boolean) =>
+    call("set_workspace_folder", { path, moveFiles }),
   /** Commits the draft; `onProgress` hears each phase as it starts. */
   importCommit: (request: ImportCommit, onProgress: (phase: ImportPhase) => void) => {
     const channel = new Channel<ImportPhase>();

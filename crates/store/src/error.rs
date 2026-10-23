@@ -18,6 +18,20 @@ pub enum StoreError {
         path: String,
     },
 
+    #[error("The file {path} has the name of a workspace but is not one Hold Explorer can read: it is damaged beyond repair. Restore a copy of the workspace from a backup, or move this file out of the workspace folder.")]
+    /// A file named like a workspace is not a database at all: it is damaged beyond repair.
+    NotADatabase {
+        /// The file that was opened.
+        path: String,
+    },
+
+    #[error("This file is a copy of the workspace in {original}. Two files with one workspace cannot both be opened; move this one to another folder to keep it.")]
+    /// The file holds the same workspace as another file in the folder, whose name sorts first.
+    DuplicateWorkspace {
+        /// The name of the file in the same folder that is listed as the workspace.
+        original: String,
+    },
+
     #[error("The workspace {path} was written by a newer version of Hold Explorer (schema version {found}; this version supports up to {supported}). Update Hold Explorer to open it.")]
     /// The file was written by a newer version of the app.
     NewerSchema {
@@ -109,6 +123,18 @@ mod tests {
                     path: "a.db".into(),
                 },
                 "Choose a workspace file",
+            ),
+            (
+                StoreError::NotADatabase {
+                    path: "a.holdx-ws".into(),
+                },
+                "Restore a copy",
+            ),
+            (
+                StoreError::DuplicateWorkspace {
+                    original: "a.holdx-ws".into(),
+                },
+                "move this one to another folder",
             ),
             (
                 StoreError::NewerSchema {

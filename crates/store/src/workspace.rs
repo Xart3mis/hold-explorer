@@ -235,21 +235,7 @@ impl Workspace {
 
     /// The column mapping remembered for this workspace, if one was saved.
     pub fn saved_mapping(&self) -> Result<Option<SavedMapping>, StoreError> {
-        let json: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT value_json FROM setting WHERE key = ?1",
-                [MAPPING_KEY],
-                |r| r.get(0),
-            )
-            .optional()
-            .map_err(database)?;
-        json.map(|json| {
-            serde_json::from_str(&json).map_err(|e| StoreError::Corrupt {
-                detail: format!("the saved column mapping could not be read ({e})"),
-            })
-        })
-        .transpose()
+        read_saved_mapping(&self.conn)
     }
 
     /// Remembers the column mapping for this workspace, replacing any earlier one.
@@ -269,6 +255,24 @@ pub(crate) fn insert_project_number(conn: &Connection, project_no: &str) -> Resu
         .map_err(database)?;
     }
     Ok(())
+}
+
+/// Reads the saved mapping on `conn`, which may be a transaction in progress.
+pub(crate) fn read_saved_mapping(conn: &Connection) -> Result<Option<SavedMapping>, StoreError> {
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT value_json FROM setting WHERE key = ?1",
+            [MAPPING_KEY],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(database)?;
+    json.map(|json| {
+        serde_json::from_str(&json).map_err(|e| StoreError::Corrupt {
+            detail: format!("the saved column mapping could not be read ({e})"),
+        })
+    })
+    .transpose()
 }
 
 /// Stores the saved mapping on `conn`, which may be a transaction in progress.

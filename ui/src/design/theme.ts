@@ -1,4 +1,5 @@
 import type { Theme } from "../bindings/Theme";
+import { remember, remembered } from "./stored";
 
 const LIGHT_SCHEME = "(prefers-color-scheme: light)";
 
@@ -6,24 +7,6 @@ const LIGHT_SCHEME = "(prefers-color-scheme: light)";
 export const THEME_STORAGE_KEY = "hold-explorer.theme";
 
 const THEMES: readonly Theme[] = ["Dark", "Light", "System"];
-
-/** Keeps the setting for the next start. Storage that refuses is done without. */
-function remember(theme: Theme): void {
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // The settings file is where the theme is saved; this copy only spares a dark first frame.
-  }
-}
-
-function remembered(): Theme | null {
-  try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return THEMES.find((theme) => theme === stored) ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /** Removes the listener on the operating system's color scheme, while System is applied. */
 let stopFollowing: (() => void) | null = null;
@@ -41,7 +24,7 @@ function show(light: boolean): void {
 export function applyTheme(theme: Theme): void {
   stopFollowing?.();
   stopFollowing = null;
-  remember(theme);
+  remember(THEME_STORAGE_KEY, theme);
 
   if (theme !== "System") {
     show(theme === "Light");
@@ -69,6 +52,6 @@ export function applyTheme(theme: Theme): void {
  * theme, leaves the dark default.
  */
 export function applyStoredTheme(): void {
-  const theme = remembered();
+  const theme = remembered(THEME_STORAGE_KEY, THEMES);
   if (theme) applyTheme(theme);
 }

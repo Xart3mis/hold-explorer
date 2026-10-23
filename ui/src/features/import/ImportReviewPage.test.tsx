@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import type { ErrorKind } from "../../bindings/ErrorKind";
 import { describe, expect, it, vi } from "vitest";
 import type { ArgsOf } from "../../api/commands";
 import { keys } from "../../api/keys";
@@ -102,7 +103,7 @@ describe("the review page while the file is read", () => {
     expect(within(main).getAllByText(en.import.mapping.missing)).toHaveLength(3);
   });
 
-  it.each([
+  it.each<[ErrorKind, string, string]>([
     [
       "Empty",
       en.import.error.Empty,
@@ -907,7 +908,7 @@ describe("importing from the review page", () => {
     SLOW,
     async () => {
       const warning = {
-        kind: "Settings",
+        kind: "Settings" as const,
         message:
           "The workspace is open, but Hold Explorer could not remember it for the next start. The settings file could not be written (permission denied).",
       };
@@ -934,7 +935,7 @@ describe("importing from the review page", () => {
     },
   );
 
-  it.each([
+  it.each<[ErrorKind, string, string]>([
     [
       "AlreadyImported",
       en.import.error.AlreadyImported,

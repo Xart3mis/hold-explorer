@@ -220,7 +220,7 @@ describe("each control writes the choice", () => {
     }
     await app.user.click(within(dialog).getByRole("button", { name: saveOf("Blockers") }));
     await waitFor(() => {
-      expect(readChoice("blockers").columns).toEqual(["step"]);
+      expect(readChoice("blockers").columns).toEqual(["blocker"]);
     });
 
     dialog = await openPanel(app.user, "Blockers");

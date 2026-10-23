@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::data::empty_dataset;
-use super::error::CommandError;
+use super::error::{CommandError, ErrorKind};
 use super::snapshots::ViewRef;
 use super::AppState;
 
@@ -169,7 +169,7 @@ impl Clipboard for SystemClipboard {
 /// What a clipboard the system refused means to the user.
 fn clipboard_error(error: arboard::Error) -> CommandError {
     CommandError::new(
-        "Clipboard",
+        ErrorKind::Clipboard,
         format!(
             "Hold Explorer could not use the clipboard: {error}. Another program may hold the clipboard; wait a moment and copy again."
         ),
@@ -440,7 +440,7 @@ impl AppState {
             Ok(())
         } else {
             Err(CommandError::new(
-                "NotWritten",
+                ErrorKind::NotWritten,
                 "Hold Explorer opens only files it saved in this session. Open the file from its folder.",
             ))
         }
@@ -539,8 +539,8 @@ fn first(sheets: &[Sheet]) -> Result<&Sheet, CommandError> {
 /// `error` with `message` in place of its text when it is a `ViewChanged` refusal: the text of
 /// that kind was written for a reading the page makes again by itself, which an export is not.
 fn told_as(error: CommandError, message: &str) -> CommandError {
-    if error.kind == "ViewChanged" {
-        CommandError::new("ViewChanged", message)
+    if error.kind == ErrorKind::ViewChanged {
+        CommandError::new(ErrorKind::ViewChanged, message)
     } else {
         error
     }
@@ -654,7 +654,7 @@ pub fn check_extension(format: &SaveFormat, path: &Path) -> Result<(), CommandEr
         |name| name.to_string_lossy().into_owned(),
     );
     Err(CommandError::new(
-        "Extension",
+        ErrorKind::Extension,
         format!(
             "Hold Explorer did not save {file}: this export is saved as a .{wanted} file, and the name ends otherwise. Save it again with a name that ends in .{wanted}."
         ),

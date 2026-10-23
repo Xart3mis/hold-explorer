@@ -13,6 +13,8 @@ export interface NavItemProps {
   icon: LucideIcon;
   /** The item names the page that is shown. */
   isCurrent: boolean;
+  /** Pressing the item of the page that is shown: the page is drawn anew, as the address is reached. */
+  onRestart?: () => void;
   /** The shortcut that opens the same address, shown in the item's tooltip. */
   shortcut?: string;
   /** A quiet tag after the label, such as "Soon". It is part of the item's accessible name. */
@@ -36,6 +38,7 @@ export function NavItem({
   label,
   icon,
   isCurrent,
+  onRestart,
   shortcut,
   tag,
   tooltipPlacement = "end",
@@ -44,6 +47,7 @@ export function NavItem({
   const link = (
     <Link
       href={href}
+      {...(onRestart === undefined ? {} : { onPress: onRestart })}
       className={cx(styles.navItem)}
       render={(domProps) =>
         "href" in domProps ? (

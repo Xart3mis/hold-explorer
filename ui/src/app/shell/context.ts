@@ -2,14 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { createContext, useContext } from "react";
 import { startQuery } from "../query";
 import type { AppStart } from "../../bindings/AppStart";
-import type { CommandError } from "../../bindings/CommandError";
+import type { AppError } from "../../api/error";
 
 /** Something that failed, for the shell to show: what failed, and the error of the command. */
 export interface ShellReport {
   /** What failed, in a sentence that stands on any page: it names what it is about. */
   title: string;
   /** What the failed command returned. Its message says why, and how to fix it. */
-  error: CommandError;
+  error: AppError;
 }
 
 /** Something the shell says without anything having failed: what happened, and what to do. */

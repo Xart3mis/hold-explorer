@@ -69,8 +69,8 @@ pub const HOLD_COLUMNS: [&str; 14] = [
 pub const BREAKDOWN_COLUMNS: [&str; 3] = ["label", "holds", "lines"];
 /// The column ids of the steps of the solve order, in table order.
 pub const BLOCKER_COLUMNS: [&str; 7] = [
-    "step",
     "blocker",
+    "step",
     "kind",
     "discipline",
     "holds",
@@ -867,18 +867,18 @@ fn step_defs(text: &ExportText) -> Result<Vec<Def<SolveRow>>, ExportError> {
     let h = |id: &str| label(text, &format!("file.column.blockers.{id}"));
     Ok(vec![
         def(
-            "step",
-            h("step")?,
-            ColumnKind::Count,
-            &[],
-            |s: &SolveRow| Cell::Count(s.step),
-        ),
-        def(
             "blocker",
             h("blocker")?,
             ColumnKind::Text,
             &[],
             |s: &SolveRow| Cell::Text(s.label.clone()),
+        ),
+        def(
+            "step",
+            h("step")?,
+            ColumnKind::Count,
+            &[],
+            |s: &SolveRow| Cell::Count(s.step),
         ),
         def("kind", h("kind")?, ColumnKind::Text, &[], |s: &SolveRow| {
             Cell::Text(s.kind.clone())

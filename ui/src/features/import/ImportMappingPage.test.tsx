@@ -168,6 +168,22 @@ describe("the mapping page", () => {
     expect(within(main).getByRole("button", { name: text.continue })).toBeEnabled();
   });
 
+  it("says that the saved mapping could not be read, and maps the file by its headers", async () => {
+    const damaged =
+      "The column mapping saved in this workspace could not be read (expected value at line 1 column 1), so the columns are matched as for a workspace without one. Check the mapping below; this import's mapping replaces the damaged one.";
+    openFlow("/import/mapping", {
+      draft: unmappedDraft({ saved_mapping_problem: { kind: "Corrupt", message: damaged } }),
+    });
+    const main = await mapping();
+    const notice = must(
+      within(main).getByText(damaged).closest<HTMLElement>('[role="status"]'),
+      "the notice around the message",
+    );
+    expect(notice).toHaveAttribute("data-tone", "warning");
+    expect(within(notice).getByText(text.savedUnreadableTitle)).toBeVisible();
+    expect(within(main).queryByText(text.savedTitle)).not.toBeInTheDocument();
+  });
+
   it("says nothing about a saved mapping when none was applied", async () => {
     openFlow("/import/mapping", { draft: exportDraft() });
     const main = await mapping();

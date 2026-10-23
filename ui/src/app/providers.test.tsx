@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
+import type { Density } from "../bindings/Density";
 import type { Theme } from "../bindings/Theme";
 import { useToast } from "../components/ToastRegion/ToastRegion";
 import { applyTheme } from "../design/theme";
@@ -11,13 +12,15 @@ import { commandFailure, mockCommands } from "../test/ipc";
 import { AppProviders } from "./providers";
 import { queryClient, startQuery } from "./query";
 
-function start(theme: Theme): AppStart {
+function start(theme: Theme, density: Density = "Comfortable"): AppStart {
   return {
     version: "0.1.0",
-    settings: { theme, workspace_dir: null, last_workspace: null },
+    settings_file: "/home/ada/.config/hold-explorer/settings.json",
+    settings: { theme, density, author_name: "", workspace_dir: null, last_workspace: null },
     list: { workspaces: [], unreadable: [], folder: "workspaces" },
     list_error: null,
     open: null,
+    settings_problem: null,
   };
 }
 
@@ -40,6 +43,7 @@ const root = document.documentElement;
 afterEach(() => {
   applyTheme("Dark");
   root.removeAttribute("data-theme");
+  root.removeAttribute("data-density");
   vi.unstubAllGlobals();
 });
 
@@ -131,6 +135,18 @@ describe("AppProviders", () => {
     );
     await waitFor(() => {
       expect(root).toHaveAttribute("data-theme", "light");
+    });
+  });
+
+  it("applies the saved density as soon as the application start is known", async () => {
+    mockCommands({ app_start: () => start("Dark", "Compact") });
+    render(
+      <AppProviders>
+        <p>content</p>
+      </AppProviders>,
+    );
+    await waitFor(() => {
+      expect(root).toHaveAttribute("data-density", "compact");
     });
   });
 

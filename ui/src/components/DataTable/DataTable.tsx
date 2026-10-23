@@ -47,7 +47,7 @@ import {
   type SortDescriptor,
   type TableLayoutProps,
 } from "react-aria-components";
-import { t } from "../../text/i18n";
+import { t, type MessageKey } from "../../text/i18n";
 import { Button } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
@@ -131,6 +131,40 @@ interface ColumnBase<Item> {
 function isSortable(column: ColumnBase<never>): boolean {
   return column.allowsSorting === true || column.sortValue !== undefined;
 }
+
+/** A key or a press the table answers, for the shortcut sheet to list. */
+export interface TableKey {
+  /** As a shortcut is written: modifiers, then the key, joined by `+`. */
+  shortcut: string;
+  /** Catalog key of what it does. */
+  label: MessageKey;
+}
+
+/**
+ * Every key and press of a table, as DESIGN.md "Table" documents them (Selection and Focus). The
+ * shortcut sheet lists exactly these; a test holds the two to each other.
+ */
+export const TABLE_KEYS: readonly TableKey[] = [
+  { shortcut: "Up", label: "shortcuts.table.up" },
+  { shortcut: "Down", label: "shortcuts.table.down" },
+  { shortcut: "Left", label: "shortcuts.table.left" },
+  { shortcut: "Right", label: "shortcuts.table.right" },
+  { shortcut: "Page Up", label: "shortcuts.table.pageUp" },
+  { shortcut: "Page Down", label: "shortcuts.table.pageDown" },
+  { shortcut: "Home", label: "shortcuts.table.home" },
+  { shortcut: "End", label: "shortcuts.table.end" },
+  { shortcut: "Enter", label: "shortcuts.table.enter" },
+  { shortcut: "Ctrl+Enter", label: "shortcuts.table.ctrlEnter" },
+  { shortcut: "Shift+Enter", label: "shortcuts.table.shiftEnter" },
+  { shortcut: "Esc", label: "shortcuts.table.escape" },
+  { shortcut: "Ctrl+Click", label: "shortcuts.table.ctrlClick" },
+  { shortcut: "Shift+Click", label: "shortcuts.table.shiftClick" },
+  { shortcut: "Shift+Up", label: "shortcuts.table.shiftUp" },
+  { shortcut: "Shift+Down", label: "shortcuts.table.shiftDown" },
+  { shortcut: "Ctrl+A", label: "shortcuts.table.selectAll" },
+  { shortcut: "Ctrl+Space", label: "shortcuts.table.ctrlSpace" },
+  { shortcut: "Shift+Space", label: "shortcuts.table.shiftSpace" },
+];
 
 /** A column of a table. It stays whatever the width of the table. */
 export interface DataTableColumn<Item> extends ColumnBase<Item> {
@@ -759,6 +793,8 @@ class MarkStore {
 }
 
 const MarkContext = createContext<MarkStore>(new MarkStore());
+/** Whether the row being drawn is the open row among selected rows: the first cell marks it. */
+const OpenMarkContext = createContext(false);
 const noMark = (): Mark => null;
 
 /**
@@ -780,14 +816,27 @@ function MarkedRow({
   const isSelected = mark === "selected" || mark === "selected open";
   const isOpen = mark === "open" || mark === "selected open";
   return (
-    <div
-      {...domProps}
-      aria-selected={isSelected}
-      data-selected={isSelected ? "true" : undefined}
-      data-open={isOpen ? "" : undefined}
-      aria-current={isOpen ? "true" : undefined}
-    />
+    <OpenMarkContext value={mark === "selected open"}>
+      <div
+        {...domProps}
+        aria-selected={isSelected}
+        data-selected={isSelected ? "true" : undefined}
+        data-open={isOpen ? "" : undefined}
+        aria-current={isOpen ? "true" : undefined}
+      />
+    </OpenMarkContext>
   );
+}
+
+/**
+ * The small mark at the start of the first cell of the open row among two or more selected rows.
+ * It stands in the padding of the cell and out of the flow, so no text and no column moves, and it
+ * is decoration: the row already says it is current.
+ */
+function OpenMark() {
+  return useContext(OpenMarkContext) ? (
+    <span aria-hidden="true" data-part="open-mark" className={styles.openMark} />
+  ) : null;
 }
 
 /**
@@ -1122,6 +1171,7 @@ export function DataTable<Item, Child = never>({
           {expandable && cell.isPinned
             ? ({ hasChildItems }) => (
                 <>
+                  {index === 0 ? <OpenMark /> : null}
                   {hasChildItems ? (
                     <Chevron />
                   ) : (
@@ -1130,7 +1180,12 @@ export function DataTable<Item, Child = never>({
                   <CellValue column={index} />
                 </>
               )
-            : () => <CellValue column={index} />}
+            : () => (
+                <>
+                  {index === 0 ? <OpenMark /> : null}
+                  <CellValue column={index} />
+                </>
+              )}
         </Cell>
       )),
       ...(hasActions

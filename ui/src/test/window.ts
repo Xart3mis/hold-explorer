@@ -16,6 +16,7 @@ const handlers = new Set<DragHandler>();
  */
 export const windowApi = {
   chooseImportFile: vi.fn<() => Promise<string | null>>(),
+  chooseFolder: vi.fn<() => Promise<string | null>>(),
   showInFolder: vi.fn<(path: string) => Promise<void>>(),
   chooseSavePath: vi.fn<(defaultName: string, format: FileFormat) => Promise<string | null>>(),
   openSavedFile: vi.fn<(path: string) => Promise<void>>(),
@@ -31,6 +32,7 @@ export const windowApi = {
 export function resetWindowApi(): void {
   handlers.clear();
   windowApi.chooseImportFile.mockReset().mockResolvedValue(null);
+  windowApi.chooseFolder.mockReset().mockResolvedValue(null);
   windowApi.showInFolder.mockReset().mockResolvedValue(undefined);
   windowApi.chooseSavePath.mockReset().mockResolvedValue(null);
   windowApi.openSavedFile.mockReset().mockResolvedValue(undefined);

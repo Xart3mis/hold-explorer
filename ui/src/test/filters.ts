@@ -1,6 +1,8 @@
-// Fixtures of the filter bar and its picker: what the `filter_options` and `filter_values`
-// commands answer for a snapshot.
+// Fixtures of the filter bar and its picker: what the `filter_options`, `filter_values`, and
+// `filter_labels` commands answer for a snapshot.
+import type { FilterLabel } from "../bindings/FilterLabel";
 import type { FilterOptions } from "../bindings/FilterOptions";
+import type { FilterSpec } from "../bindings/FilterSpec";
 import type { Group } from "../bindings/Group";
 import type { ValuePage } from "../bindings/ValuePage";
 
@@ -51,4 +53,21 @@ export function valuePage(overrides: Partial<ValuePage> = {}): ValuePage {
   ];
   const total = overrides.total ?? values.length;
   return { total, values, more: total - values.length, ...overrides };
+}
+
+/**
+ * What `filter_labels` answers for a snapshot that has none of the values of `spec`: each value
+ * once, labelled with its key, and "(blank)" for the empty key, as the command labels them.
+ */
+export function filterLabels(spec: FilterSpec): FilterLabel[] {
+  const labels: FilterLabel[] = [];
+  for (const field of spec.fields) {
+    for (const key of field.values) {
+      const seen = labels.some(
+        (label) => label.key === key && JSON.stringify(label.dim) === JSON.stringify(field.dim),
+      );
+      if (!seen) labels.push({ dim: field.dim, key, label: key === "" ? "(blank)" : key });
+    }
+  }
+  return labels;
 }
