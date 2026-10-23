@@ -354,16 +354,27 @@ fn best_of_three(ds: &Dataset, query: &str) -> (Duration, usize) {
 fn a_search_of_thirty_thousand_holds_takes_under_100_ms() {
     // A short substring found in several groups, a longer one, a typo that only the edit
     // distance finds (so every value of the snapshot is compared word by word), and a line-ID
-    // pattern. At 30,000 holds each is held to 100 ms, the best of three runs; at 10,000 it is
+    // pattern; and the worst case, a typo whose first long word is close to a word of many
+    // values and whose second is close to none, so each of those values is compared word by word
+    // twice over. At 30,000 holds each is held to 100 ms, the best of three runs; at 10,000 it is
     // recorded.
-    let queries = ["pr", "pending", "pendnig civl", "*-5*-00*"];
+    let queries = [
+        "pr",
+        "pending",
+        "pendnig civl",
+        "*-5*-00*",
+        "pendnig qwxyzk",
+    ];
     for (lines, holds) in [(3600, 10_000), (10_800, 30_000)] {
         let ds = synthetic(lines, holds);
         assert_eq!(ds.rows.len(), holds);
         let mut times = Vec::new();
         for query in queries {
             let (best, groups) = best_of_three(&ds, query);
-            assert!(groups > 0, "\"{query}\" found nothing in {holds} holds");
+            assert!(
+                groups > 0 || query == "pendnig qwxyzk",
+                "\"{query}\" found nothing in {holds} holds"
+            );
             if holds == 30_000 {
                 assert!(
                     best < Duration::from_millis(100),

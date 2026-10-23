@@ -6,9 +6,10 @@
 //! substring of it; failing that, when every query word of at least four characters is within
 //! one edit of a word of the text (two edits from eight characters), an edit being an
 //! insertion, a deletion, a substitution, or a swap of two neighbours (the optimal string
-//! alignment distance). A query word shorter than four characters must then appear in the text
-//! as it is. A query with `*` is a pattern for whole line IDs, `*` standing for any run of
-//! characters, and searches Lines only. A query shorter than two characters finds nothing.
+//! alignment distance). A query word shorter than four characters, or made of digits only, must
+//! then start a word of the text as it is. A query with `*` is a pattern for whole line IDs, `*`
+//! standing for any run of characters, and searches Lines only. A query shorter than two
+//! characters, as typed and trimmed, finds nothing.
 //!
 //! Folding lowers the case, removes the accents of the Latin-1 Supplement and Latin Extended-A
 //! letters (U+00C0 to U+017F, so `é` is `e`, `ß` is `ss`, and `æ` is `ae`) and the combining marks
@@ -92,7 +93,8 @@ pub struct SearchHit {
     pub value: String,
     /// The text shown, split into matched and unmatched parts.
     pub parts: Vec<TextPart>,
-    /// A second line: the discipline of a blocker, the role of a person; empty when none.
+    /// A second line: the role of a person; empty when none (a blocker's label already names its
+    /// discipline).
     pub detail: String,
     /// Holds with this value in the snapshot, open and released.
     pub holds: usize,
@@ -222,7 +224,7 @@ impl Candidate<'_> {
         let mut folded = String::new();
         let mut origin = Vec::new();
         fold_into(self.text, &mut folded, Some(&mut origin));
-        let ranges: Vec<(usize, usize)> = matcher
+        let mut ranges: Vec<(usize, usize)> = matcher
             .matches(&folded, scratch)
             .map(|(_, ranges)| ranges)
             .unwrap_or_default()
@@ -230,6 +232,16 @@ impl Candidate<'_> {
             .filter(|(start, end)| end > start)
             .map(|(start, end)| (origin[start].0, origin[end - 1].1))
             .collect();
+        // A typo match gives its ranges in the order of the query's words: put them in the
+        // order of the text, overlaps merged.
+        ranges.sort_unstable();
+        ranges.dedup_by(|next, kept| {
+            let overlaps = next.0 <= kept.1;
+            if overlaps {
+                kept.1 = kept.1.max(next.1);
+            }
+            overlaps
+        });
         let mut text = format!("{}{}", self.prefix, self.text);
         let mut ranges: Vec<(usize, usize)> = ranges
             .into_iter()
@@ -389,11 +401,8 @@ impl<'a> Candidates<'a> {
                 value: format!("{discipline}|{item}"),
                 text: item,
                 prefix,
-                detail: if is_blank(discipline) {
-                    String::new()
-                } else {
-                    discipline.to_string()
-                },
+                // The label carries the discipline.
+                detail: String::new(),
                 holds: tally.holds,
                 released: tally.all_released(),
             }
@@ -443,7 +452,8 @@ enum Matcher {
     Text {
         folded: String,
         long: Vec<LongWord>,
-        short: Vec<String>,
+        /// The words shorter than four characters, and those of digits only: no edit allowed.
+        exact: Vec<String>,
     },
     /// The literal runs of a line-ID pattern, between its `*`.
     Pattern(Vec<String>),
@@ -457,11 +467,15 @@ struct Scratch {
 }
 
 impl Matcher {
-    /// The matcher of `query`; `None` when the query is shorter than [`MIN_QUERY_CHARS`].
+    /// The matcher of `query`; `None` when the query, trimmed, is shorter than
+    /// [`MIN_QUERY_CHARS`] characters as typed.
     fn new(query: &str) -> Option<Matcher> {
+        if query.trim().chars().count() < MIN_QUERY_CHARS {
+            return None;
+        }
         let mut folded = String::new();
         fold_into(query, &mut folded, None);
-        if folded.chars().count() < MIN_QUERY_CHARS {
+        if folded.is_empty() {
             return None;
         }
         if folded.contains('*') {
@@ -470,19 +484,21 @@ impl Matcher {
             ));
         }
         let mut long = Vec::new();
-        let mut short = Vec::new();
+        let mut exact = Vec::new();
         for (start, end) in words(&folded) {
-            let chars: Vec<char> = folded[start..end].chars().collect();
-            match chars.len() {
-                0..=3 => short.push(folded[start..end].to_string()),
-                4..=7 => long.push(LongWord { chars, edits: 1 }),
-                _ => long.push(LongWord { chars, edits: 2 }),
+            let word = &folded[start..end];
+            let chars: Vec<char> = word.chars().collect();
+            if chars.len() < 4 || chars.iter().all(char::is_ascii_digit) {
+                exact.push(word.to_string());
+            } else {
+                let edits = if chars.len() < 8 { 1 } else { 2 };
+                long.push(LongWord { chars, edits });
             }
         }
         Some(Matcher::Text {
             folded,
             long,
-            short,
+            exact,
         })
     }
 
@@ -495,17 +511,21 @@ impl Matcher {
             Matcher::Text {
                 folded,
                 long,
-                short,
-            } => substring(folded, text).or_else(|| typo(long, short, text, scratch)),
+                exact,
+            } => substring(folded, text).or_else(|| typo(long, exact, text, scratch)),
         }
     }
 }
 
-/// The best occurrence of `query` in `text`: at the start, then at the start of a word, then
-/// the first.
+/// The best occurrence of `query` in `text`, overlapping ones included: at the start, then at
+/// the start of a word, then the first.
 fn substring(query: &str, text: &str) -> Option<(Rank, Vec<(usize, usize)>)> {
     let mut best: Option<(Rank, usize)> = None;
-    for (at, _) in text.match_indices(query) {
+    let mut from = 0;
+    while let Some(found) = text[from..].find(query) {
+        let at = from + found;
+        // The next search starts one character on, so an overlapping occurrence is seen.
+        from = at + text[at..].chars().next().map_or(1, char::len_utf8);
         let rank = match text[..at].chars().next_back() {
             None => Rank::Start,
             Some(before) if !before.is_alphanumeric() => Rank::Word,
@@ -521,19 +541,26 @@ fn substring(query: &str, text: &str) -> Option<(Rank, Vec<(usize, usize)>)> {
     best.map(|(rank, at)| (rank, vec![(at, at + query.len())]))
 }
 
-/// A typo match: every long query word is close to a word of `text`, and every short one is in
-/// `text` as it is. Marks the words of the text the long words matched.
+/// A typo match: every long query word is close to a word of `text`, and every exact one starts
+/// a word of `text` as it is. Marks the words of the text the long words matched, and the start
+/// each exact word matched.
 fn typo(
     long: &[LongWord],
-    short: &[String],
+    exact: &[String],
     text: &str,
     scratch: &mut Scratch,
 ) -> Option<(Rank, Vec<(usize, usize)>)> {
-    if long.is_empty() || !short.iter().all(|word| text.contains(word.as_str())) {
+    if long.is_empty() {
         return None;
     }
     let text_words = words(text);
-    let mut ranges = Vec::with_capacity(long.len());
+    let mut ranges = Vec::with_capacity(long.len() + exact.len());
+    for query_word in exact {
+        let (start, _) = text_words
+            .iter()
+            .find(|(start, end)| text[*start..*end].starts_with(query_word.as_str()))?;
+        ranges.push((*start, start + query_word.len()));
+    }
     for query_word in long {
         let close = text_words.iter().find(|(start, end)| {
             let word = &text[*start..*end];
@@ -716,18 +743,25 @@ fn fold_into(text: &str, out: &mut String, mut origin: Option<&mut Vec<(usize, u
 }
 
 /// Cuts a text longer than [`REMARK_CHARS`] to that many characters around the matched
-/// `ranges`, marking each cut with "…". The cut never goes through a match: when the matches
-/// span more than fits, the whole span is kept.
+/// `ranges` (in text order, without overlaps), marking each cut with "…". When several matches
+/// span more than fits, the first is kept in view and the cut comes after it; the matches cut
+/// off are not marked. The cut never goes through a match: a single match longer than fits is
+/// kept whole.
 fn cut_around(text: &str, ranges: Vec<(usize, usize)>) -> (String, Vec<(usize, usize)>) {
     let length = text.chars().count();
     if length <= REMARK_CHARS {
         return (text.to_string(), ranges);
     }
     let char_at = |byte: usize| text[..byte].chars().count();
-    let (span_start, span_end) = match (ranges.first(), ranges.last()) {
+    let (mut span_start, mut span_end) = match (ranges.first(), ranges.last()) {
         (Some(first), Some(last)) => (char_at(first.0), char_at(last.1)),
         _ => (0, 0),
     };
+    if span_end - span_start > REMARK_CHARS - 2 && ranges.len() > 1 {
+        if let Some(first) = ranges.first() {
+            (span_start, span_end) = (char_at(first.0), char_at(first.1));
+        }
+    }
     let span = span_end - span_start;
     let (from, to) = if span_end < REMARK_CHARS {
         // The start of the text, and a cut after.
@@ -763,6 +797,7 @@ fn cut_around(text: &str, ranges: Vec<(usize, usize)>) -> (String, Vec<(usize, u
     }
     let ranges = ranges
         .into_iter()
+        .filter(|(start, end)| *start >= from_byte && *end <= to_byte)
         .map(|(start, end)| (start - from_byte + shift, end - from_byte + shift))
         .collect();
     (cut, ranges)
@@ -871,7 +906,8 @@ mod tests {
         assert_eq!(hit.value, "Mechanical|538-PR-100");
         assert_eq!(shown(&hit), "Mechanical / 538-PR-100");
         assert_eq!(marked(&hit), ["538-PR"]);
-        assert_eq!(hit.detail, "Mechanical");
+        // The label carries the discipline.
+        assert_eq!(hit.detail, "");
         let remark = only_hit(&r, SearchGroupKind::Remarks);
         assert_eq!(remark.kind, SearchKind::Remark);
         assert_eq!(remark.value, "PENDING 538-PR-100");
@@ -1151,8 +1187,10 @@ mod tests {
         h.role = "—".into();
         let mut blank = hold("L2", "Piping", "(blank)", "(blank)", 1);
         blank.name = "(blank)".into();
+        blank.stress_calc = "(BLANK)".into();
         let ds = build(vec![h, blank]);
-        for query in ["—", "— ", "unspecified", "(blank)", "blank"] {
+        // Each query is long enough to search, and would match a blank spelling were it kept.
+        for query in ["unspec", "unspecified", "(bla", "(blank)", "blank"] {
             assert_eq!(search(&ds, query, 8).groups, [], "{query}");
         }
         // The same holds' values that are not blank are found.
@@ -1260,6 +1298,109 @@ mod tests {
         let r = search(&ds, "lovelace", 8);
         let hit = only_hit(&r, SearchGroupKind::People);
         assert_eq!((hit.detail.as_str(), hit.holds), ("Designer", 4));
+    }
+
+    #[test]
+    fn typo_ranges_out_of_text_order_cut_a_long_remark_without_failing() {
+        // The query words come in the reverse order of the text's.
+        let filler = "lorem ipsum ".repeat(20);
+        let remark = format!("Await vendor {filler} drawing");
+        let ds = build(vec![with_remark("L1", &remark)]);
+        let hit = only_hit(&search(&ds, "drawng vendro", 8), SearchGroupKind::Remarks);
+        let text = shown(&hit);
+        // The words are further apart than a remark shows: the first stays in view.
+        assert!(remark.starts_with(text.trim_end_matches('…')), "{text}");
+        assert_eq!(text.chars().count(), REMARK_CHARS);
+        assert_eq!(marked(&hit), ["vendor"]);
+
+        // Both in view: both are marked, in the order of the text.
+        let filler = "lorem ipsum ".repeat(10);
+        let remark = format!("{filler}Await vendor and drawing {filler}");
+        let ds = build(vec![with_remark("L1", &remark)]);
+        let hit = only_hit(&search(&ds, "drawng vendro", 8), SearchGroupKind::Remarks);
+        let text = shown(&hit);
+        assert_eq!(text.chars().count(), REMARK_CHARS);
+        assert!(remark.contains(text.trim_matches('…')), "{text}");
+        assert_eq!(marked(&hit), ["vendor", "drawing"]);
+    }
+
+    #[test]
+    fn an_overlapping_occurrence_at_a_word_start_is_found() {
+        let ds = build(vec![
+            hold("XA-A-A", "Piping", "MISC.", "x", 1),
+            hold("YA-A", "Piping", "MISC.", "x", 1),
+            hold("YA-A", "Piping", "MISC.", "x", 1),
+        ]);
+        let r = search(&ds, "a-a", 8);
+        // "A-A" starts a word of XA-A-A at its second occurrence, which overlaps the first.
+        assert_eq!(values(&r, SearchGroupKind::Lines), ["XA-A-A", "YA-A"]);
+        let first = &group(&r, SearchGroupKind::Lines).unwrap().hits[0];
+        let parts: Vec<(&str, bool)> = first
+            .parts
+            .iter()
+            .map(|p| (p.text.as_str(), p.matched))
+            .collect();
+        assert_eq!(parts, [("XA-", false), ("A-A", true)]);
+    }
+
+    #[test]
+    fn a_short_query_word_must_start_a_word_of_the_text() {
+        let ds = build(vec![with_remark("L1", "Await vendor for fluid line")]);
+        let found = |q: &str| group(&search(&ds, q, 8), SearchGroupKind::Remarks).is_some();
+        assert!(!found("vendro id"));
+        assert!(found("vendro flu"));
+        let ds = build(vec![with_remark("L1", "Await vendor for P&ID")]);
+        let hit = only_hit(&search(&ds, "vendro id", 8), SearchGroupKind::Remarks);
+        assert_eq!(marked(&hit), ["vendor", "ID"]);
+    }
+
+    #[test]
+    fn a_query_word_of_digits_allows_no_edit() {
+        let ds = build(vec![with_remark("L1", "Pending 573-PR-1450")]);
+        let found = |q: &str| group(&search(&ds, q, 8), SearchGroupKind::Remarks).is_some();
+        assert!(found("pendnig 1450"));
+        // One swap away, and the word is digits only.
+        assert!(!found("pendnig 1405"));
+        assert!(!found("pendnig 1451"));
+    }
+
+    #[test]
+    fn the_two_character_minimum_counts_the_query_as_typed() {
+        let ds = build(vec![person("L1", "Strasse Aeby", "Designer")]);
+        // Each folds to two letters, but is one character as typed.
+        for query in ["ß", " ß ", "æ"] {
+            assert!(search(&ds, query, 8).groups.is_empty(), "{query}");
+        }
+        assert!(!search(&ds, "ss", 8).groups.is_empty());
+    }
+
+    #[test]
+    fn the_edit_limits_hold_at_their_bounds() {
+        let ds = build(vec![
+            with_remark("L1", "Pump seal"),
+            with_remark("L2", "Await drawing"),
+            with_remark("L3", "Check drawings"),
+        ]);
+        let found = |q: &str| values(&search(&ds, q, 8), SearchGroupKind::Remarks);
+        // Four characters, one edit: allowed.
+        assert_eq!(found("pumo"), ["PUMP SEAL"]);
+        // Seven characters, two edits: refused.
+        assert!(!found("drewinf").contains(&"AWAIT DRAWING".to_string()));
+        // Eight characters, two edits: allowed.
+        assert_eq!(found("drewinfs"), ["CHECK DRAWINGS"]);
+    }
+
+    #[test]
+    fn a_cut_remark_with_multi_byte_text_keeps_whole_characters() {
+        let filler = "Révision du schéma ".repeat(10);
+        let remark = format!("{filler}NÉEDLE ici {filler}");
+        let ds = build(vec![with_remark("L1", &remark)]);
+        let hit = only_hit(&search(&ds, "needle", 8), SearchGroupKind::Remarks);
+        let text = shown(&hit);
+        assert_eq!(text.chars().count(), REMARK_CHARS);
+        assert!(text.starts_with('…') && text.ends_with('…'), "{text}");
+        assert!(remark.contains(text.trim_matches('…')), "{text}");
+        assert_eq!(marked(&hit), ["NÉEDLE"]);
     }
 
     #[test]

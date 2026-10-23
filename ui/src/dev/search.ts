@@ -44,8 +44,8 @@ export function devSearch(query: string): SearchResults {
         kind: "Blockers",
         total: 2,
         hits: [
-          hit("Blocker", "Process|573-PR-1450", "Process / |573-PR|-1450", 9, "Process"),
-          hit("Blocker", "Piping|573-PR-1022", "Piping / |573-PR|-1022", 4, "Piping"),
+          hit("Blocker", "Process|573-PR-1450", "Process / |573-PR|-1450", 9),
+          hit("Blocker", "Piping|573-PR-1022", "Piping / |573-PR|-1022", 4),
         ],
       },
       {

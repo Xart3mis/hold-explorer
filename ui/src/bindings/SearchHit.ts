@@ -19,7 +19,8 @@ value: string,
  */
 parts: Array<TextPart>, 
 /**
- * A second line: the discipline of a blocker, the role of a person; empty when none.
+ * A second line: the role of a person; empty when none (a blocker's label already names its
+ * discipline).
  */
 detail: string, 
 /**
