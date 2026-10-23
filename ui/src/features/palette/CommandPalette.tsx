@@ -318,8 +318,11 @@ function PaletteBody({ items, recentOf, openLine, onChoose }: BodyProps) {
       <div className={styles.results}>
         <ListBox
           aria-label={t("palette.items")}
-          aria-busy={lines.isWaiting || lines.isStale ? "true" : undefined}
           className={cx(styles.list)}
+          // The component library passes no `aria-busy` through, so the element is given it.
+          render={(props) => (
+            <div {...props} aria-busy={lines.isWaiting || lines.isStale ? "true" : undefined} />
+          )}
           renderEmptyState={() =>
             nothing === "" ? null : <span className={styles.nothing}>{nothing}</span>
           }

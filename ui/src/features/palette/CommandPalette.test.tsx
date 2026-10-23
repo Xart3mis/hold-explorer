@@ -304,10 +304,12 @@ describe("lines", () => {
       },
     });
     await openAndType(user, "57");
+    // "57" is sent once typing stops; its answer is held back.
     await act(() => new Promise((resolve) => setTimeout(resolve, SEND_AFTER_MS * 3)));
     await user.keyboard("3");
-    await within(await list()).findByRole("option", { name: /78B09-573-00097-PR-007/ });
-    act(() => {
+    // The answer for "57" arrives while "573" is typed and not yet sent: the window it must not
+    // show in.
+    await act(async () => {
       late.resolve({
         query: "57",
         groups: [
@@ -318,8 +320,14 @@ describe("lines", () => {
           },
         ],
       });
+      await Promise.resolve();
     });
-    await act(() => new Promise((resolve) => setTimeout(resolve, SEND_AFTER_MS)));
+    const shown = await list();
+    expect(within(shown).queryByRole("option", { name: /78B57-/ })).toBeNull();
+    expect(shown).toHaveAttribute("aria-busy", "true");
+    // Then the answer for "573" is the one shown.
+    await within(shown).findByRole("option", { name: /78B09-573-00097-PR-007/ });
+    expect(within(shown).queryByRole("option", { name: /78B57-/ })).toBeNull();
     expect(await itemsOf(groups.lines)).toEqual(["78B09-573-00097-PR-007"]);
   });
 
