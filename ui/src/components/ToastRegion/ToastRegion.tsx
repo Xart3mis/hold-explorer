@@ -23,6 +23,12 @@ import styles from "./ToastRegion.module.css";
  */
 const MAX_TOASTS = 3;
 
+/**
+ * The most failures shown at once. A failure is never pushed out by a toast of another kind, and
+ * stays until it is closed; a newer failure takes the place of the oldest once two show.
+ */
+const MAX_FAILURES = 2;
+
 /** How a toast is found on the page: by this part name, and by the id of its item. */
 const TOAST = '[data-part="toast"]';
 
@@ -54,7 +60,8 @@ export interface ToastOptions {
   secondaryAction?: ToastAction;
   /**
    * An icon that says how it went. `danger` says that something failed: such a toast stays until
-   * it is closed, and is never pushed out. A failure that needs more than a sentence is a notice.
+   * it is closed, and is never pushed out by a toast of another kind; at most two show, a newer
+   * one taking the place of the oldest. A failure that needs more than a sentence is a notice.
    */
   tone?: "info" | "success" | "danger";
 }
@@ -345,9 +352,16 @@ export function ToastRegion({ children }: { children: ReactNode }) {
       const staying = latest.current.filter((item) => !item.leaving);
       // The new toast needs a place: the oldest toasts without an undo give theirs up.
       const going: string[] = [];
+      // At most two failures show: a newer one takes the place of the oldest.
+      const failures = staying.filter((item) => item.tone === "danger");
+      if (options.tone === "danger" && failures.length >= MAX_FAILURES) {
+        for (const item of failures.slice(0, failures.length - MAX_FAILURES + 1)) {
+          going.push(item.id);
+        }
+      }
       for (const item of staying) {
         if (staying.length - going.length < MAX_TOASTS) break;
-        if (!isKept(item)) going.push(item.id);
+        if (!isKept(item) && !going.includes(item.id)) going.push(item.id);
       }
       // A toast that was already leaving goes now as well.
       const gone = latest.current.filter((item) => item.leaving || going.includes(item.id));

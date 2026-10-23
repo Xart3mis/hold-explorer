@@ -203,7 +203,6 @@ function ViewItem({
         <IconMenuButton
           icon={Ellipsis}
           label={t("views.actions", { name: view.name })}
-          menuLabel={t("views.actions", { name: view.name })}
           placement="bottom end"
           onOpenChange={setMenuOpen}
           className={styles.menuButton}
@@ -281,12 +280,7 @@ export function ViewsSection({ isRail, onRestart }: ViewsSectionProps) {
     const current = views.find(isCurrent);
     return (
       <div data-part="saved-views" className={styles.rail}>
-        <IconMenuButton
-          icon={Bookmark}
-          label={t("views.title")}
-          menuLabel={t("views.title")}
-          placement="end top"
-        >
+        <IconMenuButton icon={Bookmark} label={t("views.title")} placement="end top">
           {views.length === 0 ? (
             <MenuItem id="empty" isDisabled>
               {t("views.empty")}
@@ -341,6 +335,10 @@ export function ViewsSection({ isRail, onRestart }: ViewsSectionProps) {
   const onMove = (view: SavedView, by: -1 | 1) => {
     void move(workspace, view.id, by).then(() => {
       window.requestAnimationFrame(() => {
+        // Only the focus the move took away is given back: not one the user has put elsewhere.
+        const held = document.activeElement;
+        const lost = held === null || held === document.body;
+        if (!lost && section.current?.contains(held) !== true) return;
         section.current
           ?.querySelector<HTMLElement>(
             `li[data-view-id='${String(view.id)}'] [data-part='view-menu-slot'] button`,

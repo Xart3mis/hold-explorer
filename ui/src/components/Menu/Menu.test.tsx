@@ -383,12 +383,7 @@ describe("MenuSubmenu", () => {
 describe("IconMenuButton", () => {
   function renderIconMenu(onAction: (id: string) => void, onOpenChange = vi.fn()) {
     render(
-      <IconMenuButton
-        icon={Ellipsis}
-        label="Actions for Civil holds"
-        menuLabel="Actions for Civil holds"
-        onOpenChange={onOpenChange}
-      >
+      <IconMenuButton icon={Ellipsis} label="Actions for Civil holds" onOpenChange={onOpenChange}>
         <MenuItem
           id="rename"
           onAction={() => {

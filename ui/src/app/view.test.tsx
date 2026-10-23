@@ -2,6 +2,7 @@ import { QueryClientProvider, useMutation, useQueryClient } from "@tanstack/reac
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { openHoldsFilter } from "../api/filter";
 import { keys } from "../api/keys";
 import type { AppStart } from "../bindings/AppStart";
 import type { ViewRef } from "../bindings/ViewRef";
@@ -9,6 +10,7 @@ import type { WorkspaceOpen } from "../bindings/WorkspaceOpen";
 import en from "../locales/en.json";
 import { opened, openStart, otherWorkspace, startState, workspace } from "../test/fixtures";
 import { commandFailure, mockCommands } from "../test/ipc";
+import { showViews } from "./actions/start";
 import { queryClient } from "./query";
 import { ShellContext, type Shell, type ShellNotice } from "./shell/context";
 import {
@@ -465,6 +467,33 @@ describe("useSnapshotQuery", () => {
     const gone = queryClient.getQueryState(keys.snapshot(HERE, "lines", ["oldest"]));
     expect(gone?.error ?? null).toBeNull();
     expect(gone?.data).toBeUndefined();
+  });
+
+  it("keeps a list of saved views answered while it asked what is open, over the older one of the answer", async () => {
+    const read = vi.fn<Read>((view) =>
+      view.snapshot_id === 1 ? Promise.resolve("lines of 1") : Promise.reject(viewChanged()),
+    );
+    let answer: (open: WorkspaceOpen) => void = () => undefined;
+    const asked = new Promise<WorkspaceOpen>((resolve) => {
+      answer = resolve;
+    });
+    const { result, current } = screenWith(read, openStart(), () => asked);
+    await waitFor(() => {
+      expect(current).toHaveBeenCalledTimes(1);
+    });
+    // A view command answers while the question is on its way; the Rust side had read the list
+    // for the question before it.
+    const saved = { id: 4, name: "Civil holds", address: "/lines", filters: openHoldsFilter() };
+    act(() => {
+      showViews(queryClient, workspace().id, [saved]);
+    });
+    answer(opened({ selected: 1, views: [] }));
+    await waitFor(() => {
+      expect(result.current.lines.data).toBe("lines of 1");
+    });
+    const open = queryClient.getQueryData<AppStart>(keys.start)?.open;
+    expect(open?.selected).toBe(1);
+    expect(open?.views).toEqual([saved]);
   });
 
   it("lists the workspace the Rust side holds, as an action that opens one does", async () => {

@@ -256,6 +256,9 @@ async function readForView<Data>(
       // which workspace and snapshot are open, which changes nothing there. When that cannot be
       // had, the cached start stays as it is, untouched and not failed.
       const asked = lastAction(client);
+      // A list of saved views a view command answers after this is newer than the one this
+      // answer holds, which the Rust side may have read before it.
+      const views = viewsAnswered();
       let held: WorkspaceOpen | null;
       try {
         held = await api.workspaceCurrent();
@@ -277,6 +280,7 @@ async function readForView<Data>(
             ? { ...start, open: null }
             : listed({ ...start, open: held }, held.workspace),
       );
+      keepNewerViews(client, views);
       if (moved) {
         notify({
           title: t("shell.viewResyncedTitle"),
@@ -621,8 +625,8 @@ export function workspaceAction<Variables = void, Data = unknown>(
     mutationFn,
     onMutate: async (variables: Variables) => {
       onAsk?.(variables);
-      // Taken before the command is sent: a list of views answered after this is newer than the
-      // one the action answers with.
+      // Taken when the action is asked for: a list of views answered after this is newer than
+      // the one the action answers with.
       const views = viewsAnswered();
       await client.cancelQueries({ queryKey: keys.snapshots });
       return { views };

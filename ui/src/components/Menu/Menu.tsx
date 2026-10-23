@@ -332,10 +332,8 @@ export function MenuSubmenu({ id, label, children }: MenuSubmenuProps) {
 export interface IconMenuButtonProps {
   /** The icon that stands for what the menu holds. */
   icon: LucideIcon;
-  /** The name of the button: its accessible name and the text of its tooltip. */
+  /** The name of the button, its tooltip, and the name of its menu. */
   label: string;
-  /** The name of the menu. */
-  menuLabel: string;
   /**
    * Where the menu opens while there is room: under the button, lined up with one of its edges,
    * or beside it on the trailing side, its first item level with the button.
@@ -356,7 +354,6 @@ export interface IconMenuButtonProps {
 export function IconMenuButton({
   icon,
   label,
-  menuLabel,
   placement = "bottom start",
   onOpenChange,
   children,
@@ -366,7 +363,7 @@ export function IconMenuButton({
     <MenuTrigger {...(onOpenChange === undefined ? {} : { onOpenChange })}>
       <IconButton icon={icon} label={label} className={className} />
       {/* The menu is named by its button, whose name is the label. */}
-      <MenuOverlay placement={placement} label={menuLabel}>
+      <MenuOverlay placement={placement} label={label}>
         {children}
       </MenuOverlay>
     </MenuTrigger>

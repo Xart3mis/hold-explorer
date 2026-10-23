@@ -380,6 +380,22 @@ describe("ToastRegion", () => {
     expect(live).not.toHaveTextContent("The view could not be restored.");
   });
 
+  it("shows two failures at most: a third takes the place of the oldest", () => {
+    setup();
+    show({ message: "First failure.", tone: "danger" });
+    show({ message: "Second failure.", tone: "danger" });
+    show({ message: "Snapshot imported." });
+    show({ message: "Third failure.", tone: "danger" });
+    const live = screen.getByRole("status");
+    expect(
+      [...live.querySelectorAll('[data-part="toast"]')].map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining("Second failure."),
+      expect.stringContaining("Snapshot imported."),
+      expect.stringContaining("Third failure."),
+    ]);
+  });
+
   it("leaves after the toast timeout", () => {
     vi.useFakeTimers();
     setup();
