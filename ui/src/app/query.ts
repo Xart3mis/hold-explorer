@@ -69,6 +69,8 @@ queryClient.setQueryDefaults(keys.folderChange, { staleTime: Infinity, gcTime: I
 // The filters the user has set are kept by workspace for the session. Nothing reads them from
 // anywhere else, so they are never stale and never dropped while the app runs.
 queryClient.setQueryDefaults(keys.filters, { staleTime: Infinity, gcTime: Infinity });
+// The same holds for the filters each saved view was saved or applied with, labels and all.
+queryClient.setQueryDefaults(keys.viewFilters, { staleTime: Infinity, gcTime: Infinity });
 
 /**
  * What a reader finds in the cache, read again whenever the cache changes. The cache also changes

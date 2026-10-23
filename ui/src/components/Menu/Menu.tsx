@@ -14,6 +14,7 @@ import {
   Text,
 } from "react-aria-components";
 import { lengthToken } from "../../design/token-values";
+import { IconButton } from "../Button/Button";
 import { cx } from "../cx";
 import { Icon } from "../Icon/Icon";
 import { Spinner } from "../Spinner/Spinner";
@@ -298,5 +299,60 @@ export function MenuSubmenu({ id, label, children }: MenuSubmenuProps) {
         </RacMenu>
       </Popover>
     </SubmenuTrigger>
+  );
+}
+
+export interface IconMenuButtonProps {
+  /** The icon that stands for what the menu holds. */
+  icon: LucideIcon;
+  /** The name of the button: its accessible name and the text of its tooltip. */
+  label: string;
+  /** The name of the menu. */
+  menuLabel: string;
+  /**
+   * Where the menu opens while there is room: under the button, lined up with one of its edges,
+   * or beside it on the trailing side, its first item level with the button.
+   */
+  placement?: "bottom start" | "bottom end" | "end top";
+  /** Called when the menu opens or closes. */
+  onOpenChange?: (isOpen: boolean) => void;
+  /** The items: `MenuItem`, `MenuSection`, `MenuSeparator`. */
+  children: ReactNode;
+  className?: string | undefined;
+}
+
+/**
+ * A quiet icon-only button that opens a menu: the menu of an item of a list, where a labelled
+ * button has no room. It has the name and the tooltip of an icon button, and the menu is that of
+ * `MenuButton`, with the same keys.
+ */
+export function IconMenuButton({
+  icon,
+  label,
+  menuLabel,
+  placement = "bottom start",
+  onOpenChange,
+  children,
+  className,
+}: IconMenuButtonProps) {
+  const offset = lengthToken("--space-1");
+  return (
+    <MenuTrigger {...(onOpenChange === undefined ? {} : { onOpenChange })}>
+      <IconButton icon={icon} label={label} className={className} />
+      <Popover
+        placement={placement}
+        className={cx(styles.popover)}
+        style={{ zIndex: "var(--z-dropdown)" }}
+        {...(offset === null ? {} : { offset })}
+      >
+        <RacMenu
+          aria-label={menuLabel}
+          className={cx(styles.menu)}
+          render={(domProps) => <div {...domProps} aria-labelledby={undefined} />}
+        >
+          {children}
+        </RacMenu>
+      </Popover>
+    </MenuTrigger>
   );
 }

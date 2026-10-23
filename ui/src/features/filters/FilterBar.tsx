@@ -10,6 +10,7 @@ import type { Field } from "../../bindings/Field";
 import { AddFilterChip, Button, ErrorState, FilterChip, Skeleton } from "../../components";
 import { formatList } from "../../text/format";
 import { t } from "../../text/i18n";
+import { SaveViewPopover } from "../views/SaveViewPopover";
 import { chipsOf, type Chip, type FilterField } from "./chips";
 import styles from "./FilterBar.module.css";
 import { FilterPicker } from "./FilterPicker";
@@ -41,7 +42,7 @@ const CLOSED: Picker = {
 
 /**
  * The filter bar of a data screen: the status, one chip per active filter, the way to add one,
- * the way to clear them, and the number of holds the filters keep. It reads the filters every
+ * the way to clear them, the number of holds the filters keep, and "Save view". It reads the filters every
  * data screen shares (`useFilters`) and the options of the snapshot in view for them, so it takes
  * no props; a page places it under its header (`bar` of `Page`).
  *
@@ -247,6 +248,9 @@ export function FilterBar() {
               )}
             </p>
           )}
+        </div>
+        <div data-part="filter-save" className={styles.save}>
+          <SaveViewPopover />
         </div>
       </div>
       {noReleased || missing.length > 0 || hasInactive || isUnknown ? (

@@ -186,6 +186,24 @@
     "nothing": "Nothing matches “{{query}}”. Press Enter to filter by this text.",
     "error": "The search could not be read: {{message}}"
   },
+  "views": {
+    "title": "Saved views",
+    "empty": "Save the filters and screen you use often from the filter bar.",
+    "actions": "Actions for {{name}}",
+    "rename": "Rename",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "delete": "Delete",
+    "nameLabel": "Name of the saved view",
+    "deleted": "Deleted view {{name}}",
+    "saved": "Saved view {{name}}",
+    "save": "Save view",
+    "saveTitle": "Save this view",
+    "name": "Name",
+    "saveButton": "Save",
+    "replace": "Replace it",
+    "proposed": "{{page}} · {{value}}"
+  },
   "destinations": {
     "label": "Destinations",
     "soon": "Soon",

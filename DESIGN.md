@@ -802,6 +802,7 @@ A button that opens a short list of actions, or of choices, under itself: the wo
 
 - **Button:** a quiet button with a chevron. Height `--density-control-height`, padding `--space-3` at the leading side and `--space-2` at the trailing side, corner `--radius-sm`, text `--text-label` in `--color-text-secondary`. An optional leading icon, the label, and a chevron at `--size-icon` in `--color-text-muted`, `--space-1-5` apart. The label is the current value ("Unit 573 piping") or the name of what the menu holds. A long label is cut at the end with an ellipsis; the button never grows past the room it is given, and its accessible name is always the full label.
 - **Secondary form:** a menu button that stands among buttons, the Export menu in the top bar, is outlined as a secondary button is: a `--border-width-thin` border in `--color-border-strong` and text in `--color-text-primary`, with the same height, padding, and states. Unavailable, its border is `--color-border-default` and its text `--color-text-muted`.
+- **Icon-only form:** where a labelled button has no room, as on an item of a list (the menu of a saved view, the saved views of the rail), the button is a quiet icon-only button (see "Buttons"): square, with the name of the menu as its accessible name and its tooltip, and no chevron. Its menu is the same overlay with the same keys.
 - **Flush:** a menu button that starts a row of content, as the status control of the filter bar does, is moved out by its own leading padding and border, so that its label starts on the line of what stands above and below it and its hover fill reaches into the margin. The button does this itself, from the padding it has, so the two cannot drift apart.
 - **Hover:** fill `--color-surface-hover`, text `--color-text-primary`.
 - **Active and open:** fill `--color-surface-pressed` and text `--color-text-primary`, while the button is pressed and for as long as its menu is open. The button has `aria-expanded="true"` while it is open.
@@ -1351,7 +1352,7 @@ The full record of one line, one hold, or one blocker, beside the list it was ch
 
 ### Sidebar item
 
-The sidebar lists all nine destinations in two groups: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then, set apart at the bottom of the sidebar above a hairline in `--color-border-subtle`, Rules and Settings.
+The sidebar lists all nine destinations in two groups: Overview, Breakdown, Lines, Blockers, History, People, Follow-up; then, set apart at the bottom of the sidebar above a hairline in `--color-border-subtle`, Rules and Settings. Between the two stand the saved views (see "Saved views").
 
 - **Shape:** height `--density-nav-item-height`, horizontal padding `--space-2`, corner `--radius-sm`, an icon at `--size-icon` in the label's color with a `--space-2` gap, the label in `--text-label`. Items are `--space-0-5` apart inside a sidebar padded by `--space-2`.
 - **Default:** transparent fill, label `--color-text-secondary`.
@@ -1364,6 +1365,23 @@ The sidebar lists all nine destinations in two groups: Overview, Breakdown, Line
 - **Disabled:** never. Every destination can be opened, including one that is not built yet.
 - **Rail:** the sidebar can be collapsed to a rail `--layout-rail-width` wide, and expanded again, by the last item of the sidebar: a quiet icon button at `--density-nav-item-height`, below the second group, named "Collapse sidebar" or "Expand sidebar" with a tooltip that repeats the name, and `aria-expanded` saying whether the sidebar shows its labels. In the rail an item shows its icon alone, centered, in every state above. Its label and its Soon tag stay in its accessible name, so the name of an item is the same in both forms, and its tooltip shows them in text, with the shortcut, on keyboard focus at once and on hover after `--delay-tooltip`: never by hover alone. The choice is the user's at every width and is kept for the next start, on this computer. The content area takes the room the rail gives back; nothing slides.
 - **Soon tag:** a destination that is not built yet shows a tag reading "Soon" after its label: next in reading order, and aligned to the trailing edge of the item so the tags form one quiet column. The tag text is part of the item's accessible name. The tag is the neutral tag below: `--size-tag-height` tall, text `--text-caption` in `--color-text-muted`, a `--border-width-thin` border in `--color-border-default`, no fill, no accent, no state color. The item keeps every state above; the tag does not change with them. `--color-text-muted` clears 4.5:1 on each fill the item can have.
+
+### Saved views
+
+A section of the sidebar that lists the saved views of the open workspace (owner, 2026-10-19). A saved view is a data screen's address without its selection (destination, mode, grouping, sort) and the filters, kept under a name in the workspace. It stands under the destinations of the data group and above Rules and Settings, and scrolls with the sidebar.
+
+- **Title:** "Saved views", a line of `--text-caption` in `--color-text-muted`, as tall as a menu section's name, padded `--space-2` at the sides so it lines up with the labels of the items. The list of views is named by it.
+- **Item:** a sidebar item (see "Sidebar item") with a bookmark icon and the name of the view, and every state of that item: default, hover, active, and current, with the same tokens. A long name is cut at the end with an ellipsis; its tooltip shows the whole name on keyboard focus at once and on hover after `--delay-tooltip`, only while the name is cut. The accessible name is always the whole name.
+- **Applying:** one press applies the view: the filters of the workspace become the view's, then its address opens. A filter on a field the snapshot in view lacks applies as well, and its chip is the dashed chip of "Filter chip". The item is current, `aria-current="true"`, with the fill `--color-accent-subtle` of a current item, while the address shown (its selection left out) and the filters are the view's; it stops being current as soon as either changes. No colored side stripe marks it. The destination of the view stays current in the group above at the same time.
+- **A second press resets:** pressing the current view applies it again, and the page is drawn anew as for a second press on a destination: selected rows cleared, scrolled to the top, no line, hold, or blocker selected. Applying any view whose destination is the one shown draws the page anew in the same way.
+- **Menu button:** each item has a quiet icon-only button at its trailing edge, `--density-nav-item-height` square, inside the item and over its fill, with an ellipsis icon at `--size-icon` and the name "Actions for <name>". It is in the Tab order of every item, right after the item's link. It shows while the item is current, while the focus is in the item, while its menu is open, and under the pointer; at other times it is transparent but still reachable, so it never shows by hover alone. The label of the item stops `--space-1` before it. Its menu holds Rename, Move up, Move down, and Delete; Move up is disabled on the first view and Move down on the last.
+- **Rename:** the item becomes a text field in its place, at `--density-nav-item-height`, with the name selected. Enter saves, Escape cancels, and the focus leaving saves a changed name and closes an untouched one. A refused name keeps the field open with what was typed, marked invalid, and the reason under it in `--text-caption` and `--color-danger-text` with the error icon. The focus goes back to the item's menu button when the field closes by its keys.
+- **Move up, Move down:** the view changes place at once; the focus stays on its menu button.
+- **Delete:** removes the view at once, without a prompt, and a toast says "Deleted view <name>" with Undo, which puts it back where it was (see "Toast"). The focus moves to the next view, or to the one before when it was the last, or to the section when none is left. An undo that cannot be done, because another view has taken the name meanwhile, says why in a toast.
+- **Empty:** one quiet line in `--text-caption` and `--color-text-muted`, padded as the title: "Save the filters and screen you use often from the filter bar."
+- **Rail:** the section is one quiet icon-only button with the bookmark icon, centered as the items of the rail are, named "Saved views", with its tooltip. It opens a menu beside it on the trailing side, titled "Saved views", whose items are the views by name, the current one checked; choosing one applies it. Without views the menu holds the empty line as a disabled item.
+- **While an action on the workspace runs:** an item opens nothing (it is announced as unavailable and busy, `aria-disabled` and `aria-busy`, and keeps its look), the items of its menu are disabled, and the rail menu's items as well. The filters and the address cannot be set while the workspace may change.
+- **Loading and error:** the list comes with the workspace and has no loading state. A change that the workspace refuses (a name taken, too long, too many views) is said inline where it was typed; one that fails otherwise is said in a toast.
 
 ### Tag
 
@@ -1400,6 +1418,7 @@ A small, non-interactive label on a row or an item.
 3. **Add filter.**
 4. **Clear all**, while there is a chip. It removes every chip and sets the status back to open holds. It stays beside "Add filter": the two wrap to a next line together, so the line starts with the pill, on the line of the chips above, and never with the label of a quiet button, which stands in from its edge.
 
+- **Save view** stands after the trailing part, at the end of the first line, `--space-4` from the total (see "Save view popover").
 - **The trailing part** of the bar is `--size-filterbar-end-width` wide, on the first line, whatever it holds, so the controls have the same room at all times. What it holds is set to its trailing edge.
 - **The total** the filters keep stands there: `--text-label` in `--color-text-secondary` with tabular figures ("2,418 holds"). On a first read a skeleton line stands in its place. While it is read again it stays at `--opacity-stale`, as the content it counts does.
 - **More chips than fit** wrap to a next line, `--space-1-5` under the first, and the bar grows. The total stays on the first line. The bar never scrolls sideways and no chip is hidden behind a count.
@@ -1504,6 +1523,18 @@ What "Add filter" and a chip of the filter bar open: a popover in which a filter
 **The editor of the sizes.** The name of the field as a label ("Model and LDT sizes"), then an option list of two values, one to choose, each with its count: "Differ" and "Match". The mark is the circle of a single choice; choosing the chosen value again removes the filter. The list has the focus when the popover opens. When the counts could not be read the two values are listed without counts and can still be chosen; the filter bar says what failed.
 
 **The editor of text.** One text field labeled "Text", with a helper line that says where the text is looked for. It has the focus when the popover opens. What is typed applies on Enter, when the field is left, and when the popover closes, and not at every key, because each change reads the whole page again. An empty field removes the filter.
+
+### Save view popover
+
+What "Save view" in the filter bar opens: the name under which the screen shown and its filters are saved. It is a popover (see "Popover") with a field and one button.
+
+- **The trigger:** a quiet button with a bookmark-plus icon, reading "Save view", at the trailing end of the filter bar's first line, after the total, `--space-4` from it. It is on the four data screens wherever the filter bar is. While an action on the workspace runs it is inert, as a button that waits for another control is, and opens nothing.
+- **Placement:** under the trigger, lined up with its trailing edge; the popover's surface, size, and motion.
+- **Field:** a text field labelled "Name", holding a proposed name: the name of the destination, then, when a chip is set, " · " and the value of the first chip ("Lines · Civil"), at most 80 characters. The field takes the focus with the name selected, so typing replaces it.
+- **Save:** a secondary button under the field, `--density-stack-gap` below it, aligned to the trailing edge. A popover carries no primary button (the Two Surfaces Rule). Enter in the field saves as well. While the save runs the button shows its spinner and the field is read-only.
+- **After saving:** the popover closes, the focus goes back to the trigger, the new view is at the end of the list and current, and a toast says "Saved view <name>".
+- **Errors:** inline, in the field's error line: a name that is empty or longer than 80 characters, too many views, and any other refusal, in the words of the command. A name that another view has, without regard to case, names that view, and a quiet button "Replace it" stands under the message: it deletes that view, with the toast and its Undo as a delete from the sidebar, and saves this one under the name.
+- **Disabled:** never; the trigger is inert instead.
 
 ### Search field
 

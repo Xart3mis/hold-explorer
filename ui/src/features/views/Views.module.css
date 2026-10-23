@@ -1,0 +1,192 @@
+/*
+ * The saved views in the sidebar (DESIGN.md, "Saved views"): a title, then the views as sidebar
+ * items, each with a menu button over its trailing end. In the rail, one button.
+ */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  border-radius: var(--radius-sm);
+}
+
+/* The section takes the focus when its last view is deleted, and shows where it is. */
+.section:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  block-size: var(--density-nav-item-height);
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.empty {
+  padding: 0 var(--space-2);
+  color: var(--color-text-muted);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The item holds the name and, laid over its trailing end, the menu button. */
+.item {
+  position: relative;
+}
+
+/* A sidebar item, with room at its trailing end for the menu button. */
+.link {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  block-size: var(--density-nav-item-height);
+  padding: 0 calc(var(--density-nav-item-height) + var(--space-1)) 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  font: var(--text-label);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.label {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link[data-hovered]:not([aria-disabled]) {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.link[data-pressed]:not([aria-disabled]) {
+  background-color: var(--color-surface-pressed);
+  color: var(--color-text-primary);
+}
+
+.link[aria-current="true"] {
+  background-color: var(--color-accent-subtle);
+  color: var(--color-text-primary);
+}
+
+.link[aria-current="true"][data-hovered]:not([aria-disabled]),
+.link[aria-current="true"][data-pressed]:not([aria-disabled]) {
+  background-color: var(--color-accent-subtle-hover);
+}
+
+/* Inset, because the sidebar would clip a ring outside the item. */
+.link[data-focus-visible] {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.menuSlot {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * The menu button is in the Tab order of every item. It shows while the item is current, holds
+ * the focus, or has its menu open, and under the pointer; at other times it is transparent.
+ */
+.item .menuButton {
+  inline-size: var(--density-nav-item-height);
+  block-size: var(--density-nav-item-height);
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.item[data-current] .menuButton,
+.item[data-open] .menuButton,
+.item:focus-within .menuButton,
+.item:hover .menuButton {
+  opacity: 1;
+}
+
+.item .menuButton[data-focus-visible] {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* The name as a field, in the place of the item. */
+.rename {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.renameField {
+  display: flex;
+}
+
+.renameInput {
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: var(--density-nav-item-height);
+  padding: 0 var(--space-2);
+  border: var(--border-width-thin) solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-field);
+  color: var(--color-text-primary);
+  font: var(--text-body);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.renameInput[data-hovered] {
+  border-color: var(--color-text-secondary);
+}
+
+.renameInput[data-focused] {
+  border-color: var(--color-accent-text);
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.renameInput[data-invalid] {
+  border-color: var(--color-danger-text);
+}
+
+.renameError {
+  display: flex;
+  gap: var(--space-1);
+  align-items: flex-start;
+  padding: 0 var(--space-2);
+  color: var(--color-danger-text);
+  font: var(--text-caption);
+  font-variant-numeric: var(--font-numeric-proportional);
+  letter-spacing: var(--letter-spacing-normal);
+}
+
+/* In the rail: one button, centered as the items of the rail are. */
+.rail {
+  display: flex;
+  justify-content: center;
+}

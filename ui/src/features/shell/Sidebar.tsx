@@ -18,6 +18,7 @@ import { IconButton } from "../../components";
 import type { Destination, DestinationId } from "../../app/destinations";
 import { cx } from "../../components/cx";
 import { t } from "../../text/i18n";
+import { ViewsSection } from "../views/ViewsSection";
 import { NavItem } from "./NavItem";
 import type { SidebarForm } from "./window";
 import styles from "./Shell.module.css";
@@ -92,7 +93,7 @@ export interface SidebarProps {
 
 /**
  * The destinations of the list, in its order and in its two groups: what the snapshot holds, then,
- * set apart at the bottom, the setup. A destination that is not built yet looks and behaves like
+ * set apart at the bottom, the setup. Between the two stand the saved views of the workspace. A destination that is not built yet looks and behaves like
  * the others, except for the Soon tag after its label. The last item collapses the sidebar to a
  * rail of icons and expands it again; the names stay for assistive technology and in tooltips.
  */
@@ -108,6 +109,7 @@ export function Sidebar({ destinations, addressOf, onRestart, form, onFormChange
         addressOf={addressOf}
         onRestart={onRestart}
       />
+      <ViewsSection isRail={isRail} onRestart={onRestart} />
       <Group
         items={destinations.filter(({ group }) => group === "setup")}
         isLast

@@ -70,6 +70,14 @@
   min-block-size: var(--density-control-height);
 }
 
+/* "Save view", after the trailing part, at the end of the first line. */
+.save {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-block-size: var(--density-control-height);
+}
+
 /* Why nothing can be changed, for the moment. Empty, it takes no room beside the total. */
 .reason {
   color: var(--color-text-muted);

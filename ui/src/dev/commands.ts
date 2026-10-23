@@ -188,6 +188,10 @@ export const DEV_STATES = [
   "search-none",
   "search-slow",
   "search-error",
+  // Saved views in the sidebar: four views, one with a long name and one on a field the snapshot
+  // lacks. Apply one to see it current; Save view in the filter bar saves another.
+  //   dev.html?state=views#/lines
+  "views",
 ] as const;
 export type DevState = (typeof DEV_STATES)[number];
 
@@ -446,6 +450,35 @@ function devReview(state: DevState, all: WorkspaceView[]): ImportReview {
   }
 }
 
+/** The saved views of the state `views`, in sidebar order. */
+const DEV_VIEWS: SavedView[] = [
+  {
+    id: 1,
+    name: "Civil holds",
+    address: "/lines?rows=holds",
+    filters: {
+      ...openHoldsFilter(),
+      fields: [{ dim: "Discipline", values: ["Civil"], negate: false }],
+    },
+  },
+  {
+    id: 2,
+    name: "Blockers, all holds",
+    address: "/blockers",
+    filters: { ...openHoldsFilter(), status: "All" },
+  },
+  {
+    id: 3,
+    name: "Stress calculations waiting on the vendor data of the north area",
+    address: "/breakdown?mode=list&by=StressCalc",
+    filters: {
+      ...openHoldsFilter(),
+      fields: [{ dim: { Custom: "Area" }, values: ["North"], negate: false }],
+    },
+  },
+  { id: 4, name: "Overview", address: "/overview", filters: openHoldsFilter() },
+];
+
 /** The shape of the overview a state shows. */
 function overviewShape(state: DevState): DevOverview {
   switch (state) {
@@ -547,6 +580,10 @@ function world(state: DevState, theme: Theme, density: Density): World {
             "This workspace was written by a newer version of Hold Explorer (schema 9; this version reads up to schema 3). Update Hold Explorer to open it.",
         },
       ];
+      break;
+    case "views":
+      start.list.workspaces = all;
+      start.open = { ...opened(4, null), views: DEV_VIEWS };
       break;
     case "open":
     case "view-resynced":
@@ -677,6 +714,13 @@ export function installDevCommands(
   const views = new Map<string, SavedView[]>();
   // The next id of each workspace: one more than the highest ever given.
   const nextViews = new Map<string, number>();
+  if (start.open !== null && start.open.views.length > 0) {
+    views.set(start.open.workspace.id, start.open.views);
+    nextViews.set(
+      start.open.workspace.id,
+      Math.max(...start.open.views.map((view) => view.id)) + 1,
+    );
+  }
 
   const open = (workspace: WorkspaceView): WorkspaceOpen => {
     const held = snapshots.get(workspace.id) ?? [];

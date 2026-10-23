@@ -165,6 +165,8 @@ describe("FilterBar", () => {
       remove("Role"),
       en.filterChip.add,
       text.clear,
+      // "Save view" ends the first line, after the total (DESIGN.md, "Save view popover").
+      en.views.save,
     ]);
   });
 
