@@ -9,6 +9,7 @@ import { useWorkspaceActions } from "../../app/actions/workspaces";
 import { OVERVIEW_PATH } from "../../app/destinations";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
+import { useSmokeReady } from "../../app/smoke";
 import type { WorkspaceView } from "../../bindings/WorkspaceView";
 import {
   Button,
@@ -57,6 +58,7 @@ function latest(workspace: WorkspaceView): string {
  * listed apart with the reason, and never keep the rest of the page from working.
  */
 export function WelcomePage() {
+  useSmokeReady();
   const { start, dragged } = useShell();
   const { openWorkspace, refreshWorkspaces } = useWorkspaceActions();
   const { openDemo } = useDemo();

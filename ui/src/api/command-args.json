@@ -289,5 +289,8 @@
   "diagnostics_copy": {},
   "update_check": {},
   "update_skip": { "version": "0.2.0" },
-  "open_release_page": { "version": "0.2.0" }
+  "open_release_page": { "version": "0.2.0" },
+  "smoke_ready": { "sample": "30 Sept 2026" },
+  "e2e_open_path": {},
+  "e2e_save_path": { "suggested": "HoldExplorer_Unit 573_Lines_2026-10-07.xlsx" }
 }

@@ -32,6 +32,7 @@ function start(theme: Theme, density: Density = "Comfortable"): AppStart {
     list_error: null,
     open: null,
     settings_problem: null,
+    e2e: false,
   };
 }
 

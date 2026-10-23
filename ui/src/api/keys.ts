@@ -29,6 +29,8 @@ export const keys = {
    * when there is nothing to tell or the notice was put away.
    */
   update: ["app", "update"] as const,
+  /** The smoke call, sent once the first screen of the page has rendered: `null` once it was sent. */
+  smoke: ["app", "smoke"] as const,
   /** The file that is open for import: the `ImportDraft` the pages of the import flow share. */
   importDraft: ["import", "draft"] as const,
   /** What the review of that file found: the `ImportReview` of the last mapping it was read with. */

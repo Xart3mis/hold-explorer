@@ -199,6 +199,7 @@ impl AppState {
                 list_error,
                 open,
                 settings_problem,
+                e2e: cfg!(feature = "e2e"),
             },
             moved,
             left,

@@ -242,8 +242,12 @@ impl AppState {
     /// The first step of a check at `now`, for this build's version `current`. When a check is
     /// due, the address to ask ([`AppState::update_due`]). Otherwise, while the check is on, the
     /// newest version this session offered that is still newer than `current` and not skipped,
-    /// so a window that is loaded again shows the notice again.
+    /// so a window that is loaded again shows the notice again. While the check is turned off
+    /// ([`AppState::turn_off_update_check`]), `None` at once.
     pub fn update_step(&mut self, now: DateTime<Utc>, current: &str) -> UpdateStep {
+        if self.update_check_off {
+            return UpdateStep::Answer(None);
+        }
         if let Some(url) = self.update_due(now) {
             return UpdateStep::Ask(url);
         }
@@ -311,6 +315,13 @@ impl AppState {
                 "Hold Explorer opens only the release page of the version its update check found in this session, so this page was not opened. Use the Release page button of the update notice.",
             ))
         }
+    }
+
+    /// Turns the update check off for this session, whatever the settings say: every check
+    /// answers `None` at once, asks nothing, and records no attempt. The settings are left as
+    /// they are.
+    pub fn turn_off_update_check(&mut self) {
+        self.update_check_off = true;
     }
 
     /// Points the check at a server of the tests.

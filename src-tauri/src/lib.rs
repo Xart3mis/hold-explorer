@@ -5,7 +5,10 @@
 mod app;
 mod commands;
 pub mod crash;
+#[cfg(feature = "e2e")]
+mod e2e;
 pub mod native;
+mod smoke;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -37,7 +40,7 @@ fn window_background(theme: Theme) -> Color {
 }
 
 /// Every command of the interface, in one list: what `run` registers is what the tests of the
-/// command channel invoke.
+/// command channel invoke. The substitutes of the dialogs are registered in the `e2e` build only.
 fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         commands::app_start,
@@ -86,6 +89,11 @@ fn handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send
         commands::update_check,
         commands::update_skip,
         commands::open_release_page,
+        smoke::smoke_ready,
+        #[cfg(feature = "e2e")]
+        e2e::e2e_open_path,
+        #[cfg(feature = "e2e")]
+        e2e::e2e_save_path,
     ]
 }
 
@@ -247,7 +255,10 @@ fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
     let config_dir = app.path().app_config_dir()?;
     let data_dir = app.path().app_data_dir()?;
     let local_data_dir = app.path().app_local_data_dir()?;
-    let state = AppState::new(config_dir, data_dir, local_data_dir);
+    let mut state = AppState::new(config_dir, data_dir, local_data_dir);
+    if smoke::update_check_off(|name| std::env::var_os(name)) {
+        state.turn_off_update_check();
+    }
     // The window exists but has drawn nothing yet: drawing starts with the event loop. A failure
     // leaves the dark frame, which the page replaces once it has loaded.
     let _ = window.set_background_color(Some(window_background(state.settings().theme)));
@@ -255,6 +266,7 @@ fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
     app.manage(Mutex::new(state));
     // Under a lock of its own: the clipboard is set while the state is free.
     app.manage(SessionClipboard::default());
+    smoke::arm_timeout(app.handle());
     Ok(())
 }
 

@@ -51,3 +51,7 @@ tauri = { workspace = true, features = ["test"] }
 # Turned on by `tauri build`; embeds the built interface. Not a default feature, so
 # `cargo clippy --workspace` and `cargo test --workspace` need no `dist/`.
 custom-protocol = ["tauri/custom-protocol"]
+# The build the end-to-end tests drive: the open and save dialogs are answered with paths read
+# from `HX_E2E_OPEN` and `HX_E2E_SAVE_DIR`, and the update check never asks. A build without it
+# holds no trace of it.
+e2e = []

@@ -41,4 +41,9 @@ open: WorkspaceOpen | null,
  * What went wrong with the settings file at start, when anything did: set aside
  * (`SettingsSetAside`), or left in place and saving refused (`Settings`).
  */
-settings_problem: CommandError | null, };
+settings_problem: CommandError | null, 
+/**
+ * Whether this is the build the end-to-end tests drive (the cargo feature `e2e`), whose file
+ * dialogs are answered by the substitute commands.
+ */
+e2e: boolean, };

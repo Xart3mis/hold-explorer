@@ -120,6 +120,9 @@ pub struct AppState {
     /// The versions an update check offered since the application started, whose release page
     /// `open_release_page` may open.
     offered: HashSet<String>,
+    /// Whether the update check is off for this session whatever the settings say: a smoke run
+    /// and the `e2e` build ask nothing of the network.
+    update_check_off: bool,
     /// The address the update check asks: [`update::RELEASES_URL`]. In the tests it is no address, so
     /// no test reaches the network, until a test names a server of its own.
     update_url: String,
@@ -181,6 +184,7 @@ impl AppState {
             cache: None,
             written: HashSet::new(),
             offered: HashSet::new(),
+            update_check_off: false,
             update_url: if cfg!(test) {
                 String::new()
             } else {
@@ -295,6 +299,7 @@ impl AppState {
                 .settings_set_aside
                 .take()
                 .or_else(|| self.settings_blocked.clone()),
+            e2e: cfg!(feature = "e2e"),
         }
     }
 

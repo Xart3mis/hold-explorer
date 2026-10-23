@@ -138,6 +138,9 @@ interface CommandMap {
   update_check: { args: Record<string, never>; result: UpdateNotice | null };
   update_skip: { args: { version: string }; result: Settings };
   open_release_page: { args: { version: string }; result: null };
+  smoke_ready: { args: { sample: string }; result: null };
+  e2e_open_path: { args: Record<string, never>; result: string | null };
+  e2e_save_path: { args: { suggested: string }; result: string | null };
 }
 
 export type CommandName = keyof CommandMap;
@@ -293,4 +296,16 @@ export const api = {
    * `NotOffered` for any other version, and `Open` when the system could not open it.
    */
   openReleasePage: (version: string) => call("open_release_page", { version }),
+  /**
+   * Says that the first screen has rendered, with `sample`, the format module's date of 30
+   * September 2026. A smoke run (`HX_SMOKE=1`) prints it and exits; any other run does nothing.
+   */
+  smokeReady: (sample: string) => call("smoke_ready", { sample }),
+  /**
+   * The substitutes of the file dialogs, registered in the `e2e` build only: what the open
+   * dialog answers there, and what the save dialog answers for the name it proposes. `null`, as
+   * a cancelled dialog, when the test set no path. Called by ui/src/api/dialogs.ts only.
+   */
+  e2eOpenPath: () => call("e2e_open_path", {}),
+  e2eSavePath: (suggested: string) => call("e2e_save_path", { suggested }),
 };

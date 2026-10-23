@@ -13,6 +13,15 @@ const invokeModules = ["@tauri-apps/api/core", "@tauri-apps/api/core.*", "@tauri
 const tauriMessage =
   "Reach Tauri through the modules of ui/src/api/: commands.ts and workspace-commands.ts for commands, window.ts for the file dialog, the file manager, and files dragged over the window.";
 
+// The system's file dialogs are opened by one module, where the build the end-to-end tests drive
+// answers them with commands instead. No other module, of ui/src/api/ or its tests, imports the
+// dialog plugin.
+const dialogPlugin = {
+  group: ["@tauri-apps/plugin-dialog", "@tauri-apps/plugin-dialog/**"],
+  message:
+    "Open the file dialogs through ui/src/api/dialogs.ts, the only module that imports the dialog plugin: the e2e build answers the dialogs there. Screens call the functions window.ts passes on.",
+};
+
 // How much of Tauri a set of files may import. `invoke` is imported by the two modules that hold
 // the commands. Everything else of Tauri (the file dialog, the file manager, the window's events)
 // is imported by the modules of ui/src/api/ only; a screen imports from there. Tests and the
@@ -285,15 +294,31 @@ export default tseslint.config(
   },
   {
     files: ["ui/src/api/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": restricted(
+        tauri.noInvoke,
+        workspaceCommands,
+        above("api"),
+        dialogPlugin,
+      ),
+    },
+  },
+  {
+    // The one module that opens the system's file dialogs.
+    files: ["ui/src/api/dialogs.ts"],
     rules: { "no-restricted-imports": restricted(tauri.noInvoke, workspaceCommands, above("api")) },
   },
   {
     files: ["ui/src/api/commands.ts", "ui/src/api/workspace-commands.ts"],
-    rules: { "no-restricted-imports": restricted(tauri.all, workspaceCommands, above("api")) },
+    rules: {
+      "no-restricted-imports": restricted(tauri.all, workspaceCommands, above("api"), dialogPlugin),
+    },
   },
   {
     files: tests("api/"),
-    rules: { "no-restricted-imports": restricted(tauri.all, above("api", { isTest: true })) },
+    rules: {
+      "no-restricted-imports": restricted(tauri.all, above("api", { isTest: true }), dialogPlugin),
+    },
   },
   // What a module may not write. As above, each block holds everything that binds its files.
   {

@@ -133,6 +133,9 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   update_check: () => api.updateCheck(),
   update_skip: () => api.updateSkip(fixture.update_skip.version),
   open_release_page: () => api.openReleasePage(fixture.open_release_page.version),
+  smoke_ready: () => api.smokeReady(fixture.smoke_ready.sample),
+  e2e_open_path: () => api.e2eOpenPath(),
+  e2e_save_path: () => api.e2eSavePath(fixture.e2e_save_path.suggested),
 };
 
 const names = Object.keys(calls).sort() as CommandName[];

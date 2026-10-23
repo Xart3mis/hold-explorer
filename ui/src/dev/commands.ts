@@ -533,6 +533,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
     list_error: null,
     open: null,
     settings_problem: null,
+    e2e: false,
   };
   const opened = (selected: number, warning: CommandError | null): WorkspaceOpen => ({
     workspace: unit573,
@@ -955,6 +956,8 @@ export function installDevCommands(
       return start.settings;
     },
     open_release_page: () => later(300, () => null),
+    // Only a smoke run of the app does anything with it.
+    smoke_ready: () => null,
     settings_set_author_name: (payload) => {
       const name = text(payload, "name").trim();
       if (Array.from(name).length > 80) {

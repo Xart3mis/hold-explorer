@@ -898,9 +898,11 @@ mod tests {
         // `diagnostics_copy` takes no arguments and would set the clipboard of the machine that
         // runs the tests; `diagnostics_copy_builds_unlocked_and_returns_what_it_copied` runs it
         // with a clipboard of its own.
+        // The substitutes of the dialogs exist in the `e2e` build only; their tests are below.
         let outcomes: Vec<(String, String)> = command_args()
             .iter()
             .filter(|(command, _)| command.as_str() != "diagnostics_copy")
+            .filter(|(command, _)| !command.starts_with("e2e_"))
             .map(|(command, args)| (command.clone(), harness.outcome(command, args)))
             .collect();
         let outcomes: Vec<(&str, &str)> = outcomes
@@ -957,6 +959,8 @@ mod tests {
                 ("settings_set_density", "Ok"),
                 ("settings_set_theme", "Ok"),
                 ("settings_set_update_check", "Ok"),
+                // Without `HX_SMOKE=1` it does nothing, and the tests go on running.
+                ("smoke_ready", "Ok"),
                 // The demo workspace has a snapshot 2.
                 ("snapshot_select", "Ok"),
                 ("solve_order", "ViewChanged"),
@@ -1231,7 +1235,10 @@ mod tests {
         let harness = Harness::new();
         let unreadable = serde_json::json!([[]]);
         let mut tried = 0;
-        for (command, args) in command_args() {
+        for (command, args) in command_args()
+            .into_iter()
+            .filter(|(command, _)| in_this_build(command))
+        {
             let entry = args
                 .as_object()
                 .unwrap_or_else(|| panic!("the arguments of {command} are an object"));
@@ -1251,6 +1258,77 @@ mod tests {
         }
         // A fixture without a key would prove nothing.
         assert!(tried > 0, "the fixture holds no argument");
+    }
+
+    /// Whether this build registers `command`: the substitutes of the dialogs are registered by
+    /// the `e2e` build only.
+    fn in_this_build(command: &str) -> bool {
+        cfg!(feature = "e2e") || !command.starts_with("e2e_")
+    }
+
+    #[test]
+    fn app_start_says_whether_this_is_the_e2e_build() {
+        let harness = Harness::new();
+        let start = harness.invoke("app_start", &json!({})).unwrap();
+        assert_eq!(start["e2e"], json!(cfg!(feature = "e2e")));
+    }
+
+    #[cfg(not(feature = "e2e"))]
+    #[test]
+    fn a_default_build_registers_no_e2e_command() {
+        let harness = Harness::new();
+        let e2e: Vec<String> = command_args()
+            .into_keys()
+            .filter(|command| command.starts_with("e2e_"))
+            .collect();
+        assert_eq!(e2e, ["e2e_open_path", "e2e_save_path"]);
+        for command in &e2e {
+            // Tauri answers a command it does not know with a plain text that says so.
+            match harness.invoke(command, &command_args()[command]) {
+                Err(Value::String(text)) => assert!(text.contains("not found"), "{text}"),
+                other => panic!("{command} answered in a default build: {other:?}"),
+            }
+        }
+        // Each is registered under a `cfg` of the feature, and nothing else of the module is
+        // named outside one.
+        let lines = handler_lines();
+        let mut gated = 0;
+        for (index, line) in lines.iter().enumerate() {
+            if line.contains("e2e::") {
+                assert_eq!(lines[index - 1], r#"#[cfg(feature = "e2e")]"#, "{line}");
+                gated += 1;
+            }
+        }
+        assert_eq!(gated, 2);
+        assert!(LIB.contains("#[cfg(feature = \"e2e\")]\nmod e2e;"));
+    }
+
+    #[cfg(feature = "e2e")]
+    #[test]
+    fn the_e2e_build_registers_the_substitutes_of_the_dialogs() {
+        // The variables are not set here: the substitutes answer as a cancelled dialog does.
+        let harness = Harness::new();
+        for command in ["e2e_open_path", "e2e_save_path"] {
+            let args = &command_args()[command];
+            assert!(harness.invoke(command, args).is_ok(), "{command}");
+        }
+    }
+
+    #[test]
+    fn update_check_answers_none_without_asking_when_turned_off() {
+        // The smoke run and the e2e build turn it off, so neither reaches GitHub.
+        let harness = Harness::new();
+        let (listener, url) = silent_server();
+        ask_updates_at(&harness, url);
+        {
+            let state = harness.app.state::<Mutex<AppState>>();
+            state.lock().unwrap().turn_off_update_check();
+        }
+        assert_eq!(harness.invoke("update_check", &json!({})), Ok(Value::Null));
+        assert!(!was_asked(&listener));
+        // Nothing was recorded either: the check was not tried.
+        let state = harness.app.state::<Mutex<AppState>>();
+        assert_eq!(state.lock().unwrap().settings().update_checked_at, None);
     }
 
     #[test]
@@ -1293,7 +1371,10 @@ mod tests {
     #[test]
     fn after_a_panic_under_the_lock_no_command_panics_or_asks_for_a_restart() {
         let harness = Harness::new();
-        for (command, args) in command_args() {
+        for (command, args) in command_args()
+            .into_iter()
+            .filter(|(command, _)| in_this_build(command))
+        {
             poison(&harness);
             match harness.invoke(&command, &args) {
                 Ok(_) => {}
@@ -1305,10 +1386,19 @@ mod tests {
                     assert!(!message.contains("Restart"), "{command}: {message}");
                 }
             }
+            // The commands that never read the state leave its lock alone; the next one puts
+            // it right.
+            if STATELESS.contains(&command.as_str()) {
+                continue;
+            }
             let state = harness.app.state::<Mutex<AppState>>();
             assert!(!state.is_poisoned(), "{command} left the lock poisoned");
         }
     }
+
+    /// The commands that never take the state: the smoke run's signal, and the substitutes of
+    /// the dialogs, which read the environment.
+    const STATELESS: [&str; 3] = ["smoke_ready", "e2e_open_path", "e2e_save_path"];
 
     #[test]
     fn a_command_whose_work_panics_answers_internal_and_the_next_needs_no_restart() {
@@ -1727,7 +1817,7 @@ mod tests {
     }
 
     /// The keys of `interface CommandMap { ... }`: the lines that start with two spaces, a name
-    /// of lowercase letters and underscores, and a colon.
+    /// of lowercase letters, digits, and underscores, and a colon.
     fn typescript_commands() -> BTreeSet<String> {
         let start = COMMAND_MAP
             .find("interface CommandMap {")
@@ -1740,23 +1830,37 @@ mod tests {
             .filter_map(|line| line.strip_prefix("  "))
             .filter_map(|line| line.split_once(':').map(|(name, _)| name))
             .filter(|name| {
-                !name.is_empty() && name.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
             })
             .map(str::to_string)
             .collect()
     }
 
-    /// The names inside `generate_handler![ ... ]`, without their module path.
-    fn registered_commands() -> BTreeSet<String> {
+    /// The lines inside `generate_handler![ ... ]`, trimmed: a command, or the `cfg` of the one
+    /// that follows.
+    fn handler_lines() -> Vec<&'static str> {
         let start = LIB
             .find("generate_handler![")
             .expect("lib.rs registers the commands with generate_handler!");
         let body = &LIB[start + "generate_handler![".len()..];
-        let end = body.find(']').expect("the list ends");
+        let end = body.find("\n    ]").expect("the list ends");
         body[..end]
-            .split(',')
-            .map(|name| {
-                name.trim()
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect()
+    }
+
+    /// The names inside `generate_handler![ ... ]`, without their module path, in every build.
+    fn registered_commands() -> BTreeSet<String> {
+        handler_lines()
+            .into_iter()
+            .filter(|line| !line.starts_with("#["))
+            .map(|line| {
+                line.trim_end_matches(',')
                     .rsplit("::")
                     .next()
                     .unwrap_or_default()
