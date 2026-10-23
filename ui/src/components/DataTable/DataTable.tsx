@@ -132,7 +132,6 @@ function isSortable(column: ColumnBase<never>): boolean {
   return column.allowsSorting === true || column.sortValue !== undefined;
 }
 
-/** A column of a table. It stays whatever the width of the table. */
 /** A key or a press the table answers, for the shortcut sheet to list. */
 export interface TableKey {
   /** As a shortcut is written: modifiers, then the key, joined by `+`. */
@@ -155,6 +154,8 @@ export const TABLE_KEYS: readonly TableKey[] = [
   { shortcut: "Home", label: "shortcuts.table.home" },
   { shortcut: "End", label: "shortcuts.table.end" },
   { shortcut: "Enter", label: "shortcuts.table.enter" },
+  { shortcut: "Ctrl+Enter", label: "shortcuts.table.ctrlEnter" },
+  { shortcut: "Shift+Enter", label: "shortcuts.table.shiftEnter" },
   { shortcut: "Esc", label: "shortcuts.table.escape" },
   { shortcut: "Ctrl+Click", label: "shortcuts.table.ctrlClick" },
   { shortcut: "Shift+Click", label: "shortcuts.table.shiftClick" },
@@ -165,6 +166,7 @@ export const TABLE_KEYS: readonly TableKey[] = [
   { shortcut: "Shift+Space", label: "shortcuts.table.shiftSpace" },
 ];
 
+/** A column of a table. It stays whatever the width of the table. */
 export interface DataTableColumn<Item> extends ColumnBase<Item> {
   /** It has none: a column with a priority is a `LeavingColumn`. */
   priority?: never;

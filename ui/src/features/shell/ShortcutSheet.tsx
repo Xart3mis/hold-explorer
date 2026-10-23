@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
 import { Button, VisuallyHidden } from "../../components";
 import { cx } from "../../components/cx";
@@ -51,33 +51,10 @@ export interface ShortcutSheetProps {
 
 /**
  * The shortcut sheet (DESIGN.md, "Shortcut sheet"): a modal that lists every shortcut of the app,
- * grouped, from the one registry (`SHORTCUTS`). It closes on Escape and gives the focus back
- * where it was. The shell holds it, and whether it is open; `?` opens it.
+ * grouped, from the one registry (`SHORTCUTS`). It closes on Escape; the shell gives the focus back
+ * (`useModalFocusReturn`). The shell holds it, and whether it is open; `?` opens it.
  */
 export function ShortcutSheet({ isOpen, onOpenChange }: ShortcutSheetProps) {
-  // Where the focus was when the sheet opened: it goes back there when the sheet closes.
-  const returnTo = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (!isOpen) return;
-    const active = document.activeElement;
-    returnTo.current = active instanceof HTMLElement && active !== document.body ? active : null;
-  }, [isOpen]);
-  useEffect(() => {
-    if (isOpen) return undefined;
-    const back = returnTo.current;
-    returnTo.current = null;
-    if (back === null) return undefined;
-    // The modal gives the focus back as well, when it can; it is given back here when nothing
-    // has taken it by then.
-    const frame = window.requestAnimationFrame(() => {
-      const lost = document.activeElement === null || document.activeElement === document.body;
-      if (lost && back.isConnected) back.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [isOpen]);
-
   return (
     <ModalOverlay
       isOpen={isOpen}
@@ -98,7 +75,7 @@ export function ShortcutSheet({ isOpen, onOpenChange }: ShortcutSheetProps) {
                     <ul className={styles.list}>
                       {SHORTCUTS.filter((entry) => entry.group === group.id).map((entry) => (
                         <li key={`${entry.shortcut}:${entry.label}`} className={styles.row}>
-                          <span className={styles.label}>{t(entry.label as MessageKey)}</span>
+                          <span className={styles.label}>{t(entry.label)}</span>
                           <KeyCaps shortcut={entry.shortcut} />
                           <VisuallyHidden>{spoken(entry.shortcut)}</VisuallyHidden>
                         </li>

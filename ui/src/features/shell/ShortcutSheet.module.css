@@ -113,3 +113,10 @@
   font-variant-numeric: var(--font-numeric-proportional);
   letter-spacing: var(--letter-spacing-normal);
 }
+
+/* The sheet appears in place: it fades, and nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .modal[data-entering] {
+    transform: none;
+  }
+}

@@ -249,6 +249,8 @@
       "home": "First loaded row",
       "end": "Last loaded row",
       "enter": "Open the row",
+      "ctrlEnter": "Open the row, as Enter does",
+      "shiftEnter": "Open the row, as Enter does",
       "escape": "Clear the selection",
       "ctrlClick": "Add the row to the selection, or take it out",
       "shiftClick": "Select the rows from the last one pressed",

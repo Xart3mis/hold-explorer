@@ -2,7 +2,6 @@ import { OctagonAlert, Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -456,35 +455,15 @@ export function CommandPalette({
     return offered.slice(0, RECENT_COUNT);
   };
 
-  // Where the focus was when the palette opened: it goes back there when the palette closes,
-  // unless what was chosen took it elsewhere. Noted before the field takes it.
-  const returnTo = useRef<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (!isOpen) return;
-    const active = document.activeElement;
-    returnTo.current = active instanceof HTMLElement && active !== document.body ? active : null;
-  }, [isOpen]);
-
-  // What was chosen runs once the palette is gone, so that the focus it gives back, and the page
-  // it leaves, are those the action then changes.
+  // What was chosen runs once the palette is gone, so that the page it leaves, and where it puts
+  // the focus, are those the action then changes. The shell gives the focus back
+  // (`useModalFocusReturn`) when nothing has taken it.
   const chosen = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (isOpen) return undefined;
     const run = chosen.current;
     chosen.current = null;
     run?.();
-    const back = returnTo.current;
-    returnTo.current = null;
-    if (back === null) return undefined;
-    // The modal gives the focus back on the next frame as well, when it can; it is given back
-    // here when nothing has taken it by then.
-    const frame = window.requestAnimationFrame(() => {
-      const lost = document.activeElement === null || document.activeElement === document.body;
-      if (lost && back.isConnected) back.focus();
-    });
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
   }, [isOpen]);
 
   const choose = (item: PaletteItem) => {

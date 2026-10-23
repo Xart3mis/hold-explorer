@@ -1,6 +1,6 @@
 // Keyboard shortcuts are registered here and nowhere else. The shortcuts of the destinations
 // come from the destination list; the shortcuts that are not a destination's are named below.
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { destinations, needsWorkspace, type Destination } from "../../app/destinations";
 import { IN_PAGE_ATTRIBUTE, TABLE_KEYS } from "../../components";
 import { t, type MessageKey } from "../../text/i18n";
@@ -31,7 +31,11 @@ export const MODAL_ATTRIBUTE = "data-modal";
 export interface ShortcutBinding {
   /** Modifiers, then the key, joined by `+`: `Ctrl+1`, `Ctrl+,`, `/`. */
   shortcut: string;
-  run: () => void;
+  /**
+   * Does what the shortcut is for. Returning `false` says it did nothing (the search shortcut
+   * where no search field is shown), so the key goes on to the page as if no shortcut were bound.
+   */
+  run: () => unknown;
   /**
    * The shortcut acts on what the page shows, so it fires only while the page has the keys: never
    * while a text field has focus, with Ctrl or without, and never while an overlay is open, a
@@ -79,9 +83,9 @@ function isKey(event: KeyboardEvent, key: string): boolean {
 /** Whether a key press is this shortcut: the same key with exactly the modifiers it names. */
 export function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
   const wanted = parse(shortcut);
-  // The question mark is matched by the character typed: it takes Shift on a US layout and none
-  // on others, so Shift does not count for it.
-  const shiftMatches = wanted.key === "?" || event.shiftKey === wanted.shift;
+  // The question mark and the slash are matched by the character typed: either takes Shift on
+  // some layouts and none on others, so Shift does not count for them.
+  const shiftMatches = wanted.key === "?" || wanted.key === "/" || event.shiftKey === wanted.shift;
   return (
     isKey(event, wanted.key) &&
     event.ctrlKey === wanted.ctrl &&
@@ -144,8 +148,7 @@ export function handleShortcut(
   for (const binding of bindings) {
     if (!matchesShortcut(event, binding.shortcut)) continue;
     if (!mayFire(binding, typing)) continue;
-    event.preventDefault();
-    binding.run();
+    if (binding.run() !== false) event.preventDefault();
     return true;
   }
   return false;
@@ -203,22 +206,18 @@ export function useExportShortcut(run: (() => void) | null): void {
   const isOn = run !== null;
   // Offered from here, so the palette's "Export this view" exists exactly where Ctrl+E works.
   useOfferExport(isOn, latest);
-  const bindings = useMemo(
-    (): ShortcutBinding[] =>
-      isOn
-        ? [
-            {
-              shortcut: EXPORT_SHORTCUT,
-              isPageOnly: true,
-              run: () => {
-                latest.current?.();
-              },
-            },
-          ]
-        : [],
-    [isOn],
-  );
+  // The handler is made once, in state, so the bindings built from it stay the same and the
+  // listener is not registered again; it reads the latest `run` when the key is pressed.
+  const [runExport] = useState(() => () => {
+    latest.current?.();
+  });
+  const bindings = useMemo(() => exportShortcutBindings(isOn, runExport), [isOn, runExport]);
   useShortcuts(bindings);
+}
+
+/** The bindings of `useExportShortcut`: one while there is something to export, else none. */
+export function exportShortcutBindings(isOn: boolean, run: () => void): ShortcutBinding[] {
+  return isOn ? [{ shortcut: EXPORT_SHORTCUT, isPageOnly: true, run }] : [];
 }
 
 /**
@@ -230,50 +229,51 @@ export function usePaletteShortcut(toggle: () => void): void {
   useEffect(() => {
     latest.current = toggle;
   });
-  const bindings = useMemo(
-    (): ShortcutBinding[] => [
-      {
-        shortcut: PALETTE_SHORTCUT,
-        isAnywhere: true,
-        run: () => {
-          latest.current();
-        },
-      },
-    ],
-    [],
-  );
+  const [run] = useState(() => () => {
+    latest.current();
+  });
+  const bindings = useMemo(() => paletteShortcutBindings(run), [run]);
   useShortcuts(bindings);
+}
+
+/** The bindings of `usePaletteShortcut`. */
+export function paletteShortcutBindings(toggle: () => void): ShortcutBinding[] {
+  return [{ shortcut: PALETTE_SHORTCUT, isAnywhere: true, run: toggle }];
 }
 
 /**
  * Listens for `SEARCH_SHORTCUT` and `SHEET_SHORTCUT` while the component that calls it is shown.
  * Both belong to the page: never in a text field, never under an overlay or a modal.
  */
-export function usePageShortcuts(actions: { focusSearch: () => void; openSheet: () => void }) {
+export function usePageShortcuts(actions: PageActions) {
   const latest = useRef(actions);
   useEffect(() => {
     latest.current = actions;
   });
+  const [focusSearch] = useState(() => () => latest.current.focusSearch());
+  const [openSheet] = useState(() => () => {
+    latest.current.openSheet();
+  });
   const bindings = useMemo(
-    (): ShortcutBinding[] => [
-      {
-        shortcut: SEARCH_SHORTCUT,
-        isPageOnly: true,
-        run: () => {
-          latest.current.focusSearch();
-        },
-      },
-      {
-        shortcut: SHEET_SHORTCUT,
-        isPageOnly: true,
-        run: () => {
-          latest.current.openSheet();
-        },
-      },
-    ],
-    [],
+    () => pageShortcutBindings({ focusSearch, openSheet }),
+    [focusSearch, openSheet],
   );
   useShortcuts(bindings);
+}
+
+/** What the page shortcuts do. */
+export interface PageActions {
+  /** Moves the focus to the search field; `false` where none is shown. */
+  focusSearch: () => boolean;
+  openSheet: () => void;
+}
+
+/** The bindings of `usePageShortcuts`. */
+export function pageShortcutBindings(actions: PageActions): ShortcutBinding[] {
+  return [
+    { shortcut: SEARCH_SHORTCUT, isPageOnly: true, run: actions.focusSearch },
+    { shortcut: SHEET_SHORTCUT, isPageOnly: true, run: actions.openSheet },
+  ];
 }
 
 export interface ShortcutEntry {
@@ -281,7 +281,7 @@ export interface ShortcutEntry {
   shortcut: string;
   group: "go" | "actions" | "tables" | "panel";
   /** Catalog key of what it does. */
-  label: string;
+  label: MessageKey;
 }
 
 /**
@@ -297,7 +297,7 @@ export const SHORTCUTS: readonly ShortcutEntry[] = [
           {
             shortcut: destination.shortcut,
             group: "go",
-            label: `destinations.name.${destination.id}` as const satisfies MessageKey,
+            label: `destinations.name.${destination.id}` as const,
           },
         ],
   ),

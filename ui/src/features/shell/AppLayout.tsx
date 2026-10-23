@@ -33,6 +33,7 @@ import { CommandPalette } from "../palette/CommandPalette";
 import type { ShellProblem } from "./problem";
 import { focusSearchField } from "../search/SearchField";
 import { shortcutBindings, usePageShortcuts, usePaletteShortcut, useShortcuts } from "./shortcuts";
+import { useModalFocusReturn } from "./modalFocus";
 import { ShortcutSheet } from "./ShortcutSheet";
 import styles from "./Shell.module.css";
 import { Sidebar } from "./Sidebar";
@@ -297,6 +298,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
     setSheetOpen(true);
   }, []);
   usePageShortcuts({ focusSearch: focusSearchField, openSheet });
+  // One note and one return of the focus for both modals, which hand over to each other.
+  useModalFocusReturn(isPaletteOpen || isSheetOpen);
 
   // The detail panel shows while the address of a data destination selects a line, a hold, or a
   // blocker, and there is a snapshot to read it from.

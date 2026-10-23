@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { destinations } from "../../app/destinations";
 import { IN_PAGE_ATTRIBUTE, TABLE_KEYS } from "../../components";
@@ -10,6 +12,9 @@ import {
   matchesShortcut,
   MODAL_ATTRIBUTE,
   PALETTE_SHORTCUT,
+  exportShortcutBindings,
+  pageShortcutBindings,
+  paletteShortcutBindings,
   SEARCH_SHORTCUT,
   SHEET_SHORTCUT,
   SHORTCUTS,
@@ -333,55 +338,142 @@ describe("the character ?", () => {
   });
 });
 
+describe("the character /", () => {
+  it("is matched by the character typed, with Shift as a layout that types it with Shift does", () => {
+    expect(matchesShortcut(key({ key: "/" }), SEARCH_SHORTCUT)).toBe(true);
+    expect(matchesShortcut(key({ key: "/", shiftKey: true }), SEARCH_SHORTCUT)).toBe(true);
+    expect(matchesShortcut(key({ key: "/", ctrlKey: true }), SEARCH_SHORTCUT)).toBe(false);
+  });
+});
+
+describe("a binding that does not act", () => {
+  it("leaves the key to the page when it says so", () => {
+    const run = vi.fn(() => false);
+    const event = key({ key: "/" });
+    handleShortcut(event, [{ shortcut: "/", isPageOnly: true, run }]);
+    expect(run).toHaveBeenCalledOnce();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("keeps the key from the page when it acts", () => {
+    const event = key({ key: "/" });
+    handleShortcut(event, [{ shortcut: "/", isPageOnly: true, run: () => true }]);
+    expect(event.defaultPrevented).toBe(true);
+  });
+});
+
+describe("the shortcuts of the page, under an overlay", () => {
+  const bindings = pageShortcutBindings({ focusSearch: () => true, openSheet: vi.fn() });
+
+  it("hold back under a menu", () => {
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.append(menu);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }), bindings)).toBe(false);
+      expect(handleShortcut(key({ key: "/" }), bindings)).toBe(false);
+    } finally {
+      menu.remove();
+    }
+  });
+
+  it("hold back under a modal", () => {
+    const modal = document.createElement("div");
+    modal.setAttribute(MODAL_ATTRIBUTE, "");
+    document.body.append(modal);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }), bindings)).toBe(false);
+      expect(handleShortcut(key({ key: "/" }), bindings)).toBe(false);
+    } finally {
+      modal.remove();
+    }
+  });
+
+  it("hold back in a text field", () => {
+    const input = document.createElement("input");
+    document.body.append(input);
+    try {
+      expect(handleShortcut(key({ key: "?", shiftKey: true }, input), bindings)).toBe(false);
+    } finally {
+      input.remove();
+    }
+  });
+
+  it("fire on the page", () => {
+    const openSheet = vi.fn();
+    const page = pageShortcutBindings({ focusSearch: () => true, openSheet });
+    expect(handleShortcut(key({ key: "?", shiftKey: true }), page)).toBe(true);
+    expect(openSheet).toHaveBeenCalledOnce();
+  });
+});
+
 describe("SHORTCUTS", () => {
   const listed = (group: string) =>
     SHORTCUTS.filter((entry) => entry.group === group).map((entry) => entry.shortcut);
 
+  /** Every binding the shell registers, from the functions that build each hook's list. */
+  const registered = [
+    ...shortcutBindings(destinations, { open: vi.fn(), startImport: vi.fn(), hasWorkspace: true }),
+    ...exportShortcutBindings(true, vi.fn()),
+    ...paletteShortcutBindings(vi.fn()),
+    ...pageShortcutBindings({ focusSearch: () => true, openSheet: vi.fn() }),
+  ].map((binding) => binding.shortcut);
+
   it("has an entry for every binding the shell registers", () => {
-    const bound = [
-      ...shortcutBindings(destinations, {
-        open: vi.fn(),
-        startImport: vi.fn(),
-        hasWorkspace: true,
-      }).map((binding) => binding.shortcut),
-      EXPORT_SHORTCUT,
-      PALETTE_SHORTCUT,
-      SEARCH_SHORTCUT,
-      SHEET_SHORTCUT,
-    ];
+    expect(registered.length).toBeGreaterThan(10);
     const all = SHORTCUTS.map((entry) => entry.shortcut);
-    for (const shortcut of bound) expect(all).toContain(shortcut);
+    for (const shortcut of registered) expect(all).toContain(shortcut);
   });
 
-  it("has an entry for every key the table documents, in the Tables group", () => {
-    for (const { shortcut } of TABLE_KEYS) expect(listed("tables")).toContain(shortcut);
-    expect(listed("tables")).toHaveLength(TABLE_KEYS.length);
-    // The keys DESIGN.md "Table" names.
-    for (const named of [
-      "Up",
-      "Down",
-      "Home",
-      "End",
-      "Enter",
-      "Esc",
-      "Ctrl+Click",
-      "Shift+Click",
-      "Shift+Up",
-      "Shift+Down",
-      "Ctrl+A",
-      "Ctrl+Space",
-      "Shift+Space",
-    ]) {
-      expect(listed("tables")).toContain(named);
-    }
-  });
-
-  it("names a group for every entry, and a catalog text for every label", () => {
-    const groups = new Set(["go", "actions", "tables", "panel"]);
+  it("has a binding for every entry outside Tables and Esc", () => {
     for (const entry of SHORTCUTS) {
-      expect(groups.has(entry.group)).toBe(true);
-      expect(entry.label).not.toBe("");
+      if (entry.group === "tables" || entry.shortcut === "Esc") continue;
+      expect(registered, entry.shortcut).toContain(entry.shortcut);
     }
+  });
+
+  it("lists exactly the keys of TABLE_KEYS in the Tables group", () => {
+    expect(listed("tables")).toEqual(TABLE_KEYS.map((tableKey) => tableKey.shortcut));
+  });
+
+  it("has a key of TABLE_KEYS for each way DESIGN.md Table names, and no other", () => {
+    const design = readFileSync(join(__dirname, "../../../../DESIGN.md"), "utf8");
+    const start = design.indexOf("\n### Table\n");
+    const end = design.indexOf("\n### ", start + 1);
+    const table = design.slice(start, end);
+    // What the section says for each key, as the words of the section have it.
+    const named: Record<string, RegExp> = {
+      Up: /Arrow keys move/,
+      Down: /Arrow keys move/,
+      Left: /Left collapses/,
+      Right: /Right expands/,
+      "Page Up": /Page Up and Page Down/,
+      "Page Down": /Page Up and Page Down/,
+      Home: /Home and End/,
+      End: /Home and End/,
+      Enter: /Enter opens the focused row/,
+      "Ctrl+Enter": /Ctrl\+Enter and Shift\+Enter/,
+      "Shift+Enter": /Ctrl\+Enter and Shift\+Enter/,
+      Esc: /Esc clears the selection/,
+      "Ctrl+Click": /Ctrl and a press adds the row/,
+      "Shift+Click": /Shift and a press selects/,
+      "Shift+Up": /Shift\+Up and Shift\+Down/,
+      "Shift+Down": /Shift\+Up and Shift\+Down/,
+      "Ctrl+A": /Ctrl\+A selects every row/,
+      "Ctrl+Space": /Ctrl\+Space adds/,
+      "Shift+Space": /Shift\+Space selects/,
+    };
+    expect(TABLE_KEYS.map((tableKey) => tableKey.shortcut).sort()).toEqual(
+      Object.keys(named).sort(),
+    );
+    for (const [shortcut, words] of Object.entries(named)) {
+      expect(table, shortcut).toMatch(words);
+    }
+  });
+
+  it("names a group for every entry", () => {
+    const groups = new Set(["go", "actions", "tables", "panel"]);
+    for (const entry of SHORTCUTS) expect(groups.has(entry.group)).toBe(true);
     expect(listed("panel")).toContain("Esc");
   });
 });
