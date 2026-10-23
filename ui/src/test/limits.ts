@@ -19,9 +19,10 @@
  *   length of such a test, which it knows by the limit the test was given.
  *
  * On CI all four are three times as long: nine seconds to wait, fifteen for a test, thirty to wait
- * in a slow test, sixty for it. A CI runner is slower than a development machine in everything, in the first
- * render a query waits for as much as in a whole test, and a test that is merely slow there is
- * not a failure. The four keep their proportions, so the wait is below the limit there as well.
+ * in a slow test, sixty for it. A CI runner is slower than a development machine in everything,
+ * in the first render a query waits for as much as in a whole test, and a test that is merely
+ * slow there is not a failure. The four keep their proportions, so the wait is below the limit
+ * there as well.
  * CI is told by the environment variable `CI`, which GitHub sets; set to nothing, it is not set.
  */
 export interface TestLimits {
