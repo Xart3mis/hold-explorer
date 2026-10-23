@@ -543,10 +543,14 @@ where
     let _ = on_progress.send(ExportPhase::Reading);
     let text = request.text.clone();
     let asked = format.clone();
-    let content = blocking(app.clone(), move |state| {
-        state.export_content(&request, &asked, &view)
+    let (content, writes) = blocking(app.clone(), move |state| {
+        let content = state.export_content(&request, &asked, &view)?;
+        Ok((content, state.writes()))
     })
     .await?;
+    // The file is written with the state free, so the write is counted here: a close of the
+    // window waits until the file is whole and recorded.
+    let _write = writes.begin();
     let _ = on_progress.send(ExportPhase::Writing);
     let target = path.clone();
     let saved = unlocked(move || save(content, &format, &target, &text, fonts(), &write)).await?;
@@ -1241,6 +1245,43 @@ mod tests {
         assert_eq!(*heard.lock().unwrap(), [r#""Reading""#, r#""Writing""#]);
         let state = harness.app.state::<Mutex<AppState>>();
         assert!(state.lock().unwrap().has_written(&path));
+    }
+
+    #[test]
+    fn an_export_save_counts_as_a_write_while_the_file_is_written_unlocked() {
+        let harness = Harness::new();
+        let view = demo_view(&harness);
+        let (request, view) = export_args(&view);
+        let path = harness._dir.path().join("lines.csv");
+        let writes = harness
+            .app
+            .state::<Mutex<AppState>>()
+            .lock()
+            .unwrap()
+            .writes();
+        assert!(!writes.busy());
+        let seen = std::sync::Arc::new(Mutex::new(None));
+        let write = {
+            let (writes, seen) = (writes.clone(), seen.clone());
+            move |path: &std::path::Path, bytes: &[u8]| {
+                *seen.lock().unwrap() = Some(writes.busy());
+                hx_export::write_file(path, bytes)
+            }
+        };
+        let (channel, _) = phases();
+        tauri::async_runtime::block_on(super::save_with(
+            harness.app.handle().clone(),
+            request,
+            crate::app::SaveFormat::Csv,
+            path.clone(),
+            view,
+            channel,
+            write,
+        ))
+        .unwrap();
+        assert_eq!(*seen.lock().unwrap(), Some(true));
+        assert!(!writes.busy(), "the write ends with the save");
+        assert!(path.is_file());
     }
 
     #[test]

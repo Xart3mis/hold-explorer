@@ -603,3 +603,26 @@ fn a_recover_whose_reopen_fails_leaves_no_workspace_open_and_says_why() {
         ErrorKind::NoWorkspace
     );
 }
+
+#[test]
+fn the_demo_build_counts_as_a_write_while_it_imports() {
+    let fx = Fixture::new();
+    let scratch = fx.dir.path().join("scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let mut state = fx.state();
+    let writes = state.writes();
+    let seen = std::cell::RefCell::new(Vec::new());
+    let after_file = |_: u64| {
+        seen.borrow_mut().push(writes.busy());
+        Ok(())
+    };
+    state
+        .create_demo_with(&scratch, &delete_workspace, &after_file)
+        .unwrap();
+    assert_eq!(
+        *seen.borrow(),
+        [true; 4],
+        "each snapshot is imported while a write is counted"
+    );
+    assert!(!writes.busy(), "the write ends with the build");
+}

@@ -14,7 +14,7 @@ import { useIsMutating } from "@tanstack/react-query";
 import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
-import { inApp, onFileDrag } from "../../api/window";
+import { inApp, onClosingHeld, onFileDrag } from "../../api/window";
 import { useSelectionFollowsView } from "../../app/actions/selection";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
@@ -137,6 +137,8 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const [dismissedSettings, setDismissedSettings] = useState<string | null>(null);
   // Why files cannot be dropped on this window, when the window refused to say when one is.
   const [dropProblem, setDropProblem] = useState<string | null>(null);
+  // The window was asked to close while a file is being saved: Rust closes it once that is done.
+  const [closing, setClosing] = useState(false);
   // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
   const [detailFocus] = useState(createDetailFocus);
   const { selection } = useSelection();
@@ -220,6 +222,27 @@ function LoadedShell({ start, destinations }: ShellProps) {
       }),
     [navigate, pathname, state, home],
   );
+
+  // A close of the window held back by a write is said until the window goes.
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let gone = false;
+    onClosingHeld(() => {
+      setClosing(true);
+    }).then(
+      (unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      },
+      () => {
+        // Without the event the window still closes once the write is done; it only says nothing.
+      },
+    );
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   // A file dragged over the window shows the drop target; a file dropped starts an import.
   useEffect(() => {
@@ -357,13 +380,15 @@ function LoadedShell({ start, destinations }: ShellProps) {
                 />
               ) : null}
               <main className={styles.content}>
-                {problem !== null ||
+                {closing ||
+                problem !== null ||
                 notice !== null ||
                 settingsProblem !== null ||
                 dropProblem !== null ||
                 warning !== null ||
                 older !== null ? (
                   <div className={styles.notices}>
+                    {closing ? <Notice tone="info">{t("shell.closingHeld")}</Notice> : null}
                     {problem === null ? null : (
                       <div id={problemId}>
                         <Notice

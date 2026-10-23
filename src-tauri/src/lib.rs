@@ -8,12 +8,12 @@ pub mod crash;
 pub mod native;
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tauri::window::Color;
-use tauri::{Manager, RunEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, WindowEvent};
 
-use app::{AppState, SessionClipboard, Theme};
+use app::{AppState, CloseRequest, SessionClipboard, Theme, Writes, CLOSING_HELD};
 
 /// The first frame of the window in the dark theme: the design token `--color-surface-app` of
 /// the dark theme in `DESIGN.md`, as `node tools/design/check-tokens.mjs --hex dark
@@ -161,6 +161,58 @@ fn fail_start(local_data: &Path, failure: &StartFailure, app: Option<&tauri::App
     std::process::exit(1);
 }
 
+/// Lets a close of the main window wait for the writes in progress (see [`on_event`]). The count
+/// is managed beside the state, so the event loop reads it without waiting for the state lock,
+/// which a write holds. When the last write ends after a close was held back, the window is
+/// closed from the main thread; that close destroys it, so it is not held back again.
+fn hold_close<R: Runtime>(app: &AppHandle<R>, writes: Arc<Writes>) {
+    let handle = app.clone();
+    writes.closes_with(move || {
+        let main = handle.clone();
+        // A window that cannot be closed from here stays open, and the user closes it again.
+        let _ = handle.run_on_main_thread(move || {
+            if let Some(window) = main.get_webview_window("main") {
+                let _ = window.destroy();
+            }
+        });
+    });
+    app.manage(writes);
+}
+
+/// What the app does with an event of its loop. A request to close a window while a write is in
+/// progress is held back, and the interface hears [`CLOSING_HELD`] the first time. When the app
+/// exits, the clipboard is let go.
+fn on_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
+    match event {
+        RunEvent::WindowEvent {
+            event: WindowEvent::CloseRequested { api, .. },
+            ..
+        } => {
+            let Some(writes) = app.try_state::<Arc<Writes>>() else {
+                return;
+            };
+            match writes.close_requested() {
+                CloseRequest::Close => {}
+                CloseRequest::Held => {
+                    api.prevent_close();
+                    // Without the notice the window only seems slow to close.
+                    let _ = app.emit(CLOSING_HELD, ());
+                }
+                CloseRequest::AlreadyHeld => api.prevent_close(),
+            }
+        }
+        // The event loop ends the process without dropping what the app manages, and the system's
+        // clipboard hands what the app copied to the clipboard manager only when it is dropped:
+        // it is let go here, so a copy made just before quitting survives the app on X11.
+        RunEvent::Exit => {
+            if let Some(clipboard) = app.try_state::<SessionClipboard>() {
+                clipboard.release();
+            }
+        }
+        _ => {}
+    }
+}
+
 /// What the app sets up when the event loop starts: the main window, then the state, from the
 /// app's folders. The configuration asks Tauri to create no window: Tauri would create it
 /// before this runs, where a failure is not caught.
@@ -172,16 +224,15 @@ fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
         .first()
         .cloned()
         .ok_or(tauri::Error::WindowNotFound)?;
-    tauri::WebviewWindowBuilder::from_config(app.handle(), &main)?.build()?;
+    let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &main)?.build()?;
     let config_dir = app.path().app_config_dir()?;
     let data_dir = app.path().app_data_dir()?;
     let local_data_dir = app.path().app_local_data_dir()?;
     let state = AppState::new(config_dir, data_dir, local_data_dir);
-    // The window exists but has drawn nothing yet: drawing starts with the event loop.
-    if let Some(window) = app.get_webview_window("main") {
-        // A failure leaves the dark frame, which the page replaces once it has loaded.
-        let _ = window.set_background_color(Some(window_background(state.settings().theme)));
-    }
+    // The window exists but has drawn nothing yet: drawing starts with the event loop. A failure
+    // leaves the dark frame, which the page replaces once it has loaded.
+    let _ = window.set_background_color(Some(window_background(state.settings().theme)));
+    hold_close(app.handle(), state.writes());
     app.manage(Mutex::new(state));
     // Under a lock of its own: the clipboard is set while the state is free.
     app.manage(SessionClipboard::default());
@@ -232,16 +283,7 @@ pub fn run() {
         Ok(app) => app,
         Err(failure) => fail_start(&local_data, &failure, None),
     };
-    app.run(|app, event| {
-        // The event loop ends the process without dropping what the app manages, and the system's
-        // clipboard hands what the app copied to the clipboard manager only when it is dropped:
-        // it is let go here, so a copy made just before quitting survives the app on X11.
-        if let RunEvent::Exit = event {
-            if let Some(clipboard) = app.try_state::<SessionClipboard>() {
-                clipboard.release();
-            }
-        }
-    });
+    app.run(|app, event| on_event(app, &event));
 }
 
 #[cfg(test)]
@@ -363,6 +405,95 @@ mod tests {
         assert!(report
             .message
             .starts_with("Hold Explorer could not start: "));
+    }
+
+    #[test]
+    fn a_close_during_a_write_waits_for_it_and_the_window_then_closes_on_its_own() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{mpsc, Arc};
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("the mock runtime makes a window");
+        let writes = Arc::new(crate::app::Writes::default());
+        super::hold_close(app.handle(), writes.clone());
+
+        // A write runs on another thread, and ends once the interface has heard of the close.
+        let heard = Arc::new(AtomicUsize::new(0));
+        let (told, notice) = mpsc::channel();
+        let counted = heard.clone();
+        let listener = app.listen_any(crate::app::CLOSING_HELD, move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            let _ = told.send(());
+        });
+        let handle = app.handle().clone();
+        let (started, write_started) = mpsc::channel();
+        let writer = {
+            let writes = writes.clone();
+            std::thread::spawn(move || {
+                let _write = writes.begin();
+                started.send(()).unwrap();
+                // Also ends when the listener is let go without having heard anything.
+                let _ = notice.recv();
+            })
+        };
+        write_started.recv().unwrap();
+
+        let requests = Arc::new(AtomicUsize::new(0));
+        let seen = requests.clone();
+        // The loop returns once the last window is gone: the write ended and Rust closed it.
+        app.run(move |app, event| {
+            if let tauri::RunEvent::Ready = event {
+                // Two requests: the first is held back, the second does nothing more.
+                window.close().unwrap();
+                window.close().unwrap();
+            }
+            if let tauri::RunEvent::WindowEvent {
+                event: tauri::WindowEvent::CloseRequested { .. },
+                ..
+            } = event
+            {
+                seen.fetch_add(1, Ordering::SeqCst);
+            }
+            super::on_event(app, &event);
+        });
+        handle.unlisten(listener);
+        writer.join().unwrap();
+
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "both requests were held back"
+        );
+        assert_eq!(heard.load(Ordering::SeqCst), 1, "the notice is sent once");
+        assert!(!writes.busy());
+    }
+
+    #[test]
+    fn a_close_while_no_write_runs_closes_the_window_at_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        use tauri::Listener;
+
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default())
+            .build()
+            .expect("the mock runtime makes a window");
+        super::hold_close(app.handle(), Arc::new(crate::app::Writes::default()));
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counted = heard.clone();
+        app.listen_any(crate::app::CLOSING_HELD, move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+        app.run(move |app, event| {
+            if let tauri::RunEvent::Ready = event {
+                window.close().unwrap();
+            }
+            super::on_event(app, &event);
+        });
+        assert_eq!(heard.load(Ordering::SeqCst), 0);
     }
 
     #[test]

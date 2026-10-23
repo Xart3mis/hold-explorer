@@ -20,7 +20,7 @@ import { opened, openStart, otherWorkspace, startState } from "../../test/fixtur
 import { commandFailure } from "../../test/ipc";
 import { overviewOf } from "../../test/overview";
 import { SLOW } from "../../test/slow";
-import { fileDrag, windowApi } from "../../test/window";
+import { closingHeld, fileDrag, windowApi } from "../../test/window";
 import { formatDate } from "../../text/format";
 import { connectImportStart } from "../import/start";
 import { SIDEBAR_STORAGE_KEY } from "./window";
@@ -1139,6 +1139,48 @@ describe("loading the application start", () => {
     renderApp({ handlers: { app_start: () => new Promise(() => undefined) } });
     expect(screen.getByText(en.shell.loading)).toHaveAttribute("role", "status");
     await expectAccessible(document.body, { page: true });
+  });
+});
+
+describe("a close of the window that waits for a write", () => {
+  it("shows an information notice that cannot be dismissed, on every page", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    expect(screen.queryByText(en.shell.closingHeld)).not.toBeInTheDocument();
+
+    act(() => {
+      closingHeld.send();
+    });
+    const notice = must(
+      (await screen.findByText(en.shell.closingHeld)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the text",
+    );
+    expect(notice).toHaveAttribute("data-tone", "info");
+    expect(screen.getByRole("main")).toContainElement(notice);
+    expect(within(notice).queryByRole("button")).not.toBeInTheDocument();
+
+    // A second request while the window waits shows nothing more.
+    act(() => {
+      closingHeld.send();
+    });
+    expect(screen.getAllByText(en.shell.closingHeld)).toHaveLength(1);
+
+    await user.click(within(await sidebar()).getByRole("link", { name: names.lines }));
+    expect(screen.getByText(en.shell.closingHeld)).toBeInTheDocument();
+    await expectAccessible(document.body, { page: true });
+  });
+
+  it("stops listening when the shell goes", async () => {
+    const { unmount } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    unmount();
+    expect(closingHeld.listeners()).toBe(0);
   });
 });
 

@@ -13,10 +13,12 @@ mod settings;
 mod snapshots;
 mod views;
 mod workspaces;
+mod writes;
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::FilterSpec;
@@ -38,6 +40,7 @@ pub use import::{
 pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
+pub use writes::{CloseRequest, Writes, CLOSING_HELD};
 
 use settings::{load_settings_checked, save_settings, settings_file, LoadedSettings};
 
@@ -112,6 +115,9 @@ pub struct AppState {
     cache: Option<Cache>,
     /// The files an export wrote since the application started, which `export_open` may open.
     written: HashSet<PathBuf>,
+    /// The writes in progress. Shared: the close of the window reads it without the state lock,
+    /// and an export writes its file with the lock free.
+    writes: Arc<Writes>,
     /// How many datasets were built since the application started.
     #[cfg(test)]
     dataset_builds: usize,
@@ -166,6 +172,7 @@ impl AppState {
             draft: None,
             cache: None,
             written: HashSet::new(),
+            writes: Arc::default(),
             #[cfg(test)]
             dataset_builds: 0,
             #[cfg(test)]
@@ -225,6 +232,11 @@ impl AppState {
     /// The folder the workspaces are kept in when the settings name none.
     fn default_folder(&self) -> PathBuf {
         self.local_data_dir.join("workspaces")
+    }
+
+    /// The count of the writes in progress, which each write holds a guard of while it writes.
+    pub fn writes(&self) -> Arc<Writes> {
+        Arc::clone(&self.writes)
     }
 
     /// The local data folder, where the crash logs are written.

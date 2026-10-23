@@ -1,6 +1,8 @@
 // Everything that talks to Tauri other than commands: the file dialogs, the file manager, the
-// files dragged over the window, and the opening of a file the app saved. Screens import from
+// files dragged over the window, a close of the window that waits for a write, and the opening
+// of a file the app saved. Screens import from
 // here and never from `@tauri-apps/*`.
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -90,4 +92,18 @@ export async function onFileDrag(handler: (event: FileDragEvent) => void): Promi
     }
   });
   return stop;
+}
+
+/** The event Rust sends when a close of the window waits for a write to finish. */
+const CLOSING_HELD = "closing-held";
+
+/**
+ * Hears that the window was asked to close while a file is being saved: Rust holds the close
+ * back and closes the window itself once the saving has finished. Resolves with the function
+ * that stops listening.
+ */
+export async function onClosingHeld(handler: () => void): Promise<() => void> {
+  return listen(CLOSING_HELD, () => {
+    handler();
+  });
 }

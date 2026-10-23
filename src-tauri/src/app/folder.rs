@@ -89,6 +89,8 @@ impl AppState {
         move_files: bool,
         check: CopyCheck,
     ) -> Result<FolderMoved, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let (to, made_under) = self.usable_folder(path, true)?;
         let from = self.folder();
         let files = if move_files {

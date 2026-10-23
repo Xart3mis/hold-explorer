@@ -498,6 +498,9 @@ impl AppState {
         remove: &dyn Fn(&Path) -> Result<(), StoreError>,
         before_store: &dyn Fn() -> Result<(), StoreError>,
     ) -> Result<ImportDone, CommandError> {
+        // Counted from the start: a new workspace file is created on the way to the store.
+        let writes = self.writes();
+        let _write = writes.begin();
         if self.draft.is_none() {
             return Err(no_draft());
         }
