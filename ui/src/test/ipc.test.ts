@@ -58,6 +58,7 @@ describe("mockCommands", () => {
       },
       snapshots: [],
       selected: null,
+      views: [],
       warning,
     };
     mockCommands({

@@ -64,6 +64,11 @@ const COMMAND_KINDS: Record<ErrorKind, true> = {
   MoveCheck: true,
   MoveRename: true,
   MoveRemove: true,
+  ViewName: true,
+  ViewNameTaken: true,
+  TooManyViews: true,
+  ViewAddress: true,
+  ViewNotFound: true,
   Internal: true,
 };
 

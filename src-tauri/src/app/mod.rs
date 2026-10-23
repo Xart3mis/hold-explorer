@@ -10,6 +10,7 @@ mod import;
 mod search;
 mod settings;
 mod snapshots;
+mod views;
 mod workspaces;
 
 use std::collections::HashSet;
@@ -177,6 +178,8 @@ impl AppState {
         };
         let mut open = describe(workspace)?;
         open.selected = self.selected;
+        // The damage of the saved views was reported when the workspace was opened.
+        open.warning = None;
         Ok(Some(open))
     }
 
@@ -400,17 +403,23 @@ impl AppState {
         self.install(workspace, &open);
         // Kept in memory even when it cannot be saved, so the next successful save writes it.
         self.settings.last_workspace = Some(open.workspace.id.clone());
-        open.warning = self.save(&self.settings)
-            .err()
-            .map(|error| {
-                CommandError::new(
-                    ErrorKind::Settings,
-                    format!(
-                        "The workspace is open, but Hold Explorer could not remember it for the next start. {}",
-                        error.message
-                    ),
-                )
-            });
+        let not_remembered = self.save(&self.settings).err().map(|error| {
+            CommandError::new(
+                ErrorKind::Settings,
+                format!(
+                    "The workspace is open, but Hold Explorer could not remember it for the next start. {}",
+                    error.message
+                ),
+            )
+        });
+        // Both are kept when both are set: the settings' kind, then what the views say.
+        open.warning = match (not_remembered, open.warning.take()) {
+            (Some(settings), Some(views)) => Some(CommandError::new(
+                settings.kind,
+                format!("{} {}", settings.message, views.message),
+            )),
+            (settings, views) => settings.or(views),
+        };
         open
     }
 
@@ -440,15 +449,18 @@ fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
     }
 }
 
-/// What the interface receives about a workspace that was just opened.
+/// What the interface receives about a workspace that was just opened. Its warning says that the
+/// saved views could not be read, when they could not.
 fn describe(workspace: &Workspace) -> Result<WorkspaceOpen, CommandError> {
     let snapshots = workspace.snapshots()?;
     let selected = snapshots.last().map(|snapshot| snapshot.id);
+    let (views, warning) = views::read_views(workspace)?;
     Ok(WorkspaceOpen {
         workspace: workspace.info()?.into(),
         snapshots,
         selected,
-        warning: None,
+        views,
+        warning,
     })
 }
 
@@ -466,3 +478,5 @@ mod snapshot_tests;
 mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod views_tests;

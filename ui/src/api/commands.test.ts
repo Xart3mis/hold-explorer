@@ -39,7 +39,7 @@ const review: ImportReview = {
 };
 
 const done: ImportDone = {
-  open: { workspace, snapshots: [], selected: null, warning: null },
+  open: { workspace, snapshots: [], selected: null, views: [], warning: null },
   snapshot: {
     id: 1,
     taken_at: "2026-10-07T08:00:00",

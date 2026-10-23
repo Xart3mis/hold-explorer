@@ -73,6 +73,8 @@ impl AppState {
         workspace.snapshot(snapshot_id)?;
         let mut open = describe(workspace)?;
         open.selected = Some(snapshot_id);
+        // The damage of the saved views was reported when the workspace was opened.
+        open.warning = None;
         if self.selected != Some(snapshot_id) {
             self.cache = None;
         }

@@ -20,6 +20,7 @@ use hx_core::query::{FoldedMatrix, Group, HoldQuery, LinePage, LineQuery, ValueP
 use hx_core::search::SearchResults;
 use hx_core::solve::SolveView;
 use hx_export::{write_file, ExportError, ExportRequest, ExportText};
+use hx_store::SavedView;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
@@ -191,6 +192,67 @@ pub async fn workspace_rename<R: Runtime>(
     name: String,
 ) -> Result<WorkspaceView, CommandError> {
     blocking(app, move |state| state.rename_workspace(&name)).await
+}
+
+/// Saves the screen in view under a name, last in the list of saved views.
+#[tauri::command]
+pub async fn save_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    name: String,
+    address: String,
+    filters: FilterSpec,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| {
+        state.save_view(&workspace, &name, &address, filters)
+    })
+    .await
+}
+
+/// Renames a saved view.
+#[tauri::command]
+pub async fn rename_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+    name: String,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.rename_view(&workspace, id, &name)).await
+}
+
+/// Deletes a saved view.
+#[tauri::command]
+pub async fn delete_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.delete_view(&workspace, id)).await
+}
+
+/// Puts a deleted saved view back, with its id, at an index of the list.
+#[tauri::command]
+pub async fn restore_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    view: SavedView,
+    index: usize,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| {
+        state.restore_view(&workspace, view, index)
+    })
+    .await
+}
+
+/// Moves a saved view to an index of the list.
+#[tauri::command]
+pub async fn move_view<R: Runtime>(
+    app: AppHandle<R>,
+    workspace: String,
+    id: i64,
+    index: usize,
+) -> Result<Vec<SavedView>, CommandError> {
+    blocking(app, move |state| state.move_view(&workspace, id, index)).await
 }
 
 /// Opens a file as the import draft.
@@ -675,6 +737,8 @@ mod tests {
                 ("breakdown", "NoWorkspace"),
                 // The folder of the fixture is not a full path.
                 ("check_workspace_folder", "FolderNotAbsolute"),
+                // Nothing is open yet.
+                ("delete_view", "NoWorkspace"),
                 ("demo_create", "Ok"),
                 // The view of the fixture is not the demo workspace.
                 ("export_copy", "ViewChanged"),
@@ -698,7 +762,12 @@ mod tests {
                 ("line_detail", "ViewChanged"),
                 ("lines", "ViewChanged"),
                 ("matrix", "ViewChanged"),
+                // The workspace of the fixture is not the open one.
+                ("move_view", "WorkspaceNotFound"),
                 ("overview", "ViewChanged"),
+                ("rename_view", "WorkspaceNotFound"),
+                ("restore_view", "WorkspaceNotFound"),
+                ("save_view", "WorkspaceNotFound"),
                 ("search", "ViewChanged"),
                 // The folder of the fixture is not a full path.
                 ("set_workspace_folder", "FolderNotAbsolute"),
@@ -721,6 +790,48 @@ mod tests {
         let state = harness.app.state::<Mutex<AppState>>();
         let state = state.lock().unwrap();
         assert_eq!(state.settings().theme, crate::app::Theme::Light);
+    }
+
+    #[test]
+    fn the_view_commands_read_their_arguments_and_act_on_the_open_workspace() {
+        let harness = Harness::new();
+        let args = command_args();
+        let open = harness.invoke("demo_create", &args["demo_create"]).unwrap();
+        let workspace = open["workspace"]["id"].as_str().unwrap().to_string();
+        assert_eq!(open["views"], serde_json::json!([]));
+
+        let mut save = args["save_view"].clone();
+        save["workspace"] = workspace.clone().into();
+        let saved = harness.invoke("save_view", &save).unwrap();
+        assert_eq!(saved[0]["id"], 1);
+        assert_eq!(saved[0]["name"], "Old valve holds");
+        assert_eq!(saved[0]["address"], "/lines?mode=holds&sort=age");
+        assert_eq!(saved[0]["filters"]["text"], "valve");
+
+        let rename = serde_json::json!({"workspace": workspace, "id": 1, "name": "Stale"});
+        let renamed = harness.invoke("rename_view", &rename).unwrap();
+        assert_eq!(renamed[0]["name"], "Stale");
+
+        let delete = serde_json::json!({"workspace": workspace, "id": 1});
+        assert_eq!(
+            harness.invoke("delete_view", &delete).unwrap(),
+            serde_json::json!([])
+        );
+        let mut restore = args["restore_view"].clone();
+        restore["workspace"] = workspace.clone().into();
+        let restored = harness.invoke("restore_view", &restore).unwrap();
+        assert_eq!(restored[0]["id"], 3);
+        let moved = harness
+            .invoke(
+                "move_view",
+                &serde_json::json!({"workspace": workspace, "id": 3, "index": 0}),
+            )
+            .unwrap();
+        assert_eq!(moved[0]["id"], 3);
+
+        // A refusal arrives with its kind.
+        let error = harness.invoke("save_view", &save).unwrap_err();
+        assert_eq!(error["kind"], "ViewNameTaken");
     }
 
     #[test]

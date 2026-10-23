@@ -57,11 +57,13 @@ fn every_exported_type_has_a_file_in_the_export_directory() {
     crate::WorkspaceInfo::export_all(&cfg).unwrap();
     crate::SnapshotInfo::export_all(&cfg).unwrap();
     crate::SnapshotDetail::export_all(&cfg).unwrap();
+    crate::SavedView::export_all(&cfg).unwrap();
     ImportOptions::export_all(&cfg).unwrap();
     let expected = [
         "ImportOptions",
         "SnapshotDetail",
         "SnapshotInfo",
+        "SavedView",
         "StoreError",
         "UnreadableWorkspace",
         "WorkspaceInfo",

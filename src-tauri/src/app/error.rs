@@ -101,6 +101,16 @@ pub enum ErrorKind {
     MoveRename,
     /// A workspace file was not moved because it could not be removed from the old folder.
     MoveRemove,
+    /// A saved view's name is empty or longer than 80 characters.
+    ViewName,
+    /// A saved view's name is the name of another, without regard to case.
+    ViewNameTaken,
+    /// The workspace holds 100 saved views already.
+    TooManyViews,
+    /// A saved view's address is not that of a data screen, or carries a selection.
+    ViewAddress,
+    /// No saved view has the id.
+    ViewNotFound,
     /// A fault of the application itself rather than of the user's input.
     Internal,
 }

@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use chrono::NaiveDateTime;
-use hx_store::{SnapshotInfo, UnreadableWorkspace, WorkspaceInfo, WorkspaceList};
+use hx_store::{SavedView, SnapshotInfo, UnreadableWorkspace, WorkspaceInfo, WorkspaceList};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -64,7 +64,10 @@ pub struct WorkspaceOpen {
     pub snapshots: Vec<SnapshotInfo>,
     /// The selected snapshot: the newest, or `None` when there is none.
     pub selected: Option<i64>,
-    /// Set when the workspace is open but the app could not remember it for the next start.
+    /// Its saved views, in sidebar order.
+    pub views: Vec<SavedView>,
+    /// Set when the workspace is open but the app could not remember it for the next start, or
+    /// when its saved views could not be read.
     pub warning: Option<CommandError>,
 }
 

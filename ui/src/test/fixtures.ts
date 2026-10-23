@@ -51,6 +51,7 @@ export function opened(overrides: Partial<WorkspaceOpen> = {}): WorkspaceOpen {
     workspace: workspace(),
     snapshots: twoSnapshots,
     selected: 2,
+    views: [],
     warning: null,
     ...overrides,
   };

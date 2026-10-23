@@ -43,6 +43,24 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
       fixture.set_workspace_folder.moveFiles,
     ),
   workspace_list: () => api.workspaceList(),
+  save_view: () =>
+    api.saveView(
+      fixture.save_view.workspace,
+      fixture.save_view.name,
+      fixture.save_view.address,
+      fixture.save_view.filters,
+    ),
+  rename_view: () =>
+    api.renameView(fixture.rename_view.workspace, fixture.rename_view.id, fixture.rename_view.name),
+  delete_view: () => api.deleteView(fixture.delete_view.workspace, fixture.delete_view.id),
+  restore_view: () =>
+    api.restoreView(
+      fixture.restore_view.workspace,
+      fixture.restore_view.view,
+      fixture.restore_view.index,
+    ),
+  move_view: () =>
+    api.moveView(fixture.move_view.workspace, fixture.move_view.id, fixture.move_view.index),
   workspace_create: () => workspaceApi.workspaceCreate(fixture.workspace_create.name),
   workspace_open: () => workspaceApi.workspaceOpen(fixture.workspace_open.id),
   workspace_rename: () => workspaceApi.workspaceRename(fixture.workspace_rename.name),

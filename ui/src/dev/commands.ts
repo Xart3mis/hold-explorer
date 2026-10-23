@@ -25,6 +25,7 @@ import type { ImportDraft } from "../bindings/ImportDraft";
 import type { ImportPhase } from "../bindings/ImportPhase";
 import type { ImportReview } from "../bindings/ImportReview";
 import type { LineQuery } from "../bindings/LineQuery";
+import type { SavedView } from "../bindings/SavedView";
 import type { SearchResults } from "../bindings/SearchResults";
 import type { SnapshotInfo } from "../bindings/SnapshotInfo";
 import type { Theme } from "../bindings/Theme";
@@ -491,6 +492,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
     workspace: unit573,
     snapshots: fourSnapshots,
     selected,
+    views: [],
     warning,
   });
   const all = [offsites, tankFarm, unit573];
@@ -599,7 +601,13 @@ function world(state: DevState, theme: Theme, density: Density): World {
       break;
     case "empty":
       start.list.workspaces = all;
-      start.open = { workspace: offsites, snapshots: [], selected: null, warning: null };
+      start.open = {
+        workspace: offsites,
+        snapshots: [],
+        selected: null,
+        views: [],
+        warning: null,
+      };
       break;
     case "warning":
       start.list.workspaces = all;
@@ -665,12 +673,17 @@ export function installDevCommands(
     date_source: "InfoSheet",
   };
 
+  // The saved views of each workspace, in sidebar order; they last until the page is reloaded.
+  const views = new Map<string, SavedView[]>();
+  let nextView = 1;
+
   const open = (workspace: WorkspaceView): WorkspaceOpen => {
     const held = snapshots.get(workspace.id) ?? [];
     const opened = {
       workspace,
       snapshots: held,
       selected: held.at(-1)?.id ?? null,
+      views: views.get(workspace.id) ?? [],
       warning: null,
     };
     start.open = opened;
@@ -692,6 +705,61 @@ export function installDevCommands(
       a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1,
     );
     return open(workspace);
+  };
+
+  const idOf = (payload: unknown): number => {
+    const value = (payload as { id?: unknown } | undefined)?.id;
+    return typeof value === "number" ? value : -1;
+  };
+
+  /** The saved views of the workspace a command names; the open one only, as in Rust. */
+  const viewsOf = (payload: unknown) => {
+    const workspace = text(payload, "workspace");
+    if (!start.open) throw failure("NoWorkspace", "No workspace is open. Open a workspace first.");
+    if (start.open.workspace.id !== workspace) {
+      throw failure(
+        "WorkspaceNotFound",
+        "That workspace is not the one that is open, so its saved views were not changed. Open the workspace, then try again.",
+      );
+    }
+    const list = views.get(workspace) ?? [];
+    return {
+      list,
+      find: (id: number): SavedView => {
+        const found = list.find((view) => view.id === id);
+        if (!found) {
+          throw failure(
+            "ViewNotFound",
+            "That saved view is not in the list. It may have been deleted already; the list shows the views there are.",
+          );
+        }
+        return found;
+      },
+      keep: (next: SavedView[]): SavedView[] => {
+        views.set(workspace, next);
+        if (start.open) start.open = { ...start.open, views: next };
+        return next;
+      },
+    };
+  };
+
+  const checkName = (current: { list: SavedView[] }, name: string, except: number | null) => {
+    const length = Array.from(name).length;
+    if (length < 1 || length > 80) {
+      throw failure(
+        "ViewName",
+        `A saved view needs a name of 1 to 80 characters, and this one has ${String(length)}. Type a shorter or longer name, then save again.`,
+      );
+    }
+    const taken = current.list.find(
+      (view) => view.id !== except && view.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (taken) {
+      throw failure(
+        "ViewNameTaken",
+        `A saved view named "${taken.name}" already exists, and names are compared without regard to case. Choose another name, or delete that view first.`,
+      );
+    }
   };
 
   const text = (payload: unknown, key: string): string => {
@@ -849,6 +917,56 @@ export function installDevCommands(
       }
       if (state === "workspaces-pending") return new Promise<WorkspaceOpen>(() => undefined);
       return later(300, () => open(workspace));
+    },
+    // The saved views keep the rules of the Rust side that a person can meet in the interface: a
+    // name of 1 to 80 characters, unique without regard to case, and at most 100 views.
+    save_view: (payload) => {
+      const current = viewsOf(payload);
+      const name = text(payload, "name").trim();
+      checkName(current, name, null);
+      if (current.list.length >= 100) {
+        throw failure(
+          "TooManyViews",
+          "A workspace holds at most 100 saved views. Delete a view you no longer use, then save again.",
+        );
+      }
+      const saved: SavedView = {
+        id: nextView,
+        name,
+        address: text(payload, "address"),
+        filters: (payload as { filters: FilterSpec }).filters,
+      };
+      nextView += 1;
+      return current.keep([...current.list, saved]);
+    },
+    rename_view: (payload) => {
+      const current = viewsOf(payload);
+      const id = idOf(payload);
+      const name = text(payload, "name").trim();
+      const found = current.find(id);
+      checkName(current, name, id);
+      return current.keep(current.list.map((view) => (view === found ? { ...view, name } : view)));
+    },
+    delete_view: (payload) => {
+      const current = viewsOf(payload);
+      const found = current.find(idOf(payload));
+      return current.keep(current.list.filter((view) => view !== found));
+    },
+    restore_view: (payload) => {
+      const current = viewsOf(payload);
+      const { view, index } = payload as { view: SavedView; index: number };
+      checkName(current, view.name.trim(), null);
+      const next = [...current.list];
+      next.splice(Math.min(index, next.length), 0, view);
+      nextView = Math.max(nextView, view.id + 1);
+      return current.keep(next);
+    },
+    move_view: (payload) => {
+      const current = viewsOf(payload);
+      const found = current.find(idOf(payload));
+      const next = current.list.filter((view) => view !== found);
+      next.splice(Math.min((payload as { index: number }).index, next.length), 0, found);
+      return current.keep(next);
     },
     workspace_rename: (payload) => {
       const name = text(payload, "name");

@@ -9,6 +9,41 @@
   "workspace_create": { "name": "Unit 573 piping" },
   "workspace_open": { "id": "a1b2c3d4e5f60718" },
   "workspace_rename": { "name": "Unit 573 piping, phase 2" },
+  "save_view": {
+    "workspace": "a1b2c3d4e5f60718",
+    "name": "Old valve holds",
+    "address": "/lines?mode=holds&sort=age",
+    "filters": {
+      "status": "Open",
+      "fields": [],
+      "text": "valve",
+      "age_bands": [],
+      "created": { "from": null, "to": null },
+      "released": { "from": null, "to": null },
+      "size_mismatch": null
+    }
+  },
+  "rename_view": { "workspace": "a1b2c3d4e5f60718", "id": 3, "name": "Stale valve holds" },
+  "delete_view": { "workspace": "a1b2c3d4e5f60718", "id": 3 },
+  "restore_view": {
+    "workspace": "a1b2c3d4e5f60718",
+    "view": {
+      "id": 3,
+      "name": "Old valve holds",
+      "address": "/lines?mode=holds&sort=age",
+      "filters": {
+        "status": "Open",
+        "fields": [],
+        "text": "valve",
+        "age_bands": [],
+        "created": { "from": null, "to": null },
+        "released": { "from": null, "to": null },
+        "size_mismatch": null
+      }
+    },
+    "index": 1
+  },
+  "move_view": { "workspace": "a1b2c3d4e5f60718", "id": 3, "index": 0 },
   "import_open": { "path": "exports/Holds_2026-10-07.xlsx" },
   "import_choose_sheet": { "sheet": "Holds" },
   "import_review": { "fields": { "LineId": 0, "Remark": 3, "HoldType": 5 } },

@@ -30,6 +30,7 @@ import type { LinePage } from "../bindings/LinePage";
 import type { LineQuery } from "../bindings/LineQuery";
 import type { OverviewView } from "../bindings/OverviewView";
 import type { SaveFormat } from "../bindings/SaveFormat";
+import type { SavedView } from "../bindings/SavedView";
 import type { SearchResults } from "../bindings/SearchResults";
 import type { Settings } from "../bindings/Settings";
 import type { SolveView } from "../bindings/SolveView";
@@ -63,6 +64,20 @@ interface CommandMap {
   workspace_create: { args: { name: string }; result: WorkspaceOpen };
   workspace_open: { args: { id: string }; result: WorkspaceOpen };
   workspace_rename: { args: { name: string }; result: WorkspaceView };
+  save_view: {
+    args: { workspace: string; name: string; address: string; filters: FilterSpec };
+    result: SavedView[];
+  };
+  rename_view: {
+    args: { workspace: string; id: number; name: string };
+    result: SavedView[];
+  };
+  delete_view: { args: { workspace: string; id: number }; result: SavedView[] };
+  restore_view: {
+    args: { workspace: string; view: SavedView; index: number };
+    result: SavedView[];
+  };
+  move_view: { args: { workspace: string; id: number; index: number }; result: SavedView[] };
   import_open: { args: { path: string }; result: ImportDraft };
   import_choose_sheet: { args: { sheet: string }; result: ImportDraft };
   import_review: { args: { fields: Fields | null }; result: ImportReview };
@@ -157,6 +172,21 @@ export const api = {
    */
   checkWorkspaceFolder: (path: string | null) => call("check_workspace_folder", { path }),
   workspaceList: () => call("workspace_list", {}),
+  /**
+   * The saved-view commands act on the workspace with this id and reject with the kind
+   * `WorkspaceNotFound` for another. Each answers the whole list, in sidebar order. Saves the
+   * screen's address (its path and query without a selection) with its filters, last in the list.
+   */
+  saveView: (workspace: string, name: string, address: string, filters: FilterSpec) =>
+    call("save_view", { workspace, name, address, filters }),
+  renameView: (workspace: string, id: number, name: string) =>
+    call("rename_view", { workspace, id, name }),
+  deleteView: (workspace: string, id: number) => call("delete_view", { workspace, id }),
+  /** Puts a deleted view back with its id at `index` of the list. */
+  restoreView: (workspace: string, view: SavedView, index: number) =>
+    call("restore_view", { workspace, view, index }),
+  moveView: (workspace: string, id: number, index: number) =>
+    call("move_view", { workspace, id, index }),
   importOpen: (path: string) => call("import_open", { path }),
   importChooseSheet: (sheet: string) => call("import_choose_sheet", { sheet }),
   /** Reviews the draft with the given field-to-column mapping, or with the proposed one. */
