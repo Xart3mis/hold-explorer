@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master on 2026-10-24
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: 1.97.0
           components: clippy, rustfmt
@@ -76,12 +76,27 @@ jobs:
         run: cargo test --release -p hx-cli --test perf --locked -- --ignored --nocapture
       - name: Build the app
         run: pnpm tauri build --no-bundle
-      # The design tests, the tests of check-dist, and tools/dist-locales.test.mjs, which reads
-      # the built dist.
+      # The design tests and tools/dist-locales.test.mjs, which reads the built dist.
       - name: Tool tests
         run: node --test "tools/**/*.test.mjs"
       - name: The build names no other host
         run: pnpm check:dist
+      - name: Size of the binary, and its manifest on Windows
+        shell: bash
+        run: |
+          bin=target/release/hx-desktop
+          if [ "$RUNNER_OS" = "Windows" ]; then bin="$bin.exe"; fi
+          echo "$bin: $(du -m "$bin" | cut -f1) MB"
+          # The build script hands the application manifest to the linker. A test executable
+          # without it does not start, so the tests check themselves; the smoke run below starts
+          # this binary, and this check runs first so that it names the cause of a missing manifest.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            if ! grep -a -q "Microsoft.Windows.Common-Controls" "$bin"; then
+              echo "$bin holds no application manifest that asks for version 6 of the common controls (Microsoft.Windows.Common-Controls), so it would not start. See the linker arguments in src-tauri/build.rs and src-tauri/windows-app-manifest.xml."
+              exit 1
+            fi
+            echo "$bin holds the application manifest."
+          fi
       # The smoke run (src-tauri/src/smoke.rs): with HX_SMOKE=1 the built app renders its first
       # screen, prints `ready <sample>`, and exits with code 0; it exits with code 1 by itself
       # after 60 s. The update check is off in this mode, so the run does not reach GitHub. The
@@ -94,20 +109,22 @@ jobs:
         env:
           HX_SMOKE: "1"
         run: |
+          out="$RUNNER_TEMP/smoke-out.txt"
+          err="$RUNNER_TEMP/smoke-err.txt"
           set +e
-          timeout --kill-after=10 120 xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" target/release/hx-desktop > smoke-out.txt 2> smoke-err.txt
+          timeout --kill-after=10 120 xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" target/release/hx-desktop > "$out" 2> "$err"
           code=$?
           set -e
-          cat smoke-err.txt
+          cat "$err"
           if [ "$code" -ne 0 ]; then
             echo "The app ended with code $code (124 means it did not end within 120 s). Its output:"
-            cat smoke-out.txt
+            cat "$out"
             exit 1
           fi
-          line="$(grep -m 1 '^ready ' smoke-out.txt || true)"
+          line="$(grep -m 1 '^ready ' "$out" || true)"
           if [ -z "$line" ]; then
             echo "The app ended with code 0 but printed no ready line. Its output:"
-            cat smoke-out.txt
+            cat "$out"
             exit 1
           fi
           echo "Sample date (WebKitGTK): ${line#ready }"
@@ -118,44 +135,30 @@ jobs:
           HX_SMOKE: "1"
         run: |
           # The executable has no console, so its output goes to files.
-          $p = Start-Process -FilePath (Resolve-Path target\release\hx-desktop.exe) -RedirectStandardOutput smoke-out.txt -RedirectStandardError smoke-err.txt -NoNewWindow -PassThru
+          $out = Join-Path $env:RUNNER_TEMP smoke-out.txt
+          $err = Join-Path $env:RUNNER_TEMP smoke-err.txt
+          $p = Start-Process -FilePath (Resolve-Path target\release\hx-desktop.exe) -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
           # Reading the handle now keeps the exit code readable after the process ends.
           $null = $p.Handle
           if (-not $p.WaitForExit(120000)) {
             Stop-Process -Id $p.Id -Force
             Write-Output "The app did not end within 120 s. Its output:"
-            Get-Content smoke-out.txt, smoke-err.txt
+            Get-Content $out, $err
             exit 1
           }
-          Get-Content smoke-err.txt
+          Get-Content $err
           if ($p.ExitCode -ne 0) {
             Write-Output "The app ended with code $($p.ExitCode). Its output:"
-            Get-Content smoke-out.txt
+            Get-Content $out
             exit 1
           }
-          $line = Get-Content smoke-out.txt | Where-Object { $_ -match '^ready ' } | Select-Object -First 1
+          $line = Get-Content $out | Where-Object { $_ -match '^ready ' } | Select-Object -First 1
           if (-not $line) {
             Write-Output "The app ended with code 0 but printed no ready line. Its output:"
-            Get-Content smoke-out.txt
+            Get-Content $out
             exit 1
           }
           Write-Output "Sample date (WebView2): $($line.Substring(6))"
-      - name: Size of the binary, and its manifest on Windows
-        shell: bash
-        run: |
-          bin=target/release/hx-desktop
-          if [ "$RUNNER_OS" = "Windows" ]; then bin="$bin.exe"; fi
-          echo "$bin: $(du -m "$bin" | cut -f1) MB"
-          # The build script hands the application manifest to the linker. A test executable
-          # without it does not start, so the tests check themselves; the smoke run above starts
-          # this binary, and this check names the cause when the manifest is missing.
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            if ! grep -a -q "Microsoft.Windows.Common-Controls" "$bin"; then
-              echo "$bin holds no application manifest that asks for version 6 of the common controls (Microsoft.Windows.Common-Controls), so it would not start. See the linker arguments in src-tauri/build.rs and src-tauri/windows-app-manifest.xml."
-              exit 1
-            fi
-            echo "$bin holds the application manifest."
-          fi
 
   # The end-to-end tests of the built app (e2e/README.md): WebdriverIO drives the build with the
   # cargo feature `e2e` through tauri-driver and WebKitWebDriver, on a virtual display.
@@ -168,7 +171,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb dbus
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master on 2026-10-24
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: 1.97.0
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
