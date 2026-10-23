@@ -173,8 +173,9 @@ pub fn install(local_data: PathBuf, version: &'static str) {
     }));
 }
 
-/// `text` with the local data folder written as `<local data>` and the home folder as `~`.
-fn redact(text: &str, home: Option<&Path>, local_data: &Path) -> String {
+/// `text` with the local data folder written as `<local data>` and the home folder as `~`, in
+/// their plain spelling and in their `{:?}` spelling.
+pub(crate) fn redact(text: &str, home: Option<&Path>, local_data: &Path) -> String {
     let mut text = text.to_string();
     let folders = [(Some(local_data), "<local data>"), (home, "~")];
     for (folder, name) in folders {
@@ -185,6 +186,12 @@ fn redact(text: &str, home: Option<&Path>, local_data: &Path) -> String {
             continue;
         }
         text = text.replace(folder.as_ref(), name);
+        // The `{:?}` spelling too, which doubles the backslashes of a Windows path.
+        let debug = format!("{folder:?}");
+        let debug = debug.trim_matches('"');
+        if debug != folder {
+            text = text.replace(debug, name);
+        }
     }
     text
 }
@@ -524,6 +531,19 @@ mod tests {
             )
         );
         assert!(!redacted.contains(temp.path().to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn a_folder_is_found_in_its_debug_spelling_too() {
+        // On Windows a path printed with `{:?}` doubles its backslashes; a folder with a
+        // backslash in its name shows the same on any system.
+        let temp = TempDir::new().expect("a temporary folder");
+        let local_data = temp.path().join("data\\app");
+        let text = format!("failed: {:?}", local_data.join("w.db"));
+        let redacted = redact(&text, None, &local_data);
+        let separator = format!("{:?}", std::path::MAIN_SEPARATOR_STR);
+        let separator = separator.trim_matches('"');
+        assert_eq!(redacted, format!("failed: \"<local data>{separator}w.db\""));
     }
 
     #[test]

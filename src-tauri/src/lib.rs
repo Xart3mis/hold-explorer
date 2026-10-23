@@ -124,20 +124,35 @@ fn attempt<T, E: std::fmt::Display>(
     }
 }
 
+/// The crash report of a start that returned `error`, with the user's folders shortened as the
+/// panic hook shortens them.
+fn start_failure_report(error: &str, local_data: &Path) -> crash::CrashReport {
+    let home = std::env::home_dir();
+    let mut report = crash::CrashReport::now(
+        VERSION,
+        tauri::webview_version().ok(),
+        format!("Hold Explorer could not start: {error}"),
+        None,
+    );
+    report.message = crash::redact(&report.message, home.as_deref(), local_data);
+    report.backtrace = crash::redact(&report.backtrace, home.as_deref(), local_data);
+    report
+}
+
 /// Ends a start that failed: writes a crash log (the panic hook has written it already for a
-/// panic), says so in a native message, and ends the process with code 1.
-fn fail_start(local_data: &Path, failure: &StartFailure) -> ! {
+/// panic), hides the main window of `app` if it was created, says so in a native message, and
+/// ends the process with code 1.
+fn fail_start(local_data: &Path, failure: &StartFailure, app: Option<&tauri::AppHandle>) -> ! {
     let log = if failure.panicked {
         crash::newest_log(local_data)
     } else {
-        let report = crash::CrashReport::now(
-            VERSION,
-            tauri::webview_version().ok(),
-            format!("Hold Explorer could not start: {}", failure.error),
-            None,
-        );
+        let report = start_failure_report(&failure.error, local_data);
         crash::write_log(&crash::logs_dir(local_data), &report).ok()
     };
+    if let Some(window) = app.and_then(|app| app.get_webview_window("main")) {
+        // A window left blank behind the message would look like the app had started.
+        let _ = window.hide();
+    }
     native::error_message(
         native::STARTUP_FAILURE_TITLE,
         &native::startup_failure_text(&failure.error, log.as_deref()),
@@ -145,8 +160,18 @@ fn fail_start(local_data: &Path, failure: &StartFailure) -> ! {
     std::process::exit(1);
 }
 
-/// What the app sets up once its window exists: the state, from the app's folders.
+/// What the app sets up when the event loop starts: the main window, then the state, from the
+/// app's folders. The configuration asks Tauri to create no window: Tauri would create it
+/// before this runs, where a failure is not caught.
 fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
+    let main = app
+        .config()
+        .app
+        .windows
+        .first()
+        .cloned()
+        .ok_or(tauri::Error::WindowNotFound)?;
+    tauri::WebviewWindowBuilder::from_config(app.handle(), &main)?.build()?;
     let config_dir = app.path().app_config_dir()?;
     let data_dir = app.path().app_data_dir()?;
     let state = AppState::new(config_dir, data_dir);
@@ -196,14 +221,14 @@ pub fn run() {
             // error into a panic there: a failure is handled here instead, before Tauri sees it.
             .setup(move |app| match attempt(|| setup(app)) {
                 Ok(()) => Ok(()),
-                Err(failure) => fail_start(&setup_data, &failure),
+                Err(failure) => fail_start(&setup_data, &failure, Some(app.handle())),
             })
             .invoke_handler(handler())
             .build(tauri::generate_context!())
     });
     let app = match built {
         Ok(app) => app,
-        Err(failure) => fail_start(&local_data, &failure),
+        Err(failure) => fail_start(&local_data, &failure, None),
     };
     app.run(|app, event| {
         // The event loop ends the process without dropping what the app manages, and the system's
@@ -302,6 +327,40 @@ mod tests {
             tauri::test::mock_builder().build(tauri::test::mock_context(tauri::test::noop_assets()))
         });
         assert!(built.is_ok());
+    }
+
+    #[test]
+    fn tauri_creates_no_window_so_a_failure_to_create_it_is_a_start_failure() {
+        // Tauri creates the windows of the configuration before the setup closure runs, outside
+        // its guard: the setup creates the main window itself.
+        let window = &config()["app"]["windows"][0];
+        assert_eq!(window["label"], "main");
+        assert_eq!(window["create"], false);
+    }
+
+    #[test]
+    fn the_log_of_a_failed_start_names_no_folder_of_the_user() {
+        let local_data = super::crash::local_data_folder(IDENTIFIER);
+        let error = format!(
+            "could not open {}",
+            local_data.join("settings.json").display()
+        );
+        let report = super::start_failure_report(&error, &local_data);
+        assert!(
+            report.message.contains("<local data>"),
+            "{}",
+            report.message
+        );
+        assert!(
+            !report
+                .message
+                .contains(local_data.to_string_lossy().as_ref()),
+            "{}",
+            report.message
+        );
+        assert!(report
+            .message
+            .starts_with("Hold Explorer could not start: "));
     }
 
     #[test]
