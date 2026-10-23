@@ -83,3 +83,40 @@ jobs:
             fi
             echo "$bin holds the application manifest."
           fi
+
+  # The end-to-end tests of the built app (e2e/README.md): WebdriverIO drives the build with the
+  # cargo feature `e2e` through tauri-driver and WebKitWebDriver, on a virtual display.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev webkit2gtk-driver xvfb
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install interface dependencies
+        run: pnpm install --frozen-lockfile
+      # The newest stable tauri-driver, of Tauri 2 (its 3.0 releases are alphas of the next Tauri).
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --version 2.1.0 --locked
+      - name: Build the app with the e2e feature
+        run: pnpm e2e:build
+      - name: End-to-end tests
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" pnpm e2e
+      - name: Keep the logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: target/e2e/logs
+          if-no-files-found: ignore

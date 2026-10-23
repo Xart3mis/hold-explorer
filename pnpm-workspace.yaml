@@ -1,3 +1,11 @@
+# The install scripts of these packages do not run. The end-to-end tests bring them in
+# (WebdriverIO's runner): edgedriver and geckodriver would download browser drivers the tests do
+# not use (tauri-driver drives the app), and esbuild's only checks its binary, which tsx finds
+# without it. pnpm stops an install that meets a script nobody has decided on.
+allowBuilds:
+  edgedriver: false
+  esbuild: false
+  geckodriver: false
 # eslint-plugin-jsx-a11y 6.10 declares ESLint up to 9 as its peer. Its rules run under ESLint 10
 # (checked with an img without alt, which `pnpm lint` reports), so the mismatch is accepted here.
 peerDependencyRules:
