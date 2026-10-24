@@ -27,34 +27,92 @@ export function startsWith(start: string): RegExp {
   return new RegExp(`^${literal(start)}(\\s|$)`);
 }
 
+/** An element told by its role and accessible name, found afresh each time it is looked for. */
+export interface Locator {
+  role: string;
+  name: Name;
+}
+
 /**
- * Where to look: anywhere, or inside an element found before (`scope` of `find`). With `enabled`,
- * only an element that is not disabled counts.
+ * Where to look: anywhere, or inside an element. That element is a selector of one found before
+ * (`scope`), or a locator found again on each try, for an element the page may render anew (a
+ * list in a popover). With `enabled`, only an element that is not disabled counts.
  */
 export interface Where {
-  within?: string;
+  within?: string | Locator;
   timeout?: number;
   enabled?: boolean;
+}
+
+/** A locator as the page receives it: plain data, the pattern as its source and flags. */
+interface PageLocator {
+  role: string;
+  source: string;
+  flags: string | null;
+}
+
+/** What the page saw when it looked: whether the element was there, and, for an error, what was. */
+interface Sighting {
+  found: boolean;
+  /** Whether the element to look inside was there. */
+  scoped: boolean;
+  /** The names of the shown elements of the role, in order (the first 20). */
+  seen: string[];
+  /** The shown text fields and comboboxes, each as its name and its value. */
+  fields: string[];
+}
+
+function toPage(role: string, name: Name): PageLocator {
+  return typeof name === "string"
+    ? { role, source: name, flags: null }
+    : { role, source: name.source, flags: name.flags };
+}
+
+/** `within` as the page receives it. */
+function scopeOf(where: Where): string | PageLocator | null {
+  const within = where.within;
+  if (within === undefined) return null;
+  return typeof within === "string" ? within : toPage(within.role, within.name);
+}
+
+/** `within` as an error message names it. */
+function describeScope(where: Where): string {
+  const within = where.within;
+  if (within === undefined) return "";
+  return typeof within === "string"
+    ? ` within ${within}`
+    : ` within the ${within.role} named ${String(within.name)}`;
+}
+
+/** What the page saw, as the end of an error message. */
+function describeSighting(role: string, sighting: Sighting | undefined, where: Where): string {
+  if (sighting === undefined) return "";
+  if (!sighting.scoped) return ` The element to look in${describeScope(where)} was not there.`;
+  const seen =
+    sighting.seen.length === 0
+      ? `No ${role} was shown.`
+      : `The ${role} names shown: ${sighting.seen.map((name) => JSON.stringify(name)).join(", ")}.`;
+  const fields =
+    sighting.fields.length === 0 ? "" : ` The fields read: ${sighting.fields.join(", ")}.`;
+  return ` ${seen}${fields}`;
 }
 
 let marks = 0;
 
 /**
- * Runs in the page. Marks the first shown element of `role` whose accessible name is `name` (or
- * matches the pattern `source`/`flags`) with `data-e2e="<token>"`, inside the element `scope`
- * selects, and says whether one was found. With no token, it only says so and marks nothing. The name is read as the accessibility tree reads it in
- * the cases the interface uses: `aria-label`, then `aria-labelledby`, then a `<label for>`, then
- * the text inside, leaving out what is inside an `aria-hidden` element. With `enabledOnly`, an
- * element that is disabled, natively or by `aria-disabled`, does not count.
+ * Runs in the page. Marks the first shown element of `target` (a role and a name, or a pattern
+ * of it) with `data-e2e="<token>"`, inside the element `scope` gives, and says what it saw. With
+ * no token, it marks nothing. The name is read as the accessibility tree reads it in the cases
+ * the interface uses: `aria-label`, then `aria-labelledby`, then a `<label for>`, then the text
+ * inside, leaving out what is inside an `aria-hidden` element. With `enabledOnly`, an element
+ * that is disabled, natively or by `aria-disabled`, does not count.
  */
 function markInPage(
-  role: string,
-  name: string,
-  flags: string | null,
-  scope: string | null,
+  target: PageLocator,
+  scope: string | PageLocator | null,
   token: string | null,
   enabledOnly: boolean,
-): boolean {
+): Sighting {
   const implicit: Record<string, string> = {
     button: 'button, [role="button"]',
     link: 'a[href], [role="link"]',
@@ -64,9 +122,6 @@ function markInPage(
     dialog: 'dialog, [role="dialog"], [role="alertdialog"]',
     list: 'ul, ol, [role="list"]',
   };
-  const selector = implicit[role] ?? `[role="${role}"]`;
-  const root = scope === null ? document : document.querySelector(scope);
-  if (root === null) return false;
   const clean = (value: string) => value.replace(/\s+/g, " ").trim();
   // The text of a node, without the text of the aria-hidden elements inside it (a search result
   // shows its ID once for the eye, aria-hidden, and once for the accessibility tree).
@@ -85,8 +140,8 @@ function markInPage(
         by
           .split(/\s+/)
           .map((id) => {
-            const target = document.getElementById(id);
-            return target === null ? "" : ownText(target);
+            const labelling = document.getElementById(id);
+            return labelling === null ? "" : ownText(labelling);
           })
           .join(" "),
       );
@@ -97,10 +152,27 @@ function markInPage(
     }
     return clean(ownText(element));
   };
-  const matches =
-    flags === null
-      ? (candidate: string) => candidate === name
-      : (candidate: string) => new RegExp(name, flags).test(candidate);
+  const shownOf = (root: ParentNode, role: string) =>
+    [...root.querySelectorAll(implicit[role] ?? `[role="${role}"]`)].filter(
+      (element) => element.getClientRects().length > 0,
+    );
+  const named = (locator: PageLocator) => {
+    const pattern = locator.flags === null ? null : new RegExp(locator.source, locator.flags);
+    return (element: Element) => {
+      const name = nameOf(element);
+      return pattern === null ? name === locator.source : pattern.test(name);
+    };
+  };
+  const fields = [...new Set([...shownOf(document, "textbox"), ...shownOf(document, "combobox")])]
+    .filter((element) => element instanceof HTMLInputElement)
+    .map((element) => `${JSON.stringify(nameOf(element))} = ${JSON.stringify(element.value)}`);
+  const root =
+    scope === null
+      ? document
+      : typeof scope === "string"
+        ? document.querySelector(scope)
+        : (shownOf(document, scope.role).find(named(scope)) ?? null);
+  if (root === null) return { found: false, scoped: false, seen: [], fields };
   if (token !== null) {
     for (const old of document.querySelectorAll(`[data-e2e="${token}"]`)) {
       old.removeAttribute("data-e2e");
@@ -108,15 +180,17 @@ function markInPage(
   }
   const disabled = (element: Element) =>
     element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true";
-  const found = [...root.querySelectorAll(selector)].find(
-    (element) =>
-      element.getClientRects().length > 0 &&
-      !(enabledOnly && disabled(element)) &&
-      matches(nameOf(element)),
+  const candidates = shownOf(root, target.role);
+  const found = candidates.find(
+    (element) => !(enabledOnly && disabled(element)) && named(target)(element),
   );
-  if (found === undefined) return false;
-  if (token !== null) found.setAttribute("data-e2e", token);
-  return true;
+  if (found !== undefined && token !== null) found.setAttribute("data-e2e", token);
+  return {
+    found: found !== undefined,
+    scoped: true,
+    seen: candidates.slice(0, 20).map(nameOf),
+    fields,
+  };
 }
 
 /**
@@ -126,24 +200,27 @@ function markInPage(
 export async function scope(role: string, name: Name, where: Where = {}): Promise<string> {
   marks += 1;
   const token = `m${String(marks)}`;
-  const source = typeof name === "string" ? name : name.source;
-  const flags = typeof name === "string" ? null : name.flags;
-  await browser.waitUntil(
-    () =>
-      browser.execute(
-        markInPage,
-        role,
-        source,
-        flags,
-        where.within ?? null,
-        token,
-        where.enabled === true,
-      ),
-    {
-      ...(where.timeout === undefined ? {} : { timeout: where.timeout }),
-      timeoutMsg: `No ${where.enabled === true ? "enabled " : ""}${role} named ${String(name)} was shown${where.within === undefined ? "" : ` within ${where.within}`}.`,
-    },
-  );
+  let last: Sighting | undefined;
+  try {
+    await browser.waitUntil(
+      async () => {
+        last = await browser.execute(
+          markInPage,
+          toPage(role, name),
+          scopeOf(where),
+          token,
+          where.enabled === true,
+        );
+        return last.found;
+      },
+      where.timeout === undefined ? {} : { timeout: where.timeout },
+    );
+  } catch {
+    // The message says what was there instead, so that a failure explains itself.
+    throw new Error(
+      `No ${where.enabled === true ? "enabled " : ""}${role} named ${String(name)} was shown${describeScope(where)}.${describeSighting(role, last, where)}`,
+    );
+  }
   return `[data-e2e="${token}"]`;
 }
 
@@ -169,7 +246,10 @@ function markFirstInPage(selector: string, scope: string | null, token: string):
  * Waits for the first shown element that the CSS `selector` matches, and returns a selector of
  * that one element alone: WebdriverIO's `$` refuses a selector that matches more than one.
  */
-export async function first(selector: string, where: Where = {}): Promise<string> {
+export async function first(
+  selector: string,
+  where: { within?: string; timeout?: number } = {},
+): Promise<string> {
   marks += 1;
   const token = `m${String(marks)}`;
   await browser.waitUntil(
@@ -184,15 +264,14 @@ export async function first(selector: string, where: Where = {}): Promise<string
 
 /** Whether an element of `role` named `name` is shown now, without waiting. */
 export async function isShown(role: string, name: Name, where: Where = {}): Promise<boolean> {
-  return browser.execute(
+  const sighting = await browser.execute(
     markInPage,
-    role,
-    typeof name === "string" ? name : name.source,
-    typeof name === "string" ? null : name.flags,
-    where.within ?? null,
+    toPage(role, name),
+    scopeOf(where),
     null,
     where.enabled === true,
   );
+  return sighting.found;
 }
 
 /** Waits for a shown element of `role` named `name`, and returns it. */
