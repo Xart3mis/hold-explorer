@@ -40,14 +40,28 @@ describe("the search", () => {
     // while the answer comes, so it is found again on each try rather than held. The list as it
     // was first seen is marked too, and the log says whether it was still there once the result
     // was: a record of whether WebKitGTK renders the popover anew.
+    const results = { within: { role: "listbox", name: text.search.results } };
     const firstList = await scope("listbox", text.search.results);
-    const option = await find("option", lineId, {
-      within: { role: "listbox", name: text.search.results },
-    });
+    await find("option", lineId, results);
     const kept = await $(firstList).isExisting();
     console.log(`The search list first seen was ${kept ? "still there" : "rendered anew"}.`);
-    await option.waitForClickable();
-    await option.click();
+    // Found and pressed as one step, again if the list is rendered anew in between.
+    let failure = "";
+    await browser
+      .waitUntil(async () => {
+        try {
+          const option = await find("option", lineId, { ...results, timeout: 5_000 });
+          await option.waitForClickable({ timeout: 5_000 });
+          await option.click();
+          return true;
+        } catch (error: unknown) {
+          failure = error instanceof Error ? error.message : String(error);
+          return false;
+        }
+      })
+      .catch(() => {
+        throw new Error(`The result ${lineId} could not be pressed: ${failure}`);
+      });
     await find("heading", startsWith(lineId));
     await key(KEYS.escape);
     await browser.waitUntil(async () => !(await isShown("heading", startsWith(lineId))), {

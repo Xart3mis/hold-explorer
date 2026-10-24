@@ -215,10 +215,14 @@ export async function scope(role: string, name: Name, where: Where = {}): Promis
       },
       where.timeout === undefined ? {} : { timeout: where.timeout },
     );
-  } catch {
+  } catch (error: unknown) {
+    // Nothing was ever seen: the page did not answer (a script error, a lost session).
+    if (last === undefined) throw error;
     // The message says what was there instead, so that a failure explains itself.
+    const cause = error instanceof Error ? ` (${error.message})` : "";
     throw new Error(
-      `No ${where.enabled === true ? "enabled " : ""}${role} named ${String(name)} was shown${describeScope(where)}.${describeSighting(role, last, where)}`,
+      `No ${where.enabled === true ? "enabled " : ""}${role} named ${String(name)} was shown${describeScope(where)}.${describeSighting(role, last, where)}${cause}`,
+      { cause: error },
     );
   }
   return `[data-e2e="${token}"]`;
