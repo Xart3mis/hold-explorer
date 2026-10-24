@@ -440,3 +440,40 @@ fn a_check_that_is_not_due_answers_the_offer_of_this_session_again() {
     state.set_update_check(false).unwrap();
     assert_eq!(state.update_step(later, "0.1.0"), UpdateStep::Answer(None));
 }
+
+#[test]
+fn a_settings_file_set_aside_at_start_asks_nothing() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    // The user turned the check off, but the file cannot be understood: the choice is unknown.
+    std::fs::write(
+        fx.config().join("settings.json"),
+        r#"{"update_check":false"#,
+    )
+    .unwrap();
+    let mut state = fx.state();
+    state.set_update_url("http://127.0.0.1:9/test".into());
+    assert_eq!(state.update_step(noon(), "0.1.0"), UpdateStep::Answer(None));
+    // No attempt was recorded either.
+    assert_eq!(load_settings(&fx.config()).update_checked_at, None);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_settings_file_that_cannot_be_read_at_start_asks_nothing() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    let path = fx.config().join("settings.json");
+    std::fs::write(&path, r#"{"update_check":false}"#).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read(&path).is_ok() {
+        // Running as a user whom permissions do not stop (root); nothing to test.
+        return;
+    }
+    let mut state = fx.state();
+    state.set_update_url("http://127.0.0.1:9/test".into());
+    let step = state.update_step(noon(), "0.1.0");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(step, UpdateStep::Answer(None));
+}

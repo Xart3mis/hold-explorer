@@ -243,9 +243,10 @@ impl AppState {
     /// due, the address to ask ([`AppState::update_due`]). Otherwise, while the check is on, the
     /// newest version this session offered that is still newer than `current` and not skipped,
     /// so a window that is loaded again shows the notice again. While the check is turned off
-    /// ([`AppState::turn_off_update_check`]), `None` at once.
+    /// ([`AppState::turn_off_update_check`]), `None` at once. When the settings file could not be
+    /// read or was set aside at start, the user's choice is unknown, so nothing is asked either.
     pub fn update_step(&mut self, now: DateTime<Utc>, current: &str) -> UpdateStep {
-        if self.update_check_off {
+        if self.update_check_off || self.settings_problem_at_start.is_some() {
             return UpdateStep::Answer(None);
         }
         if let Some(url) = self.update_due(now) {
