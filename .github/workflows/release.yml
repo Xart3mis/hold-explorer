@@ -285,13 +285,15 @@ jobs:
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
       # The symbols are kept with the run only, for reading a crash log; they are never part of
-      # the release.
+      # the release. They expire after 90 days, so for each release download them and archive
+      # them outside GitHub.
       - name: Keep the symbols
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: symbols-${{ matrix.artifact }}
           path: ${{ runner.temp }}/symbols/
           if-no-files-found: warn
+          retention-days: 90
 
   publish:
     needs: [check, build]
