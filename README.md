@@ -2,7 +2,7 @@
 
 Desktop app that reads the PlantIM "holds" export, shows which piping lines are on hold and why, tracks changes between exports, and recommends which blockers to solve first.
 
-Status: early development. The design is in `docs/superpowers/specs/`.
+Status: the first milestone (M1) is complete, and 0.1.0 is its first release. History, blocker rules, and follow-up come in later milestones. The design is in `docs/superpowers/specs/`.
 
 ## What it does today
 
@@ -21,7 +21,9 @@ Status: early development. The design is in `docs/superpowers/specs/`.
 - Search: one box in the top bar (`/` reaches it) finds lines, blockers, people and roles, remarks, and hold values in the snapshot in view, open and released, grouped and with the match marked. It forgives a misspelling and accepts a wildcard in a line ID, as in `78B01-573-*`. Choosing a result opens the line or the blocker, or filters Lines by the value; Enter applies the text as a filter.
 - Saved views: "Save view" in the filter bar keeps the destination, mode, grouping, sort, and filters under a name. The views are kept in the workspace file and listed in the sidebar; one press applies one, and a deleted view can be brought back with Undo.
 - Command palette and shortcuts: `Ctrl+K` opens a palette to jump to a destination, a saved view, a snapshot, a workspace, or a line, or to run an action (import, export, clear filters, theme, density). `?` lists every shortcut.
-- Settings: theme, density (comfortable or compact), author name, and the workspaces folder, which can be changed with the option of moving the workspace files to the new folder. About shows the version, the workspaces folder, and the settings file, each path with Show in folder.
+- Settings: theme, density (comfortable or compact), author name, the workspaces folder, which can be changed with the option of moving the workspace files to the new folder, and "Check for updates at start". About shows the version, the workspaces folder, the settings file, and the logs folder, each path with Show in folder, and "Copy diagnostics", which copies the version, the system, the folders, and the newest crash log, to paste into a bug report. It names no workspace, snapshot, or hold.
+- Crashes and failed starts: a crash writes a log to the logs folder, and the app sends nothing anywhere about it. When the app cannot start, a message says what failed and where the log is.
+- Closing during a save: a close of the window while a file is being written waits, says "Hold Explorer closes when it has finished saving.", and the window closes on its own once the write ends.
 
 History, People, Follow-up, and Rules are listed in the sidebar and say "Soon".
 
@@ -61,12 +63,6 @@ The request goes to the GitHub API and carries the app's version number (in a `U
 
 To turn the check off, open Settings and clear "Check for updates at start".
 
-## Development
-
-    cargo test --workspace
-
-The parity test needs Node.js on the PATH.
-
 ## Develop
 
 Prerequisites on both systems: Rust 1.97 (the repository pins it), Node.js 22 or newer, and pnpm 11 (`corepack enable` uses the version in `package.json`).
@@ -86,6 +82,9 @@ Install the interface dependencies once with `pnpm install`. Then:
     pnpm bindings                   regenerate ui/src/bindings (cargo test with the ts feature)
     pnpm tokens                     regenerate ui/src/design/tokens.css from the tables in DESIGN.md
     pnpm check:dist                 after a build: fail if dist/ names another host
+    cargo test --workspace          the Rust tests; the parity test needs Node.js on the PATH
+    pnpm e2e:build                  the app with the cargo feature e2e, for the end-to-end tests
+    pnpm e2e                        the end-to-end tests on Linux (see e2e/README.md)
 
 The types in `ui/src/bindings/` are generated from Rust and committed. CI fails when they are out of date.
 
@@ -94,6 +93,12 @@ The stylesheet of design tokens, `ui/src/design/tokens.css`, is generated from `
 While `pnpm dev` runs, `http://localhost:1420/gallery.html` shows every base component in every state, in both themes. The gallery is for development only and is not part of the build.
 
 The app's own pages open in a browser at `http://localhost:1420/dev.html?state=first-run`, with the commands answered from fixtures (`ui/src/dev/commands.ts`). The states are listed and explained at the top of `ui/src/dev/commands.ts` (`first-run`, `workspaces`, `open`, `older`, the filter, Lines, detail panel, Breakdown, Blockers, and import states, among others); add `&theme=light` for the light theme. This page is for development only as well, and `pnpm check:dist` fails a build that contains it.
+
+A built binary started with `HX_SMOKE=1` draws its first screen, prints `ready <date>`, and exits with code 0, or exits with code 1 after 60 s; CI starts the release build this way on Windows and Linux. The update check never runs in this mode or in the e2e build.
+
+## Release
+
+A release is made by pushing an annotated tag `v<version>` whose version equals the one in `Cargo.toml` and `package.json` (`src-tauri/tauri.conf.json` names none and takes the crate's), for example `git tag -a v0.1.0 -m "Hold Explorer 0.1.0"`. The tag's message becomes the release notes. `.github/workflows/release.yml` checks the versions, builds the two files of the Download section, starts both, and publishes them with `SHA256SUMS.txt`. A pull request that changes the workflow or `tools/release-check.mjs` runs it as a dry run, which publishes nothing. The symbols of each build are kept with the workflow run, for reading a crash log, and are not published.
 
 ## Data policy
 
