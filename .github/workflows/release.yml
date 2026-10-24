@@ -171,7 +171,8 @@ jobs:
           exe="$RUNNER_TEMP/release/HoldExplorer-$VERSION-windows-x64.exe"
           echo "$(basename "$exe"): $(du -m "$exe" | cut -f1) MB"
           # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
-          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the sure mark.
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the
+          # sure mark.
           if grep -a -q -F -e HX_E2E_OPEN -e e2e_open_path "$exe"; then
             echo "$exe holds HX_E2E_OPEN or e2e_open_path, so it was built with the cargo feature e2e. A release is built without it."
             exit 1
@@ -191,7 +192,8 @@ jobs:
           (cd "$work" && "$image" --appimage-extract > /dev/null)
           root="$work/squashfs-root"
           # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
-          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the sure mark.
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the
+          # sure mark.
           if grep -r -a -l -F -e HX_E2E_OPEN -e e2e_open_path "$root"; then
             echo "The files above, in the AppImage, hold HX_E2E_OPEN or e2e_open_path, so the app was built with the cargo feature e2e. A release is built without it."
             exit 1
@@ -308,8 +310,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      # The tag must still be annotated and still name the commit this run built: a tag moved
+      # after the check would otherwise publish these binaries under another commit.
       - name: Fetch the annotated tag
-        run: git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+        run: |
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "$TAG is now a lightweight tag, so it has no message for the release notes. Push an annotated tag: git tag -a $TAG -m \"<notes>\"."
+            exit 1
+          fi
+          tagged="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          if [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "$TAG now names commit $tagged, but this run built commit $GITHUB_SHA. The tag was moved after the run started; nothing is published. Push the tag again to build and release the commit it names."
+            exit 1
+          fi
       - name: Fetch the release files
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
