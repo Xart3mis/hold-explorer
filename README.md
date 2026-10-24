@@ -29,7 +29,7 @@ History, People, Follow-up, and Rules are listed in the sidebar and say "Soon".
 
 Releases are on the releases page of this repository: https://github.com/Xart3mis/hold-explorer/releases. Each release has three files:
 
-- `HoldExplorer-<version>-windows-x64.exe`: Windows 10 and 11, x64. It is portable: there is nothing to install and it needs no admin rights. Put it in any folder and start it.
+- `HoldExplorer-<version>-windows-x64.exe`: Windows 10 and 11, x64. It is portable: there is nothing to install and it needs no admin rights. Put it in any folder and start it. It needs the Microsoft Edge WebView2 Runtime, which Windows 11 includes and Windows 10 usually already has; if it is missing, Hold Explorer says so and gives the address of the Evergreen installer, which installs for your user only and needs no admin rights.
 - `HoldExplorer-<version>-linux-x86_64.AppImage`: Linux, x64. Make it executable (`chmod +x HoldExplorer-<version>-linux-x86_64.AppImage`) and start it.
 - `SHA256SUMS.txt`: the SHA-256 checksum of each of the other two files.
 

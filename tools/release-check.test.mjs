@@ -117,6 +117,30 @@ describe("release-check without a tag (the dry run)", () => {
   });
 });
 
+describe("the form of the version", () => {
+  // The workflow writes the printed version into GITHUB_OUTPUT, where a line break would add
+  // an output of its own.
+  it("refuses a version with a line break, and prints nothing", () => {
+    const result = run(project({ pkg: "0.1.0\nversion=9.9.9" }));
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /is not a version of the form 1\.2\.3/);
+  });
+
+  it("refuses a version that is not of the form 1.2.3, even when every file names it", () => {
+    const result = run(project({ workspace: "latest", pkg: "latest" }));
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /"latest" is not a version of the form 1\.2\.3/);
+  });
+
+  it("passes a pre-release version and its tag", () => {
+    const result = run(project({ workspace: "0.2.0-rc.1", pkg: "0.2.0-rc.1" }), "v0.2.0-rc.1");
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "0.2.0-rc.1\n");
+  });
+});
+
 describe("where the version is read", () => {
   it("reads a version the crate writes itself instead of the workspace's", () => {
     const result = run(project({ workspace: "9.9.9", crate: 'version = "0.1.0"' }), "v0.1.0");
@@ -134,6 +158,7 @@ describe("where the version is read", () => {
 
   it("takes the crate's version for a tauri.conf.json without one", () => {
     const result = run(project(), "v0.1.0");
+    assert.equal(result.status, 0, result.stderr);
     assert.match(
       result.stderr,
       /tauri\.conf\.json \(no version: Tauri uses the crate's\): 0\.1\.0/,

@@ -6,7 +6,9 @@
 // crate src-tauri/Cargo.toml takes with `version.workspace = true`, or a version of its own),
 // package.json, and src-tauri/tauri.conf.json. tauri.conf.json may leave `version` out, and then
 // Tauri uses the version of the desktop crate, so it agrees by construction; it may also name a
-// JSON file whose `version` is used. All of them must be equal.
+// JSON file whose `version` is used. All of them must be equal, and of the form 1.2.3, with an
+// optional pre-release part (1.2.3-rc.1), so the version the workflow writes into GITHUB_OUTPUT
+// can hold no line break.
 //
 // With a tag, the tag must be `v` followed by that version: `v0.1.0` for 0.1.0. Without a tag (the
 // dry run of the release workflow, which has no tag) only the three files are compared.
@@ -108,9 +110,19 @@ function versions(root) {
   return found;
 }
 
+/** A version: 1.2.3, or 1.2.3 with a pre-release part. */
+const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+
 /** The problems, as sentences; an empty list means the tag and the files agree. */
 function problems(found, tag) {
   const result = [];
+  for (const { source, version } of found) {
+    if (!VERSION.test(version)) {
+      result.push(
+        `${source}: ${JSON.stringify(version)} is not a version of the form 1.2.3 (or 1.2.3-rc.1). Write the version in that form.`,
+      );
+    }
+  }
   const first = found[0].version;
   if (found.some(({ version }) => version !== first)) {
     result.push(

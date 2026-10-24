@@ -52,6 +52,19 @@ jobs:
             version="$(node tools/release-check.mjs)"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # gh reads the notes of --notes-from-tag from the tag's message, so a release needs an
+      # annotated tag. The checkout of a tag can leave a lightweight tag in place of the annotated
+      # one, so the tag is fetched again as it is, before anything is built.
+      - name: The tag is annotated
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "$TAG is a lightweight tag, so it has no message for the release notes. Push an annotated tag: git tag -a $TAG -m \"<notes>\"."
+            exit 1
+          fi
 
   build:
     needs: check
@@ -74,7 +87,10 @@ jobs:
       # The release profile strips the binary (strip = true in Cargo.toml). Here it is built with
       # its symbols, so a copy with symbols can be kept for reading the addresses of a crash
       # log: on Linux the shipped binary is stripped below, before the AppImage is made; on
-      # Windows the symbols go to a separate PDB file and the executable holds none.
+      # Windows the symbols go to a separate PDB file and the executable holds none. The Windows
+      # executable then carries a CodeView record that names the PDB by its path on the runner;
+      # that is intended, and the record holds no symbols. (No RUSTFLAGS to change that path: they
+      # would replace any rustflags configured for the build.)
       CARGO_PROFILE_RELEASE_STRIP: none
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -154,6 +170,8 @@ jobs:
         run: |
           exe="$RUNNER_TEMP/release/HoldExplorer-$VERSION-windows-x64.exe"
           echo "$(basename "$exe"): $(du -m "$exe" | cut -f1) MB"
+          # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the sure mark.
           if grep -a -q -F -e HX_E2E_OPEN -e e2e_open_path "$exe"; then
             echo "$exe holds HX_E2E_OPEN or e2e_open_path, so it was built with the cargo feature e2e. A release is built without it."
             exit 1
@@ -172,6 +190,8 @@ jobs:
           mkdir -p "$work"
           (cd "$work" && "$image" --appimage-extract > /dev/null)
           root="$work/squashfs-root"
+          # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the sure mark.
           if grep -r -a -l -F -e HX_E2E_OPEN -e e2e_open_path "$root"; then
             echo "The files above, in the AppImage, hold HX_E2E_OPEN or e2e_open_path, so the app was built with the cargo feature e2e. A release is built without it."
             exit 1
@@ -283,16 +303,13 @@ jobs:
       TAG: ${{ github.ref_name }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      # gh reads the notes of --notes-from-tag from the local tag. The checkout of a tag can leave
-      # a lightweight tag in place of the annotated one, so the tag is fetched again as it is.
+      # gh reads the notes of --notes-from-tag from the local tag, fetched again as it is (the
+      # check job has refused a lightweight tag). gh itself authenticates with GH_TOKEN.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Fetch the annotated tag
-        run: |
-          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
-          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
-            echo "$TAG is a lightweight tag, so it has no message for the release notes. Push an annotated tag: git tag -a $TAG -m \"<notes>\"."
-            exit 1
-          fi
+        run: git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
       - name: Fetch the release files
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
