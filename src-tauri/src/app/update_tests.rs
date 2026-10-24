@@ -476,4 +476,42 @@ fn a_settings_file_that_cannot_be_read_at_start_asks_nothing() {
     let step = state.update_step(noon(), "0.1.0");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     assert_eq!(step, UpdateStep::Answer(None));
+    // A file that is not set aside is not rewritten: the check stays as the file says.
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        r#"{"update_check":false}"#
+    );
+}
+
+#[test]
+fn a_settings_file_set_aside_saves_the_check_off_and_the_next_start_asks_nothing() {
+    let fx = Fixture::new();
+    std::fs::create_dir_all(fx.config()).unwrap();
+    std::fs::write(fx.config().join("settings.json"), "{ not json").unwrap();
+    let state = fx.state();
+    assert!(!state.settings().update_check);
+    // The new file holds the defaults with the check off.
+    let saved = load_settings(&fx.config());
+    assert_eq!(
+        saved,
+        Settings {
+            update_check: false,
+            ..Settings::default()
+        }
+    );
+    drop(state);
+    // The next start reads that file, has no settings problem, and asks nothing.
+    let mut again = fx.state();
+    assert_eq!(again.start().settings_problem, None);
+    again.set_update_url("http://127.0.0.1:9/test".into());
+    assert_eq!(again.update_step(noon(), "0.1.0"), UpdateStep::Answer(None));
+    assert_eq!(load_settings(&fx.config()).update_checked_at, None);
+    // Turned on again by the user, the check is due once more.
+    again.set_update_check(true).unwrap();
+    let mut third = fx.state();
+    third.set_update_url("http://127.0.0.1:9/test".into());
+    assert_eq!(
+        third.update_step(noon(), "0.1.0"),
+        UpdateStep::Ask("http://127.0.0.1:9/test".into())
+    );
 }

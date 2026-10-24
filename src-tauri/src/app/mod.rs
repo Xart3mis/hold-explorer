@@ -152,12 +152,20 @@ impl AppState {
     /// the default folder holds no workspace file, and the old one holds at least one, the old
     /// folder becomes the chosen folder and is saved in the settings; nothing is moved. When the
     /// settings cannot be saved, the old folder is used for this session only.
+    ///
+    /// When the settings file was set aside, the defaults are saved with the update check off.
     pub fn new(config_dir: PathBuf, data_dir: PathBuf, local_data_dir: PathBuf) -> AppState {
         let LoadedSettings {
             mut settings,
             blocked,
             set_aside,
         } = load_settings_checked(&config_dir);
+        if set_aside.is_some() {
+            // Whether the user wanted the update check is unknown, so it is saved off; the
+            // Settings switch then shows it off. A failed save still asks nothing at this start.
+            settings.update_check = false;
+            let _ = save_settings(&config_dir, &settings);
+        }
         if settings.workspace_dir.is_none() && !settings.workspace_folder_chosen {
             let default = local_data_dir.join("workspaces");
             let old = data_dir.join("workspaces");
