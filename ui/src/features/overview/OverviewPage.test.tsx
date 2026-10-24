@@ -7,7 +7,7 @@ import type { AppStart } from "../../bindings/AppStart";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { OverviewView } from "../../bindings/OverviewView";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp, type RenderAppOptions } from "../../test/app";
 import { opened, openStart, otherWorkspace, snapshot, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
@@ -479,7 +479,7 @@ describe("the Overview with a snapshot", () => {
       expect(names()[0]).toBe("Unspecified");
       // Sorting is presentation: nothing is asked again.
       expect(overview).toHaveBeenCalledTimes(1);
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
     },
   );
 
@@ -754,7 +754,7 @@ describe("the Overview while it changes", () => {
       expect(main.querySelector("[data-part='skeleton']")).toBeNull();
       // The line under the title still names the snapshot those numbers are of.
       expect(within(main).getByText(description(NEWEST, "9,300", "5,042"))).toBeInTheDocument();
-      await expectAccessible(container, { page: true });
+      await expectNoAxeViolations(container, { page: true });
 
       await act(async () => {
         finish(older);
@@ -951,7 +951,7 @@ describe("the Overview of a limited snapshot", () => {
       start: withLimited(),
     });
     await loaded(overview);
-    await expectAccessible(container, { page: true });
+    await expectNoAxeViolations(container, { page: true });
   });
 });
 
@@ -966,10 +966,10 @@ describe("the Overview and the accessibility checker", () => {
         { start: openStart({ open: opened({ selected: 1 }) }) },
       );
       await loaded(overview);
-      await expectAccessible(container, { page: true });
+      await expectNoAxeViolations(container, { page: true });
       await user.click(disciplineSwitch());
       await screen.findByRole("grid", { name: text.byDiscipline });
-      await expectAccessible(container, { page: true });
+      await expectNoAxeViolations(container, { page: true });
     },
   );
 
@@ -978,20 +978,20 @@ describe("the Overview and the accessibility checker", () => {
     await waitFor(async () => {
       expect(status(await page())).toHaveTextContent(text.loading);
     });
-    await expectAccessible(loading.container, { page: true });
+    await expectNoAxeViolations(loading.container, { page: true });
     loading.unmount();
 
     const failed = renderOverview(() => {
       throw commandFailure("Io", "The workspace file could not be read. Try again.");
     });
     await screen.findByRole("alert");
-    await expectAccessible(failed.container, { page: true });
+    await expectNoAxeViolations(failed.container, { page: true });
     failed.unmount();
 
     const none = renderOverview(() => null, {
       start: openStart({ open: opened({ snapshots: [], selected: null }) }),
     });
     await screen.findByRole("heading", { level: 2, name: text.emptyTitle });
-    await expectAccessible(none.container, { page: true });
+    await expectNoAxeViolations(none.container, { page: true });
   });
 });

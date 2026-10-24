@@ -571,3 +571,31 @@ fn each_open_reads_the_saved_views_once() {
         1
     );
 }
+
+#[test]
+fn every_change_to_the_saved_views_is_stored_while_a_write_is_counted() {
+    let fx = Fixture::new();
+    let mut state = small(&fx);
+    let id = state.open_id();
+    super::views::STORED_WHILE_BUSY.with_borrow_mut(Vec::clear);
+
+    let saved = save(&mut state, "Valves").unwrap();
+    let view = saved[0].clone();
+    save(&mut state, "Spares").unwrap();
+    state.rename_view(&id, view.id, "Valves open").unwrap();
+    state.move_view(&id, view.id, 1).unwrap();
+    let deleted = state.delete_view(&id, view.id).unwrap();
+    assert_eq!(deleted.len(), 1);
+    let renamed = SavedView {
+        name: "Valves open".into(),
+        ..view
+    };
+    state.restore_view(&id, renamed, 0).unwrap();
+
+    let seen = super::views::STORED_WHILE_BUSY.with_borrow(Clone::clone);
+    assert_eq!(
+        seen, [true; 6],
+        "each of the five operations writes while counted"
+    );
+    assert!(!state.writes().busy(), "every write has ended");
+}

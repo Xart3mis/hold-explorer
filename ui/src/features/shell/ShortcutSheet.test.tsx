@@ -4,7 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import en from "../../locales/en.json";
 import { renderApp } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { openStart, startState } from "../../test/fixtures";
 import { t } from "../../text/i18n";
 import { SHORTCUTS } from "./shortcuts";
@@ -178,7 +178,7 @@ describe("the sheet", () => {
   it("has no accessibility violations", async () => {
     const { user } = renderSheet();
     await openSheet(user);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 

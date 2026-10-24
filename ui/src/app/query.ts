@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useCallback, useSyncExternalStore } from "react";
+import { answerDialogsFor } from "../api/dialogs";
 import { keys } from "../api/keys";
 import { workspaceApi } from "../api/workspace-commands";
 
@@ -48,7 +49,12 @@ export const queryClient = new QueryClient({
  */
 export const startQuery = queryOptions({
   queryKey: keys.start,
-  queryFn: () => workspaceApi.appStart(),
+  queryFn: async () => {
+    const start = await workspaceApi.appStart();
+    // Only the start says whether the dialogs are the system's or the e2e build's substitutes.
+    answerDialogsFor(start);
+    return start;
+  },
   staleTime: Infinity,
 });
 

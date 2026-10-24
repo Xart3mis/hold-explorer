@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { EmptyState } from "./EmptyState";
 
@@ -54,6 +54,6 @@ describe("EmptyState", () => {
         Remove a filter, or clear them all.
       </EmptyState>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

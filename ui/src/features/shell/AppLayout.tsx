@@ -14,10 +14,11 @@ import { useIsMutating } from "@tanstack/react-query";
 import { asCommandError } from "../../api/error";
 import { fileName } from "../../api/files";
 import { keys } from "../../api/keys";
-import { inApp, onFileDrag } from "../../api/window";
+import { inApp, onClosingHeld, onFileDrag } from "../../api/window";
 import { useSelectionFollowsView } from "../../app/actions/selection";
 import { useSnapshotActions } from "../../app/actions/snapshots";
 import { useStart } from "../../app/actions/start";
+import { useUpdateNotice } from "../../app/actions/update";
 import { IMPORT_PATH, OVERVIEW_PATH, WELCOME_PATH, type Destination } from "../../app/destinations";
 import { searchWithSelection } from "../../app/selection";
 import { ShellContext, type ShellNotice, type ShellReport } from "../../app/shell/context";
@@ -137,6 +138,11 @@ function LoadedShell({ start, destinations }: ShellProps) {
   const [dismissedSettings, setDismissedSettings] = useState<string | null>(null);
   // Why files cannot be dropped on this window, when the window refused to say when one is.
   const [dropProblem, setDropProblem] = useState<string | null>(null);
+  // The window was asked to close while a file is being saved: Rust closes it once that is done.
+  const [closing, setClosing] = useState(false);
+  // A newer release, found by the one check made after the start.
+  const update = useUpdateNotice();
+  const updateNotice = update.notice;
   // Where the focus goes as the detail panel opens and closes; see ui/src/features/detail/.
   const [detailFocus] = useState(createDetailFocus);
   const { selection } = useSelection();
@@ -220,6 +226,26 @@ function LoadedShell({ start, destinations }: ShellProps) {
       }),
     [navigate, pathname, state, home],
   );
+
+  // A close of the window held back by a write is said until the window goes, or until Rust says
+  // the close could not be carried out and the window stays.
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let gone = false;
+    onClosingHeld(setClosing).then(
+      (unlisten) => {
+        if (gone) unlisten();
+        else stop = unlisten;
+      },
+      () => {
+        // Without the event the window still closes once the write is done; it only says nothing.
+      },
+    );
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, []);
 
   // A file dragged over the window shows the drop target; a file dropped starts an import.
   useEffect(() => {
@@ -357,13 +383,16 @@ function LoadedShell({ start, destinations }: ShellProps) {
                 />
               ) : null}
               <main className={styles.content}>
-                {problem !== null ||
+                {closing ||
+                problem !== null ||
                 notice !== null ||
                 settingsProblem !== null ||
                 dropProblem !== null ||
                 warning !== null ||
+                updateNotice !== null ||
                 older !== null ? (
                   <div className={styles.notices}>
+                    {closing ? <Notice tone="info">{t("shell.closingHeld")}</Notice> : null}
                     {problem === null ? null : (
                       <div id={problemId}>
                         <Notice
@@ -426,6 +455,54 @@ function LoadedShell({ start, destinations }: ShellProps) {
                         }}
                       >
                         {warning.message}
+                      </Notice>
+                    )}
+                    {updateNotice === null ? null : (
+                      <Notice
+                        tone="info"
+                        actions={
+                          <>
+                            <Button
+                              variant="quiet"
+                              reservesPendingSpace
+                              isPending={update.openPage.isPending}
+                              onPress={() => {
+                                update.openPage.mutate(updateNotice.version, {
+                                  onError: (error) => {
+                                    setProblem({
+                                      kind: "action",
+                                      title: t("shell.updateReleasePageError"),
+                                      message: asCommandError(error).message,
+                                    });
+                                  },
+                                });
+                              }}
+                            >
+                              {t("shell.updateReleasePage")}
+                            </Button>
+                            <Button
+                              variant="quiet"
+                              // Nothing is skipped while the page of the version is being opened.
+                              isInert={update.openPage.isPending}
+                              onPress={() => {
+                                update.skip.mutate(updateNotice.version, {
+                                  onError: (error) => {
+                                    setProblem({
+                                      kind: "action",
+                                      title: t("shell.updateSkipError"),
+                                      message: asCommandError(error).message,
+                                    });
+                                  },
+                                });
+                              }}
+                            >
+                              {t("shell.updateSkip")}
+                            </Button>
+                          </>
+                        }
+                        onDismiss={update.hide}
+                      >
+                        {t("shell.updateAvailable", { version: updateNotice.version })}
                       </Notice>
                     )}
                     {older === null ? null : (

@@ -4,13 +4,23 @@ import { useAuthorNameSetting } from "../../app/actions/authorName";
 import { useDensitySetting } from "../../app/actions/density";
 import { useWorkspaceFolder } from "../../app/actions/folder";
 import { useThemeSetting } from "../../app/actions/theme";
+import { useUpdateCheckSetting } from "../../app/actions/update";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
 import type { Density } from "../../bindings/Density";
 import type { Theme } from "../../bindings/Theme";
-import { Notice, SectionTitle, Select, TextField, type SelectOption } from "../../components";
+import {
+  Checkbox,
+  Notice,
+  SectionTitle,
+  Select,
+  TextField,
+  type SelectOption,
+} from "../../components";
 import { t } from "../../text/i18n";
+import { DiagnosticsRow } from "./DiagnosticsRow";
 import { FolderRow } from "./FolderRow";
+import { LogsFolderRow } from "./LogsFolderRow";
 import { SettingsFileRow } from "./SettingsFileRow";
 import styles from "./SettingsPage.module.css";
 
@@ -28,16 +38,19 @@ function isDensity(value: string): value is Density {
 
 /**
  * Settings: the theme and the density, applied at once and saved; the name notes are signed
- * with, saved when the field is left or Enter is pressed; then About: the version of the app, the
+ * with, saved when the field is left or Enter is pressed; whether a newer release is looked for
+ * at start, applied at once and saved; then About: the version of the app, the
  * folder the workspaces are kept in, with a way to show it and to change it, and the settings
- * file, with a way to show it. While the folder changes, the other settings are inert, and the
- * folder row says so.
+ * file and the logs folder, each with a way to show it, and Copy diagnostics. While the folder
+ * changes, the other settings are inert, and the folder row says so.
  */
 export function SettingsPage() {
   const { start } = useShell();
   const { setTheme } = useThemeSetting();
   const { setDensity } = useDensitySetting();
   const { setAuthorName } = useAuthorNameSetting();
+  const { setUpdateCheck } = useUpdateCheckSetting();
+  const updateHelpId = useId();
   const folder = useWorkspaceFolder();
   const aboutId = useId();
   // The other settings wait while the workspaces folder changes.
@@ -172,6 +185,26 @@ export function SettingsPage() {
           />
         </div>
 
+        <div className={styles.row} inert={waiting}>
+          <Checkbox
+            isSelected={start.settings.update_check}
+            aria-describedby={updateHelpId}
+            onChange={(enabled) => {
+              setUpdateCheck.mutate(enabled);
+            }}
+          >
+            {t("settings.updateCheck")}
+          </Checkbox>
+          <span id={updateHelpId} className={[styles.help, styles.checkHelp].join(" ")}>
+            {t("settings.updateCheckHelp")}
+          </span>
+          {setUpdateCheck.isError ? (
+            <Notice tone="danger" title={t("settings.updateCheckError")}>
+              {asCommandError(setUpdateCheck.error).message}
+            </Notice>
+          ) : null}
+        </div>
+
         <section aria-labelledby={aboutId} className={[styles.row, styles.about].join(" ")}>
           <SectionTitle level={2} id={aboutId}>
             {t("settings.about")}
@@ -186,6 +219,10 @@ export function SettingsPage() {
           <FolderRow start={start} folder={folder} />
 
           <SettingsFileRow path={start.settings_file} isWaiting={waiting} />
+
+          <LogsFolderRow path={start.logs_folder} isWaiting={waiting} />
+
+          <DiagnosticsRow isWaiting={waiting} />
         </section>
       </div>
     </Page>

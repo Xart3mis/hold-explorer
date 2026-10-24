@@ -79,6 +79,9 @@ pub struct AppStart {
     pub version: String,
     /// The absolute path of the settings file, `settings.json`, whether or not it exists yet.
     pub settings_file: String,
+    /// The absolute path of the folder the crash logs are written to, whether or not it exists
+    /// yet.
+    pub logs_folder: String,
     /// The user's settings.
     pub settings: Settings,
     /// The workspaces in the folder in use.
@@ -90,6 +93,9 @@ pub struct AppStart {
     /// What went wrong with the settings file at start, when anything did: set aside
     /// (`SettingsSetAside`), or left in place and saving refused (`Settings`).
     pub settings_problem: Option<CommandError>,
+    /// Whether this is the build the end-to-end tests drive (the cargo feature `e2e`), whose file
+    /// dialogs are answered by the substitute commands.
+    pub e2e: bool,
 }
 
 impl From<WorkspaceInfo> for WorkspaceView {

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { destinations, type DestinationId } from "../../app/destinations";
 import { destinationPages } from "../../app/router";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { openStart } from "../../test/fixtures";
 import { SLOW } from "../../test/slow";
@@ -80,7 +80,7 @@ describe("ComingSoon", () => {
   it.each(notBuilt)("%s has no accessibility violation", SLOW, async (id) => {
     renderApp({ start: openStart(), path: `/${id}` });
     await screen.findByRole("heading", { level: 1, name: names[id] });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 
   it("is reached and left by the keyboard alone", SLOW, async () => {

@@ -76,6 +76,9 @@ export const DEV_STATES = [
   "warning",
   // The settings file could not be understood at start and was set aside.
   "settings-problem",
+  // The check after the start found a newer release: the shell offers its release page, and to
+  // skip it. Every other state finds none.
+  "update-available",
   // A move of the workspaces folder (Change folder in Settings) where the new folder already holds
   // a file of every name, so no file moves and the result says why for each:
   //   dev.html?state=folder-taken#/settings
@@ -203,6 +206,7 @@ export function isDevState(value: string): value is DevState {
 const FOLDER = "/home/ada/.local/share/hold-explorer/workspaces";
 /** Where the development page says the settings file is. */
 const SETTINGS_FILE = "/home/ada/.config/hold-explorer/settings.json";
+const LOGS_FOLDER = "/home/ada/.local/share/hold-explorer/logs";
 
 /** What a reading answers when the workspace file is locked. */
 const LOCKED =
@@ -513,17 +517,23 @@ function world(state: DevState, theme: Theme, density: Density): World {
   const start: AppStart = {
     version: "0.1.0",
     settings_file: SETTINGS_FILE,
+    logs_folder: LOGS_FOLDER,
     settings: {
       theme,
       density,
       author_name: "",
       workspace_dir: null,
+      workspace_folder_chosen: false,
       last_workspace: null,
+      update_check: true,
+      update_checked_at: null,
+      skipped_version: null,
     },
     list: { workspaces: [], unreadable: [], folder: FOLDER },
     list_error: null,
     open: null,
     settings_problem: null,
+    e2e: false,
   };
   const opened = (selected: number, warning: CommandError | null): WorkspaceOpen => ({
     workspace: unit573,
@@ -590,6 +600,7 @@ function world(state: DevState, theme: Theme, density: Density): World {
       start.open = { ...opened(4, null), views: DEV_VIEWS };
       break;
     case "open":
+    case "update-available":
     case "view-resynced":
     case "no-dates":
     case "overview-loading":
@@ -931,6 +942,22 @@ export function installDevCommands(
       }
       return start.settings;
     },
+    settings_set_update_check: (payload) => {
+      const { enabled } = payload as { enabled: boolean };
+      start.settings = { ...start.settings, update_check: enabled };
+      return start.settings;
+    },
+    update_check: () =>
+      later(400, () =>
+        state === "update-available" && start.settings.update_check ? { version: "0.2.0" } : null,
+      ),
+    update_skip: (payload) => {
+      start.settings = { ...start.settings, skipped_version: text(payload, "version") };
+      return start.settings;
+    },
+    open_release_page: () => later(300, () => null),
+    // Only a smoke run of the app does anything with it.
+    smoke_ready: () => null,
     settings_set_author_name: (payload) => {
       const name = text(payload, "name").trim();
       if (Array.from(name).length > 80) {
@@ -1400,6 +1427,7 @@ export function installDevCommands(
       return later(150, () => null);
     },
     export_open: () => null,
+    diagnostics_copy: () => later(150, () => "Version: 0.1.0\nOS: linux\n"),
     // The folder dialog picks a folder on the project drive; the file dialog an export.
     "plugin:dialog|open": (payload) => {
       const { options } = payload as { options: { directory?: boolean } };

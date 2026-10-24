@@ -5,6 +5,7 @@ use hx_core::filter::FilterSpec;
 use hx_store::{SavedView, StoreError, Workspace};
 
 use super::error::{CommandError, ErrorKind};
+use super::writes::Writes;
 use super::AppState;
 
 /// The longest name of a saved view, in characters, after trimming.
@@ -23,6 +24,9 @@ const SELECTION_PARAMS: [&str; 3] = ["line", "hold", "blocker"];
 thread_local! {
     /// How many times this thread read the saved views of a workspace.
     pub(super) static VIEW_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Whether a write was counted, each time this thread stored the saved views of a workspace.
+    pub(super) static STORED_WHILE_BUSY: std::cell::RefCell<Vec<bool>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// The saved views of `workspace`, and the warning to show when they could not be read: a stored
@@ -155,6 +159,8 @@ impl AppState {
         address: &str,
         filters: FilterSpec,
     ) -> Result<Vec<SavedView>, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(name)?;
         check_address(address)?;
@@ -167,7 +173,7 @@ impl AppState {
             address: address.to_string(),
             filters,
         });
-        workspace.set_saved_views(&views)?;
+        store(workspace, &views, &writes)?;
         Ok(views)
     }
 
@@ -178,13 +184,15 @@ impl AppState {
         id: i64,
         name: &str,
     ) -> Result<Vec<SavedView>, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(name)?;
         let mut views = list_for_write(workspace)?;
         let at = position(&views, id)?;
         check_name_free(&views, &name, Some(id))?;
         views[at].name = name;
-        workspace.set_saved_views(&views)?;
+        store(workspace, &views, &writes)?;
         Ok(views)
     }
 
@@ -194,10 +202,12 @@ impl AppState {
         workspace: &str,
         id: i64,
     ) -> Result<Vec<SavedView>, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let mut views = list_for_write(workspace)?;
         views.remove(position(&views, id)?);
-        workspace.set_saved_views(&views)?;
+        store(workspace, &views, &writes)?;
         Ok(views)
     }
 
@@ -209,6 +219,8 @@ impl AppState {
         view: SavedView,
         index: usize,
     ) -> Result<Vec<SavedView>, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let name = clean_name(&view.name)?;
         check_address(&view.address)?;
@@ -225,7 +237,7 @@ impl AppState {
         check_name_free(&views, &name, None)?;
         check_room(&views)?;
         views.insert(index.min(views.len()), SavedView { name, ..view });
-        workspace.set_saved_views(&views)?;
+        store(workspace, &views, &writes)?;
         Ok(views)
     }
 
@@ -238,13 +250,32 @@ impl AppState {
         id: i64,
         index: usize,
     ) -> Result<Vec<SavedView>, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let workspace = self.views_workspace(workspace)?;
         let mut views = list_for_write(workspace)?;
         let view = views.remove(position(&views, id)?);
         views.insert(index.min(views.len()), view);
-        workspace.set_saved_views(&views)?;
+        store(workspace, &views, &writes)?;
         Ok(views)
     }
+}
+
+/// Stores the list of saved views: the one write of each of the five operations, which counts
+/// itself in `writes` from its start.
+fn store(
+    workspace: &mut Workspace,
+    views: &[SavedView],
+    writes: &Writes,
+) -> Result<(), CommandError> {
+    debug_assert!(
+        writes.busy(),
+        "saved views are stored only while a write is counted"
+    );
+    #[cfg(test)]
+    STORED_WHILE_BUSY.with_borrow_mut(|seen| seen.push(writes.busy()));
+    workspace.set_saved_views(views)?;
+    Ok(())
 }
 
 /// The list a write starts from: a damaged stored value reads as no views, so the write replaces it.

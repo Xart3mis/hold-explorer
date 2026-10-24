@@ -6,7 +6,7 @@ import type { Theme } from "../../bindings/Theme";
 import { applyDensity } from "../../design/density";
 import { applyTheme } from "../../design/theme";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { renderApp } from "../../test/app";
 import { openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -19,7 +19,11 @@ const settings = (theme: Theme): Settings => ({
   density: "Comfortable",
   author_name: "",
   workspace_dir: null,
+  workspace_folder_chosen: false,
   last_workspace: null,
+  update_check: true,
+  update_checked_at: null,
+  skipped_version: null,
 });
 
 afterEach(() => {
@@ -213,6 +217,75 @@ describe("SettingsPage", () => {
     expect(alert).toHaveTextContent("The file does not exist yet.");
   });
 
+  it("shows the logs folder and shows it in the file manager", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    expect(within(about).getByText(en.settings.logsFolder)).toBeInTheDocument();
+    expect(
+      within(about).getByText("/home/ada/.local/share/hold-explorer/logs"),
+    ).toBeInTheDocument();
+    const show = within(about).getByRole("button", { name: en.settings.logsFolderShow });
+    expect(show).toHaveTextContent(en.common.showInFolder);
+    await user.click(show);
+    expect(windowApi.showInFolder).toHaveBeenLastCalledWith(
+      "/home/ada/.local/share/hold-explorer/logs",
+    );
+  });
+
+  it("says why the logs folder could not be shown", async () => {
+    windowApi.showInFolder.mockRejectedValue(new Error("The folder does not exist yet."));
+    const { user } = renderApp({ start: openStart(), path: "/settings" });
+    const main = await page();
+    const about = within(main).getByRole("region", { name: en.settings.about });
+    await user.click(within(about).getByRole("button", { name: en.settings.logsFolderShow }));
+    const alert = await within(about).findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.logsFolderError);
+    expect(alert).toHaveTextContent("The folder does not exist yet.");
+  });
+
+  it("copies the diagnostics and says so in a toast", async () => {
+    const copy = vi.fn(() => "Version: 0.1.0\n");
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { diagnostics_copy: copy },
+    });
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    expect(await screen.findByRole("group", { name: en.settings.diagnosticsCopied })).toBeVisible();
+    expect(copy).toHaveBeenCalledTimes(1);
+    expect(within(main).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a clipboard that failed in place, and copies again", async () => {
+    const message = "The system did not let Hold Explorer write to the clipboard. Try again.";
+    let fail = true;
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        diagnostics_copy: () => {
+          if (fail) throw commandFailure("Clipboard", message);
+          return "Version: 0.1.0\n";
+        },
+      },
+    });
+    const main = await page();
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    const alert = await within(main).findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.diagnosticsError);
+    expect(alert).toHaveTextContent(message);
+    expect(screen.queryByRole("group", { name: en.settings.diagnosticsCopied })).toBeNull();
+
+    fail = false;
+    await user.click(within(main).getByRole("button", { name: en.settings.diagnosticsCopy }));
+    expect(await screen.findByRole("group", { name: en.settings.diagnosticsCopied })).toBeVisible();
+    await waitFor(() => {
+      expect(within(main).queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("works without a workspace", async () => {
     renderApp({ start: startState(), path: "/settings" });
     const main = await page();
@@ -224,10 +297,10 @@ describe("SettingsPage", () => {
   it("has no accessibility violation", SLOW, async () => {
     const { user } = renderApp({ start: openStart(), path: "/settings" });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(screen.getByRole("button", { name: new RegExp(en.settings.theme) }));
     await screen.findAllByRole("option");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -631,10 +704,71 @@ describe("the author name", () => {
       },
     });
     await page();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.type(nameField(), "x");
     await user.tab();
     await screen.findByText(TOO_LONG);
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
+  });
+});
+
+describe("the update check", () => {
+  const box = () => screen.getByRole("checkbox", { name: en.settings.updateCheck });
+
+  it("is on by default, with what it sends under it", async () => {
+    renderApp({ start: openStart(), path: "/settings" });
+    await page();
+    expect(box()).toBeChecked();
+    expect(box()).toHaveAccessibleDescription(en.settings.updateCheckHelp);
+  });
+
+  it("is saved at once and stays as saved when the page comes back", SLOW, async () => {
+    const set = vi.fn(({ enabled }: { enabled: boolean }) =>
+      withSettings({ update_check: enabled }),
+    );
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: { settings_set_update_check: set },
+    });
+    await page();
+    await user.click(box());
+    expect(box()).not.toBeChecked();
+    await waitFor(() => {
+      expect(set).toHaveBeenCalledTimes(1);
+    });
+    expect(set).toHaveBeenCalledWith({ enabled: false });
+    await user.click(screen.getByRole("link", { name: en.destinations.name.overview }));
+    await screen.findByRole("heading", { level: 1, name: en.destinations.name.overview });
+    await user.click(screen.getByRole("link", { name: en.destinations.name.settings }));
+    await page();
+    expect(box()).not.toBeChecked();
+    await user.click(box());
+    await waitFor(() => {
+      expect(set).toHaveBeenLastCalledWith({ enabled: true });
+    });
+    expect(box()).toBeChecked();
+  });
+
+  it("goes back and says why when it could not be saved", async () => {
+    const message =
+      "Could not save the settings to /home/ada/.config/hold-explorer/settings.json: permission denied. Check that the folder exists, that you have permission to use it, and that there is free disk space, then try again.";
+    const { user } = renderApp({
+      start: openStart(),
+      path: "/settings",
+      handlers: {
+        settings_set_update_check: () => {
+          throw commandFailure("Settings", message);
+        },
+      },
+    });
+    await page();
+    await user.click(box());
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(en.settings.updateCheckError);
+    expect(alert).toHaveTextContent(message);
+    await waitFor(() => {
+      expect(box()).toBeChecked();
+    });
   });
 });

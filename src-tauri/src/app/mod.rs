@@ -3,6 +3,7 @@
 
 mod data;
 mod demo;
+mod diagnostics;
 mod error;
 mod export;
 mod folder;
@@ -10,12 +11,15 @@ mod import;
 mod search;
 mod settings;
 mod snapshots;
+mod update;
 mod views;
 mod workspaces;
+mod writes;
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use hx_core::dataset::Dataset;
 use hx_core::filter::FilterSpec;
@@ -24,6 +28,7 @@ use hx_core::solve::SolvePlan;
 use hx_store::{list_workspaces, Workspace, WorkspaceList};
 
 pub use data::{FilterOptions, GroupDetail, HoldsView};
+pub use diagnostics::diagnostics;
 pub use error::{CommandError, ErrorKind};
 pub use export::{
     check_extension, fonts, save, Content, CopyFormat, ExportPhase, ExportSaved, SaveFormat,
@@ -35,7 +40,9 @@ pub use import::{
 };
 pub use settings::{Density, Settings, Theme};
 pub use snapshots::{OverviewView, ViewRef};
+pub use update::{fetch_latest_tag, UpdateNotice, UpdateStep};
 pub use workspaces::{AppStart, WorkspaceListView, WorkspaceOpen, WorkspaceView};
+pub use writes::{CloseRequest, Writes, CLOSING_HELD, CLOSING_RESUMED};
 
 use settings::{load_settings_checked, save_settings, settings_file, LoadedSettings};
 
@@ -91,12 +98,16 @@ struct Columns {
 /// What the application holds between commands.
 pub struct AppState {
     config_dir: PathBuf,
-    data_dir: PathBuf,
+    /// The local data folder: the default workspaces folder and the crash logs live under it.
+    local_data_dir: PathBuf,
     settings: Settings,
     /// Why saving the settings is refused, when the settings file could not be read or moved aside.
     settings_blocked: Option<CommandError>,
     /// That the settings file was set aside at start, until the first start reports it.
     settings_set_aside: Option<CommandError>,
+    /// The problem the settings file had when the state was made, kept for Copy diagnostics: the
+    /// start reports `settings_set_aside` once and forgets it.
+    settings_problem_at_start: Option<CommandError>,
     open: Option<Workspace>,
     /// The id of the workspace in `open`, kept beside it so a check of the view reads no file.
     open_id: Option<String>,
@@ -106,6 +117,18 @@ pub struct AppState {
     cache: Option<Cache>,
     /// The files an export wrote since the application started, which `export_open` may open.
     written: HashSet<PathBuf>,
+    /// The versions an update check offered since the application started, whose release page
+    /// `open_release_page` may open.
+    offered: HashSet<String>,
+    /// Whether the update check is off for this session whatever the settings say: a smoke run
+    /// and the `e2e` build ask nothing of the network.
+    update_check_off: bool,
+    /// The address the update check asks: [`update::RELEASES_URL`]. In the tests it is no address, so
+    /// no test reaches the network, until a test names a server of its own.
+    update_url: String,
+    /// The writes in progress. Shared: the close of the window reads it without the state lock,
+    /// and an export writes its file with the lock free.
+    writes: Arc<Writes>,
     /// How many datasets were built since the application started.
     #[cfg(test)]
     dataset_builds: usize,
@@ -122,17 +145,44 @@ pub struct AppState {
 
 impl AppState {
     /// Reads the settings from `config_dir` at once. Workspaces are kept in `workspaces/` under
-    /// `data_dir` unless the settings name another folder.
-    pub fn new(config_dir: PathBuf, data_dir: PathBuf) -> AppState {
+    /// `local_data_dir` unless the settings name another folder.
+    ///
+    /// A user of an earlier version has them in `workspaces/` under `data_dir`, which is the
+    /// local data folder on Linux and macOS but not on Windows. When the settings name no folder,
+    /// the default folder holds no workspace file, and the old one holds at least one, the old
+    /// folder becomes the chosen folder and is saved in the settings; nothing is moved. When the
+    /// settings cannot be saved, the old folder is used for this session only.
+    ///
+    /// When the settings file was set aside, the defaults are saved with the update check off.
+    pub fn new(config_dir: PathBuf, data_dir: PathBuf, local_data_dir: PathBuf) -> AppState {
         let LoadedSettings {
-            settings,
+            mut settings,
             blocked,
             set_aside,
         } = load_settings_checked(&config_dir);
+        if set_aside.is_some() {
+            // Whether the user wanted the update check is unknown, so it is saved off; the
+            // Settings switch then shows it off. A failed save still asks nothing at this start.
+            settings.update_check = false;
+            let _ = save_settings(&config_dir, &settings);
+        }
+        if settings.workspace_dir.is_none() && !settings.workspace_folder_chosen {
+            let default = local_data_dir.join("workspaces");
+            let old = data_dir.join("workspaces");
+            if old != default && !holds_workspace_files(&default) && holds_workspace_files(&old) {
+                settings.workspace_dir = Some(old.to_string_lossy().into_owned());
+                settings.workspace_folder_chosen = true;
+                if blocked.is_none() {
+                    // A failed save repeats the carry-over at the next start, which is harmless.
+                    let _ = save_settings(&config_dir, &settings);
+                }
+            }
+        }
         AppState {
             config_dir,
-            data_dir,
+            local_data_dir,
             settings,
+            settings_problem_at_start: set_aside.clone().or_else(|| blocked.clone()),
             settings_blocked: blocked,
             settings_set_aside: set_aside,
             open: None,
@@ -141,6 +191,14 @@ impl AppState {
             draft: None,
             cache: None,
             written: HashSet::new(),
+            offered: HashSet::new(),
+            update_check_off: false,
+            update_url: if cfg!(test) {
+                String::new()
+            } else {
+                update::RELEASES_URL.to_string()
+            },
+            writes: Arc::default(),
             #[cfg(test)]
             dataset_builds: 0,
             #[cfg(test)]
@@ -199,7 +257,17 @@ impl AppState {
 
     /// The folder the workspaces are kept in when the settings name none.
     fn default_folder(&self) -> PathBuf {
-        self.data_dir.join("workspaces")
+        self.local_data_dir.join("workspaces")
+    }
+
+    /// The count of the writes in progress, which each write holds a guard of while it writes.
+    pub fn writes(&self) -> Arc<Writes> {
+        Arc::clone(&self.writes)
+    }
+
+    /// The local data folder, where the crash logs are written.
+    pub fn local_data_dir(&self) -> &Path {
+        &self.local_data_dir
     }
 
     /// Everything the interface needs at start; reopens the last workspace when it can. A last
@@ -230,6 +298,7 @@ impl AppState {
         AppStart {
             version: env!("CARGO_PKG_VERSION").to_string(),
             settings_file: settings_file(&self.config_dir),
+            logs_folder: diagnostics::logs_folder(&self.local_data_dir),
             settings: self.settings.clone(),
             list: workspaces::list_view(raw, &folder),
             list_error,
@@ -238,6 +307,7 @@ impl AppState {
                 .settings_set_aside
                 .take()
                 .or_else(|| self.settings_blocked.clone()),
+            e2e: cfg!(feature = "e2e"),
         }
     }
 
@@ -300,6 +370,17 @@ impl AppState {
     pub fn set_density(&mut self, density: Density) -> Result<Settings, CommandError> {
         let next = Settings {
             density,
+            ..self.settings.clone()
+        };
+        self.save(&next)?;
+        self.settings = next;
+        Ok(self.settings.clone())
+    }
+
+    /// Sets and saves whether a newer release is looked for at start.
+    pub fn set_update_check(&mut self, enabled: bool) -> Result<Settings, CommandError> {
+        let next = Settings {
+            update_check: enabled,
             ..self.settings.clone()
         };
         self.save(&next)?;
@@ -430,6 +511,13 @@ impl AppState {
     }
 }
 
+/// Whether the folder holds a file the store lists, readable or not. A folder that cannot be
+/// listed holds none.
+fn holds_workspace_files(folder: &Path) -> bool {
+    list_workspaces(folder)
+        .is_ok_and(|list| !list.workspaces.is_empty() || !list.unreadable.is_empty())
+}
+
 /// The listing of a workspace folder, as a start shows it: a folder that cannot be listed gives
 /// an empty list and the error.
 fn list_folder(folder: &Path) -> (WorkspaceList, Option<CommandError>) {
@@ -493,16 +581,22 @@ fn describe_with_warning(workspace: &Workspace) -> Result<WorkspaceOpen, Command
 #[cfg(test)]
 mod data_tests;
 #[cfg(test)]
+mod diagnostics_tests;
+#[cfg(test)]
 mod export_tests;
 #[cfg(test)]
 mod folder_tests;
 #[cfg(test)]
 mod import_tests;
 #[cfg(test)]
+mod local_folder_tests;
+#[cfg(test)]
 mod snapshot_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod update_tests;
 #[cfg(test)]
 mod views_tests;

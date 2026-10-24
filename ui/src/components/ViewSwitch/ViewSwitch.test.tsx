@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { ViewSwitch } from "./ViewSwitch";
 
 const views = [
@@ -16,7 +16,7 @@ describe("ViewSwitch", () => {
     expect(group).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Lines" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "Holds" })).not.toBeChecked();
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 
   it("is one stop for Tab; the arrow keys move between the views and choose them", async () => {

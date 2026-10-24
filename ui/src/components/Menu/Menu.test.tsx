@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { Ellipsis } from "lucide-react";
 import {
@@ -245,9 +245,9 @@ describe("MenuButton", () => {
   it("has no accessibility violation, closed and open", SLOW, async () => {
     const user = userEvent.setup();
     render(<Sample />);
-    await expectAccessible();
+    await expectNoAxeViolations();
     await user.click(screen.getByRole("button", { name: "Export" }));
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -376,7 +376,7 @@ describe("MenuSubmenu", () => {
     await user.click(screen.getByRole("button", { name: "Export" }));
     await user.click(screen.getByRole("menuitem", { name: "Chart as PNG" }));
     await screen.findByRole("menu", { name: "Chart as PNG" });
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -434,7 +434,7 @@ describe("IconMenuButton", () => {
       await waitFor(() => {
         expect(within(menu).getByRole("menuitem", { name: "Rename" })).toHaveFocus();
       });
-      await expectAccessible();
+      await expectNoAxeViolations();
       await user.keyboard("{ArrowDown}{Enter}");
       expect(chosen).toHaveBeenCalledWith("delete");
       expect(onOpenChange).toHaveBeenLastCalledWith(false);

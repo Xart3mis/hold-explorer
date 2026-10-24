@@ -1,11 +1,32 @@
 import react from "@vitejs/plugin-react";
 import process from "node:process";
-import { defineConfig } from "vitest/config";
+import { defineConfig, type Plugin } from "vitest/config";
 import { testLimits } from "./ui/src/test/limits.ts";
+
+// The strings of the component library (react-aria) come in one file for each language: for most
+// packages `.../intl/<package>/<language>.mjs`, and for react-aria-components itself
+// `.../dist/private/intl/<language>.mjs`, with no package folder. There are 33 languages. The app
+// fixes its locale (`locale` of ui/src/text/i18n.ts, English), and the library falls back to
+// en-US for it, so the other languages would only be dead weight in the bundle. This is the
+// replacement the library's documentation describes for a Vite build
+// (`@react-aria/optimize-locales-plugin`), written here so the project takes no new dependency:
+// every language but en-US loads as an empty module. A language is named like `de-DE` or
+// `zh-Hant`. A build only; the tests and the development server keep the library as it is.
+// tools/dist-locales.test.mjs checks the result on the built files.
+const OTHER_LANGUAGE =
+  /[\\/]intl[\\/](?:[^\\/]+[\\/])?(?!en-US\.)[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})+\.m?js$/;
+const englishOnly: Plugin = {
+  name: "hx-english-only-components",
+  apply: "build",
+  enforce: "pre",
+  load(id) {
+    return OTHER_LANGUAGE.test(id.split("?")[0] ?? id) ? "export default {};" : null;
+  },
+};
 
 export default defineConfig({
   root: "ui",
-  plugins: [react()],
+  plugins: [react(), englishOnly],
   clearScreen: false,
   server: { port: 1420, strictPort: true },
   // Nothing is inlined as a data: address: the content security policy lets fonts load from the
@@ -20,5 +41,8 @@ export default defineConfig({
     // allowance of ui/src/test/slow.ts and the wait of the queries grow the same way.
     // ui/src/test/limits.ts holds the times.
     testTimeout: testLimits(process.env).test,
+    // Half the cores: a test renders the whole app, and with a worker on every core the runs
+    // slow each other until waits and limits that are fine alone are passed.
+    maxWorkers: "50%",
   },
 });

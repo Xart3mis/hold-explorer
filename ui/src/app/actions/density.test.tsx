@@ -10,7 +10,11 @@ const settings = (density: Density): Settings => ({
   density,
   author_name: "",
   workspace_dir: null,
+  workspace_folder_chosen: false,
   last_workspace: null,
+  update_check: true,
+  update_checked_at: null,
+  skipped_version: null,
 });
 
 describe("changing the density", () => {

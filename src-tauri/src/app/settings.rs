@@ -40,7 +40,7 @@ pub enum Density {
 pub(super) const AUTHOR_NAME_LIMIT: usize = 80;
 
 /// What the user has chosen. A missing field takes its default.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(default)]
 #[ts(export)]
 pub struct Settings {
@@ -53,8 +53,33 @@ pub struct Settings {
     pub author_name: String,
     /// Where workspaces are kept; `None` means the default folder.
     pub workspace_dir: Option<String>,
+    /// Whether a folder was chosen, the default folder included, or the old folder was carried
+    /// over: from then on the old folder is never carried over again.
+    pub workspace_folder_chosen: bool,
     /// The id of the workspace that was open last.
     pub last_workspace: Option<String>,
+    /// Whether a newer release is looked for at start, at most once in 24 hours. On by default.
+    pub update_check: bool,
+    /// When a newer release was last looked for, successfully or not: RFC 3339, in UTC.
+    pub update_checked_at: Option<String>,
+    /// The version the user chose to skip: it is not offered again, a newer one is.
+    pub skipped_version: Option<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            theme: Theme::default(),
+            density: Density::default(),
+            author_name: String::new(),
+            workspace_dir: None,
+            workspace_folder_chosen: false,
+            last_workspace: None,
+            update_check: true,
+            update_checked_at: None,
+            skipped_version: None,
+        }
+    }
 }
 
 /// The settings, the reason saving must be refused when the settings file could not be read or

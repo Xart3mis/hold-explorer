@@ -10,7 +10,7 @@ import type { LinePage } from "../../bindings/LinePage";
 import type { Status } from "../../bindings/Status";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
 import { openStart, opened, workspace } from "../../test/fixtures";
@@ -875,10 +875,10 @@ describe("Lines", () => {
       await screen.findByRole("heading", { level: 1, name: en.destinations.name.lines }),
     ).toBeInTheDocument();
     await within(await grid()).findByRole("rowheader", { name: lineId(0) });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(screen.getByRole("radio", { name: text.modeHolds }));
     await within(await grid(text.holdsTable)).findAllByRole("rowheader");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

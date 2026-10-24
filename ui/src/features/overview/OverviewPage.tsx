@@ -6,6 +6,7 @@ import { asCommandError } from "../../api/error";
 import { useFilters, withValues } from "../../app/filters/state";
 import { useShell } from "../../app/shell/context";
 import { Page } from "../../app/shell/Page";
+import { useSmokeReady } from "../../app/smoke";
 import { useSnapshotQuery } from "../../app/view";
 import type { Dim } from "../../bindings/Dim";
 import type { Group } from "../../bindings/Group";
@@ -214,6 +215,7 @@ function Figures({
  * because the content is marked as busy meanwhile and what is busy may hold its changes back.
  */
 export function OverviewPage() {
+  useSmokeReady();
   const { start } = useShell();
   const open = start.open;
   const [asTable, setAsTable] = useState<Record<DimensionId, boolean>>({

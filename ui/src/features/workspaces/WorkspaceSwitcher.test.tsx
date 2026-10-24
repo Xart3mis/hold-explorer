@@ -4,7 +4,7 @@ import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { AppStart } from "../../bindings/AppStart";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { renderApp, topBar } from "../../test/app";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -251,9 +251,9 @@ describe("WorkspaceSwitcher", () => {
   it("has no accessibility violation, closed and open", SLOW, async () => {
     const { user } = renderApp({ start: openStart(), path: "/overview" });
     await screen.findByRole("button", { name: current });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await openMenu(user);
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 
@@ -518,6 +518,6 @@ describe("renaming the workspace", () => {
 
   it("has no accessibility violation while the name is edited", SLOW, async () => {
     await startRename();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

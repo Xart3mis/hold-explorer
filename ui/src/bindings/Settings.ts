@@ -24,6 +24,23 @@ author_name: string,
  */
 workspace_dir: string | null, 
 /**
+ * Whether a folder was chosen, the default folder included, or the old folder was carried
+ * over: from then on the old folder is never carried over again.
+ */
+workspace_folder_chosen: boolean, 
+/**
  * The id of the workspace that was open last.
  */
-last_workspace: string | null, };
+last_workspace: string | null, 
+/**
+ * Whether a newer release is looked for at start, at most once in 24 hours. On by default.
+ */
+update_check: boolean, 
+/**
+ * When a newer release was last looked for, successfully or not: RFC 3339, in UTC.
+ */
+update_checked_at: string | null, 
+/**
+ * The version the user chose to skip: it is not offered again, a newer one is.
+ */
+skipped_version: string | null, };

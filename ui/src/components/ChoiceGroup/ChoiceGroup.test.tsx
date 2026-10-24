@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { ChoiceGroup, type ChoiceGroupProps } from "./ChoiceGroup";
 
 const options = [
@@ -120,8 +120,8 @@ describe("ChoiceGroup", () => {
 
   it("has no accessibility violation, enabled and disabled", async () => {
     const { container, rerender } = render(<Held />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<Held isDisabled orientation="horizontal" />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

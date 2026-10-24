@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { OptionList, type OptionListProps } from "./OptionList";
 
@@ -266,14 +266,14 @@ describe("OptionList", () => {
     const { container, rerender } = render(
       <Held initial={["civil"]} footer="1,300 more values. Type to narrow." />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<Held selectionMode="single" initial={["civil"]} />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<Held options={[]} />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<Held options={[]} isLoading />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<Held isLoading />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

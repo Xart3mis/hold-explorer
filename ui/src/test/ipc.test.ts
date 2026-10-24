@@ -11,7 +11,11 @@ const settings: Settings = {
   density: "Comfortable",
   author_name: "",
   workspace_dir: null,
+  workspace_folder_chosen: false,
   last_workspace: null,
+  update_check: true,
+  update_checked_at: null,
+  skipped_version: null,
 };
 
 describe("mockCommands", () => {
@@ -66,11 +70,13 @@ describe("mockCommands", () => {
       app_start: () => ({
         version: "0.1.0",
         settings_file: "/c/settings.json",
+        logs_folder: "/c/logs",
         settings,
         list: { workspaces: [], unreadable: [], folder: "/w" },
         list_error: { kind: "Io", message: "Could not read /w." },
         open: null,
         settings_problem: null,
+        e2e: false,
       }),
     });
     await expect(workspaceApi.workspaceOpen("0123456789abcdef")).resolves.toEqual(opened);

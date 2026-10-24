@@ -2,7 +2,7 @@
 
 Desktop app that reads the PlantIM "holds" export, shows which piping lines are on hold and why, tracks changes between exports, and recommends which blockers to solve first.
 
-Status: early development. The design is in `docs/superpowers/specs/`.
+Status: the first milestone (M1) is complete, and 0.1.0 is its first release. History, blocker rules, and follow-up come in later milestones. The design is in `docs/superpowers/specs/`.
 
 ## What it does today
 
@@ -21,15 +21,47 @@ Status: early development. The design is in `docs/superpowers/specs/`.
 - Search: one box in the top bar (`/` reaches it) finds lines, blockers, people and roles, remarks, and hold values in the snapshot in view, open and released, grouped and with the match marked. It forgives a misspelling and accepts a wildcard in a line ID, as in `78B01-573-*`. Choosing a result opens the line or the blocker, or filters Lines by the value; Enter applies the text as a filter.
 - Saved views: "Save view" in the filter bar keeps the destination, mode, grouping, sort, and filters under a name. The views are kept in the workspace file and listed in the sidebar; one press applies one, and a deleted view can be brought back with Undo.
 - Command palette and shortcuts: `Ctrl+K` opens a palette to jump to a destination, a saved view, a snapshot, a workspace, or a line, or to run an action (import, export, clear filters, theme, density). `?` lists every shortcut.
-- Settings: theme, density (comfortable or compact), author name, and the workspaces folder, which can be changed with the option of moving the workspace files to the new folder. About shows the version, the workspaces folder, and the settings file, each path with Show in folder.
+- Settings: theme, density (comfortable or compact), author name, the workspaces folder, which can be changed with the option of moving the workspace files to the new folder, and "Check for updates at start". About shows the version, the workspaces folder, the settings file, and the logs folder, each path with Show in folder, and "Copy diagnostics", which copies the version, the system, the folders, and the newest crash log, to paste into a bug report. It names no workspace, snapshot, or hold.
+- Crashes and failed starts: a crash writes a log to the logs folder, and the app sends nothing anywhere about it. When the app cannot start, a message says what failed and where the log is.
+- Closing during a save: a close of the window while a file is being written waits, says "Hold Explorer closes when it has finished saving.", and the window closes on its own once the write ends.
 
 History, People, Follow-up, and Rules are listed in the sidebar and say "Soon".
 
-## Development
+## Download
 
-    cargo test --workspace
+Releases are on the releases page of this repository: https://github.com/Xart3mis/hold-explorer/releases. Each release has three files:
 
-The parity test needs Node.js on the PATH.
+- `HoldExplorer-<version>-windows-x64.exe`: Windows 10 and 11, x64. It is portable: there is nothing to install and it needs no admin rights. Put it in any folder and start it. It needs the Microsoft Edge WebView2 Runtime, which Windows 11 includes and Windows 10 usually already has; if it is missing, Hold Explorer says so and gives the address of the WebView2 download page. The Evergreen installer is on that page; run as you, it installs for your user only and needs no admin rights.
+- `HoldExplorer-<version>-linux-x86_64.AppImage`: Linux, x64. Make it executable (`chmod +x HoldExplorer-<version>-linux-x86_64.AppImage`) and start it.
+- `SHA256SUMS.txt`: the SHA-256 checksum of each of the other two files.
+
+### Check the download
+
+Download `SHA256SUMS.txt` to the same folder as the app, then compare the checksums. A file whose checksum differs is damaged or is not the file that was published; delete it and download it again.
+
+- Windows, in PowerShell, in that folder:
+
+      Get-FileHash .\HoldExplorer-<version>-windows-x64.exe -Algorithm SHA256
+
+  Compare the `Hash` it prints with the line for the `.exe` in `SHA256SUMS.txt`. PowerShell prints the hash in capitals and the file has it in small letters; the letters and digits must be the same.
+
+- Linux, in that folder:
+
+      sha256sum --check --ignore-missing SHA256SUMS.txt
+
+  It prints `OK` after the name of each file it found and checked.
+
+### The first start on Windows
+
+The executable is not signed. On the first start of a downloaded copy, Windows SmartScreen may say "Windows protected your PC" and offer only "Don't run". Check the checksum first, then choose "More info" and "Run anyway". Windows asks again only for a newly downloaded file.
+
+### The update check
+
+When it starts, at most once a day, Hold Explorer asks GitHub whether a newer release is out. If one is, a notice says so and offers the release page or to skip that version. Nothing is downloaded or installed by the app.
+
+The request goes to the GitHub API and carries the app's version number (in a `User-Agent` of `HoldExplorer/<version>`). It sends only its version number to GitHub: no file, no workspace data, no name, and no identifier. GitHub sees the network address the request comes from, as with any request. The app makes no other network request, and everything else works offline.
+
+To turn the check off, open Settings and clear "Check for updates at start".
 
 ## Develop
 
@@ -50,6 +82,9 @@ Install the interface dependencies once with `pnpm install`. Then:
     pnpm bindings                   regenerate ui/src/bindings (cargo test with the ts feature)
     pnpm tokens                     regenerate ui/src/design/tokens.css from the tables in DESIGN.md
     pnpm check:dist                 after a build: fail if dist/ names another host
+    cargo test --workspace          the Rust tests; the parity test needs Node.js on the PATH
+    pnpm e2e:build                  the app with the cargo feature e2e, for the end-to-end tests
+    pnpm e2e                        the end-to-end tests on Linux (see e2e/README.md)
 
 The types in `ui/src/bindings/` are generated from Rust and committed. CI fails when they are out of date.
 
@@ -58,6 +93,12 @@ The stylesheet of design tokens, `ui/src/design/tokens.css`, is generated from `
 While `pnpm dev` runs, `http://localhost:1420/gallery.html` shows every base component in every state, in both themes. The gallery is for development only and is not part of the build.
 
 The app's own pages open in a browser at `http://localhost:1420/dev.html?state=first-run`, with the commands answered from fixtures (`ui/src/dev/commands.ts`). The states are listed and explained at the top of `ui/src/dev/commands.ts` (`first-run`, `workspaces`, `open`, `older`, the filter, Lines, detail panel, Breakdown, Blockers, and import states, among others); add `&theme=light` for the light theme. This page is for development only as well, and `pnpm check:dist` fails a build that contains it.
+
+A built binary started with `HX_SMOKE=1` draws its first screen, prints `ready <date>`, and exits with code 0, or exits with code 1 after 60 s; CI starts the release build this way on Windows and Linux. The update check never runs in this mode or in the e2e build. With `HX_SMOKE=1` set in the environment, the app quits after its first render, so the variable is meant only for CI: leave it unset when you use the app.
+
+## Release
+
+A release is made by pushing an annotated tag `v<version>` whose version equals the one in `Cargo.toml` and `package.json` (`src-tauri/tauri.conf.json` names none and takes the crate's), for example `git tag -a v0.1.0 -m "Hold Explorer 0.1.0"`. The tag's message becomes the release notes. `.github/workflows/release.yml` checks the versions, builds the two files of the Download section, starts both, and publishes them with `SHA256SUMS.txt`. A pull request that changes the workflow or `tools/release-check.mjs` runs it as a dry run, which publishes nothing. The symbols of each build are kept with the workflow run, for reading a crash log, and are not published.
 
 ## Data policy
 

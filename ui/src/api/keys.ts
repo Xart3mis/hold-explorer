@@ -24,6 +24,13 @@ export const keys = {
    * here and not in a page, so that the page that comes back after a press of the sidebar shows it.
    */
   folderChange: ["settings", "folder"] as const,
+  /**
+   * What the check for a newer release found, once after the start: the `UpdateNotice`, or `null`
+   * when there is nothing to tell or the notice was put away.
+   */
+  update: ["app", "update"] as const,
+  /** The smoke call, sent once the first screen of the page has rendered: `null` once it was sent. */
+  smoke: ["app", "smoke"] as const,
   /** The file that is open for import: the `ImportDraft` the pages of the import flow share. */
   importDraft: ["import", "draft"] as const,
   /** What the review of that file found: the `ImportReview` of the last mapping it was read with. */

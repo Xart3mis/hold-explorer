@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Tab, TabList, TabPanel, Tabs, type TabsProps } from "./Tabs";
 
 function tabs(props: Omit<TabsProps, "children"> = {}) {
@@ -93,6 +93,6 @@ describe("Tabs", () => {
 
   it("has no accessibility violation", async () => {
     const { container } = render(tabs());
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

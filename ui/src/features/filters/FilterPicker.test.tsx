@@ -10,7 +10,7 @@ import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { ValuePage } from "../../bindings/ValuePage";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions, group, valuePage } from "../../test/filters";
 import { openStart, workspace } from "../../test/fixtures";
@@ -1054,7 +1054,7 @@ describe("the picker and the keyboard", () => {
       const region = await bar();
       set({ fields: [{ dim: "Discipline", values: [value("Marine")], negate: true }] });
       await openFields(user, region);
-      await expectAccessible();
+      await expectNoAxeViolations();
       await user.keyboard("{Escape}");
       await closed();
 
@@ -1066,7 +1066,7 @@ describe("the picker and the keyboard", () => {
           await user.type(within(dialog).getByRole("textbox", { name: picker.date.from }), "x");
           await user.tab();
         }
-        await expectAccessible();
+        await expectNoAxeViolations();
         await user.keyboard("{Escape}");
         await closed();
       }

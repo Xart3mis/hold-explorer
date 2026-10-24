@@ -16,11 +16,23 @@ function start(theme: Theme, density: Density = "Comfortable"): AppStart {
   return {
     version: "0.1.0",
     settings_file: "/home/ada/.config/hold-explorer/settings.json",
-    settings: { theme, density, author_name: "", workspace_dir: null, last_workspace: null },
+    logs_folder: "/home/ada/.local/share/hold-explorer/logs",
+    settings: {
+      theme,
+      density,
+      author_name: "",
+      workspace_dir: null,
+      workspace_folder_chosen: false,
+      last_workspace: null,
+      update_check: true,
+      update_checked_at: null,
+      skipped_version: null,
+    },
     list: { workspaces: [], unreadable: [], folder: "workspaces" },
     list_error: null,
     open: null,
     settings_problem: null,
+    e2e: false,
   };
 }
 

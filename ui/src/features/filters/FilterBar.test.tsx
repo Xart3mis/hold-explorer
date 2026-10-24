@@ -10,7 +10,7 @@ import type { FilterOptions } from "../../bindings/FilterOptions";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
@@ -1060,17 +1060,17 @@ describe("FilterBar", () => {
         snapshot_select: select.handler,
       });
       const region = await bar();
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
 
       set({ ...THREE, text: "valve" });
       await waitFor(() => {
         expect(chips(region)).toHaveLength(4);
       });
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
 
       await user.click(chip(region, "Discipline Civil"));
       await screen.findByRole("dialog");
-      await expectAccessible();
+      await expectNoAxeViolations();
       await user.keyboard("{Escape}");
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -1082,7 +1082,7 @@ describe("FilterBar", () => {
       await waitFor(() => {
         expect(within(region).getByRole("button", { name: en.filterChip.add })).toBeDisabled();
       });
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
     },
   );
 });

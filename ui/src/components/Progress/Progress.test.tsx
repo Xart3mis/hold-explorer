@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { formatPercent } from "../../text/format";
 import { Progress } from "./Progress";
 
@@ -63,6 +63,6 @@ describe("Progress", () => {
         <Progress label="Reading the file" />
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

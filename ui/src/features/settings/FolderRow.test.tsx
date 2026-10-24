@@ -9,7 +9,7 @@ import type { AppStart } from "../../bindings/AppStart";
 import type { FolderCheck } from "../../bindings/FolderCheck";
 import type { FolderMoved } from "../../bindings/FolderMoved";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { openStart, opened } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -133,7 +133,7 @@ describe("The workspaces folder in Settings", () => {
       const moveThem = screen.getByRole("button", { name: en.settings.folderMoveThem });
       expect(moveThem).toHaveFocus();
       expect(screen.getByRole("button", { name: en.settings.folderLeaveThem })).toBeInTheDocument();
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
 
       await user.keyboard("{Enter}");
       expect(setFolder).toHaveBeenCalledWith({ path: NEW, moveFiles: true });
@@ -182,7 +182,7 @@ describe("The workspaces folder in Settings", () => {
       // The page shows the folder the answer names, and the rest of the settings are back.
       expect(within(main).getAllByText(NEW).length).toBeGreaterThan(0);
       expect(theme.closest("[inert]")).toBeNull();
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
 
       await user.tab();
       expect(screen.getByRole("button", { name: en.common.dismiss })).toHaveFocus();

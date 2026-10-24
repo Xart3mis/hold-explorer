@@ -6,7 +6,7 @@ import { queryClient } from "../../app/query";
 import type { ImportDraft } from "../../bindings/ImportDraft";
 import type { ImportReview } from "../../bindings/ImportReview";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { draft, openStart, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -58,7 +58,7 @@ describe("the import page while the file is read", () => {
       handlers: { import_open: () => new Promise<ImportDraft>(() => undefined) },
     });
     await within(await page()).findByText(reading);
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 
@@ -249,7 +249,7 @@ describe("the import page when the file cannot be opened", () => {
       handlers: failing("NotFound"),
     });
     await within(await page()).findByRole("alert");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 
@@ -394,6 +394,6 @@ describe("the import page in its other states", () => {
     expect(
       screen.queryByRole("navigation", { name: en.destinations.label }),
     ).not.toBeInTheDocument();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

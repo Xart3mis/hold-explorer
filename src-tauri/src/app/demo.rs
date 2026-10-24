@@ -52,6 +52,8 @@ impl AppState {
         remove: &dyn Fn(&Path) -> Result<(), StoreError>,
         after_file: &dyn Fn(u64) -> Result<(), CommandError>,
     ) -> Result<WorkspaceOpen, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let mut workspace =
             Workspace::create(&self.folder(), DEMO_NAME).map_err(|e| demo_failed(e.into()))?;
         let path = workspace.path().to_path_buf();

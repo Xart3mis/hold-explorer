@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { CommandError } from "../../bindings/CommandError";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { ErrorState } from "./ErrorState";
 
 const error: CommandError = {
@@ -61,6 +61,6 @@ describe("ErrorState", () => {
         <ErrorState error={error} onRetry={() => undefined} />
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

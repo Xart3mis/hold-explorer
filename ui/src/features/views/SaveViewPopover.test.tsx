@@ -12,7 +12,7 @@ import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
 import { must, renderApp } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
 import { commandFailure, type Handlers } from "../../test/ipc";
 import { SLOW } from "../../test/slow";
@@ -257,7 +257,7 @@ describe("Save view", () => {
       button.focus();
       await user.keyboard("{Enter}");
       const dialog = await screen.findByRole("dialog", { name: text.saveTitle });
-      await expectAccessible();
+      await expectNoAxeViolations();
       await user.keyboard("Piping and civil{Enter}");
       await waitFor(() => {
         expect(viewNames()).toEqual(["Piping and civil"]);

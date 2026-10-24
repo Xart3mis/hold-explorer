@@ -6,7 +6,7 @@ import { keys } from "../../api/keys";
 import { queryClient } from "../../app/query";
 import type { ImportReview } from "../../bindings/ImportReview";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must } from "../../test/app";
 import { choose, openFlow, pageTitled } from "../../test/flow";
 import { exportDraft, review, savedMappingDraft, unmappedDraft } from "../../test/import";
@@ -493,9 +493,9 @@ describe("the mapping page", () => {
   it("has no accessibility violation, with fields missing and with a list open", SLOW, async () => {
     const { user } = openFlow("/import/mapping", { draft: unmappedDraft() });
     const main = await mapping();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(within(main).getByRole("button", { name: lineId }));
     await screen.findByRole("listbox");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

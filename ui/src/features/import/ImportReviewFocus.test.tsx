@@ -5,7 +5,7 @@ import type { ImportDone } from "../../bindings/ImportDone";
 import type { TargetCheck } from "../../bindings/TargetCheck";
 import en from "../../locales/en.json";
 import { must, topBar } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { done, freeTarget, review, reviewToConfirm } from "../../test/import";
 import { commandFailure } from "../../test/ipc";
 import { filled, heldCommit, importButton, ready, reviewing, reviewPage } from "../../test/review";
@@ -130,10 +130,10 @@ describe("the focus while an import runs", () => {
     const main = await ready();
     await pressImport(user, main);
     await within(main).findByRole("progressbar");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     commit.fail(commandFailure("Io", failure));
     await within(main).findByRole("alert");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { exportButton, itemNames, openMenu, renderAt } from "../../test/export";
 import { openStart, opened, workspace } from "../../test/fixtures";
@@ -157,7 +157,7 @@ describe("accessibility of the top bar", () => {
       try {
         renderAt("/overview");
         await exportButton();
-        await expectAccessible(document.body, { page: true });
+        await expectNoAxeViolations(document.body, { page: true });
       } finally {
         delete document.documentElement.dataset.theme;
       }
@@ -171,7 +171,7 @@ describe("accessibility of the top bar", () => {
       try {
         renderApp({ path: "/settings", start: openStart() });
         await inTopBar(menu.label);
-        await expectAccessible(document.body, { page: true });
+        await expectNoAxeViolations(document.body, { page: true });
       } finally {
         delete document.documentElement.dataset.theme;
       }

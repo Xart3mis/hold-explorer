@@ -6,7 +6,7 @@ import { randomFillSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { queryClient } from "../app/query";
 import { checkUnhandledCommands } from "./ipc";
 import { testLimits } from "./limits";
@@ -16,7 +16,14 @@ import { resetWindowApi } from "./window";
 // CI. That is longer than the library's one second, and shorter than a test may take, so a wait
 // in vain fails with what it waited for. It is set once, here, for every test;
 // ui/src/test/limits.ts says why it is what it is.
-configure({ asyncUtilTimeout: testLimits(process.env).wait });
+const limits = testLimits(process.env);
+configure({ asyncUtilTimeout: limits.wait });
+
+// A test with the slow allowance (ui/src/test/slow.ts) waits longer as well: its queries are as
+// slow as the rest of it. It is told by the limit it was given, and the wait is put back after.
+beforeEach(({ task }) => {
+  configure({ asyncUtilTimeout: task.timeout > limits.test ? limits.slowWait : limits.wait });
+});
 
 // No test reaches the file dialog, the file manager, or the window's drag events: the module that
 // talks to them is replaced by the stand-in of ui/src/test/window.ts. The test of that module
@@ -70,6 +77,7 @@ if (typeof window.IntersectionObserver === "undefined") {
 
 afterEach(() => {
   cleanup();
+  configure({ asyncUtilTimeout: limits.wait });
   clearMocks();
   resetWindowApi();
   // The component library announces a button that starts to wait through a live region it keeps

@@ -4,7 +4,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { StatTile, StatTileGroup } from "./StatTile";
 
 describe("StatTile", () => {
@@ -142,6 +142,6 @@ describe("StatTile", () => {
         <StatTile label="Median age" unavailable="The export has no created date column." />
       </StatTileGroup>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

@@ -168,3 +168,21 @@ describe("onFileDrag", () => {
     expect(seen).toHaveLength(3);
   });
 });
+
+describe("onClosingHeld", () => {
+  it("hears that a close waits for a write and that it was given up, until it stops listening", async () => {
+    plugins({});
+    const heard: boolean[] = [];
+    const stop = await real.onClosingHeld((held) => heard.push(held));
+
+    await emit("closing-held", null);
+    await emit("closing-resumed", null);
+    expect(heard).toEqual([true, false]);
+
+    stop();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await emit("closing-held", null);
+    await emit("closing-resumed", null);
+    expect(heard).toHaveLength(2);
+  });
+});

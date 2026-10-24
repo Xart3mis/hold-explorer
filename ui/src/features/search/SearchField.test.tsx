@@ -8,7 +8,7 @@ import type { SearchResults } from "../../bindings/SearchResults";
 import type { ViewRef } from "../../bindings/ViewRef";
 import en from "../../locales/en.json";
 import { must, renderApp, topBar } from "../../test/app";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { openStart, opened, workspace } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { group, valuePage } from "../../test/filters";
@@ -489,10 +489,10 @@ describe("accessibility", () => {
   it("passes the checker on the page, and with the results open", SLOW, async () => {
     const { user } = renderSearch();
     await field();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     // The results lie over the page, outside its landmarks, as every overlay does.
     await typeAndOpen(user, "573");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });
 

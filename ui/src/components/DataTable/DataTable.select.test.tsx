@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must } from "../../test/app";
 import { SLOW } from "../../test/slow";
 import {
@@ -542,7 +542,7 @@ describe("DataTable with selected rows, as it is read", () => {
     const { container } = render(
       <Harness seen={newSeen()} initialOpen="LINE-B" initialSelected={["LINE-A", "LINE-C"]} />,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });
 

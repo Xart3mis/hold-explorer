@@ -786,7 +786,7 @@ fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
     let mut state = fx.state();
     // A file where the folder in use should be: it cannot be listed, so a move is refused after
     // the new folder was made.
-    fs::create_dir_all(fx.data()).unwrap();
+    fs::create_dir_all(fx.local()).unwrap();
     fs::write(fx.workspaces(), "in the way").unwrap();
     let new = elsewhere(&fx, "new");
     let error = state
@@ -815,7 +815,7 @@ fn a_refused_set_removes_the_folder_it_created_and_only_an_empty_one() {
 fn a_refused_set_removes_every_empty_level_it_made_and_no_folder_that_was_there() {
     let fx = Fixture::new();
     let mut state = fx.state();
-    fs::create_dir_all(fx.data()).unwrap();
+    fs::create_dir_all(fx.local()).unwrap();
     fs::write(fx.workspaces(), "in the way").unwrap();
     // Two levels are made under a folder that was there before.
     let above = elsewhere(&fx, "above");
@@ -826,4 +826,28 @@ fn a_refused_set_removes_every_empty_level_it_made_and_no_folder_that_was_there(
         .unwrap_err();
     assert!(!above.join("new").exists());
     assert!(above.is_dir());
+}
+
+#[test]
+fn a_folder_move_counts_as_a_write_while_it_copies() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    create(&mut state, &["A", "B"]);
+    let writes = state.writes();
+    let new = elsewhere(&fx, "new");
+    let seen = RefCell::new(Vec::new());
+    let check = |_: &Path| {
+        seen.borrow_mut().push(writes.busy());
+        Ok(())
+    };
+    let result = state
+        .set_workspace_folder_with(Some(&text(&new)), true, &check)
+        .unwrap();
+    assert_eq!(result.moved.len(), 2);
+    assert_eq!(
+        *seen.borrow(),
+        [true; 2],
+        "each copy is made while a write is counted"
+    );
+    assert!(!writes.busy(), "the write ends with the move");
 }

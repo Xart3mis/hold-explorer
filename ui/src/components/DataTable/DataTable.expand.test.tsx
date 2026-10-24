@@ -4,7 +4,7 @@ import { Profiler, useState } from "react";
 import { TableLayout } from "react-aria-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { scrollTable, tableViewport } from "../../test/viewport";
 import {
@@ -554,7 +554,7 @@ describe("DataTable with rows that expand", () => {
     SLOW,
     async () => {
       const { rerender } = render(<Tree />);
-      await expectAccessible();
+      await expectNoAxeViolations();
       // Another tree: the screen holds the keys it is first given.
       rerender(
         <Tree
@@ -571,7 +571,7 @@ describe("DataTable with rows that expand", () => {
           }
         />,
       );
-      await expectAccessible();
+      await expectNoAxeViolations();
     },
   );
 });

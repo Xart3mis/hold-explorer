@@ -9,7 +9,7 @@ import type { ViewRef } from "../../bindings/ViewRef";
 import type { WorkspaceOpen } from "../../bindings/WorkspaceOpen";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { filterOptions } from "../../test/filters";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
@@ -668,17 +668,17 @@ describe("The place of the panel", () => {
     await within(await screen.findByRole("grid", { name: en.lines.linesTable })).findAllByRole(
       "rowheader",
     );
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(
       within(region).getByRole("button", {
         name: `${text.releasedHolds} ${fill(text.holdCount_one, { count: 1 })}`,
       }),
     );
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     const open = within(region).getByRole("list", { name: text.openHolds });
     await user.click(must(within(open).getAllByRole("button")[0]));
     const holdPanel = await panel(text.holdTitle);
     await within(holdPanel).findByRole("list", { name: text.holdFacts });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

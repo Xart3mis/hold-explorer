@@ -1,0 +1,70 @@
+// 4. Search for a line ID and open its panel.
+import assert from "node:assert/strict";
+import {
+  find,
+  first,
+  isShown,
+  key,
+  KEYS,
+  openDemo,
+  press,
+  scope,
+  startsWith,
+  text,
+  typeInto,
+} from "../support/page.ts";
+
+describe("the search", () => {
+  it("finds a line by its ID and opens it in the panel", async () => {
+    await openDemo();
+    // A line of the demo workspace: the first row of Lines.
+    await press("link", text.destinations.name.lines);
+    await pageReady();
+    const row = await $(await first('[role="row"][data-key]'));
+    const lineId = await row.getAttribute("data-key");
+    if (lineId === null || lineId === "") throw new Error("The first row of Lines has no key.");
+
+    const field = await find("combobox", text.search.label);
+    await field.click();
+    // One character at a time, each checked, as WebKitWebDriver can lose a repeated key; the
+    // field then holds exactly the ID before any result is looked for.
+    await typeInto(field, lineId);
+    assert.equal(await field.getValue(), lineId, "The search field does not hold the line ID.");
+    // The result named by exactly that ID. The list sits in a popover the page may render anew
+    // while the answer comes, so it is found again on each try rather than held. The list as it
+    // was first seen is marked too, and the log says whether it was still there once the result
+    // was: a record of whether WebKitGTK renders the popover anew.
+    const results = { within: { role: "listbox", name: text.search.results } };
+    const firstList = await scope("listbox", text.search.results);
+    await find("option", lineId, results);
+    const kept = await $(firstList).isExisting();
+    console.log(`The search list first seen was ${kept ? "still there" : "rendered anew"}.`);
+    // Found and pressed as one step, again if the list is rendered anew in between.
+    let failure = "";
+    await browser
+      .waitUntil(async () => {
+        try {
+          const option = await find("option", lineId, { ...results, timeout: 5_000 });
+          await option.waitForClickable({ timeout: 5_000 });
+          await option.click();
+          return true;
+        } catch (error: unknown) {
+          failure = error instanceof Error ? error.message : String(error);
+          return false;
+        }
+      })
+      .catch(() => {
+        throw new Error(`The result ${lineId} could not be pressed: ${failure}`);
+      });
+    await find("heading", startsWith(lineId));
+    await key(KEYS.escape);
+    await browser.waitUntil(async () => !(await isShown("heading", startsWith(lineId))), {
+      timeoutMsg: `Escape did not close the panel of ${lineId}.`,
+    });
+  });
+});
+
+/** Lines is shown. */
+async function pageReady(): Promise<void> {
+  await find("heading", text.destinations.name.lines);
+}

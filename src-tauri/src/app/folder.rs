@@ -89,6 +89,8 @@ impl AppState {
         move_files: bool,
         check: CopyCheck,
     ) -> Result<FolderMoved, CommandError> {
+        let writes = self.writes();
+        let _write = writes.begin();
         let (to, made_under) = self.usable_folder(path, true)?;
         let from = self.folder();
         let files = if move_files {
@@ -150,6 +152,7 @@ impl AppState {
         let to_text = to.to_string_lossy().into_owned();
         let next = Settings {
             workspace_dir: (!same_folder(&to, &self.default_folder())).then(|| to_text.clone()),
+            workspace_folder_chosen: true,
             ..self.settings.clone()
         };
         let saved = self.save(&next);
@@ -190,11 +193,13 @@ impl AppState {
             start: AppStart {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 settings_file: super::settings::settings_file(&self.config_dir),
+                logs_folder: super::diagnostics::logs_folder(&self.local_data_dir),
                 settings: self.settings.clone(),
                 list: list_view(raw, &to),
                 list_error,
                 open,
                 settings_problem,
+                e2e: cfg!(feature = "e2e"),
             },
             moved,
             left,

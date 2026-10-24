@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Checkbox } from "./Checkbox";
 
 describe("Checkbox", () => {
@@ -86,6 +86,6 @@ describe("Checkbox", () => {
         <Checkbox errorMessage="Confirm the date, or enter another one.">With a message</Checkbox>
       </>,
     );
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

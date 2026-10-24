@@ -14,13 +14,13 @@ import type { ViewRef } from "../../bindings/ViewRef";
 import { Button } from "../../components";
 import { durationToken } from "../../design/token-values";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp, topBar } from "../../test/app";
 import { opened, openStart, otherWorkspace, startState } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
 import { overviewOf } from "../../test/overview";
 import { SLOW } from "../../test/slow";
-import { fileDrag, windowApi } from "../../test/window";
+import { closingHeld, fileDrag, windowApi } from "../../test/window";
 import { formatDate } from "../../text/format";
 import { connectImportStart } from "../import/start";
 import { SIDEBAR_STORAGE_KEY } from "./window";
@@ -1127,7 +1127,7 @@ describe("loading the application start", () => {
     expect(alert).toHaveTextContent(en.shell.startError);
     expect(alert).toHaveTextContent(message);
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
 
     await user.click(within(alert).getByRole("button", { name: en.common.retry }));
     await sidebar();
@@ -1138,7 +1138,65 @@ describe("loading the application start", () => {
   it("has no accessibility violation while loading", async () => {
     renderApp({ handlers: { app_start: () => new Promise(() => undefined) } });
     expect(screen.getByText(en.shell.loading)).toHaveAttribute("role", "status");
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
+  });
+});
+
+describe("a close of the window that waits for a write", () => {
+  it("shows an information notice that cannot be dismissed, on every page", async () => {
+    const { user } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    expect(screen.queryByText(en.shell.closingHeld)).not.toBeInTheDocument();
+
+    act(() => {
+      closingHeld.send();
+    });
+    const notice = must(
+      (await screen.findByText(en.shell.closingHeld)).closest<HTMLElement>('[role="status"]'),
+      "the notice around the text",
+    );
+    expect(notice).toHaveAttribute("data-tone", "info");
+    expect(screen.getByRole("main")).toContainElement(notice);
+    expect(within(notice).queryByRole("button")).not.toBeInTheDocument();
+
+    // A second request while the window waits shows nothing more.
+    act(() => {
+      closingHeld.send();
+    });
+    expect(screen.getAllByText(en.shell.closingHeld)).toHaveLength(1);
+
+    await user.click(within(await sidebar()).getByRole("link", { name: names.lines }));
+    expect(screen.getByText(en.shell.closingHeld)).toBeInTheDocument();
+    await expectNoAxeViolations(document.body, { page: true });
+  });
+
+  it("goes when the close could not be carried out and the window stays", async () => {
+    renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    act(() => {
+      closingHeld.send();
+    });
+    expect(await screen.findByText(en.shell.closingHeld)).toBeInTheDocument();
+    act(() => {
+      closingHeld.resume();
+    });
+    expect(screen.queryByText(en.shell.closingHeld)).not.toBeInTheDocument();
+  });
+
+  it("stops listening when the shell goes", async () => {
+    const { unmount } = renderApp({ start: openStart(), path: "/overview" });
+    await sidebar();
+    await waitFor(() => {
+      expect(closingHeld.listeners()).toBe(1);
+    });
+    unmount();
+    expect(closingHeld.listeners()).toBe(0);
   });
 });
 
@@ -1305,13 +1363,13 @@ describe("accessibility of the pages in the shell", () => {
   it("Overview has no violation", SLOW, async () => {
     renderApp({ start: openStart(), path: "/overview" });
     await sidebar();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 
   it("the page that does not exist has no violation", SLOW, async () => {
     renderApp({ start: openStart(), path: "/nowhere" });
     await screen.findByRole("heading", { level: 1, name: en.notFound.title });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 
   it("the window-wide drop target has no violation", SLOW, async () => {
@@ -1319,7 +1377,7 @@ describe("accessibility of the pages in the shell", () => {
     await sidebar();
     fileDrag.enter(["/exports/Holds.xlsx"]);
     await screen.findByText(en.shell.dropTitle);
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
 

@@ -6,7 +6,7 @@ import { defaultFilters, type Filters } from "../../app/filters/state";
 import { queryClient } from "../../app/query";
 import type { FilterSpec } from "../../bindings/FilterSpec";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { foldedMatrix } from "../../test/breakdown";
 import { openStart, opened, workspace } from "../../test/fixtures";
@@ -420,11 +420,11 @@ describe("Breakdown, matrix", () => {
     const { user } = renderMatrix();
     await findGrid();
     await user.tab();
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
     await user.click(screen.getByRole("button", { name: en.charts.tableView }));
     await screen.findByRole("grid", {
       name: en.charts.tableName.replace("{{name}}", gridName()),
     });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });

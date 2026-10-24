@@ -36,6 +36,7 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
   settings_set_theme: () => api.setTheme(fixture.settings_set_theme.theme),
   settings_set_density: () => api.setDensity(fixture.settings_set_density.density),
   settings_set_author_name: () => api.setAuthorName(fixture.settings_set_author_name.name),
+  settings_set_update_check: () => api.setUpdateCheck(fixture.settings_set_update_check.enabled),
   check_workspace_folder: () => api.checkWorkspaceFolder(fixture.check_workspace_folder.path),
   set_workspace_folder: () =>
     workspaceApi.setWorkspaceFolder(
@@ -128,6 +129,13 @@ const calls: Record<CommandName, () => Promise<unknown>> = {
       fixture.export_copy.view,
     ),
   export_open: () => api.exportOpen(fixture.export_open.path),
+  diagnostics_copy: () => api.diagnosticsCopy(),
+  update_check: () => api.updateCheck(),
+  update_skip: () => api.updateSkip(fixture.update_skip.version),
+  open_release_page: () => api.openReleasePage(fixture.open_release_page.version),
+  smoke_ready: () => api.smokeReady(fixture.smoke_ready.sample),
+  e2e_open_path: () => api.e2eOpenPath(),
+  e2e_save_path: () => api.e2eSavePath(fixture.e2e_save_path.suggested),
 };
 
 const names = Object.keys(calls).sort() as CommandName[];

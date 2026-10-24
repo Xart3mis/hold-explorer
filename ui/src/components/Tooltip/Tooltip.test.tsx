@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { Tooltip } from "./Tooltip";
 
@@ -116,6 +116,6 @@ describe("Tooltip", () => {
     );
     await user.tab();
     await screen.findByRole("tooltip");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

@@ -4,7 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Download, X } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button, IconButton } from "./Button";
 
 const variants = ["primary", "secondary", "quiet", "danger"] as const;
@@ -270,7 +270,7 @@ describe("Button", () => {
           </Button>
         </>,
       );
-      await expectAccessible(container);
+      await expectNoAxeViolations(container);
     },
   );
 });
@@ -311,9 +311,9 @@ describe("IconButton", () => {
   it("has no accessibility violation, at rest and with its tooltip open", async () => {
     const user = userEvent.setup();
     render(<IconButton icon={X} label="Dismiss" />);
-    await expectAccessible();
+    await expectNoAxeViolations();
     await user.tab();
     await screen.findByRole("tooltip");
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

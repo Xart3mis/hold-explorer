@@ -201,3 +201,10 @@
     transform: none;
   }
 }
+
+/* Forced colors takes away the shadow and the fill: the outline is what sets the surface apart. */
+@media (forced-colors: active) {
+  .popover {
+    outline: var(--border-width-thin) solid CanvasText;
+  }
+}

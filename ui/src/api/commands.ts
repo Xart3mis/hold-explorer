@@ -38,6 +38,7 @@ import type { SolveView } from "../bindings/SolveView";
 import type { TargetCheck } from "../bindings/TargetCheck";
 import type { TargetChoice } from "../bindings/TargetChoice";
 import type { Theme } from "../bindings/Theme";
+import type { UpdateNotice } from "../bindings/UpdateNotice";
 import type { ValuePage } from "../bindings/ValuePage";
 import type { ViewRef } from "../bindings/ViewRef";
 import type { WorkspaceListView } from "../bindings/WorkspaceListView";
@@ -59,6 +60,7 @@ interface CommandMap {
   settings_set_theme: { args: { theme: Theme }; result: Settings };
   settings_set_density: { args: { density: Density }; result: Settings };
   settings_set_author_name: { args: { name: string }; result: Settings };
+  settings_set_update_check: { args: { enabled: boolean }; result: Settings };
   check_workspace_folder: { args: { path: string | null }; result: FolderCheck };
   set_workspace_folder: { args: { path: string | null; moveFiles: boolean }; result: FolderMoved };
   workspace_list: { args: Record<string, never>; result: WorkspaceListView };
@@ -132,6 +134,13 @@ interface CommandMap {
     result: null;
   };
   export_open: { args: { path: string }; result: null };
+  diagnostics_copy: { args: Record<string, never>; result: string };
+  update_check: { args: Record<string, never>; result: UpdateNotice | null };
+  update_skip: { args: { version: string }; result: Settings };
+  open_release_page: { args: { version: string }; result: null };
+  smoke_ready: { args: { sample: string }; result: null };
+  e2e_open_path: { args: Record<string, never>; result: string | null };
+  e2e_save_path: { args: { suggested: string }; result: string | null };
 }
 
 export type CommandName = keyof CommandMap;
@@ -167,6 +176,8 @@ export const api = {
   setTheme: (theme: Theme) => call("settings_set_theme", { theme }),
   setDensity: (density: Density) => call("settings_set_density", { density }),
   setAuthorName: (name: string) => call("settings_set_author_name", { name }),
+  /** Turns the check for a newer release at start on or off. */
+  setUpdateCheck: (enabled: boolean) => call("settings_set_update_check", { enabled }),
   /**
    * Checks a folder to keep the workspaces in (`null`: the default one): absolute, not the one in
    * use, and writable, or creatable when missing; nothing is created. Names the workspace files a
@@ -271,4 +282,30 @@ export const api = {
     call("export_copy", { request, format, view }),
   /** Opens a file the app saved in this session; rejects with `NotWritten` for any other. */
   exportOpen: (path: string) => call("export_open", { path }),
+  /** Copies the diagnostics text to the clipboard and returns it. */
+  diagnosticsCopy: () => call("diagnostics_copy", {}),
+  /**
+   * Looks for a newer release, when the check is on and none was tried in the last 24 hours.
+   * `null` when there is none to tell, also when the check failed: it never rejects for that.
+   */
+  updateCheck: () => call("update_check", {}),
+  /** Skips a version: it is not offered again, a newer one is. */
+  updateSkip: (version: string) => call("update_skip", { version }),
+  /**
+   * Opens the release page of the version the check returned, in the browser. Rejects with
+   * `NotOffered` for any other version, and `Open` when the system could not open it.
+   */
+  openReleasePage: (version: string) => call("open_release_page", { version }),
+  /**
+   * Says that the first screen has rendered, with `sample`, the format module's date of 30
+   * September 2026. A smoke run (`HX_SMOKE=1`) prints it and exits; any other run does nothing.
+   */
+  smokeReady: (sample: string) => call("smoke_ready", { sample }),
+  /**
+   * The substitutes of the file dialogs, registered in the `e2e` build only: what the open
+   * dialog answers there, and what the save dialog answers for the name it proposes. `null`, as
+   * a cancelled dialog, when the test set no path. Called by ui/src/api/dialogs.ts only.
+   */
+  e2eOpenPath: () => call("e2e_open_path", {}),
+  e2eSavePath: (suggested: string) => call("e2e_save_path", { suggested }),
 };

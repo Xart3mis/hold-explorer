@@ -1,0 +1,355 @@
+name: Release
+
+# A pushed tag `v<version>` builds the Windows executable and the Linux AppImage and publishes
+# them, with SHA256SUMS.txt, as the GitHub release of that tag (decision 8 of the M1d plan).
+#
+# Every other run is a dry run: it checks the versions, builds, checks and starts both artifacts,
+# and keeps them as workflow artifacts, and publishes nothing. A dry run is started by hand
+# (workflow_dispatch, once this file is on the default branch), or by a pull request that changes
+# this file or the version check, since GitHub starts workflow_dispatch only from the default
+# branch.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - tools/release-check.mjs
+
+permissions:
+  contents: read
+
+# Two runs for the same ref never overlap. A newer push to a pull request cancels its older dry
+# run; a run for a tag is never cancelled.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.versions.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # With a tag, the tag must be v<version>; without one (a dry run on a branch) the files must
+      # still agree with each other. The script prints the version alone on stdout.
+      - name: The tag and the versions agree
+        id: versions
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          if [ -n "$TAG" ]; then
+            version="$(node tools/release-check.mjs "$TAG")"
+          else
+            version="$(node tools/release-check.mjs)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      # gh reads the notes of --notes-from-tag from the tag's message, so a release needs an
+      # annotated tag. The checkout of a tag can leave a lightweight tag in place of the annotated
+      # one, so the tag is fetched again as it is, before anything is built.
+      - name: The tag is annotated
+        if: github.ref_type == 'tag'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "$TAG is a lightweight tag, so it has no message for the release notes. Push an annotated tag: git tag -a $TAG -m \"<notes>\"."
+            exit 1
+          fi
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: windows-x64
+          # 22.04, not the newest: an AppImage runs on systems with the glibc it was built
+          # against or a newer one.
+          - os: ubuntu-22.04
+            artifact: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    # A release is built from scratch, without a build cache another ref could have written, so
+    # every run is a cold build with link-time optimization.
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      # The release profile strips the binary (strip = true in Cargo.toml). Here it is built with
+      # its symbols, so a copy with symbols can be kept for reading the addresses of a crash
+      # log: on Linux the shipped binary is stripped below, before the AppImage is made; on
+      # Windows the symbols go to a separate PDB file and the executable holds none. The Windows
+      # executable then carries a CodeView record that names the PDB by its path on the runner;
+      # that is intended, and the record holds no symbols. (No RUSTFLAGS to change that path: they
+      # would replace any rustflags configured for the build.)
+      CARGO_PROFILE_RELEASE_STRIP: none
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # The packages CI installs, plus what the AppImage needs: patchelf and xdg-utils, as the
+      # Tauri guide for GitHub Actions lists them.
+      - name: Install Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb patchelf xdg-utils
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.97.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Install interface dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Never with the cargo feature `e2e`: the checks below refuse a binary that holds it.
+      - name: Build the app (Windows)
+        if: runner.os == 'Windows'
+        run: pnpm tauri build --no-bundle
+      - name: Name the executable (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/release" "$RUNNER_TEMP/symbols"
+          cp target/release/hx-desktop.exe "$RUNNER_TEMP/release/HoldExplorer-$VERSION-windows-x64.exe"
+          if ls target/release/*.pdb > /dev/null 2>&1; then
+            cp target/release/*.pdb "$RUNNER_TEMP/symbols/"
+          else
+            echo "::warning::The build wrote no PDB file, so no symbols are kept for Windows."
+          fi
+
+      # The binary is built with symbols, a copy is kept, and the binary is stripped in place;
+      # `tauri bundle` then makes the AppImage from that stripped binary without building again.
+      # strip(1) removes only the symbol tables, so the addresses in the copy are those of the
+      # shipped binary.
+      - name: Build the app (Linux)
+        if: runner.os == 'Linux'
+        run: pnpm tauri build --no-bundle
+      - name: Keep the symbols and strip the binary (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$RUNNER_TEMP/release" "$RUNNER_TEMP/symbols"
+          symbols="$RUNNER_TEMP/symbols/hx-desktop-$VERSION-linux-x86_64"
+          cp target/release/hx-desktop "$symbols"
+          strip --strip-all target/release/hx-desktop
+          file -b "$symbols"
+          file -b target/release/hx-desktop
+          case "$(file -b "$symbols")" in
+            *"not stripped"*) ;;
+            *) echo "The copy kept for its symbols has none. Its CARGO_PROFILE_RELEASE_STRIP did not take effect."; exit 1 ;;
+          esac
+      - name: Make the AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          pnpm tauri bundle --bundles appimage
+          shopt -s nullglob
+          images=(target/release/bundle/appimage/*.AppImage)
+          if [ "${#images[@]}" -ne 1 ]; then
+            echo "Expected one AppImage in target/release/bundle/appimage, found ${#images[@]}: ${images[*]}"
+            exit 1
+          fi
+          cp "${images[0]}" "$RUNNER_TEMP/release/HoldExplorer-$VERSION-linux-x86_64.AppImage"
+          chmod +x "$RUNNER_TEMP/release/HoldExplorer-$VERSION-linux-x86_64.AppImage"
+
+      # What ships must not hold the code of the e2e feature, which answers the open and save
+      # dialogs from the environment.
+      - name: The executable holds no e2e code, and holds its manifest (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          exe="$RUNNER_TEMP/release/HoldExplorer-$VERSION-windows-x64.exe"
+          echo "$(basename "$exe"): $(du -m "$exe" | cut -f1) MB"
+          # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the
+          # sure mark.
+          if grep -a -q -F -e HX_E2E_OPEN -e e2e_open_path "$exe"; then
+            echo "$exe holds HX_E2E_OPEN or e2e_open_path, so it was built with the cargo feature e2e. A release is built without it."
+            exit 1
+          fi
+          if ! grep -a -q "Microsoft.Windows.Common-Controls" "$exe"; then
+            echo "$exe holds no application manifest that asks for version 6 of the common controls, so it would not start. See src-tauri/build.rs."
+            exit 1
+          fi
+          echo "$exe holds no e2e code and holds the application manifest."
+      - name: The AppImage holds a stripped binary and no e2e code (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          image="$RUNNER_TEMP/release/HoldExplorer-$VERSION-linux-x86_64.AppImage"
+          echo "$(basename "$image"): $(du -m "$image" | cut -f1) MB"
+          work="$RUNNER_TEMP/appimage"
+          mkdir -p "$work"
+          (cd "$work" && "$image" --appimage-extract > /dev/null)
+          root="$work/squashfs-root"
+          # e2e_open_path is also in ui/src/api/commands.ts; it is absent here only because Tauri
+          # compresses the embedded interface in a release build. HX_E2E_OPEN (Rust only) is the
+          # sure mark.
+          if grep -r -a -l -F -e HX_E2E_OPEN -e e2e_open_path "$root"; then
+            echo "The files above, in the AppImage, hold HX_E2E_OPEN or e2e_open_path, so the app was built with the cargo feature e2e. A release is built without it."
+            exit 1
+          fi
+          # The app's binary is the one in usr/bin that names HX_SMOKE; a library or a script
+          # there does not.
+          app="$(grep -a -l -F HX_SMOKE "$root"/usr/bin/* || true)"
+          if [ -z "$app" ] || [ "$(printf '%s\n' "$app" | wc -l)" -ne 1 ]; then
+            echo "Expected one binary of the app in usr/bin of the AppImage, found: ${app:-none}"
+            ls -l "$root/usr/bin"
+            exit 1
+          fi
+          kind="$(file -b "$app")"
+          echo "$app: $kind"
+          case "$kind" in
+            *"not stripped"*) echo "The binary in the AppImage still holds its symbols."; exit 1 ;;
+            *stripped*) ;;
+            *) echo "file(1) does not say whether the binary in the AppImage is stripped."; exit 1 ;;
+          esac
+          echo "The AppImage holds a stripped binary and no e2e code."
+
+      # The smoke run of CI (src-tauri/src/smoke.rs), on what ships: with HX_SMOKE=1 the app draws
+      # its first screen, prints `ready <sample>`, and exits with code 0, or exits with code 1
+      # after 60 s. The update check is off in this mode, so the run does not reach GitHub.
+      # The runner has no FUSE, so the AppImage extracts itself and runs from the extracted files.
+      - name: Start the AppImage (Linux)
+        if: runner.os == 'Linux'
+        env:
+          HX_SMOKE: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          image="$RUNNER_TEMP/release/HoldExplorer-$VERSION-linux-x86_64.AppImage"
+          out="$RUNNER_TEMP/smoke-out.txt"
+          err="$RUNNER_TEMP/smoke-err.txt"
+          set +e
+          timeout --kill-after=10 120 xvfb-run --auto-servernum --server-args="-screen 0 1280x800x24" "$image" > "$out" 2> "$err"
+          code=$?
+          set -e
+          cat "$err"
+          if [ "$code" -ne 0 ]; then
+            echo "The AppImage ended with code $code (124 means it did not end within 120 s). Its output:"
+            cat "$out"
+            exit 1
+          fi
+          line="$(grep -m 1 '^ready ' "$out" || true)"
+          if [ -z "$line" ]; then
+            echo "The AppImage ended with code 0 but printed no ready line. Its output:"
+            cat "$out"
+            exit 1
+          fi
+          echo "Sample date (WebKitGTK, AppImage): ${line#ready }"
+      - name: Start the executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          HX_SMOKE: "1"
+        run: |
+          # The executable has no console, so its output goes to files.
+          $exe = Join-Path $env:RUNNER_TEMP "release\HoldExplorer-$env:VERSION-windows-x64.exe"
+          $out = Join-Path $env:RUNNER_TEMP smoke-out.txt
+          $err = Join-Path $env:RUNNER_TEMP smoke-err.txt
+          $p = Start-Process -FilePath $exe -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow -PassThru
+          # Reading the handle now keeps the exit code readable after the process ends.
+          $null = $p.Handle
+          if (-not $p.WaitForExit(120000)) {
+            Stop-Process -Id $p.Id -Force
+            Write-Output "The executable did not end within 120 s. Its output:"
+            Get-Content $out, $err
+            exit 1
+          }
+          Get-Content $err
+          if ($p.ExitCode -ne 0) {
+            Write-Output "The executable ended with code $($p.ExitCode). Its output:"
+            Get-Content $out
+            exit 1
+          }
+          $line = Get-Content $out | Where-Object { $_ -match '^ready ' } | Select-Object -First 1
+          if (-not $line) {
+            Write-Output "The executable ended with code 0 but printed no ready line. Its output:"
+            Get-Content $out
+            exit 1
+          }
+          Write-Output "Sample date (WebView2, release executable): $($line.Substring(6))"
+
+      - name: Keep the release file
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+      # The symbols are kept with the run only, for reading a crash log; they are never part of
+      # the release. They expire after 90 days, so for each release download them and archive
+      # them outside GitHub.
+      - name: Keep the symbols
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: symbols-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/symbols/
+          if-no-files-found: warn
+          retention-days: 90
+
+  publish:
+    needs: [check, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # gh reads the notes of --notes-from-tag from the local tag, fetched again as it is (the
+      # check job has refused a lightweight tag). gh itself authenticates with GH_TOKEN.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      # The tag must still be annotated and still name the commit this run built: a tag moved
+      # after the check would otherwise publish these binaries under another commit.
+      - name: Fetch the annotated tag
+        run: |
+          git fetch --no-tags --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "$TAG is now a lightweight tag, so it has no message for the release notes. Push an annotated tag: git tag -a $TAG -m \"<notes>\"."
+            exit 1
+          fi
+          tagged="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          if [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "$TAG now names commit $tagged, but this run built commit $GITHUB_SHA. The tag was moved after the run started; nothing is published. Push the tag again to build and release the commit it names."
+            exit 1
+          fi
+      - name: Fetch the release files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+      - name: Write the checksums
+        working-directory: release
+        run: |
+          windows="HoldExplorer-$VERSION-windows-x64.exe"
+          linux="HoldExplorer-$VERSION-linux-x86_64.AppImage"
+          for name in "$windows" "$linux"; do
+            if [ ! -f "$name" ]; then
+              echo "$name is missing from the build artifacts. Found:"
+              ls -l
+              exit 1
+            fi
+          done
+          sha256sum "$windows" "$linux" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Publish the release
+        working-directory: release
+        run: |
+          gh release create "$TAG" --verify-tag --title "Hold Explorer $VERSION" --notes-from-tag \
+            "HoldExplorer-$VERSION-windows-x64.exe" \
+            "HoldExplorer-$VERSION-linux-x86_64.AppImage" \
+            SHA256SUMS.txt

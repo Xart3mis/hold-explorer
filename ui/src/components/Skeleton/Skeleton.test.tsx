@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Skeleton } from "./Skeleton";
 
 describe("Skeleton", () => {
@@ -28,6 +28,6 @@ describe("Skeleton", () => {
 
   it("has no accessibility violation", async () => {
     const { container } = render(<Skeleton />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

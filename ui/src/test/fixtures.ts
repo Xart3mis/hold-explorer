@@ -78,12 +78,17 @@ export function startState(overrides: Partial<AppStart> = {}): AppStart {
   return {
     version: "0.1.0",
     settings_file: "/home/ada/.config/hold-explorer/settings.json",
+    logs_folder: "/home/ada/.local/share/hold-explorer/logs",
     settings: {
       theme: "Dark",
       density: "Comfortable",
       author_name: "",
       workspace_dir: null,
+      workspace_folder_chosen: false,
       last_workspace: null,
+      update_check: true,
+      update_checked_at: null,
+      skipped_version: null,
     },
     list: {
       workspaces: [],
@@ -93,6 +98,7 @@ export function startState(overrides: Partial<AppStart> = {}): AppStart {
     list_error: null,
     open: null,
     settings_problem: null,
+    e2e: false,
     ...overrides,
   };
 }

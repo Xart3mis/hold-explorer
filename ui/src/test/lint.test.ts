@@ -299,9 +299,27 @@ describe("the modules of Tauri", () => {
     await expectRefused("ui/src/features/lines/LinesPage.tsx", "@tauri-apps/api/core", /invoke/);
     await expectRefused("ui/src/app/view.ts", "@tauri-apps/plugin-dialog", /ui\/src\/api\//);
     await expectRefused("ui/src/api/window.ts", "@tauri-apps/api/core", /invoke/);
-    await expectAllowed("ui/src/api/window.ts", "@tauri-apps/plugin-dialog");
+    await expectAllowed("ui/src/api/dialogs.ts", "@tauri-apps/plugin-dialog");
+    await expectAllowed("ui/src/api/window.ts", "@tauri-apps/plugin-opener");
     await expectAllowed("ui/src/api/commands.ts", "@tauri-apps/api/core");
     await expectAllowed("ui/src/api/workspace-commands.ts", "@tauri-apps/api/core");
+  });
+
+  it("give the dialog plugin to ui/src/api/dialogs.ts only, where the e2e build answers the dialogs", async () => {
+    for (const file of [
+      "ui/src/api/window.ts",
+      "ui/src/api/commands.ts",
+      "ui/src/api/workspace-commands.ts",
+      "ui/src/api/files.ts",
+      "ui/src/api/dialogs.test.ts",
+    ]) {
+      await expectRefused(file, "@tauri-apps/plugin-dialog", /ui\/src\/api\/dialogs\.ts/);
+      await expectRefused(file, "@tauri-apps/plugin-dialog/dist", /ui\/src\/api\/dialogs\.ts/);
+    }
+    for (const file of ["ui/src/app/view.ts", "ui/src/features/import/start.ts"]) {
+      await expectRefused(file, "@tauri-apps/plugin-dialog", /ui\/src\/api\//);
+    }
+    await expectAllowed("ui/src/api/dialogs.ts", "@tauri-apps/plugin-dialog");
   });
 
   it("give their mocks to the tests and to the development page, and nothing else", async () => {

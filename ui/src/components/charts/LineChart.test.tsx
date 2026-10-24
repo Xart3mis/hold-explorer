@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatCount } from "../../text/format";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { SLOW } from "../../test/slow";
 import { LineChart, type LineChartProps, type LinePoint } from "./LineChart";
 
@@ -438,8 +438,8 @@ describe("LineChart", () => {
     const { rerender } = render(chart({ onPointPress: () => undefined }));
     await user.tab();
     await screen.findByRole("tooltip");
-    await expectAccessible();
+    await expectNoAxeViolations();
     rerender(chart({ view: "table" }));
-    await expectAccessible();
+    await expectNoAxeViolations();
   });
 });

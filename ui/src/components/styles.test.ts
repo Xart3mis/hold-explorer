@@ -111,3 +111,19 @@ describe("ToastRegion.module.css", () => {
     expect(toast?.css).not.toContain("--layout-sidebar-width");
   });
 });
+
+describe("menus and popovers under forced colors", () => {
+  it.each(["Menu.module.css", "Popover.module.css", "Select.module.css"])(
+    "%s outlines its surface in CanvasText",
+    (name) => {
+      const sheet = files.find((file) => file.name.endsWith(name));
+      expect(sheet?.css).toBeDefined();
+      // Forced colors removes the shadow and the fill that set a menu apart from the page.
+      const block = /@media \(forced-colors: active\)\s*\{\s*\.popover\s*\{([^}]*)\}/.exec(
+        sheet?.css ?? "",
+      );
+      expect(block).not.toBeNull();
+      expect(block?.[1]).toMatch(/outline:\s*var\(--border-width-thin\) solid CanvasText;/);
+    },
+  );
+});

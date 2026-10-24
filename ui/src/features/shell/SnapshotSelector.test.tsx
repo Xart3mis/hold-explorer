@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { opened, openStart, snapshot } from "../../test/fixtures";
 import { commandFailure } from "../../test/ipc";
@@ -250,9 +250,9 @@ describe("SnapshotSelector", () => {
         path: "/overview",
       });
       await screen.findByText(olderNotice);
-      await expectAccessible(document.body, { page: true });
+      await expectNoAxeViolations(document.body, { page: true });
       await openMenu(user, OLDER);
-      await expectAccessible();
+      await expectNoAxeViolations();
     },
   );
 });

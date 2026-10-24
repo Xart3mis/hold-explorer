@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import en from "../../locales/en.json";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { Button } from "../Button/Button";
 import { FactList } from "./FactList";
 
@@ -144,8 +144,8 @@ describe("FactList", () => {
       { label: "Project number", value: "None in the file", isAbsent: true },
     ];
     const { container, rerender } = render(<FactList aria-label="File facts" items={items} />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
     rerender(<FactList aria-label="File facts" items={items} isLoading />);
-    await expectAccessible(container);
+    await expectNoAxeViolations(container);
   });
 });

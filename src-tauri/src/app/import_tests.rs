@@ -1286,3 +1286,37 @@ fn an_import_into_another_workspace_replaces_its_damaged_saved_mapping() {
         .unwrap()
         .is_some());
 }
+
+#[test]
+fn an_import_commit_counts_as_a_write_while_it_stores() {
+    let fx = Fixture::new();
+    let mut state = fx.state();
+    let writes = state.writes();
+    state
+        .import_open(&fx.synth_project("one.xlsx", 1, "P-1"))
+        .unwrap();
+    let seen = RefCell::new(Vec::new());
+    let progress = |phase: ImportPhase| seen.borrow_mut().push((phase, writes.busy()));
+    let busy_before_store = std::cell::Cell::new(false);
+    state
+        .import_commit_with(
+            commit(new_target("A"), "2026-10-07 08:00:00"),
+            &progress,
+            &hx_store::delete_workspace,
+            &|| {
+                busy_before_store.set(writes.busy());
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert!(
+        busy_before_store.get(),
+        "the store runs while a write is counted"
+    );
+    let seen = seen.into_inner();
+    assert!(
+        seen.iter().all(|(_, busy)| *busy),
+        "every phase runs while a write is counted: {seen:?}"
+    );
+    assert!(!writes.busy(), "the write ends with the commit");
+}

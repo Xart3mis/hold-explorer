@@ -9,7 +9,7 @@ import type { FilterSpec } from "../../bindings/FilterSpec";
 import type { ViewRef } from "../../bindings/ViewRef";
 import en from "../../locales/en.json";
 import { held } from "../../test/actions";
-import { expectAccessible } from "../../test/axe";
+import { expectNoAxeViolations } from "../../test/axe";
 import { must, renderApp } from "../../test/app";
 import { blockerDetail } from "../../test/blockers";
 import { opened, openStart, otherWorkspace, workspace } from "../../test/fixtures";
@@ -513,6 +513,6 @@ describe("The blocker and the view", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    await expectAccessible(document.body, { page: true });
+    await expectNoAxeViolations(document.body, { page: true });
   });
 });
