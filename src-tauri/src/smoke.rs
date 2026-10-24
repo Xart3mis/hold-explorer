@@ -79,7 +79,9 @@ fn arm_timeout_when<R: Runtime>(app: &AppHandle<R>, wanted: bool) -> bool {
     let app = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(SMOKE_TIMEOUT);
-        eprintln!(
+        // Standard error may be closed or its pipe broken: ignored, so the exit still happens.
+        let _ = writeln!(
+            std::io::stderr(),
             "The page did not report that it rendered within {} s.",
             SMOKE_TIMEOUT.as_secs()
         );
