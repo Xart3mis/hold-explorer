@@ -94,7 +94,7 @@ While `pnpm dev` runs, `http://localhost:1420/gallery.html` shows every base com
 
 The app's own pages open in a browser at `http://localhost:1420/dev.html?state=first-run`, with the commands answered from fixtures (`ui/src/dev/commands.ts`). The states are listed and explained at the top of `ui/src/dev/commands.ts` (`first-run`, `workspaces`, `open`, `older`, the filter, Lines, detail panel, Breakdown, Blockers, and import states, among others); add `&theme=light` for the light theme. This page is for development only as well, and `pnpm check:dist` fails a build that contains it.
 
-A built binary started with `HX_SMOKE=1` draws its first screen, prints `ready <date>`, and exits with code 0, or exits with code 1 after 60 s; CI starts the release build this way on Windows and Linux. The update check never runs in this mode or in the e2e build.
+A built binary started with `HX_SMOKE=1` draws its first screen, prints `ready <date>`, and exits with code 0, or exits with code 1 after 60 s; CI starts the release build this way on Windows and Linux. The update check never runs in this mode or in the e2e build. With `HX_SMOKE=1` set in the environment, the app quits after its first render, so the variable is meant only for CI: leave it unset when you use the app.
 
 ## Release
 

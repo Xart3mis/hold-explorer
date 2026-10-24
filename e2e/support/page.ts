@@ -325,6 +325,11 @@ export async function typeInto(field: WebdriverIO.Element, value: string): Promi
     const after = value.slice(0, index + 1);
     let landed = false;
     for (let attempt = 0; attempt < 3 && !landed; attempt += 1) {
+      if (attempt > 0) {
+        console.log(
+          `Typing "${value}": sending ${JSON.stringify(value.charAt(index))} (character ${String(index + 1)}) again.`,
+        );
+      }
       await browser.keys(value.charAt(index));
       landed = await browser
         .waitUntil(

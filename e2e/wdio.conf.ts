@@ -22,7 +22,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** The app built with `--features e2e`, and the command line that writes the synthetic workbook. */
 const APP = path.join(ROOT, "target", "debug", "hx-desktop");
 const CLI = path.join(ROOT, "target", "debug", "hx-cli");
-/** The logs of WebdriverIO and of tauri-driver (with the app's own output), kept by CI on a failure. */
+/**
+ * The logs of WebdriverIO and of tauri-driver (with the app's own output), kept by CI on a
+ * failure.
+ */
 const LOGS = path.join(ROOT, "target", "e2e", "logs");
 /** tauri-driver from the PATH, or from `TAURI_DRIVER`. */
 const DRIVER = process.env.TAURI_DRIVER ?? "tauri-driver";

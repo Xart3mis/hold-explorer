@@ -57,6 +57,8 @@ What CI does (`.github/workflows/ci.yml`, job `e2e`), on Ubuntu:
 
    This builds `target/debug/hx-desktop` with the interface in it, and `target/debug/hx-cli`.
    Build again after a change to the app or the interface.
+   `cargo test`, or any plain cargo build of the app, overwrites `target/debug/hx-desktop`
+   without the `e2e` feature, so run `pnpm e2e:build` again before `pnpm e2e` after one.
 
 4. Run the tests:
 
