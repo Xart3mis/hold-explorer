@@ -312,6 +312,40 @@ export async function key(value: string, { ctrl = false }: { ctrl?: boolean } = 
   await keys.perform();
 }
 
+/**
+ * Types `value` into the focused `field` one character at a time, each sent once its previous one
+ * is in the field. WebKitWebDriver can lose the second of two identical keys sent back to back
+ * ("002" became "02" in CI); a character that did not land is sent again, up to three times. Ends
+ * with the field holding exactly `value`, or fails saying what it holds.
+ */
+export async function typeInto(field: WebdriverIO.Element, value: string): Promise<void> {
+  let typed = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const before = value.slice(0, index);
+    const after = value.slice(0, index + 1);
+    let landed = false;
+    for (let attempt = 0; attempt < 3 && !landed; attempt += 1) {
+      await browser.keys(value.charAt(index));
+      landed = await browser
+        .waitUntil(
+          async () => {
+            typed = await field.getValue();
+            return typed === after;
+          },
+          { timeout: 2_000, interval: 50 },
+        )
+        .catch(() => false);
+      // Anything but the text before this character means a key landed wrongly: no retry.
+      if (!landed && typed !== before) break;
+    }
+    if (!landed) {
+      throw new Error(
+        `Typing "${value}": the field reads ${JSON.stringify(typed)} after character ${String(index + 1)}, not ${JSON.stringify(after)}.`,
+      );
+    }
+  }
+}
+
 /** Takes the focus off any field, so that a key reaches the page and not a field. */
 export async function focusPage(): Promise<void> {
   await browser.execute(() => {

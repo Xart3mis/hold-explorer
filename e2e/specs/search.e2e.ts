@@ -1,4 +1,5 @@
 // 4. Search for a line ID and open its panel.
+import assert from "node:assert/strict";
 import {
   find,
   first,
@@ -10,6 +11,7 @@ import {
   scope,
   startsWith,
   text,
+  typeInto,
 } from "../support/page.ts";
 
 describe("the search", () => {
@@ -24,18 +26,10 @@ describe("the search", () => {
 
     const field = await find("combobox", text.search.label);
     await field.click();
-    await browser.keys(lineId);
-    // The whole ID reached the field, in order, before any result is looked for.
-    let typed = "";
-    await browser
-      .waitUntil(async () => {
-        typed = await field.getValue();
-        return typed === lineId;
-      })
-      .catch((error: unknown) => {
-        const why = error instanceof Error ? ` (${error.message})` : "";
-        throw new Error(`The search field reads ${JSON.stringify(typed)}, not "${lineId}"${why}.`);
-      });
+    // One character at a time, each checked, as WebKitWebDriver can lose a repeated key; the
+    // field then holds exactly the ID before any result is looked for.
+    await typeInto(field, lineId);
+    assert.equal(await field.getValue(), lineId, "The search field does not hold the line ID.");
     // The result named by exactly that ID. The list sits in a popover the page may render anew
     // while the answer comes, so it is found again on each try rather than held. The list as it
     // was first seen is marked too, and the log says whether it was still there once the result
